@@ -1,8 +1,26 @@
-<form class="form-horizontal">
-    <div class="control-group">
-        <label class="control-label">Printer Key</label>
-        <div class="controls">
-            <input type="text" class="input-block-level" data-bind="value: settings.plugins.octoeverywhere.PrinterKey">
-        </div>
+<h3>OctoEverywhere!</h3>
+
+<p style="padding-bottom:10px"><a href="https://octoeverywhere.com">OctoEverywhere.com</a> allows you to access your full OctoPrint interface, controls, cameras, and plugins from anywhere! On your laptop, phone, or your favorite OctoPrint app!</p>
+<p style="padding-bottom:10px">OctoEverywhere! is <b>free, secure, and super easy to setup!</b></p>
+
+<p>
+    <a data-bind="attr: { href: settings.plugins.octoeverywhere.AddPrinterUrl }">
+        Click here to setup your free account and get going!
+    </a>
+</p>
+
+<div>
+    <div>
+        <small>
+            <a href="#" class="muted" onclick="$(this).children().toggleClass('fa-caret-right fa-caret-down').parent().parent().parent().next().slideToggle('fast')"><i class="fa fa-caret-right"></i> Advanced options</a>
+        </small>
     </div>
-</form>
+    <div class="hide">        
+        <div class="control-group">
+            <label class="control-label" style="padding-top:20px;">Your Printer Id:</label>
+            <div class="controls">
+                <input type="text" class="input-block-level" data-bind="value: settings.plugins.octoeverywhere.PrinterKey" disabled>
+            </div>
+        </div>        
+    </div>
+</div>

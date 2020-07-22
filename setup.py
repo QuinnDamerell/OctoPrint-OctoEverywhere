@@ -1,8 +1,5 @@
 # coding=utf-8
 
-########################################################################################################################
-### Do not forget to adjust the following variables to your own plugin.
-
 # The plugin's identifier, has to be unique
 plugin_identifier = "octoeverywhere"
 
@@ -18,7 +15,7 @@ plugin_version = "0.1.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
-plugin_description = """TODO"""
+plugin_description = """Access OctoPrint Everywhere! Safe. Simple. Secure."""
 
 # The plugin's author. Can be overwritten within OctoPrint's internal data via __plugin_author__ in the plugin module
 plugin_author = "Quinn Damerell"
@@ -33,7 +30,7 @@ plugin_url = "http://www.OctoEverywhere.com"
 plugin_license = "AGPLv3"
 
 # Any additional requirements besides OctoPrint should be listed here
-plugin_requires = []
+plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "jsonpickle>=1.4.1"]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point

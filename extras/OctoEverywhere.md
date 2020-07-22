@@ -3,29 +3,24 @@ layout: plugin
 
 id: OctoEverywhere
 title: octoeverywhere
-description: TODO
+description: Access Your OctoPrint Everywhere! Safe. Simple. Secure.
 author: Quinn Damerell
 license: AGPLv3
+date: 2020-07-22
 
-# TODO
-date: today's date in format YYYY-MM-DD, e.g. 2015-04-21
-
-homepage: http://www.OctoEverywhere.com
+homepage: https://www.OctoEverywhere.com
 source: https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere
 archive: https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/master.zip
 
-# TODO
-# Set this to true if your plugin uses the dependency_links setup parameter to include
-# library versions not yet published on PyPi. SHOULD ONLY BE USED IF THERE IS NO OTHER OPTION!
-#follow_dependency_links: false
-
-# TODO
 tags:
-- a list
-- of tags
-- that apply
-- to your plugin
-- (take a look at the existing plugins for what makes sense here)
+- remote
+- remote access
+- phone access
+- access anywhere
+- away from home access
+- safe
+- secure
+- full support
 
 # TODO
 screenshots:
@@ -56,7 +51,6 @@ compatibility:
   #
   # You can also remove the whole "octoprint" block. Removing it will default to all
   # OctoPrint versions being supported.
-
   octoprint:
   - 1.2.0
 
@@ -76,7 +70,6 @@ compatibility:
   #
   # You can also remove the whole "os" block. Removing it will default to all
   # operating systems being supported.
-
   os:
   - linux
   - windows
@@ -90,9 +83,8 @@ compatibility:
   # Plugins that only wish to support Python 3 should set it to ">=3,<4". 
   #
   # If your plugin only supports Python 2 (worst case, not recommended for newly developed plugins since Python 2
-  # is EOL), leave at ">=2.7,<3"
-  
-  python: ">=2.7,<3"
+  # is EOL), leave at ">=2.7,<3"  
+  python: ">=2.7,<4"
 
 ---
 

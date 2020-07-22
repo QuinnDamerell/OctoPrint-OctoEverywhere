@@ -1,40 +1,34 @@
 # coding=utf-8
 from __future__ import absolute_import
+import logging
+import threading
+import random
+import string
 
-### (Don't forget to remove me)
-# This is a basic skeleton for your plugin's __init__.py. You probably want to adjust the class name of your plugin
-# as well as the plugin mixins it's subclassing from. This is really just a basic skeleton to get you started,
-# defining your plugin as a template plugin, settings and asset plugin. Feel free to add or remove mixins
-# as necessary.
-#
-# Take a look at the documentation on what other plugin mixins are available.
-
+from .octoeverywhereimpl import OctoEverywhere
 import octoprint.plugin
 
-class OctoeverywherePlugin(octoprint.plugin.SettingsPlugin,
+logger = logging.getLogger('octoprint.plugins.octoeverywhere')
+
+class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
+						   octoprint.plugin.SettingsPlugin,
                            octoprint.plugin.AssetPlugin,
                            octoprint.plugin.TemplatePlugin):
 
-	##~~ SettingsPlugin mixin
-
+	# Return the default settings.
 	def get_settings_defaults(self):
-		return dict(
-			PrinterKey="testkey"
-		)
+		return dict(PrinterKey="")
 
-	##~~ AssetPlugin mixin
+	# Return the current printer key for the settings template
+	def get_template_vars(self):
+		return dict(PrinterKey=self._settings.get(["PrinterKey"]))
 
-	def get_assets(self):
-		# Define your plugin's asset files to automatically include in the
-		# core UI here.
-		return dict(
-			js=["js/OctoEverywhere.js"],
-			css=["css/OctoEverywhere.css"],
-			less=["less/OctoEverywhere.less"]
-		)
+	def get_template_configs(self):
+		return [
+			dict(type="settings", custom_bindings=False)
+		]
 
 	##~~ Softwareupdate hook
-
 	def get_update_information(self):
 		# Define the configuration for your plugin to use with the Software Update
 		# Plugin here. See https://docs.octoprint.org/en/master/bundledplugins/softwareupdate.html
@@ -55,12 +49,58 @@ class OctoeverywherePlugin(octoprint.plugin.SettingsPlugin,
 			)
 		)
 
+	# Call when the system is ready and running
+	def on_after_startup(self):
+		# Spin off a thread for us to operate on.
+		logger.info("After startup called. Strating workder thread.")
+		main_thread = threading.Thread(target=self.main)
+		main_thread.daemon = True
+		main_thread.start()
 
-__plugin_name__ = "Octo Everywhere!"
-# Starting with OctoPrint 1.4.0 OctoPrint will also support to run under Python 3 in addition to the deprecated
-# Python 2. New plugins should make sure to run under both versions for now. Uncomment one of the following
-# compatibility flags according to what Python versions your plugin supports!
-__plugin_pythoncompat__ = ">=3,<4" # only python 3
+	# The length the printer ID should be.
+	c_OctoEverywherePrinterIdLength = 40
+	# The url for the add printer process.
+	c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/addprinter?printerid="
+
+	# Returns a new printer Id. This needs to be crypo-random to make sure it's not
+	# predictable.
+	def GeneratePrinterId(self):
+		return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(self.c_OctoEverywherePrinterIdLength))
+	
+	# Ensures we have generated a printer id and returns it.
+	def EnsureAndGetPrinterId(self):
+		# Try to get the current.
+		currentId = self._settings.get(["PrinterKey"])
+
+		# Make sure the current ID is valid.
+		if currentId == None or len(currentId) < self.c_OctoEverywherePrinterIdLength:
+			# Create and save the new value
+			logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
+			currentId = self.GeneratePrinterId()
+			logger.info("New printer id is: "+currentId)
+
+		# Always update the settings, so they are always correct.
+		self._settings.set(["AddPrinterUrl"], self.c_OctoEverywhereAddPrinterUrl + currentId, force=True)
+		self._settings.set(["PrinterKey"], currentId, force=True)
+		self._settings.save(force=True)
+		return currentId
+
+	# Our main worker
+	def main(self):
+		logger.info("Main thread starting")
+		try:		
+			# Get or create a printer id.
+			printerId = self.EnsureAndGetPrinterId()
+
+			# Run!
+			OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"
+			oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger)
+			oe.RunBlocking()		
+		except Exception as e:
+			logger.error("Exception thrown out of main runner. "+str(e))
+
+__plugin_name__ = "OctoEverywhere!"
+__plugin_pythoncompat__ = ">=2.7,<4" # py 2.7 or 3
 
 def __plugin_load__():
 	global __plugin_implementation__
@@ -70,4 +110,3 @@ def __plugin_load__():
 	__plugin_hooks__ = {
 		"octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information
 	}
-
