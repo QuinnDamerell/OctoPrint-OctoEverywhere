@@ -11,17 +11,46 @@ import octoprint.plugin
 logger = logging.getLogger('octoprint.plugins.octoeverywhere')
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
-						   octoprint.plugin.SettingsPlugin,
-                           octoprint.plugin.AssetPlugin,
-                           octoprint.plugin.TemplatePlugin):
+							octoprint.plugin.SettingsPlugin,
+							octoprint.plugin.AssetPlugin,
+							octoprint.plugin.TemplatePlugin,
+							octoprint.plugin.WizardPlugin):
+
+	# Assets we use, just for the wizard right now.
+	def get_assets(self):
+		return {
+			"js"  : ["js/OctoEverywhere.js"],
+			"less": ["less/OctoEverywhere.less"],
+			"css" : ["css/OctoEverywhere.css"]
+		}
+
+	# Reture true if the wizard needs to be shown.
+	def is_wizard_required(self):
+		return self._settings.get(["HasSeenBasicWizard"]) is None
+	
+	# Called when the wizard is closed. Indicates if the UI was seen or not.
+	def on_wizard_finish(self, handled):
+		self._settings.set(["HasSeenBasicWizard"], True, force=True)
+		self._settings.save(force=True)
+
+	# Incrment this if we need to pop the wizard again.
+	def get_wizard_version(self):
+		return 2
+
+	# Called to get details for the wizard page.
+	def get_wizard_details():
+		return self.get_template_vars()
 
 	# Return the default settings.
 	def get_settings_defaults(self):
-		return dict(PrinterKey="")
+		return dict(PrinterKey="", AddPrinterUrl="")
 
 	# Return the current printer key for the settings template
 	def get_template_vars(self):
-		return dict(PrinterKey=self._settings.get(["PrinterKey"]))
+		return dict(
+			PrinterKey=self._settings.get(["PrinterKey"]), 
+			AddPrinterUrl=self._settings.get(["AddPrinterUrl"])
+		)
 
 	def get_template_configs(self):
 		return [
@@ -48,6 +77,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 				pip="https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/{target_version}.zip"
 			)
 		)
+
+	# Called when the system is starting up.
+	def on_startup(self, ip, port):
+		# Ensure they key is created here, so make sure that it is always created before
+		# Any of the UI queries for it.
+		self.EnsureAndGetPrinterId()
 
 	# Call when the system is ready and running
 	def on_after_startup(self):
