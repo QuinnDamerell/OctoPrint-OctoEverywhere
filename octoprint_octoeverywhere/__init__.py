@@ -95,7 +95,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 	# The length the printer ID should be.
 	c_OctoEverywherePrinterIdLength = 40
 	# The url for the add printer process.
-	c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/addprinter?printerid="
+	c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/getstarted?printerid="
 
 	# Returns a new printer Id. This needs to be crypo-random to make sure it's not
 	# predictable.
