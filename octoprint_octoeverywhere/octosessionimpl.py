@@ -131,7 +131,13 @@ class OctoMessageThread(threading.Thread):
                 return
 
             # Handle the webrequest.
-            self.OctoSession.HandleWebRequest(msg)          
+            if msg["IsHttpRequest"] != None and msg["IsHttpRequest"]:
+                self.OctoSession.HandleWebRequest(msg)
+                return
+
+            # We don't know what this is, probally a new message we don't understand.
+            self.Logger.info("Unknown message type received, ignoring.")
+            return
 
         except Exception as e:
             # If anything throws, we consider it a protocol failure.
@@ -258,6 +264,7 @@ class OctoSession:
             outMsg = {}
             outMsg["Path"] = path
             outMsg["PairId"] = msg["PairId"]
+            outMsg["IsHttpRequest"] = True
 
             if response != None:
                 # Prepare to send back the response.
