@@ -244,13 +244,13 @@ class OctoSession:
             send_headers = Header.GatherRequestHeaders(msg, self.LocalHostAddress)
 
             # Make the local request.
+            # Note we use a long timeout becuase some api calls can hang for a while.
+            # For example when plugins are installed, some have to compile whilch can take some
+            # time.
             reqStart = time.time()
             response = None
             try:
-                if msg["Method"] == "POST" :
-                    response = requests.post(path, headers=send_headers, data= msg["Data"], timeout=60)
-                else:
-                    response = requests.get(path, headers=send_headers, timeout=60)
+                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=600)
             except Exception as e:
                 # If we fail to make the call then kill the connection.
                 self.Logger.error("Failed to make local request. " + str(e) + " for " + path)
