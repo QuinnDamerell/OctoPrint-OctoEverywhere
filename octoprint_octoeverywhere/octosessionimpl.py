@@ -6,6 +6,7 @@ import threading
 import requests
 import jsonpickle
 import traceback
+import zlib
 
 # 
 # This Session file respresents one connection to the service. If anything fails it is destroyed and a new connection will be made.
@@ -257,8 +258,7 @@ class OctoSession:
                 self.OctoStream.OnSessionError(0)
                 return
 
-            reqEnd = time.time()
-            self.Logger.info("Local Web Request took ["+str(reqEnd - reqStart)+"] for " + path)           
+            reqEnd = time.time()         
 
             # Prepare to return the response.
             outMsg = {}
@@ -266,21 +266,48 @@ class OctoSession:
             outMsg["PairId"] = msg["PairId"]
             outMsg["IsHttpRequest"] = True
 
+            ogDataSize = 0
+            compressedSize = 0
             if response != None:
                 # Prepare to send back the response.
                 outMsg["StatusCode"] = response.status_code
                 outMsg["Data"] = response.content
+                ogDataSize = len(outMsg["Data"])
 
                 # Gather up the headers to return.
+                compressData = False
                 returnHeaders = []
                 for name in response.headers:
                     returnHeaders.append(Header(name, response.headers[name]))
+
+                    # Look for the content type header. Anything that is text or
+                    # javascript we will compress before sending.
+                    nameLower = name.lower()
+                    if nameLower == "content-type":
+                        valueLower = response.headers[name].lower()
+                        if valueLower.find("text/") == 0 or valueLower.find("javascript") != -1 or valueLower.find("json") != -1:
+                            compressData = True
+
+                # Set the headers
                 outMsg["Headers"] = returnHeaders
+
+                # Compress the data if needed.
+                if compressData:
+                    orgLen = len(outMsg["Data"])
+                    outMsg["DataCompression"] = "zlib"
+                    outMsg["Data"] = zlib.compress(outMsg["Data"])
+                    compressedSize = len(outMsg["Data"])                    
             else:
                 outMsg["StatusCode"] = 408
 
+            processTime = time.time() 
+
             # Send the response
             self.Send(outMsg) 
+
+            # Log about it.
+            sentTime = time.time() 
+            self.Logger.info("Web Request [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size ("+str(ogDataSize)+"->"+str(compressedSize)+") for " + path)
 
     def StartHandshake(self):
         # Setup the message

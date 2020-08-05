@@ -10,15 +10,26 @@ class Header:
     def GatherRequestHeaders(msg, hostAddress) :
         send_headers = {}
         for header in msg["Headers"]:
-            name = header["Name"]
+            lowerName = header["Name"].lower()
             value = header["Value"]
-            if name == "Host" :
-                value = hostAddress
-            if name == "Referer" :
-                value = "http://" + hostAddress
-            if name == "Origin" :
-                value = "http://" + hostAddress
-            if name == "Upgrade-Insecure-Requests":
+
+            # Filter out headers we don't want to send.
+            if lowerName == "accept-encoding":
+                # We don't want to accept encoding becuase it's just a waste of CPU to send over
+                # local host. We will do our own encoding when we send the data over the websocket.
+                continue
+            if lowerName == "upgrade-insecure-requests":
+                # We don't support https over the local host.
                 continue 
-            send_headers[name] = value
+
+            # Update any headers we need to for the local call.
+            if lowerName == "host" :
+                value = hostAddress
+            if lowerName == "referer" :
+                value = "http://" + hostAddress
+            if lowerName == "origin" :
+                value = "http://" + hostAddress
+
+            # Add the header. (use the orgional case)
+            send_headers[header["Name"]] = value
         return send_headers
