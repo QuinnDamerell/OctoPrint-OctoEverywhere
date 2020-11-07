@@ -64,7 +64,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		# for details.
 		return dict(
 			OctoEverywhere=dict(
-				displayName="Octoeverywhere Plugin",
+				displayName=self.__plugin_name__,
 				displayVersion=self._plugin_version,
 
 				# version check: github repository
