@@ -63,7 +63,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		# Plugin here. See https://docs.octoprint.org/en/master/bundledplugins/softwareupdate.html
 		# for details.
 		return dict(
-			OctoEverywhere=dict(
+			octoeverywhere=dict(
 				displayName=self.__plugin_name__,
 				displayVersion=self._plugin_version,
 
