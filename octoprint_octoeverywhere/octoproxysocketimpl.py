@@ -21,7 +21,7 @@ class OctoProxySocket(threading.Thread):
     HttpResponse = None
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        threading.Thread.__init__(self, group=group, target=target, name=name, verbose=verbose)
+        threading.Thread.__init__(self, group=group, target=target, name=name)
         self.Logger = args[0]    
         self.Id = args[1] 
         self.OctoSession = args[2] 

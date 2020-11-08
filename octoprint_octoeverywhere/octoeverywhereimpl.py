@@ -14,7 +14,7 @@ class OctoEverywhere:
     OctoSession = None
 
     Ws = None
-    WsConnectBackOffSec = 0
+    WsConnectBackOffSec = 5
 
     def __init__(self, endpoint, printerId, logger):
         self.Logger = logger
@@ -32,7 +32,7 @@ class OctoEverywhere:
         self.Logger.info("Handshake complete, successfully connected to OctoEverywhere!")
 
         # Only set the back off when we are done with the handshake
-        self.WsConnectBackOffSec = 0
+        self.WsConnectBackOffSec = 5
 
     def OnClosed(self, ws):
         self.Logger.info("Service websocket closed.")
@@ -42,7 +42,11 @@ class OctoEverywhere:
 
     def OnMsg(self, ws, msg):
         if self.OctoSession :
-            self.OctoSession.HandleMessage(msg)
+            try:
+                self.OctoSession.HandleMessage(msg)
+            except Exception as e:
+                self.Logger.error("Exception in OctoSession.HandleMessage " + str(e))
+                self.OnSessionError(0)
     
     # Called by the session if we should kill this socket.
     def OnSessionError(self, backoffModifierSec):
@@ -82,8 +86,8 @@ class OctoEverywhere:
             time.sleep(self.WsConnectBackOffSec)
 
             # Increment
-            if self.WsConnectBackOffSec < 60 :
-                self.WsConnectBackOffSec += 1
+            if self.WsConnectBackOffSec < 180 :
+                self.WsConnectBackOffSec *= 2
 
     def SendMsg(self, msgBytes):
         self.Ws.Send(msgBytes, True)
