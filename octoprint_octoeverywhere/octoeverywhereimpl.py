@@ -86,8 +86,9 @@ class OctoEverywhere:
             time.sleep(self.WsConnectBackOffSec)
 
             # Increment
-            if self.WsConnectBackOffSec < 180 :
-                self.WsConnectBackOffSec *= 2
+            self.WsConnectBackOffSec *= 2
+            if self.WsConnectBackOffSec > 180 :
+                self.WsConnectBackOffSec = 180                
 
     def SendMsg(self, msgBytes):
         self.Ws.Send(msgBytes, True)
