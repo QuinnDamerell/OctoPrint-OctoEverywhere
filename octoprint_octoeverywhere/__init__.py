@@ -27,9 +27,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 			"css" : ["css/OctoEverywhere.css"]
 		}
 
-	# Reture true if the wizard needs to be shown.
+	# Return true if the wizard needs to be shown.
 	def is_wizard_required(self):
-		return self._settings.get(["HasSeenBasicWizard"]) is None
+		# TODO - for now disable the wizard since for some users it got them stuck
+		# with no way to dismiss it.
+		return False
+		#return self._settings.get(["HasSeenBasicWizard"]) is None
 	
 	# Called when the wizard is closed. Indicates if the UI was seen or not.
 	def on_wizard_finish(self, handled):
