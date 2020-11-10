@@ -150,14 +150,16 @@ class OctoMessageThread(threading.Thread):
 class OctoSession:
     Logger = None
     OctoStream = None
+    OctoPrintLocalPort = 80
     PrinterId = ""
     LocalHostAddress = "127.0.0.1"
     ActiveProxySockets = {}
 
-    def __init__(self, octoStream, logger, printerId):
+    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort):
         self.Logger = logger
         self.OctoStream = octoStream
         self.PrinterId = printerId
+        self.OctoPrintLocalPort = octoPrintLocalPort
 
     def OnSessionError(self, backoffModifierSec):
         # Just forward
@@ -198,7 +200,7 @@ class OctoSession:
                 self.Logger.error("A websocket connect message was sent with data!")
 
             # Create the proxy socket object
-            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress,))
+            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort,))
             self.ActiveProxySockets[socketId] = s
             s.start()
 
@@ -239,10 +241,11 @@ class OctoSession:
 
     def HandleWebRequest(self, msg):                         
             # Create the path.
-            path = 'http://' + self.LocalHostAddress + msg["Path"]
+            addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
+            path = 'http://' + addressAndPort + msg["Path"]
 
             # Setup the headers
-            send_headers = Header.GatherRequestHeaders(msg, self.LocalHostAddress)
+            send_headers = Header.GatherRequestHeaders(msg, addressAndPort)
 
             # Make the local request.
             # Note we use a long timeout becuase some api calls can hang for a while.

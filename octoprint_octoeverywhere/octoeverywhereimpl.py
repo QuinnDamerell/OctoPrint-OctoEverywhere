@@ -8,6 +8,7 @@ from .octosessionimpl import OctoSession
 #
 class OctoEverywhere:
     ProtocolVersion = 1
+    OctoPrintLocalPort = 80
     Logger = None
     Endpoint = ""
     PrinterId = ""
@@ -16,16 +17,17 @@ class OctoEverywhere:
     Ws = None
     WsConnectBackOffSec = 5
 
-    def __init__(self, endpoint, printerId, logger):
+    def __init__(self, endpoint, octoPrintLocalPort, printerId, logger):
         self.Logger = logger
         self.PrinterId = printerId
         self.Endpoint = endpoint
+        self.OctoPrintLocalPort = octoPrintLocalPort
 
     def OnOpened(self, ws):
         self.Logger.info("Connected To Octo Everywhere. Starting handshake...")
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.OctoPrintLocalPort)
         self.OctoSession.StartHandshake()
 
     def OnHandshakeComplete(self):

@@ -16,6 +16,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 							octoprint.plugin.TemplatePlugin,
 							octoprint.plugin.WizardPlugin):
 
+	# The port this octoprint instance is listening on.
+	OctoPrintLocalPort = 80
+
 	# Assets we use, just for the wizard right now.
 	def get_assets(self):
 		return {
@@ -80,6 +83,10 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 	# Called when the system is starting up.
 	def on_startup(self, ip, port):
+		# Get the port the server is listening on, since for some configs it's not the default.
+		self.OctoPrintLocalPort = port 
+		logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
+
 		# Ensure they key is created here, so make sure that it is always created before
 		# Any of the UI queries for it.
 		self.EnsureAndGetPrinterId()
@@ -129,7 +136,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 			# Run!
 			OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"
-			oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger)
+			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, printerId, logger)
 			oe.RunBlocking()		
 		except Exception as e:
 			logger.error("Exception thrown out of main runner. "+str(e))

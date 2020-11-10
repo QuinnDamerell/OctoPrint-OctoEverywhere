@@ -14,6 +14,7 @@ class OctoProxySocket(threading.Thread):
     Logger = None
     OpenMsg = {}
     LocalHostAddress = ""
+    LoastHostPort = 80
     Id = 0
     OctoSession = {}
     Ws = None
@@ -27,6 +28,7 @@ class OctoProxySocket(threading.Thread):
         self.OctoSession = args[2] 
         self.OpenMsg = args[3] 
         self.LocalHostAddress = args[4] 
+        self.LoastHostPort = args[5] 
 
     def run(self):
         try:
@@ -132,7 +134,9 @@ class OctoProxySocket(threading.Thread):
     def HandleWebSocketConnection(self) :
         # Open the ws and run it until it closed.
         path = self.OpenMsg["Path"]
-        uri = "ws://" + self.LocalHostAddress + path
+
+        # For the websocket use the correct OctoPrint port number
+        uri = "ws://" + self.LocalHostAddress + ":" + str(self.LoastHostPort) + path
         self.Logger.info('Opening proxy socket websocket ' + str(self.Id) + " , " + uri)
         self.Ws = Client(uri, self.OnWsOpened, None, self.OnWsData, self.OnWsClosed, self.OnWsError)
         if self.IsClosed:
@@ -159,7 +163,7 @@ class OctoProxySocket(threading.Thread):
                     headerSize = headerStr.find("\r\n\r\n")
                     if headerSize == -1:
                         # We failed.
-                        self.Logger.error("Failed to find header size in http stream.")
+                        self.Logger.error("Failed to find header size in http stream." +str(data))
                         return 0
 
                     # Add 4 bytes for the \r\n\r\n sequence and two bytes for the \r\n at the end of the chunk.
@@ -225,6 +229,9 @@ class OctoProxySocket(threading.Thread):
     def HandleHttpStreamConnection(self) :
         # Setup the path.
         path = self.OpenMsg["Path"]
+
+        # For camera streams, we can't use the local OctoPrint port.
+        # TODO - this means cameras won't work on on default port instances.
         uri = "http://" + self.LocalHostAddress + path
         self.Logger.info("Opening proxy socket http stream " + str(self.Id) + " , " +uri)
 
