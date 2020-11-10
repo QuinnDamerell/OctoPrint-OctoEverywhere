@@ -41,7 +41,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		return 2
 
 	# Called to get details for the wizard page.
-	def get_wizard_details():
+	def get_wizard_details(self):
 		return self.get_template_vars()
 
 	# Return the default settings.
