@@ -8,8 +8,6 @@ import string
 from .octoeverywhereimpl import OctoEverywhere
 import octoprint.plugin
 
-logger = logging.getLogger('octoprint.plugins.octoeverywhere')
-
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 							octoprint.plugin.SettingsPlugin,
 							octoprint.plugin.AssetPlugin,
@@ -33,7 +31,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		# with no way to dismiss it.
 		return False
 		#return self._settings.get(["HasSeenBasicWizard"]) is None
-	
+
 	# Called when the wizard is closed. Indicates if the UI was seen or not.
 	def on_wizard_finish(self, handled):
 		self._settings.set(["HasSeenBasicWizard"], True, force=True)
@@ -54,7 +52,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 	# Return the current printer key for the settings template
 	def get_template_vars(self):
 		return dict(
-			PrinterKey=self._settings.get(["PrinterKey"]), 
+			PrinterKey=self._settings.get(["PrinterKey"]),
 			AddPrinterUrl=self._settings.get(["AddPrinterUrl"])
 		)
 
@@ -87,8 +85,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 	# Called when the system is starting up.
 	def on_startup(self, ip, port):
 		# Get the port the server is listening on, since for some configs it's not the default.
-		self.OctoPrintLocalPort = port 
-		logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
+		self.OctoPrintLocalPort = port
+		self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
 
 		# Ensure they key is created here, so make sure that it is always created before
 		# Any of the UI queries for it.
@@ -97,7 +95,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 	# Call when the system is ready and running
 	def on_after_startup(self):
 		# Spin off a thread for us to operate on.
-		logger.info("After startup called. Strating workder thread.")
+		self._logger.info("After startup called. Strating workder thread.")
 		main_thread = threading.Thread(target=self.main)
 		main_thread.daemon = True
 		main_thread.start()
@@ -111,7 +109,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 	# predictable.
 	def GeneratePrinterId(self):
 		return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(self.c_OctoEverywherePrinterIdLength))
-	
+
 	# Ensures we have generated a printer id and returns it.
 	def EnsureAndGetPrinterId(self):
 		# Try to get the current.
@@ -120,9 +118,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		# Make sure the current ID is valid.
 		if currentId == None or len(currentId) < self.c_OctoEverywherePrinterIdLength:
 			# Create and save the new value
-			logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
+			self._logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
 			currentId = self.GeneratePrinterId()
-			logger.info("New printer id is: "+currentId)
+			self._logger.info("New printer id is: "+currentId)
 
 		# Always update the settings, so they are always correct.
 		self._settings.set(["AddPrinterUrl"], self.c_OctoEverywhereAddPrinterUrl + currentId, force=True)
@@ -132,17 +130,17 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 	# Our main worker
 	def main(self):
-		logger.info("Main thread starting")
-		try:		
+		self._logger.info("Main thread starting")
+		try:
 			# Get or create a printer id.
 			printerId = self.EnsureAndGetPrinterId()
 
 			# Run!
 			OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"
-			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, printerId, logger)
-			oe.RunBlocking()		
+			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, printerId, self._logger)
+			oe.RunBlocking()
 		except Exception as e:
-			logger.error("Exception thrown out of main runner. "+str(e))
+			self._logger.error("Exception thrown out of main runner. "+str(e))
 
 __plugin_name__ = "OctoEverywhere!"
 __plugin_pythoncompat__ = ">=2.7,<4" # py 2.7 or 3
