@@ -3,6 +3,7 @@ import requests
 import datetime
 import time
 import traceback
+import sys
 
 from .websocketimpl import Client
 from .octoheaderimpl import Header
@@ -160,7 +161,14 @@ class OctoProxySocket(threading.Thread):
                     headerStr = str(data)
 
                     # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
-                    headerSize = headerStr.find("\r\n\r\n")
+                    # For python2, we need to change the format of the strings.
+                    endOfAllHeadersMatch = "\\r\\n\\r\\n"
+                    endOfHeaderMatch = "\\r\\n"
+                    if sys.version_info[0] < 3:
+                        endOfAllHeadersMatch =  "\r\n\r\n"
+                        endOfHeaderMatch = "\r\n"
+
+                    headerSize = headerStr.find(endOfAllHeadersMatch)
                     if headerSize == -1:
                         # We failed.
                         self.Logger.error("Failed to find header size in http stream." +str(data))
@@ -170,7 +178,7 @@ class OctoProxySocket(threading.Thread):
                     headerSize += 4 + 2
 
                     # Split out the headers
-                    headers = headerStr.split("\r\n")
+                    headers = headerStr.split(endOfHeaderMatch)
                     foundLen = False
                     for header in headers:
                         if header.lower().startswith("content-length"):

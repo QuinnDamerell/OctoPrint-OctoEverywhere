@@ -24,7 +24,10 @@ def pack32Int(buffer, bufferOffset, value) :
 
 # Helper to unpack ints
 def unpack32Int(buffer, bufferOffset) :
-    return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
+    if sys.version_info[0] < 3:
+        return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
+    else:
+        return (buffer[0 + bufferOffset] << 24) + (buffer[1 + bufferOffset] << 16) + (buffer[2 + bufferOffset] << 8) + (buffer[3 + bufferOffset])
 
 # Decodes an OctoStream message.
 def decodeOcotoStreamMsg(data) :
@@ -104,8 +107,8 @@ class OctoMessageThread(threading.Thread):
     OctoSession = None
     IncomingData = None
 
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        threading.Thread.__init__(self, group=group, target=target, name=name, verbose=verbose)
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None):
+        threading.Thread.__init__(self, group=group, target=target, name=name)
         self.Logger = args[0]
         self.OctoSession = args[1]
         self.IncomingData = args[2]
