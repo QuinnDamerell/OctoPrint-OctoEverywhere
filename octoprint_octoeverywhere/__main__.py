@@ -35,7 +35,8 @@ if __name__ == '__main__':
 
     devId = GeneratePrinterId()
     OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"    
-    #OctoEverywhereWsUri = "ws://192.168.1.142:5000/octoclientws"
+    #OctoEverywhereWsUri = "ws://192.168.86.74:5000/octoclientws"
     OctoPrintLocalPort = 5000
-    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, devId, logger)
+    MjpgStreamerLocalPort = 8080
+    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, MjpgStreamerLocalPort, devId, logger)
     oe.RunBlocking()

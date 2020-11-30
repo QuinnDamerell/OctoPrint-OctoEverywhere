@@ -14,6 +14,7 @@ import zlib
 
 from .octoproxysocketimpl import OctoProxySocket
 from .octoheaderimpl import Header
+from .octoutils import Utils
 
 # Helper to pack ints
 def pack32Int(buffer, bufferOffset, value) :
@@ -154,15 +155,17 @@ class OctoSession:
     Logger = None
     OctoStream = None
     OctoPrintLocalPort = 80
+    MjpgStreamerLocalPort = 8080
     PrinterId = ""
     LocalHostAddress = "127.0.0.1"
     ActiveProxySockets = {}
 
-    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort):
+    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort, mjpgStreamerLocalPort):
         self.Logger = logger
         self.OctoStream = octoStream
         self.PrinterId = printerId
         self.OctoPrintLocalPort = octoPrintLocalPort
+        self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
 
     def OnSessionError(self, backoffModifierSec):
         # Just forward
@@ -203,7 +206,7 @@ class OctoSession:
                 self.Logger.error("A websocket connect message was sent with data!")
 
             # Create the proxy socket object
-            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort,))
+            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort,))
             self.ActiveProxySockets[socketId] = s
             s.start()
 
@@ -246,6 +249,11 @@ class OctoSession:
             # Create the path.
             addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
             path = 'http://' + addressAndPort + msg["Path"]
+
+            # Any path that is directed to /webcam/ needs to go to mjpg-streamer instead of
+            # the OctoPrint instance. If we detect it, we need to use a different path.
+            if Utils.IsWebcamRequest(msg["Path"]) :
+                path = Utils.GetWebcamRequestPath(msg["Path"], self.LocalHostAddress, self.MjpgStreamerLocalPort)
 
             # Setup the headers
             send_headers = Header.GatherRequestHeaders(msg, addressAndPort)

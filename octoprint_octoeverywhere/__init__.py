@@ -137,9 +137,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 			# Get or create a printer id.
 			printerId = self.EnsureAndGetPrinterId()
 
+			# For now, we will always use 8080 for mjpg-streamer. This is the default port and I think
+			# most all configs will run on it. Ideally we would pull this from the config.
+			mjpgStreamerLocalPort = 8080
+
 			# Run!
 			OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"
-			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, printerId, logger)
+			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger)
 			oe.RunBlocking()		
 		except Exception as e:
 			logger.error("Exception thrown out of main runner. "+str(e))

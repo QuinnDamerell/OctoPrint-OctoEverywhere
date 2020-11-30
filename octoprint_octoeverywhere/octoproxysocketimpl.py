@@ -7,6 +7,7 @@ import sys
 
 from .websocketimpl import Client
 from .octoheaderimpl import Header
+from .octoutils import Utils
 
 #
 # Respresents a websocket connection we are proxying or a http stream we are sending.
@@ -16,6 +17,7 @@ class OctoProxySocket(threading.Thread):
     OpenMsg = {}
     LocalHostAddress = ""
     LoastHostPort = 80
+    MjpgStreamerLocalPort = 8080
     Id = 0
     OctoSession = {}
     Ws = None
@@ -30,6 +32,7 @@ class OctoProxySocket(threading.Thread):
         self.OpenMsg = args[3] 
         self.LocalHostAddress = args[4] 
         self.LoastHostPort = args[5] 
+        self.MjpgStreamerLocalPort = args[6]
 
     def run(self):
         try:
@@ -238,9 +241,14 @@ class OctoProxySocket(threading.Thread):
         # Setup the path.
         path = self.OpenMsg["Path"]
 
-        # For camera streams, we can't use the local OctoPrint port.
-        # TODO - this means cameras won't work on on default port instances.
-        uri = "http://" + self.LocalHostAddress + path
+        # Any path that is directed to /webcam/ needs to go to mjpg-streamer instead of
+        # the OctoPrint instance. If we detect it, we need to use a different path.
+        if Utils.IsWebcamRequest(path) :
+            uri = Utils.GetWebcamRequestPath(path, self.LocalHostAddress, self.MjpgStreamerLocalPort)
+        else :
+            # If this isn't a webcam stream, connect to the OctoPrint instance.
+            uri = "http://" + self.LocalHostAddress + ":" + str(self.LoastHostPort) + path
+
         self.Logger.info("Opening proxy socket http stream " + str(self.Id) + " , " +uri)
 
         # Setup the headers
