@@ -14,6 +14,7 @@ import zlib
 
 from .octoproxysocketimpl import OctoProxySocket
 from .octoheaderimpl import Header
+from .octoutils import Utils
 
 # Helper to pack ints
 def pack32Int(buffer, bufferOffset, value) :
@@ -24,7 +25,10 @@ def pack32Int(buffer, bufferOffset, value) :
 
 # Helper to unpack ints
 def unpack32Int(buffer, bufferOffset) :
-    return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
+    if sys.version_info[0] < 3:
+        return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
+    else:
+        return (buffer[0 + bufferOffset] << 24) + (buffer[1 + bufferOffset] << 16) + (buffer[2 + bufferOffset] << 8) + (buffer[3 + bufferOffset])
 
 # Decodes an OctoStream message.
 def decodeOcotoStreamMsg(data) :
@@ -104,8 +108,8 @@ class OctoMessageThread(threading.Thread):
     OctoSession = None
     IncomingData = None
 
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        threading.Thread.__init__(self, group=group, target=target, name=name, verbose=verbose)
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None):
+        threading.Thread.__init__(self, group=group, target=target, name=name)
         self.Logger = args[0]
         self.OctoSession = args[1]
         self.IncomingData = args[2]
@@ -151,15 +155,17 @@ class OctoSession:
     Logger = None
     OctoStream = None
     OctoPrintLocalPort = 80
+    MjpgStreamerLocalPort = 8080
     PrinterId = ""
     LocalHostAddress = "127.0.0.1"
     ActiveProxySockets = {}
 
-    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort):
+    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort, mjpgStreamerLocalPort):
         self.Logger = logger
         self.OctoStream = octoStream
         self.PrinterId = printerId
         self.OctoPrintLocalPort = octoPrintLocalPort
+        self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
 
     def OnSessionError(self, backoffModifierSec):
         # Just forward
@@ -200,7 +206,7 @@ class OctoSession:
                 self.Logger.error("A websocket connect message was sent with data!")
 
             # Create the proxy socket object
-            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort,))
+            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort,))
             self.ActiveProxySockets[socketId] = s
             s.start()
 
@@ -244,17 +250,26 @@ class OctoSession:
             addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
             path = 'http://' + addressAndPort + msg["Path"]
 
+            # Any path that is directed to /webcam/ needs to go to mjpg-streamer instead of
+            # the OctoPrint instance. If we detect it, we need to use a different path.
+            if Utils.IsWebcamRequest(msg["Path"]) :
+                path = Utils.GetWebcamRequestPath(msg["Path"], self.LocalHostAddress, self.MjpgStreamerLocalPort)
+
             # Setup the headers
             send_headers = Header.GatherRequestHeaders(msg, addressAndPort)
 
             # Make the local request.
-            # Note we use a long timeout becuase some api calls can hang for a while.
-            # For example when plugins are installed, some have to compile whilch can take some
-            # time.
+            # Note we use a long timeout because some api calls can hang for a while.
+            # For example when plugins are installed, some have to compile which can take some time.
+            # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
+            # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
+            # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
+            # place to set the location redirect header.
             reqStart = time.time()
             response = None
             try:
-                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=600)
+
+                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
             except Exception as e:
                 # If we fail to make the call then kill the connection.
                 self.Logger.error("Failed to make local request. " + str(e) + " for " + path)
