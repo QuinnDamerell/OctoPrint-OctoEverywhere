@@ -259,13 +259,17 @@ class OctoSession:
             send_headers = Header.GatherRequestHeaders(msg, addressAndPort)
 
             # Make the local request.
-            # Note we use a long timeout becuase some api calls can hang for a while.
-            # For example when plugins are installed, some have to compile whilch can take some
-            # time.
+            # Note we use a long timeout because some api calls can hang for a while.
+            # For example when plugins are installed, some have to compile which can take some time.
+            # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
+            # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
+            # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
+            # place to set the location redirect header.
             reqStart = time.time()
             response = None
             try:
-                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=600)
+
+                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
             except Exception as e:
                 # If we fail to make the call then kill the connection.
                 self.Logger.error("Failed to make local request. " + str(e) + " for " + path)

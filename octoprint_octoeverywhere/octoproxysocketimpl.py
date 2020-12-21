@@ -255,13 +255,19 @@ class OctoProxySocket(threading.Thread):
         send_headers = Header.GatherRequestHeaders(self.OpenMsg, self.LocalHostAddress)
 
         # Try to make the http call.
+        # Note we use a long timeout because some api calls can hang for a while.
+        # For example when plugins are installed, some have to compile which can take some time.
+        # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
+        # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
+        # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
+        # place to set the location redirect header.
         method = self.OpenMsg["Method"]
         if method == "POST" :
-            self.HttpResponse = requests.post(uri, headers=send_headers, data=self.OpenMsg["Data"], timeout=60, stream=True)
+            self.HttpResponse = requests.post(uri, headers=send_headers, data=self.OpenMsg["Data"], timeout=1800, allow_redirects=False, stream=True)
         elif method == "GET" :
-            self.HttpResponse = requests.get(uri, headers=send_headers, timeout=60, stream=True)
+            self.HttpResponse = requests.get(uri, headers=send_headers, timeout=1800, allow_redirects=False, stream=True)
         else:
-            self.Logger.error(method+" methoid is not supported for stream sockets.")
+            self.Logger.error(method+" method is not supported for stream sockets.")
             return
 
         # The response should indicate the boundary or that it's an event stream.
