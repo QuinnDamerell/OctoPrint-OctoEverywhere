@@ -1,23 +1,31 @@
 # OctoEverywhere!
 
-Access your full OctoPrint instance (plugins, camera, control, and more) from everywhere! OctoEverywhere works in a browser on all of your devices and also with your favorite OctoPrint apps!
+An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, and secure access to your OctoPrint instance** (plugins, camera, remote control, and more) from everywhere! 
+
+OctoEverywhere allows you access to the full OctoPrint web portal on all of your devices and also with your favorite 3rd party OctoPrint apps!
+
 
 ## Project Status
 
-**OctoEverywhere is in alpha and still has some rough edges.** The project is under very active development and all of the current issues will be resolved soon.
+**OctoEverywhere is in a beta release, but still has a few rough edges!** The project is under very active development to keep making it better!
+
 
 ## Try It Out!
 
-If you would like to try the alpha, [start here](https://octoeverywhere.com/addprinter).
+What are you waiting for? [Try it out now, it's free and takes less than a mintue to setup!](https://octoeverywhere.com/getStarted)
+
 
 ## Bugs & Feedback
 
-Please leave feedback and bug reports on our [subreddit](https://reddit.com/r/octoeverywhere).
+Please submit bugs or feedback on our github page or [subreddit](https://reddit.com/r/octoeverywhere).
 
 
 ## Setup
 
-Install via the bundled [Plugin Manager](https://docs.octoprint.org/en/master/bundledplugins/pluginmanager.html)
-or manually using this URL:
+### Recomended
 
-    https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/master.zip
+Follow the quick and easy setup guide on the website, [which can be found here.](https://octoeverywhere.com/getStarted).
+
+### Manual
+
+The plugin is listed in the offical OctoPrint plugin repo, so you can find it by searching for it via the Plugin Manager on you OctoPrint portal.

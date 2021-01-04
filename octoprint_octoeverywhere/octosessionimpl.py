@@ -6,6 +6,7 @@ import threading
 import requests
 import jsonpickle
 import traceback
+import zlib
 
 # 
 # This Session file respresents one connection to the service. If anything fails it is destroyed and a new connection will be made.
@@ -13,6 +14,7 @@ import traceback
 
 from .octoproxysocketimpl import OctoProxySocket
 from .octoheaderimpl import Header
+from .octoutils import Utils
 
 # Helper to pack ints
 def pack32Int(buffer, bufferOffset, value) :
@@ -23,7 +25,10 @@ def pack32Int(buffer, bufferOffset, value) :
 
 # Helper to unpack ints
 def unpack32Int(buffer, bufferOffset) :
-    return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
+    if sys.version_info[0] < 3:
+        return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
+    else:
+        return (buffer[0 + bufferOffset] << 24) + (buffer[1 + bufferOffset] << 16) + (buffer[2 + bufferOffset] << 8) + (buffer[3 + bufferOffset])
 
 # Decodes an OctoStream message.
 def decodeOcotoStreamMsg(data) :
@@ -103,8 +108,8 @@ class OctoMessageThread(threading.Thread):
     OctoSession = None
     IncomingData = None
 
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        threading.Thread.__init__(self, group=group, target=target, name=name, verbose=verbose)
+    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None):
+        threading.Thread.__init__(self, group=group, target=target, name=name)
         self.Logger = args[0]
         self.OctoSession = args[1]
         self.IncomingData = args[2]
@@ -130,8 +135,19 @@ class OctoMessageThread(threading.Thread):
                 self.OctoSession.HandleHandshakeAck(msg)
                 return
 
+            # If this is a client notification, handle it.
+            if "Notification" in msg and msg["Notification"] != None :
+                self.OctoSession.HandleClientNotification(msg)
+                return
+
             # Handle the webrequest.
-            self.OctoSession.HandleWebRequest(msg)          
+            if msg["IsHttpRequest"] != None and msg["IsHttpRequest"]:
+                self.OctoSession.HandleWebRequest(msg)
+                return
+
+            # We don't know what this is, probally a new message we don't understand.
+            self.Logger.info("Unknown message type received, ignoring.")
+            return
 
         except Exception as e:
             # If anything throws, we consider it a protocol failure.
@@ -142,15 +158,21 @@ class OctoMessageThread(threading.Thread):
 
 class OctoSession:
     Logger = None
+    UiPopupInvoker = None
     OctoStream = None
+    OctoPrintLocalPort = 80
+    MjpgStreamerLocalPort = 8080
     PrinterId = ""
     LocalHostAddress = "127.0.0.1"
     ActiveProxySockets = {}
 
-    def __init__(self, octoStream, logger, printerId):
+    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker):
         self.Logger = logger
         self.OctoStream = octoStream
         self.PrinterId = printerId
+        self.OctoPrintLocalPort = octoPrintLocalPort
+        self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
+        self.UiPopupInvoker = uiPopupInvoker
 
     def OnSessionError(self, backoffModifierSec):
         # Just forward
@@ -160,6 +182,16 @@ class OctoSession:
         # Encode and send the message.
         encodedMsg = encodeOctoStreamMsg(msg)
         self.OctoStream.SendMsg(encodedMsg)
+
+    def HandleClientNotification(self, msg): 
+        try:
+            title = msg["Notification"]["Title"]
+            text = msg["Notification"]["Text"]
+            type = msg["Notification"]["Type"].lower()
+            autoHide = msg["Notification"]["AutoHide"]
+            self.UiPopupInvoker.ShowUiPopup(title, text, type, autoHide)
+        except Exception as e:
+            self.Logger.error("Failed to handle octo notification message. " + str(e))
 
     def HandleHandshakeAck(self, msg):
         # Handles a handshake ack message.
@@ -191,7 +223,7 @@ class OctoSession:
                 self.Logger.error("A websocket connect message was sent with data!")
 
             # Create the proxy socket object
-            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress,))
+            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort,))
             self.ActiveProxySockets[socketId] = s
             s.start()
 
@@ -232,48 +264,96 @@ class OctoSession:
 
     def HandleWebRequest(self, msg):                         
             # Create the path.
-            path = 'http://' + self.LocalHostAddress + msg["Path"]
+            addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
+            path = 'http://' + addressAndPort + msg["Path"]
+
+            # Any path that is directed to /webcam/ needs to go to mjpg-streamer instead of
+            # the OctoPrint instance. If we detect it, we need to use a different path.
+            if Utils.IsWebcamRequest(msg["Path"]) :
+                path = Utils.GetWebcamRequestPath(msg["Path"], self.LocalHostAddress, self.MjpgStreamerLocalPort)
 
             # Setup the headers
-            send_headers = Header.GatherRequestHeaders(msg, self.LocalHostAddress)
+            send_headers = Header.GatherRequestHeaders(msg, addressAndPort)
 
             # Make the local request.
+            # Note we use a long timeout because some api calls can hang for a while.
+            # For example when plugins are installed, some have to compile which can take some time.
+            # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
+            # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
+            # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
+            # place to set the location redirect header.
             reqStart = time.time()
             response = None
             try:
-                if msg["Method"] == "POST" :
-                    response = requests.post(path, headers=send_headers, data= msg["Data"], timeout=60)
-                else:
-                    response = requests.get(path, headers=send_headers, timeout=60)
+
+                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
             except Exception as e:
                 # If we fail to make the call then kill the connection.
                 self.Logger.error("Failed to make local request. " + str(e) + " for " + path)
                 self.OctoStream.OnSessionError(0)
                 return
 
-            reqEnd = time.time()
-            self.Logger.info("Local Web Request took ["+str(reqEnd - reqStart)+"] for " + path)           
+            reqEnd = time.time()         
 
             # Prepare to return the response.
             outMsg = {}
             outMsg["Path"] = path
             outMsg["PairId"] = msg["PairId"]
+            outMsg["IsHttpRequest"] = True
 
+            ogDataSize = 0
+            compressedSize = 0
             if response != None:
                 # Prepare to send back the response.
                 outMsg["StatusCode"] = response.status_code
                 outMsg["Data"] = response.content
+                ogDataSize = len(outMsg["Data"])
 
                 # Gather up the headers to return.
+                compressData = False
                 returnHeaders = []
                 for name in response.headers:
+                    nameLower = name.lower()
+
+                    # Since we send the entire result as one non-encoded
+                    # payload we want to drop this header. Otherwise the server might emit it to 
+                    # the client, when it actually doesn't match what the server sends to the client.
+                    # Note: Typically, if the OctoPrint web server sent something chunk encoded, 
+                    # our web server will also send it to the client via chunk encoding. But it will handle
+                    # that on it's own and set the header accordingly.
+                    if nameLower == "transfer-encoding":
+                        continue
+
+                    # Add the output header
                     returnHeaders.append(Header(name, response.headers[name]))
+
+                    # Look for the content type header. Anything that is text or
+                    # javascript we will compress before sending.
+                    if nameLower == "content-type":
+                        valueLower = response.headers[name].lower()
+                        if valueLower.find("text/") == 0 or valueLower.find("javascript") != -1 or valueLower.find("json") != -1:
+                            compressData = True
+
+                # Set the headers
                 outMsg["Headers"] = returnHeaders
+
+                # Compress the data if needed.
+                if compressData:
+                    orgLen = len(outMsg["Data"])
+                    outMsg["DataCompression"] = "zlib"
+                    outMsg["Data"] = zlib.compress(outMsg["Data"])
+                    compressedSize = len(outMsg["Data"])                    
             else:
                 outMsg["StatusCode"] = 408
 
+            processTime = time.time() 
+
             # Send the response
             self.Send(outMsg) 
+
+            # Log about it.
+            sentTime = time.time() 
+            self.Logger.info("Web Request [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size ("+str(ogDataSize)+"->"+str(compressedSize)+") for " + path)
 
     def StartHandshake(self):
         # Setup the message

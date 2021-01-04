@@ -9,8 +9,8 @@
             "type": "python",
             "request": "launch",
             "module": "octoprint_octoeverywhere",
-            "cwd": "${workspaceFolder}"
-
+            "cwd": "${workspaceFolder}",
+            "justMyCode": false
         },
         {
             "name": "Dev Runner",

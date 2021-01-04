@@ -8,31 +8,37 @@ from .octosessionimpl import OctoSession
 #
 class OctoEverywhere:
     ProtocolVersion = 1
+    OctoPrintLocalPort = 80
+    MjpgStreamerLocalPort = 8080
     Logger = None
+    UiPopupInvoker = None
     Endpoint = ""
     PrinterId = ""
     OctoSession = None
 
     Ws = None
-    WsConnectBackOffSec = 0
+    WsConnectBackOffSec = 5
 
-    def __init__(self, endpoint, printerId, logger):
+    def __init__(self, endpoint, octoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger, uiPopupInvoker):
         self.Logger = logger
         self.PrinterId = printerId
         self.Endpoint = endpoint
+        self.OctoPrintLocalPort = octoPrintLocalPort
+        self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
+        self.UiPopupInvoker = uiPopupInvoker
 
     def OnOpened(self, ws):
         self.Logger.info("Connected To Octo Everywhere. Starting handshake...")
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort, self.UiPopupInvoker)
         self.OctoSession.StartHandshake()
 
     def OnHandshakeComplete(self):
         self.Logger.info("Handshake complete, successfully connected to OctoEverywhere!")
 
         # Only set the back off when we are done with the handshake
-        self.WsConnectBackOffSec = 0
+        self.WsConnectBackOffSec = 5
 
     def OnClosed(self, ws):
         self.Logger.info("Service websocket closed.")
@@ -42,7 +48,11 @@ class OctoEverywhere:
 
     def OnMsg(self, ws, msg):
         if self.OctoSession :
-            self.OctoSession.HandleMessage(msg)
+            try:
+                self.OctoSession.HandleMessage(msg)
+            except Exception as e:
+                self.Logger.error("Exception in OctoSession.HandleMessage " + str(e))
+                self.OnSessionError(0)
     
     # Called by the session if we should kill this socket.
     def OnSessionError(self, backoffModifierSec):
@@ -82,8 +92,9 @@ class OctoEverywhere:
             time.sleep(self.WsConnectBackOffSec)
 
             # Increment
-            if self.WsConnectBackOffSec < 60 :
-                self.WsConnectBackOffSec += 1
+            self.WsConnectBackOffSec *= 2
+            if self.WsConnectBackOffSec > 180 :
+                self.WsConnectBackOffSec = 180                
 
     def SendMsg(self, msgBytes):
         self.Ws.Send(msgBytes, True)
