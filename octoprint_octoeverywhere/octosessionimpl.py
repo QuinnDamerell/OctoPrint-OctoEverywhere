@@ -339,8 +339,9 @@ class OctoSession:
 
                 # Compress the data if needed.
                 if compressData:
-                    orgLen = len(outMsg["Data"])
+                    ogDataSize = len(outMsg["Data"])
                     outMsg["DataCompression"] = "zlib"
+                    outMsg["OriginalDataSize"] = ogDataSize
                     outMsg["Data"] = zlib.compress(outMsg["Data"])
                     compressedSize = len(outMsg["Data"])                    
             else:
