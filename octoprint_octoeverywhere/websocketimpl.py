@@ -53,7 +53,7 @@ class Client:
     def RunUntilClosed(self):
         # Note we must set the ping_interval and ping_timeout or we won't get a multithread
         # safe socket... python. >.>
-        self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=120)
+        self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300)
 
     def RunAsync(self):
         t = threading.Thread(target=self.RunUntilClosed, args=())
