@@ -164,15 +164,17 @@ class OctoSession:
     MjpgStreamerLocalPort = 8080
     PrinterId = ""
     LocalHostAddress = "127.0.0.1"
+    PluginVersion = ""
     ActiveProxySockets = {}
 
-    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker):
+    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker, pluginVersion):
         self.Logger = logger
         self.OctoStream = octoStream
         self.PrinterId = printerId
         self.OctoPrintLocalPort = octoPrintLocalPort
         self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
         self.UiPopupInvoker = uiPopupInvoker
+        self.PluginVersion = pluginVersion
 
     def OnSessionError(self, backoffModifierSec):
         # Just forward
@@ -199,6 +201,7 @@ class OctoSession:
             self.OctoStream.OnHandshakeComplete()
         else:
             self.Logger.error("Handshake failed, reason '" + str(msg["HandshakeAck"]["Error"] + "'"))
+            # The server can send back a backoff time we should respect.
             backoffModifierSec = 0
             if msg["HandshakeAck"]["BackoffSeconds"]:
                 backoffModifierSec = int(msg["HandshakeAck"]["BackoffSeconds"])
@@ -254,13 +257,18 @@ class OctoSession:
     def CloseAllProxySockets(self):
         # Close them all.
         self.Logger.info("Closing all open proxy sockets ("+str(len(self.ActiveProxySockets))+")")
-        for id in self.ActiveProxySockets:
-            try:
-                self.ActiveProxySockets[id].Close()
-            except Exception as e:
-                self.Logger.error("Exception thrown while closing proxy socket " +str(id)+ " " + str(e))
-        # Clear them all.
-        self.ActiveProxySockets.clear()
+
+        # try catch the entire thing to make sure we don't leak exceptions.
+        try:
+            for id in self.ActiveProxySockets:
+                try:
+                    self.ActiveProxySockets[id].Close()
+                except Exception as e:
+                    self.Logger.error("Exception thrown while closing proxy socket " +str(id)+ " " + str(e))
+            # Clear them all.
+            self.ActiveProxySockets.clear()
+        except Exception as ex:
+            self.Logger.error("Exception thrown while closing all proxy sockets" + str(ex))
 
     def HandleWebRequest(self, msg):                         
             # Create the path.
@@ -285,7 +293,6 @@ class OctoSession:
             reqStart = time.time()
             response = None
             try:
-
                 response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
             except Exception as e:
                 # If we fail to make the call then kill the connection.
@@ -362,6 +369,7 @@ class OctoSession:
         handshakeSyn = {}
         outMsg["HandshakeSyn"] = handshakeSyn
         handshakeSyn["Id"] = self.PrinterId
+        handshakeSyn["PluginVersion"] = self.PluginVersion
 
         # Send the handshakesyn
         try:

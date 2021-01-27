@@ -142,7 +142,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 			# Run!
 			OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"
-			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, self._logger, self)
+			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, self._logger, self, self._plugin_version)
 			oe.RunBlocking()		
 		except Exception as e:
 			self._logger.error("Exception thrown out of main runner. "+str(e))

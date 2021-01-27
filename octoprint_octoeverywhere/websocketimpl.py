@@ -53,6 +53,9 @@ class Client:
     def RunUntilClosed(self):
         # Note we must set the ping_interval and ping_timeout or we won't get a multithread
         # safe socket... python. >.>
+        # The client is responsible for sending keep alive pings the server will then pong respond to.
+        # If that's not done, the connection will timeout.        
+        # We will send a ping every 10 minutes, and expected a pong back within 5 mintues.
         self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300)
 
     def RunAsync(self):

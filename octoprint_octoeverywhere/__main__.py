@@ -50,5 +50,5 @@ if __name__ == '__main__':
     OctoPrintLocalPort = 5000
     MjpgStreamerLocalPort = 8080
     uiPopInvoker = UiPopupInvokerStub(logger)
-    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, MjpgStreamerLocalPort, devId, logger, uiPopInvoker)
+    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, MjpgStreamerLocalPort, devId, logger, uiPopInvoker, "dev")
     oe.RunBlocking()

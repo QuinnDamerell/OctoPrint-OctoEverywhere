@@ -1,4 +1,5 @@
 import time
+import random
 
 from .websocketimpl import Client
 from .octosessionimpl import OctoSession
@@ -15,30 +16,33 @@ class OctoEverywhere:
     Endpoint = ""
     PrinterId = ""
     OctoSession = None
+    PluginVersion = ""
 
     Ws = None
-    WsConnectBackOffSec = 5
+    WsConnectBackOffSec_Default = 5
+    WsConnectBackOffSec = WsConnectBackOffSec_Default
 
-    def __init__(self, endpoint, octoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger, uiPopupInvoker):
+    def __init__(self, endpoint, octoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger, uiPopupInvoker, pluginVersion):
         self.Logger = logger
         self.PrinterId = printerId
         self.Endpoint = endpoint
         self.OctoPrintLocalPort = octoPrintLocalPort
         self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
         self.UiPopupInvoker = uiPopupInvoker
+        self.PluginVersion = pluginVersion
 
     def OnOpened(self, ws):
         self.Logger.info("Connected To Octo Everywhere. Starting handshake...")
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort, self.UiPopupInvoker)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort, self.UiPopupInvoker, self.PluginVersion)
         self.OctoSession.StartHandshake()
 
     def OnHandshakeComplete(self):
         self.Logger.info("Handshake complete, successfully connected to OctoEverywhere!")
 
-        # Only set the back off when we are done with the handshake
-        self.WsConnectBackOffSec = 5
+        # Only set the back off when we are done with the handshake and it was successful.
+        self.WsConnectBackOffSec = self.WsConnectBackOffSec_Default
 
     def OnClosed(self, ws):
         self.Logger.info("Service websocket closed.")
@@ -56,8 +60,12 @@ class OctoEverywhere:
     
     # Called by the session if we should kill this socket.
     def OnSessionError(self, backoffModifierSec):
+
+        # If a back off modifer is supplied, we should add it to the current backoff.
+        # This is driven by the service when it asks us to back off in our connection time.
         if backoffModifierSec > 0:
             self.WsConnectBackOffSec += backoffModifierSec
+
         self.Logger.error("Session reported an error, closing the websocket. Backoff time sec: " + str(self.WsConnectBackOffSec))
 
         # Try to close all of the sockets before we disconnect, so we send the messages.
@@ -85,7 +93,11 @@ class OctoEverywhere:
 
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. " + str(e))
-                time.sleep(5)
+                time.sleep(20)
+
+            # We have a back off time, but always add some random noise as well so not all client try to use the exact
+            # same time.
+            self.WsConnectBackOffSec += random.randint(5, 20)            
             
             # Sleep before incrmenting, so on the first failure we instantly try again.
             self.Logger.info("Sleeping for " + str(self.WsConnectBackOffSec) + " seconds before trying again.")
