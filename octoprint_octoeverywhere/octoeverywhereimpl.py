@@ -1,5 +1,6 @@
 import time
 import random
+import threading
 
 from .websocketimpl import Client
 from .octosessionimpl import OctoSession
@@ -17,6 +18,10 @@ class OctoEverywhere:
     PrinterId = ""
     OctoSession = None
     PluginVersion = ""
+
+    # Summon vars
+    SummonServerTimeout = None
+    SummonServerConnectUrl = ""
 
     Ws = None
     WsConnectBackOffSec_Default = 5
@@ -68,24 +73,68 @@ class OctoEverywhere:
 
         self.Logger.error("Session reported an error, closing the websocket. Backoff time sec: " + str(self.WsConnectBackOffSec))
 
+        # Shut things down
+        self.Disconnect()
+
+    def Disconnect(self):        
         # Try to close all of the sockets before we disconnect, so we send the messages.
         if self.OctoSession:
             self.OctoSession.CloseAllProxySockets()
 
         if self.Ws:
             self.Ws.Close()
+
+    # A summon request can be sent by the services if the user is connected to a different
+    # server than we are connected to. In such a case, we will go connect to the requested
+    # server so that our connection is super speedy!
+    def OnSummonRequest(self, summonConnectUrl):
+        self.Logger.info("We have been summoned by "+summonConnectUrl+"! Let's go say hi!")
+        self.SummonServerConnectUrl = summonConnectUrl
+
+        # Call shutdown so we reconnect over to the new server
+        self.Disconnect()
+
+    # This timer is used to reset back to the original server after some time of being summoned.
+    def OnSummonServerTimeoutCallback(self):
+        try:
+            self.Logger.info("Server summon timeout fired, switching back to the default server.")
+
+            # If there is a timer, stop it now.
+            localTimer = self.SummonServerTimeout
+            self.SummonServerTimeout = None
+            if localTimer != None:
+                localTimer.cancel()
+
+            # Call disconnect to shutdown the connection, and we will auto reconnect to the default domain.
+            self.Disconnect()
+        except Exception as e:
+            self.Logger.error("Exception in OnSummonServerTimeoutCallback: " + str(e))
     
     def RunBlocking(self):
         while 1:
             # Since we want to run forever, we want to make sure any exceptions get caught but then we try again.
             try:
+
+                # Before we connect, see if we have been summoned to a specific server.
+                localEndpoint = self.Endpoint
+                if len(self.SummonServerConnectUrl) > 0:
+                    # If so, set our endpoint to be the summon server.
+                    localEndpoint = self.SummonServerConnectUrl
+                    # Clear out the summon subdomain so we only attempt this once.
+                    self.SummonServerConnectUrl = ""
+
+                    # Also start a timer so we eventually default back to the normal server.
+                    timeoutSec = 12 * 60 * 60 # switch back to default after half a day.
+                    self.SummonServerTimeout = threading.Timer(timeoutSec, self.OnSummonServerTimeoutCallback)
+                    self.SummonServerTimeout.start()
+
                 # Connect to the service.
-                self.Logger.info("Attempting to talk to Octo Everywhere. " + str(self.Endpoint))
-                self.Ws = Client(self.Endpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
+                self.Logger.info("Attempting to talk to OctoEverywhere. " + str(localEndpoint))
+                self.Ws = Client(localEndpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
                 self.Ws.RunUntilClosed()
 
                 # Handle disconnects            
-                self.Logger.info("Disconnected from Octo Everywhere")
+                self.Logger.info("Disconnected from OctoEverywhere")
 
                 # Ensure all proxy sockets are closed.
                 if self.OctoSession:
@@ -94,6 +143,16 @@ class OctoEverywhere:
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. " + str(e))
                 time.sleep(20)
+
+            # If a summon timeout is runing, cancel it since we always default back to the main hostname on a new connection.
+            localTimer = self.SummonServerTimeout
+            self.SummonServerTimeout = None
+            if localTimer != None:
+                localTimer.cancel()
+
+            # If we have been summoned, instantly try to connect, don't wait a backoff.
+            if len(self.SummonServerConnectUrl) > 0:
+                continue
 
             # We have a back off time, but always add some random noise as well so not all client try to use the exact
             # same time.

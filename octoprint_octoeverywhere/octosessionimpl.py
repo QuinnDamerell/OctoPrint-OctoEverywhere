@@ -125,14 +125,14 @@ class OctoMessageThread(threading.Thread):
             return
     
         try:
-            # If this is a proxy socket, handle it
-            if msg["ProxySocket"] != None :
-                self.OctoSession.HandleProxySocketMessage(msg)
+            # If this is a handshake ack, handle it.
+            if "HandshakeAck" in msg and msg["HandshakeAck"] != None :
+                self.OctoSession.HandleHandshakeAck(msg)
                 return
 
-            # If this is a handshake ack, handle it.
-            if msg["HandshakeAck"] != None :
-                self.OctoSession.HandleHandshakeAck(msg)
+            # If this is a proxy socket, handle it
+            if "ProxySocket" in msg and msg["ProxySocket"] != None :
+                self.OctoSession.HandleProxySocketMessage(msg)
                 return
 
             # If this is a client notification, handle it.
@@ -141,8 +141,13 @@ class OctoMessageThread(threading.Thread):
                 return
 
             # Handle the webrequest.
-            if msg["IsHttpRequest"] != None and msg["IsHttpRequest"]:
+            if "IsHttpRequest" in msg and msg["IsHttpRequest"] != None and msg["IsHttpRequest"]:
                 self.OctoSession.HandleWebRequest(msg)
+                return
+
+            # Handle the summon request.
+            if "Summon" in msg and msg["Summon"] != None :
+                self.OctoSession.HandleSummonRequest(msg)
                 return
 
             # We don't know what this is, probally a new message we don't understand.
@@ -184,6 +189,13 @@ class OctoSession:
         # Encode and send the message.
         encodedMsg = encodeOctoStreamMsg(msg)
         self.OctoStream.SendMsg(encodedMsg)
+
+    def HandleSummonRequest(self, msg):
+        try:
+            summonConnectUrl = msg["Summon"]["ServerConnectUrl"]
+            self.OctoStream.OnSummonRequest(summonConnectUrl)
+        except Exception as e:
+            self.Logger.error("Failed to handle summon request " + str(e))
 
     def HandleClientNotification(self, msg): 
         try:
