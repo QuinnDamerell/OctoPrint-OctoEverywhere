@@ -10,7 +10,7 @@ from os import urandom
 from .octoeverywhereimpl import OctoEverywhere
 
 #
-# This file is used for development purposes. It can run the system outside of teh OctoPrtint env.
+# This file is used for development purposes. It can run the system outside of teh OctoPrint env.
 # 
 
 # A mock of the popup UI interface.

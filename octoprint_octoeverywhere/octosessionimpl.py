@@ -163,6 +163,7 @@ class OctoMessageThread(threading.Thread):
 
 class OctoSession:
     Logger = None
+    SessionId = 0
     UiPopupInvoker = None
     OctoStream = None
     OctoPrintLocalPort = 80
@@ -171,9 +172,11 @@ class OctoSession:
     LocalHostAddress = "127.0.0.1"
     PluginVersion = ""
     ActiveProxySockets = {}
+    ActiveProxySocketsLock = threading.Lock()
 
-    def __init__(self, octoStream, logger, printerId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker, pluginVersion):
+    def __init__(self, octoStream, logger, printerId, sessionId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker, pluginVersion):
         self.Logger = logger
+        self.SessionId = sessionId
         self.OctoStream = octoStream
         self.PrinterId = printerId
         self.OctoPrintLocalPort = octoPrintLocalPort
@@ -183,7 +186,7 @@ class OctoSession:
 
     def OnSessionError(self, backoffModifierSec):
         # Just forward
-        self.OctoStream.OnSessionError(backoffModifierSec)
+        self.OctoStream.OnSessionError(self.SessionId, backoffModifierSec)
 
     def Send(self, msg):
         # Encode and send the message.
@@ -193,7 +196,7 @@ class OctoSession:
     def HandleSummonRequest(self, msg):
         try:
             summonConnectUrl = msg["Summon"]["ServerConnectUrl"]
-            self.OctoStream.OnSummonRequest(summonConnectUrl)
+            self.OctoStream.OnSummonRequest(self.SessionId, summonConnectUrl)
         except Exception as e:
             self.Logger.error("Failed to handle summon request " + str(e))
 
@@ -210,75 +213,140 @@ class OctoSession:
     def HandleHandshakeAck(self, msg):
         # Handles a handshake ack message.
         if msg["HandshakeAck"]["Accepted"]:
-            self.OctoStream.OnHandshakeComplete()
+            self.OctoStream.OnHandshakeComplete(self.SessionId)
         else:
             self.Logger.error("Handshake failed, reason '" + str(msg["HandshakeAck"]["Error"] + "'"))
             # The server can send back a backoff time we should respect.
             backoffModifierSec = 0
             if msg["HandshakeAck"]["BackoffSeconds"]:
                 backoffModifierSec = int(msg["HandshakeAck"]["BackoffSeconds"])
-            self.OctoStream.OnSessionError(backoffModifierSec)
+            self.OnSessionError(backoffModifierSec)
 
     def HandleProxySocketMessage(self, msg) :
         # Get the requested id.
         socketId = msg["ProxySocket"]["Id"]
 
-        #
-        # TODO does this map need to be thread safe?
         if "OpenDetails" in msg["ProxySocket"] and msg["ProxySocket"]["OpenDetails"] != None :
+            # Grab the lock before messing with the map.
+            self.ActiveProxySocketsLock.acquire()
+            try:
+                # Check we don't have a socket already
+                if socketId in self.ActiveProxySockets :
+                    self.Logger.error("Tried to open proxy socket id " + str(socketId) + " but it already exists.")
+                    # throwing here will terminate this entire OcotoSocket and reset.
+                    raise Exception("Tried to open proxy socket that was already open")
+                    
+                # Sanity check there is no data.
+                if len(msg["Data"]) != 0:
+                    self.Logger.error("A websocket connect message was sent with data!")
 
-            # Check we don't have a socket already
-            if socketId in self.ActiveProxySockets :
-                self.Logger.error("Tried to open proxy socket id " + str(socketId) + " but it already exists.")
-                # throwing here will terminate this entire OcotoSocket and reset.
-                raise Exception("Tried to open proxy socket that was already open")
-            
-            # Sanity check there is no data.
-            if len(msg["Data"]) != 0:
-                self.Logger.error("A websocket connect message was sent with data!")
+                # Create the proxy socket object
+                s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort,))
+                self.ActiveProxySockets[socketId] = s
+                s.start()
 
-            # Create the proxy socket object
-            s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort,))
-            self.ActiveProxySockets[socketId] = s
-            s.start()
+            except Exception as _:
+                # rethrow any exceptions in the code
+                raise                
+            finally:
+                # Always unlock                
+                self.ActiveProxySocketsLock.release()
 
         elif msg["ProxySocket"]["IsCloseMessage"] == True :
-            # Check that it exists.
-            if socketId in self.ActiveProxySockets :
-                try:
-                    self.ActiveProxySockets[socketId].Close()
-                except Exception as e:
-                    self.Logger.error("Exception while closing proxy socket "+str(e))
+            # Grab the lock before messing with the map.
+            localSocket = None
+            self.ActiveProxySocketsLock.acquire()
+            try:
+                # Try to copy the socket locally.
+                if socketId in self.ActiveProxySockets :
+                    # If we find it, take it and remove it.
+                    localSocket = self.ActiveProxySockets[socketId]
+                    self.ActiveProxySockets.pop(socketId)  
+                else:
+                    self.Logger.error("tried to close proxy socket id " + str(socketId) + " but it already closed.")
+                    # throwing here will terminate this entire OcotoSocket and reset.
+                    raise Exception("Tried to close proxy socket that was already closed.")
+            except Exception as _:
+                # rethrow any exceptions in the code
+                raise                
+            finally:
+                # Always unlock                
+                self.ActiveProxySocketsLock.release()
 
-                # Remove it from the map
-                self.ActiveProxySockets.pop(socketId)  
-
-            else :
-                self.Logger.error("tried to close proxy socket id " + str(socketId) + " but it already closed.")
+            # Check we got it. We always should, but it never hurts.
+            if localSocket == None:
+                self.Logger.error("tried to close proxy socket id " + str(socketId) + " but it returned a null socket?")
                 # throwing here will terminate this entire OcotoSocket and reset.
-                raise Exception("Tried to close proxy socket that was already closed.")
+                raise Exception("Tried to close proxy socket but got a null socket obj.")
+
+            # Now actually try to close the socket
+            try:
+                localSocket.Close()
+            except Exception as e:
+                # If we get an error report it and throw again, so the connection will
+                # reset.
+                self.Logger.error("Exception while closing proxy socket "+str(e))
+                raise Exception("Exception while closing proxy socket")
+
         else :
-            if socketId in self.ActiveProxySockets :
-                # If the id exists, send the data through the socket.
-                self.ActiveProxySockets[socketId].Send(msg)
-            else:
-                self.Logger.error("Tried to send data to a proxy socket id that doesn't exist. " + str(socketId))
+            # Grab the lock before messing with the map.
+            localSocket = None
+            self.ActiveProxySocketsLock.acquire()
+            try:
+                # Try to copy the socket locally.
+                if socketId in self.ActiveProxySockets :
+                    localSocket = self.ActiveProxySockets[socketId]
+                else:
+                    self.Logger.error("Tried to send data to a proxy socket id that doesn't exist. " + str(socketId))
+                    # throwing here will terminate this entire OcotoSocket and reset.
+                    raise Exception("Tried to send data to a proxy socket id that doesn't exist")
+            except Exception as _:
+                # rethrow any exceptions in the code
+                raise                
+            finally:
+                # Always unlock                
+                self.ActiveProxySocketsLock.release()
+
+            # Check we got it. We always should, but it never hurts.
+            if localSocket == None:
+                self.Logger.error("tried to send a message on a proxy socket id " + str(socketId) + " but it returned a null socket?")
                 # throwing here will terminate this entire OcotoSocket and reset.
-                raise Exception("Tried to send data to a proxy socket id that doesn't exist")
+                raise Exception("Tried to send a message on a proxy socket but got a null socket obj.")
 
+            # Send the message!
+            localSocket.Send(msg)
+
+            
     def CloseAllProxySockets(self):
-        # Close them all.
-        self.Logger.info("Closing all open proxy sockets ("+str(len(self.ActiveProxySockets))+")")
-
-        # try catch the entire thing to make sure we don't leak exceptions.
+        # To be thread safe, lock the map, copy all of the sockets out, then close them all.
+        localSocketList = {}
+        self.ActiveProxySocketsLock.acquire()
         try:
+            # Close them all.
+            self.Logger.info("Closing all open proxy sockets ("+str(len(self.ActiveProxySockets))+")")
+
+            # Copy all of the sockets locally
             for id in self.ActiveProxySockets:
+                localSocketList[id] = self.ActiveProxySockets[id]
+
+            # Clear them all from the global map
+            self.ActiveProxySockets.clear()
+            
+        except Exception as _:
+            # rethrow any exceptions in the code
+            raise                
+        finally:
+            # Always unlock                
+            self.ActiveProxySocketsLock.release()
+
+        # Try catch all of this so we don't leak exceptions.
+        # Use our local socket list to tell them all to close.
+        try:
+            for id in localSocketList:
                 try:
-                    self.ActiveProxySockets[id].Close()
+                    localSocketList[id].Close()
                 except Exception as e:
                     self.Logger.error("Exception thrown while closing proxy socket " +str(id)+ " " + str(e))
-            # Clear them all.
-            self.ActiveProxySockets.clear()
         except Exception as ex:
             self.Logger.error("Exception thrown while closing all proxy sockets" + str(ex))
 
@@ -309,7 +377,7 @@ class OctoSession:
             except Exception as e:
                 # If we fail to make the call then kill the connection.
                 self.Logger.error("Failed to make local request. " + str(e) + " for " + path)
-                self.OctoStream.OnSessionError(0)
+                self.OnSessionError(0)
                 return
 
             reqEnd = time.time()         
@@ -389,7 +457,7 @@ class OctoSession:
             self.OctoStream.SendMsg(res)
         except Exception as e:
             self.Logger.error("Failed to send handshake syn. " + str(e))
-            self.OctoStream.OnSessionError(0)
+            self.OnSessionError(0)
             return
 
     def HandleMessage(self, msgBytes):

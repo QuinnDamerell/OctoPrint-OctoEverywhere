@@ -1,2 +1,17 @@
 {
+    "python.pythonPath": "py3venv/bin/python",
+    "cSpell.words": [
+        "ABNF",
+        "Ocoto",
+        "Proto",
+        "ints",
+        "ocotomessage",
+        "octoclientws",
+        "octoeverywhere",
+        "octoeverywhereimpl",
+        "octoproxysocketimpl",
+        "octosessionimpl",
+        "referer",
+        "struct"
+    ]
 }

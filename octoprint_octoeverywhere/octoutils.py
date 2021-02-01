@@ -9,7 +9,7 @@ class Utils:
     def GetWebcamRequestPath(path, localAddress, mjpgStreamerPort) :
         # When we are talking to mjpg-streamer, we will talk directly to
         # it's http server. For that reason, we need to remove the /webcam/
-        # which usually maps the requrst to mjpg-streamer for the http-proxy
+        # which usually maps the requests to mjpg-streamer for the http-proxy
         webcamPathStart = path.lower().find("/webcam/")
         if webcamPathStart == -1:
             return ""
