@@ -34,7 +34,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		return 2
 
 	def get_wizard_details(self):
-		return {"AddPrinterUrl": self._settings.get(["AddPrinterUrl"])}
+		# Do some sanity checking logic, since this has been sensitive in the past.
+		printerUrl = self._settings.get(["AddPrinterUrl"])
+		if printerUrl == None:
+			self._logger.info("Failed to get OctoPrinter Url for wizard.")
+			printerUrl = "https://octoeverywhere.com/getstarted"
+		return {"AddPrinterUrl": printerUrl}
 
 	# Return the default settings.
 	def get_settings_defaults(self):
