@@ -27,7 +27,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 	# Return true if the wizard needs to be shown.
 	def is_wizard_required(self):
-		return True
+		return False
 
 	# Increment this if we need to pop the wizard again.
 	def get_wizard_version(self):
