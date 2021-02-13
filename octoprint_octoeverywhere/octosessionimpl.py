@@ -441,7 +441,7 @@ class OctoSession:
 
             # Log about it.
             sentTime = time.time() 
-            self.Logger.info("Web Request [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size ("+str(ogDataSize)+"->"+str(compressedSize)+") for " + path)
+            self.Logger.info("Web Request "+msg['Method']+" [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size:("+str(ogDataSize)+"->"+str(compressedSize)+") status:"+str(response.status_code)+" for " + path)
 
     def StartHandshake(self):
         # Setup the message

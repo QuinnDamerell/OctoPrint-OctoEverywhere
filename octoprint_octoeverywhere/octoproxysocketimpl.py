@@ -22,6 +22,7 @@ class OctoProxySocket(threading.Thread):
     OctoSession = {}
     Ws = None
     IsClosed = False
+    IsOpened = False
     HttpResponse = None
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
@@ -71,6 +72,9 @@ class OctoProxySocket(threading.Thread):
         return msg
 
     def OnWsOpened(self, ws):
+        # When we get the opened callback, set the flag so we know it's ok
+        # to send messages.
+        self.IsOpened = True
         self.Logger.info('Proxy socket websocket ' + str(self.Id) + " opened")
 
     def OnWsClosed(self, ws):
@@ -109,6 +113,24 @@ class OctoProxySocket(threading.Thread):
             isBinary = msg["ProxySocket"]["IsBinary"]
             if isBinary == False :
                 data = data.decode("utf-8")
+
+            # Some applications send data super quickly after opening the socket. 
+            # In this case, we need to wait to make sure the socket is opened fully before we try to send or it will fail.
+            sleepCount = 0
+            while self.IsOpened != True:
+                # Sleep for one second.
+                time.sleep(1)
+                
+                # Sanity check that we don't loop forever.
+                sleepCount += 1 
+                if sleepCount > 30:
+                    raise Exception('We had data to send to OctoPrint on a proxy websocket but it didnt open after 30 seconds.') 
+
+            # If we have been closed return now.
+            if self.IsClosed:
+                return
+
+            # Now send.            
             ws.Send(data, isBinary)
             return
         self.Logger.error("Not supported - Data was attempted to be sent to a proxy socket http")
@@ -146,6 +168,8 @@ class OctoProxySocket(threading.Thread):
         if self.IsClosed:
             return
         self.Ws.RunUntilClosed()
+
+        # TODO - We should tell the service the websocket is closed when this exits.
 
     # Reads a single chunk from the http response.
     def ReadStreamChunk(self, byteBuffer, boundaryStr):
