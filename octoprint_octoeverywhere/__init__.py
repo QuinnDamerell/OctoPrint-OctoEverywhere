@@ -146,7 +146,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 			mjpgStreamerLocalPort = 8080
 
 			# Run!
-			OctoEverywhereWsUri = "wss://octoeverywhere.com/octoclientws"
+			OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"
 			oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, self._logger, self, self._plugin_version)
 			oe.RunBlocking()		
 		except Exception as e:
