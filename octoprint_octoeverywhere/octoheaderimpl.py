@@ -1,7 +1,6 @@
 # Respresents the header class we encode in json.
 class Header:
-    Name = ""
-    Value = ""
+    
     def __init__(self, name, value):
         self.Name = name
         self.Value = value

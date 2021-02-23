@@ -104,9 +104,6 @@ def encodeOctoStreamMsg(msg) :
 # Used to handle each incoming message from the service. We run a thread for each so they can be handled in parallel.
 # TODO, we might want to use some kind of pool in the future to have a limit of concurrent threads.
 class OctoMessageThread(threading.Thread):
-    Logger = None
-    OctoSession = None
-    IncomingData = None
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs=None):
         threading.Thread.__init__(self, group=group, target=target, name=name)
@@ -162,23 +159,17 @@ class OctoMessageThread(threading.Thread):
             return
 
 class OctoSession:
-    Logger = None
-    SessionId = 0
-    UiPopupInvoker = None
-    OctoStream = None
-    OctoPrintLocalPort = 80
-    MjpgStreamerLocalPort = 8080
-    PrinterId = ""
-    LocalHostAddress = "127.0.0.1"
-    PluginVersion = ""
-    ActiveProxySockets = {}
-    ActiveProxySocketsLock = threading.Lock()
 
-    def __init__(self, octoStream, logger, printerId, sessionId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker, pluginVersion):
+    def __init__(self, octoStream, logger, printerId, isPrimarySession, sessionId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker, pluginVersion):
+        self.LocalHostAddress = "127.0.0.1"
+        self.ActiveProxySockets = {}
+        self.ActiveProxySocketsLock = threading.Lock()
+        
         self.Logger = logger
         self.SessionId = sessionId
         self.OctoStream = octoStream
         self.PrinterId = printerId
+        self.isPrimarySession = isPrimarySession
         self.OctoPrintLocalPort = octoPrintLocalPort
         self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
         self.UiPopupInvoker = uiPopupInvoker
@@ -450,6 +441,7 @@ class OctoSession:
         outMsg["HandshakeSyn"] = handshakeSyn
         handshakeSyn["Id"] = self.PrinterId
         handshakeSyn["PluginVersion"] = self.PluginVersion
+        handshakeSyn["IsPrimaryConnection"] = self.isPrimarySession
 
         # Send the handshakesyn
         try:

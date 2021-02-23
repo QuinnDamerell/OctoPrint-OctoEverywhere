@@ -1,17 +1,27 @@
 {
-    "python.pythonPath": "py3venv/bin/python",
+    "python.pythonPath": "py2venv/bin/python",
     "cSpell.words": [
         "ABNF",
+        "Damerell",
+        "Mjpg",
         "Ocoto",
+        "Octo",
         "Proto",
+        "crypo",
+        "didnt",
+        "hacky",
         "ints",
         "ocotomessage",
         "octoclientws",
         "octoeverywhere",
         "octoeverywhereimpl",
+        "octoheaderimpl",
+        "octoprint",
         "octoproxysocketimpl",
+        "octoservercon",
         "octosessionimpl",
         "referer",
-        "struct"
+        "struct",
+        "urandom"
     ]
 }

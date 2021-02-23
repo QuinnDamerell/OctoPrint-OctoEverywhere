@@ -15,8 +15,6 @@ except ImportError:
 #
 
 class Client:
-    Ws = None
-    IsOpen = False
 
     def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headerArray = None):
 

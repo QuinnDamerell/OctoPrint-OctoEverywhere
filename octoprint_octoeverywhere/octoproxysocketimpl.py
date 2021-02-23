@@ -13,17 +13,6 @@ from .octoutils import Utils
 # Respresents a websocket connection we are proxying or a http stream we are sending.
 #
 class OctoProxySocket(threading.Thread):
-    Logger = None
-    OpenMsg = {}
-    LocalHostAddress = ""
-    LocalHostPort = 80
-    MjpgStreamerLocalPort = 8080
-    Id = 0
-    OctoSession = {}
-    Ws = None
-    IsClosed = False
-    IsOpened = False
-    HttpResponse = None
 
     def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
         threading.Thread.__init__(self, group=group, target=target, name=name)
@@ -34,6 +23,10 @@ class OctoProxySocket(threading.Thread):
         self.LocalHostAddress = args[4] 
         self.LocalHostPort = args[5] 
         self.MjpgStreamerLocalPort = args[6]
+        self.Ws = None
+        self.IsClosed = False
+        self.IsOpened = False
+        self.HttpResponse = None
 
     def run(self):
         try:
@@ -180,7 +173,7 @@ class OctoProxySocket(threading.Thread):
         # Read in an initial chunk of data to get the headers.
         try: 
             for data in self.HttpResponse.iter_content(chunk_size=200):
-                # Skip keep alives
+                # Skip keepalives
                 if data:        
                     # Add this initial buffer to our output 
                     gotData = True   
@@ -253,7 +246,7 @@ class OctoProxySocket(threading.Thread):
         # Not exactly sure how to do this, so for now we will just read each chunk.
         try:
             for data in self.HttpResponse.iter_content(chunk_size=200):
-                # Skip keep alives
+                # Skip keepalives
                 if data:         
                     byteBuffer[0:] = data
                     return len(byteBuffer)
