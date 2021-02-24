@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "py2venv/bin/python",
+    "python.pythonPath": "py3venv/bin/python",
     "cSpell.words": [
         "ABNF",
         "Damerell",

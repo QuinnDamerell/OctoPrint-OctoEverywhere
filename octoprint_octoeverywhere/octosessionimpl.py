@@ -15,6 +15,7 @@ import zlib
 from .octoproxysocketimpl import OctoProxySocket
 from .octoheaderimpl import Header
 from .octoutils import Utils
+from .localip import LocalIpHelper
 
 # Helper to pack ints
 def pack32Int(buffer, bufferOffset, value) :
@@ -442,6 +443,9 @@ class OctoSession:
         handshakeSyn["Id"] = self.PrinterId
         handshakeSyn["PluginVersion"] = self.PluginVersion
         handshakeSyn["IsPrimaryConnection"] = self.isPrimarySession
+        # We try to get and send the device's local IP, which we can give apps
+        # to make the user's setup easier.
+        handshakeSyn["LocalDeviceIp"] = LocalIpHelper.TryToGetLocalIp()
 
         # Send the handshakesyn
         try:
