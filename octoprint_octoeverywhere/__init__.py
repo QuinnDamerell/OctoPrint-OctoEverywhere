@@ -97,14 +97,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		main_thread.start()
 
 	# The length the printer ID should be.
-	c_OctoEverywherePrinterIdLength = 40
+	c_OctoEverywherePrinterIdIdealLength = 60
+	c_OctoEverywherePrinterIdMinLength = 40
 	# The url for the add printer process.
 	c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/getstarted?printerid="
 
 	# Returns a new printer Id. This needs to be crypo-random to make sure it's not
 	# predictable.
 	def GeneratePrinterId(self):
-		return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(self.c_OctoEverywherePrinterIdLength))
+		return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(self.c_OctoEverywherePrinterIdIdealLength))
 
 	# Ensures we have generated a printer id and returns it.
 	def EnsureAndGetPrinterId(self):
@@ -112,7 +113,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		currentId = self._settings.get(["PrinterKey"])
 
 		# Make sure the current ID is valid.
-		if currentId == None or len(currentId) < self.c_OctoEverywherePrinterIdLength:
+		if currentId == None or len(currentId) < self.c_OctoEverywherePrinterIdMinLength:
 			# Create and save the new value
 			self._logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
 			currentId = self.GeneratePrinterId()
