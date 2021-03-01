@@ -5,6 +5,9 @@ import threading
 import random
 import string
 
+# Use for the simple api mixin
+import flask
+
 from .octoeverywhereimpl import OctoEverywhere
 import octoprint.plugin
 
@@ -12,7 +15,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 							octoprint.plugin.SettingsPlugin,
 							octoprint.plugin.AssetPlugin,
 							octoprint.plugin.TemplatePlugin,
-							octoprint.plugin.WizardPlugin):
+							octoprint.plugin.WizardPlugin,
+							octoprint.plugin.SimpleApiPlugin):
 
 	# The port this octoprint instance is listening on.
 	OctoPrintLocalPort = 80
@@ -95,6 +99,28 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 		main_thread = threading.Thread(target=self.main)
 		main_thread.daemon = True
 		main_thread.start()
+
+	#
+	# Functions for the Simple API Mixin
+	#
+	def get_api_commands(self):
+		# Currently we support no commands
+		return dict()
+
+	def on_api_command(self, command, data):
+		# Currently we support no commands
+		pass
+
+	def on_api_get(self, request):
+		# On get requests, share some data.
+		# This API is protected by the need for a OctoPrint API key
+		# This API is used by apps and other system to identify the printer
+		# for communication with the service. Thus these values should not be 
+		# modified or deleted.
+		return flask.jsonify(
+			PluginVersion=self._plugin_version,
+			PrinterId=self.EnsureAndGetPrinterId()
+		)
 
 	# The length the printer ID should be.
 	c_OctoEverywherePrinterIdIdealLength = 60
