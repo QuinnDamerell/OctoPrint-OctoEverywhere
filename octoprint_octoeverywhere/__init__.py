@@ -4,6 +4,7 @@ import logging
 import threading
 import random
 import string
+from datetime import datetime
 
 # Use for the simple api mixin
 import flask
@@ -16,7 +17,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.AssetPlugin,
                             octoprint.plugin.TemplatePlugin,
                             octoprint.plugin.WizardPlugin,
-                            octoprint.plugin.SimpleApiPlugin):
+                            octoprint.plugin.SimpleApiPlugin,
+                            octoprint.plugin.EventHandlerPlugin):
 
     # The port this octoprint instance is listening on.
     OctoPrintLocalPort = 80
@@ -122,6 +124,49 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             PrinterId=self.EnsureAndGetPrinterId()
         )
 
+    #
+    # Functions for the Event Handler Mixin
+    #
+    def on_event(self, event, payload):
+        # Listen for client authed events, these fire whenever a websocket opens and is auth is done.
+        if event == "ClientAuthed":
+            self.HandleClientAuthedEvent()
+
+
+    def HandleClientAuthedEvent(self):
+        connectedAccounts = self._settings.get(["ConnectedAccounts"])
+        addPrinterUrl = self._settings.get(["AddPrinterUrl"])
+        # Check if we know there are connected accounts or not, if we have a add printer URL, and finally if there are no accounts setup yet.
+        # If we don't know about connected accounts or have a printer URL, we will skip this until we know for sure.
+        if connectedAccounts != None and addPrinterUrl != None and len(connectedAccounts) == 0:
+            #
+            # We will only inform the user there are no connected accounts when it's first
+            # detected and then every little while. We don't want to bug the user, so the time must be long.
+            # Since our wizard doesn't work well, we will use this for the time being.
+            #
+            # Note! The time must also be longer than the primary socket refresh time, because when an account 
+            # is connected in the service our plugin currently doesn't get a message. So we rely on the primary socket
+            # refresh to update the value every ~48 hours.
+            minTimeBetweenInformsSec = 60 * 60 * 24 * 30 # Every 30 days.
+
+            # Check the time since the last message.
+            lastInformTime = self._settings.get(["NoAccountConnectedLastInformTime"])
+            if lastInformTime == None or (datetime.now() - lastInformTime).total_seconds() > minTimeBetweenInformsSec:
+                # Update the last show time.
+                self._settings.set(["NoAccountConnectedLastInformTime"], datetime.now(), force=True)
+
+                # Send the UI message.
+                if lastInformTime == None:
+                    # Show a different messsage for the first time.
+                    title = "OctoEverywhere Blastoff!"
+                    message = '<br/>The OctoEverywhere plugin is up and running! Click the button below and in about <strong>15 seconds</strong> you too will enjoy free remote acccess from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
+                    self.ShowUiPopup(title, message, "notice", False)
+                else:
+                    title = "We Miss You"
+                    message = '<br/>It only takes about <strong>15 seconds</strong> to finish the OctoEverywhere setup and you too can enjoy free remote access from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
+                    self.ShowUiPopup(title, message, "notice", True)
+
+
     # The length the printer ID should be.
     c_OctoEverywherePrinterIdIdealLength = 60
     c_OctoEverywherePrinterIdMinLength = 40
@@ -150,6 +195,16 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._settings.set(["PrinterKey"], currentId, force=True)
         self._settings.save(force=True)
         return currentId
+    
+    def GetConnectedAccounts(self):
+        # Try to get the current value.
+        connectedAccounts = self._settings.get(["ConnectedAccounts"])
+
+        # If we didn't get a value, default to empty.
+        if connectedAccounts == None:
+            connectedAccounts = []
+
+        return connectedAccounts
 
     # Sends a UI popup message for various uses.
     # title - string, the title text.
@@ -163,6 +218,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Fired when the connection to the primary server is established.
     # connectedAccounts - a string list of connected accounts, can be an empty list.
     def OnPrimaryConnectionEstablished(self, connectedAccounts):
+        # On connection, update the list of connected email accounts.
+        self._settings.set(["ConnectedAccounts"], connectedAccounts, force=True)
+        self._settings.save(force=True)
         pass
 
     # Our main worker
