@@ -15,13 +15,19 @@ from .octoeverywhereimpl import OctoEverywhere
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub():
-    Logger = None
-
     def __init__(self, logger):
         self.Logger = logger
 
     def ShowUiPopup(self, title, text, type, autoHide):
         self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+type+"; AutoHide:"+str(autoHide))
+
+# A mock of the popup UI interface.
+class StatusChangeHandlerStub():
+    def __init__(self, logger):
+        self.Logger = logger
+
+    def OnPrimaryConnectionEstablished(self, connectedAccounts):
+        self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts))
 
 def SignalHandler(sig, frame):
     print('Ctrl+C Pressed, Exiting!')
@@ -50,5 +56,6 @@ if __name__ == '__main__':
     OctoPrintLocalPort = 5000
     MjpgStreamerLocalPort = 8080
     uiPopInvoker = UiPopupInvokerStub(logger)
-    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, MjpgStreamerLocalPort, devId, logger, uiPopInvoker, "dev")
+    statusHandler = StatusChangeHandlerStub(logger)
+    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, MjpgStreamerLocalPort, devId, logger, uiPopInvoker, statusHandler, "dev")
     oe.RunBlocking()

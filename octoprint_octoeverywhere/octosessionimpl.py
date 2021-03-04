@@ -205,7 +205,7 @@ class OctoSession:
     def HandleHandshakeAck(self, msg):
         # Handles a handshake ack message.
         if msg["HandshakeAck"]["Accepted"]:
-            self.OctoStream.OnHandshakeComplete(self.SessionId)
+            self.OctoStream.OnHandshakeComplete(self.SessionId, msg["HandshakeAck"]["ConnectedAccounts"])
         else:
             self.Logger.error("Handshake failed, reason '" + str(msg["HandshakeAck"]["Error"] + "'"))
             # The server can send back a backoff time we should respect.

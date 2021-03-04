@@ -46,7 +46,7 @@ class OctoServerCon:
     # We always add a random second count to the reconnect sleep to add variance. This is the max value.
     WsConnectRandomMaxSec = 10
     
-    def __init__(self, host, endpoint, isPrimaryConnection, octoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger, uiPopupInvoker, pluginVersion, runForSeconds):
+    def __init__(self, host, endpoint, isPrimaryConnection, octoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, runForSeconds):
         self.ProtocolVersion = 1
         self.OctoSession = None
         self.IsDisconnecting = False
@@ -63,6 +63,9 @@ class OctoServerCon:
         self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
+
+        # Note! Will be None for secondary connections!
+        self.StatusChangeHandler = statusChangeHandler
 
         # Setup RunFor
         self.RunForSeconds = runForSeconds
@@ -108,12 +111,16 @@ class OctoServerCon:
                 self.Logger.error("Exception in OctoSession.HandleMessage " + self.GetConnectionString() + " :" + str(e))
                 self.OnSessionError(localSessionId, 0)
 
-    def OnHandshakeComplete(self, sessionId):
+    def OnHandshakeComplete(self, sessionId, connectedAccounts):
         if sessionId != self.ActiveSessionId:
             self.Logger.info("Got a handshake complete for an old session, "+str(sessionId)+", ignoring.")
             return
 
         self.Logger.info("Handshake complete, server con "+self.GetConnectionString()+", successfully connected to OctoEverywhere!")
+
+        # Only primary connections have this handler.
+        if self.StatusChangeHandler != None:
+            self.StatusChangeHandler.OnPrimaryConnectionEstablished(connectedAccounts)
 
         # Only set the back off when we are done with the handshake and it was successful.
         self.WsConnectBackOffSec = self.WsConnectBackOffSec_Default

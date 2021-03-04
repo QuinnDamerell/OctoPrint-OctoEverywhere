@@ -160,6 +160,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         data = {"title": title, "text": text, "type": type, "autoHide": autoHide}
         self._plugin_manager.send_plugin_message("octoeverywhere_ui_popup_msg", data)
 
+    # Fired when the connection to the primary server is established.
+    # connectedAccounts - a string list of connected accounts, can be an empty list.
+    def OnPrimaryConnectionEstablished(self, connectedAccounts):
+        pass
+
     # Our main worker
     def main(self):
         self._logger.info("Main thread starting")
@@ -174,7 +179,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
             # Run!
             OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, self._logger, self, self._plugin_version)
+            oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, self._logger, self, self, self._plugin_version)
             oe.RunBlocking()		
         except Exception as e:
             self._logger.error("Exception thrown out of main runner. "+str(e))
