@@ -30,7 +30,7 @@ plugin_url = "http://www.OctoEverywhere.com"
 plugin_license = "AGPLv3"
 
 # Any additional requirements besides OctoPrint should be listed here
-plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "jsonpickle>=1.4.1"]
+plugin_requires = ["websocket_client>=0.58.0", "requests>=2.25.1"]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point

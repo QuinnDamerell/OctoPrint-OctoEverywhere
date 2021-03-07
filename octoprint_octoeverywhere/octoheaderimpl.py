@@ -1,10 +1,5 @@
-# Respresents the header class we encode in json.
-class Header:
+class HeaderHelper:    
     
-    def __init__(self, name, value):
-        self.Name = name
-        self.Value = value
-
     @staticmethod
     def GatherRequestHeaders(msg, hostAddress) :
         send_headers = {}

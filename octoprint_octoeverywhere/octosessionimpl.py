@@ -4,7 +4,6 @@ import sys
 import struct
 import threading
 import requests
-import jsonpickle
 import traceback
 import zlib
 
@@ -13,7 +12,7 @@ import zlib
 #
 
 from .octoproxysocketimpl import OctoProxySocket
-from .octoheaderimpl import Header
+from .octoheaderimpl import HeaderHelper
 from .octoutils import Utils
 from .localip import LocalIpHelper
 
@@ -79,7 +78,7 @@ def encodeOctoStreamMsg(msg) :
         msg["Data"] = None
 
     # Encode the json to bytes
-    encodedJson = jsonpickle.encode(msg).encode()
+    encodedJson = json.dumps(msg).encode()
 
     # Create a buffer to send.
     msgLength = len(encodedJson) + len(data) + 4 + 4
@@ -353,7 +352,7 @@ class OctoSession:
                 path = Utils.GetWebcamRequestPath(msg["Path"], self.LocalHostAddress, self.MjpgStreamerLocalPort)
 
             # Setup the headers
-            send_headers = Header.GatherRequestHeaders(msg, addressAndPort)
+            send_headers = HeaderHelper.GatherRequestHeaders(msg, addressAndPort)
 
             # Make the local request.
             # Note we use a long timeout because some api calls can hang for a while.
@@ -404,7 +403,7 @@ class OctoSession:
                         continue
 
                     # Add the output header
-                    returnHeaders.append(Header(name, response.headers[name]))
+                    returnHeaders.append({"Name":name, "Value":response.headers[name]})
 
                     # Look for the content type header. Anything that is text or
                     # javascript we will compress before sending.

@@ -6,7 +6,7 @@ import traceback
 import sys
 
 from .websocketimpl import Client
-from .octoheaderimpl import Header
+from .octoheaderimpl import HeaderHelper
 from .octoutils import Utils
 
 #
@@ -269,7 +269,7 @@ class OctoProxySocket(threading.Thread):
         self.Logger.info("Opening proxy socket http stream " + str(self.Id) + " , " +uri)
 
         # Setup the headers
-        send_headers = Header.GatherRequestHeaders(self.OpenMsg, self.LocalHostAddress)
+        send_headers = HeaderHelper.GatherRequestHeaders(self.OpenMsg, self.LocalHostAddress)
 
         # Try to make the http call.
         # Note we use a long timeout because some api calls can hang for a while.
@@ -349,7 +349,7 @@ class OctoProxySocket(threading.Thread):
                 # Gather up the headers to return.
                 returnHeaders = []
                 for name in self.HttpResponse.headers:
-                    returnHeaders.append(Header(name, self.HttpResponse.headers[name]))
+                    returnHeaders.append({"Name":name, "Value":self.HttpResponse.headers[name]})
                 send["Headers"] = returnHeaders
 
             # Detect the correct type.   
