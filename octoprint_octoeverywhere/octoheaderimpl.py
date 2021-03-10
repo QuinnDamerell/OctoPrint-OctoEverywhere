@@ -15,6 +15,14 @@ class HeaderHelper:
             if lowerName == "upgrade-insecure-requests":
                 # We don't support https over the local host.
                 continue 
+            if lowerName == "x-forwarded-for":
+                # We should never send these to OctoPrint, or it will detect the IP as external and show
+                # the external connection warning.
+                continue
+            if lowerName == "x-real-ip":
+                # We should never send these to OctoPrint, or it will detect the IP as external and show
+                # the external connection warning.
+                continue
 
             # Update any headers we need to for the local call.
             if lowerName == "host" :
