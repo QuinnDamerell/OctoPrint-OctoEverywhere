@@ -30,7 +30,9 @@ plugin_url = "http://www.OctoEverywhere.com"
 plugin_license = "AGPLv3"
 
 # Any additional requirements besides OctoPrint should be listed here
-plugin_requires = ["websocket_client>=0.58.0", "requests>=2.25.1"]
+# Note! Some older version of OctoPrint seems to have a system dependency that locks websocket_client to exactly 0.56.0. When we tried to update to a newer version,
+# this broke that dependency and make all of OctoPrint unhappy. So don't update the version unless we really need to.
+plugin_requires = ["websocket_client>=0.56.0", "requests>=2.25.1"]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point
