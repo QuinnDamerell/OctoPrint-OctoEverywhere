@@ -29,6 +29,9 @@ class StatusChangeHandlerStub():
     def OnPrimaryConnectionEstablished(self, connectedAccounts):
         self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts))
 
+    def OnPluginUpdateRequired(self):
+        self.Logger.info("On plugin update required message.")
+
 def SignalHandler(sig, frame):
     print('Ctrl+C Pressed, Exiting!')
     sys.exit(0)

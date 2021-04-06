@@ -203,14 +203,26 @@ class OctoSession:
 
     def HandleHandshakeAck(self, msg):
         # Handles a handshake ack message.
-        if msg["HandshakeAck"]["Accepted"]:
-            self.OctoStream.OnHandshakeComplete(self.SessionId, msg["HandshakeAck"]["ConnectedAccounts"])
+        handshakeAck = msg["HandshakeAck"]
+        if handshakeAck["Accepted"]:
+            self.OctoStream.OnHandshakeComplete(self.SessionId, handshakeAck["ConnectedAccounts"])
         else:
-            self.Logger.error("Handshake failed, reason '" + str(msg["HandshakeAck"]["Error"] + "'"))
+            # Pull out the error.
+            error = "not set"
+            if "Error" in handshakeAck and handshakeAck["Error"] != None:
+                error = handshakeAck["Error"]
+            self.Logger.error("Handshake failed, reason '" + str(error + "'"))
+
             # The server can send back a backoff time we should respect.
             backoffModifierSec = 0
-            if msg["HandshakeAck"]["BackoffSeconds"]:
-                backoffModifierSec = int(msg["HandshakeAck"]["BackoffSeconds"])
+            if handshakeAck["BackoffSeconds"] and handshakeAck["BackoffSeconds"] != None:
+                backoffModifierSec = int(handshakeAck["BackoffSeconds"])
+
+            # Check if an update is required, if so we need to tell the UI and set the back off to be crazy high.
+            if "RequiresPluginUpdate" in handshakeAck and handshakeAck["RequiresPluginUpdate"] != None and handshakeAck["RequiresPluginUpdate"]:
+                backoffModifierSec = 43200 # 1 month
+                self.OctoStream.OnPluginUpdateRequired()
+
             self.OnSessionError(backoffModifierSec)
 
     def HandleProxySocketMessage(self, msg) :

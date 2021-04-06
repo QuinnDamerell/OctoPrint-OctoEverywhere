@@ -134,11 +134,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     def HandleClientAuthedEvent(self):
-        connectedAccounts = self._settings.get(["ConnectedAccounts"])
+        hasConnectedAccounts = self._settings.get(["HasConnectedAccounts"])
         addPrinterUrl = self._settings.get(["AddPrinterUrl"])
         # Check if we know there are connected accounts or not, if we have a add printer URL, and finally if there are no accounts setup yet.
         # If we don't know about connected accounts or have a printer URL, we will skip this until we know for sure.
-        if connectedAccounts != None and addPrinterUrl != None and len(connectedAccounts) == 0:
+        if hasConnectedAccounts != None and hasConnectedAccounts == False and addPrinterUrl != None:
             #
             # We will only inform the user there are no connected accounts when it's first
             # detected and then every little while. We don't want to bug the user, so the time must be long.
@@ -165,7 +165,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                     title = "We Miss You"
                     message = '<br/>It only takes about <strong>15 seconds</strong> to finish the OctoEverywhere setup and you too can enjoy free remote access from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
                     self.ShowUiPopup(title, message, "notice", True)
-
+        
+        # Check if an update is required, if so, tell the user everytime they login.
+        pluginUpdateRequired = self._settings.get(["PluginUpdateRequired"])
+        if pluginUpdateRequired != None and pluginUpdateRequired == True:
+            title = "OctoEverywhere Disabled"
+            message = '<br/><strong>You need to update your OctoEverywhere plugin before you can continue using OctoEverywhere.</strong><br/><br/>We are always improving OctoEverywhere to make things faster and add features. Sometimes, that means we have to break things. If you need info about how to update your plugin, <a target="_blank" href="https://octoeverywhere.com/pluginupdate">check this out.</i></a>'
+            self.ShowUiPopup(title, message, "notice", True)
 
     # The length the printer ID should be.
     c_OctoEverywherePrinterIdIdealLength = 60
@@ -196,16 +202,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._settings.save(force=True)
         return currentId
     
-    def GetConnectedAccounts(self):
-        # Try to get the current value.
-        connectedAccounts = self._settings.get(["ConnectedAccounts"])
-
-        # If we didn't get a value, default to empty.
-        if connectedAccounts == None:
-            connectedAccounts = []
-
-        return connectedAccounts
-
     # Sends a UI popup message for various uses.
     # title - string, the title text.
     # text  - string, the message.
@@ -218,10 +214,27 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Fired when the connection to the primary server is established.
     # connectedAccounts - a string list of connected accounts, can be an empty list.
     def OnPrimaryConnectionEstablished(self, connectedAccounts):
-        # On connection, update the list of connected email accounts.
-        self._settings.set(["ConnectedAccounts"], connectedAccounts, force=True)
+        # On connection, set if there are connected accounts. We don't want to save the email
+        # addresses in the settings, since they can be read by anyone that has access to the config 
+        # file or any plugin.
+        hasConnectedAccounts = connectedAccounts != None and len(connectedAccounts) > 0
+        self._settings.set(["HasConnectedAccounts"], hasConnectedAccounts, force=True)
+
+        # Clear out the update required flag, since we connected.
+        self._settings.set(["PluginUpdateRequired"], False, force=True)
+
+        # Clear this old value.
+        self._settings.set(["ConnectedAccounts"], "", force=True)
+
+        # Save
         self._settings.save(force=True)
-        pass
+
+    # Fired when the plugin needs to be updated before OctoEverywhere can be used again.
+    # This should so a message to the user, so they know they need to update.    
+    def OnPluginUpdateRequired(self):
+        self._logger.error("The OctoEverywhere service told us we must update before we can connect.")
+        self._settings.set(["PluginUpdateRequired"], True, force=True)
+        self._settings.save(force=True)
 
     # Our main worker
     def main(self):

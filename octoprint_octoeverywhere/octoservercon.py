@@ -141,6 +141,13 @@ class OctoServerCon:
         # Shut things down
         self.Disconnect()
 
+    # Called by the server con if the plugin needs to be updated. The backoff time will be set very high
+    # and this notification will be handled by the UI to show the user a message.
+    def OnPluginUpdateRequired(self):
+        # This will be null for secondary connections
+        if self.StatusChangeHandler != None:
+            self.StatusChangeHandler.OnPluginUpdateRequired()
+
     # A summon request can be sent by the services if the user is connected to a different
     # server than we are connected to. In such a case we will multi connect a temp non-primary connection
     # to the request server as well, that will be to service the user.
