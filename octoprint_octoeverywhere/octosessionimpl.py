@@ -353,17 +353,12 @@ class OctoSession:
         except Exception as ex:
             self.Logger.error("Exception thrown while closing all proxy sockets" + str(ex))
 
-    def HandleWebRequest(self, msg):                         
-            # Create the path.
-            addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
-            path = 'http://' + addressAndPort + msg["Path"]
-
-            # Any path that is directed to /webcam/ needs to go to mjpg-streamer instead of
-            # the OctoPrint instance. If we detect it, we need to use a different path.
-            if Utils.IsWebcamRequest(msg["Path"]) :
-                path = Utils.GetWebcamRequestPath(msg["Path"], self.LocalHostAddress, self.MjpgStreamerLocalPort)
+    def HandleWebRequest(self, msg):
+            # Get the absolute uri path
+            uri = Utils.GetOctoMessageAbsoluteUri(msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort)
 
             # Setup the headers
+            addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
             send_headers = HeaderHelper.GatherRequestHeaders(msg, addressAndPort)
 
             # Make the local request.
@@ -376,10 +371,10 @@ class OctoSession:
             reqStart = time.time()
             response = None
             try:
-                response = requests.request(msg['Method'], path, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
+                response = requests.request(msg['Method'], uri, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
             except Exception as e:
                 # If we fail to make the call then kill the connection.
-                self.Logger.error("Failed to make local request. " + str(e) + " for " + path)
+                self.Logger.error("Failed to make local request. " + str(e) + " for " + uri)
                 self.OnSessionError(0)
                 return
 
@@ -387,7 +382,6 @@ class OctoSession:
 
             # Prepare to return the response.
             outMsg = {}
-            outMsg["Path"] = path
             outMsg["PairId"] = msg["PairId"]
             outMsg["IsHttpRequest"] = True
 
@@ -444,7 +438,7 @@ class OctoSession:
 
             # Log about it.
             sentTime = time.time() 
-            self.Logger.info("Web Request "+msg['Method']+" [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size:("+str(ogDataSize)+"->"+str(compressedSize)+") status:"+str(response.status_code)+" for " + path)
+            self.Logger.info("Web Request "+msg['Method']+" [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size:("+str(ogDataSize)+"->"+str(compressedSize)+") status:"+str(response.status_code)+" for " + uri)
 
     def StartHandshake(self):
         # Setup the message

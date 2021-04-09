@@ -56,7 +56,6 @@ class OctoProxySocket(threading.Thread):
 
     def GetBaseOctoMessage(self):
         msg = {}
-        msg["Path"] = self.OpenMsg["Path"]
         msg["PairId"] = 0
         msg["StatusCode"] = 200
         msg["ProxySocket"] = {}
@@ -152,6 +151,7 @@ class OctoProxySocket(threading.Thread):
     # Handles websocket proxy sockets
     def HandleWebSocketConnection(self) :
         # Open the ws and run it until it closed.
+        # TODO - Handle ABL Urls
         path = self.OpenMsg["Path"]
 
         # For the websocket use the correct OctoPrint port number
@@ -255,18 +255,10 @@ class OctoProxySocket(threading.Thread):
 
     # Handles websocket proxy sockets
     def HandleHttpStreamConnection(self) :
-        # Setup the path.
-        path = self.OpenMsg["Path"]
+        # Get the URI for this message.
+        uri = Utils.GetOctoMessageAbsoluteUri(self.OpenMsg, self.LocalHostAddress, self.LocalHostPort, self.MjpgStreamerLocalPort)
 
-        # Any path that is directed to /webcam/ needs to go to mjpg-streamer instead of
-        # the OctoPrint instance. If we detect it, we need to use a different path.
-        if Utils.IsWebcamRequest(path) :
-            uri = Utils.GetWebcamRequestPath(path, self.LocalHostAddress, self.MjpgStreamerLocalPort)
-        else :
-            # If this isn't a webcam stream, connect to the OctoPrint instance.
-            uri = "http://" + self.LocalHostAddress + ":" + str(self.LocalHostPort) + path
-
-        self.Logger.info("Opening proxy socket http stream " + str(self.Id) + " , " +uri)
+        self.Logger.info("Opening proxy socket http stream " + str(self.Id) + ", " +uri)
 
         # Setup the headers
         send_headers = HeaderHelper.GatherRequestHeaders(self.OpenMsg, self.LocalHostAddress)
@@ -344,7 +336,6 @@ class OctoProxySocket(threading.Thread):
             # For the first message, include the response context
             if isFirstResponse:
                 isFirstResponse = False
-                send["Path"] = path
                 send["StatusCode"] = self.HttpResponse.status_code
                 # Gather up the headers to return.
                 returnHeaders = []
