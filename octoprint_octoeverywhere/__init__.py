@@ -106,12 +106,26 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Functions for the Simple API Mixin
     #
     def get_api_commands(self):
-        # Currently we support no commands
-        return dict()
+        return dict(
+            # Our frontend js logic calls this API when it detects a local LAN connection and reports the port used.
+            # We use the port internally as a solid indicator for what port the http proxy in front of OctoPrint is on.
+            # This is required because it's common to also have webcams setup behind the http proxy and there's no other
+            # way to query the port value from the system.
+            setFrontendLocalPort=["port"]
+        )
 
     def on_api_command(self, command, data):
-        # Currently we support no commands
-        pass
+        if command == "setFrontendLocalPort":
+            if "port" in data:
+                port = int(data["port"])
+                self._logger.info("SetFrontendLocalPort API called. Port:"+str(port))
+                self._settings.set(["HttpFrontendPort"], port, force=True)
+                self._settings.save(force=True)
+            else:
+                self._logger.info("SetFrontendLocalPort API called with no port.")
+        else:
+            self._logger.info("Unknown API command. "+command)
+
 
     def on_api_get(self, request):
         # On get requests, share some data.
@@ -201,6 +215,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._settings.set(["PrinterKey"], currentId, force=True)
         self._settings.save(force=True)
         return currentId
+
+    # Returns the frontend http port OctoPrint's http proxy is running on.
+    def GetFrontendHttpPort(self):
+        # Always try to get and parse the settings value. If the value doesn't exist
+        # or it's invalid this will fall back to the default value.
+        try:
+            return int(self._settings.get(["HttpFrontendPort"]))
+        except:
+            return 80
     
     # Sends a UI popup message for various uses.
     # title - string, the title text.
@@ -243,6 +266,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         try:
             # Get or create a printer id.
             printerId = self.EnsureAndGetPrinterId()
+
+            # Get the frontend http port OctoPrint or it's proxy is running on.
+            # This is the port the user would use if they were accessing OctoPrint locally.
+            # Normally this is port 80, but some users might configure it differently.
+            frontendHttpPort = self.GetFrontendHttpPort()
+            self._logger.info("Frontend http port detected as " + str(frontendHttpPort))
 
             # For now, we will always use 8080 for mjpg-streamer. This is the default port and I think
             # most all configs will run on it. Ideally we would pull this from the config.
