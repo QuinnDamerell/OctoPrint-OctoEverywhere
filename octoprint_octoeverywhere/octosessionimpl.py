@@ -13,7 +13,7 @@ import zlib
 
 from .octoproxysocketimpl import OctoProxySocket
 from .octoheaderimpl import HeaderHelper
-from .octoutils import Utils
+from .octohttprequest import OctoHttpRequest
 from .localip import LocalIpHelper
 
 # Helper to pack ints
@@ -160,8 +160,7 @@ class OctoMessageThread(threading.Thread):
 
 class OctoSession:
 
-    def __init__(self, octoStream, logger, printerId, isPrimarySession, sessionId, octoPrintLocalPort, mjpgStreamerLocalPort, uiPopupInvoker, pluginVersion):
-        self.LocalHostAddress = "127.0.0.1"
+    def __init__(self, octoStream, logger, printerId, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion):
         self.ActiveProxySockets = {}
         self.ActiveProxySocketsLock = threading.Lock()
         
@@ -170,8 +169,6 @@ class OctoSession:
         self.OctoStream = octoStream
         self.PrinterId = printerId
         self.isPrimarySession = isPrimarySession
-        self.OctoPrintLocalPort = octoPrintLocalPort
-        self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
 
@@ -244,7 +241,7 @@ class OctoSession:
                     self.Logger.error("A websocket connect message was sent with data!")
 
                 # Create the proxy socket object
-                s = OctoProxySocket(args=(self.Logger, socketId, self, msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort,))
+                s = OctoProxySocket(args=(self.Logger, socketId, self, msg,))
                 self.ActiveProxySockets[socketId] = s
                 s.start()
 
@@ -354,91 +351,85 @@ class OctoSession:
             self.Logger.error("Exception thrown while closing all proxy sockets" + str(ex))
 
     def HandleWebRequest(self, msg):
-            # Get the absolute uri path
-            uri = Utils.GetOctoMessageAbsoluteUri(msg, self.LocalHostAddress, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort)
 
-            # Setup the headers
-            addressAndPort = self.LocalHostAddress + ':' + str(self.OctoPrintLocalPort)
-            send_headers = HeaderHelper.GatherRequestHeaders(msg, addressAndPort)
+        # Setup the headers
+        sendHeaders = HeaderHelper.GatherRequestHeaders(msg)
 
-            # Make the local request.
-            # Note we use a long timeout because some api calls can hang for a while.
-            # For example when plugins are installed, some have to compile which can take some time.
-            # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
-            # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
-            # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
-            # place to set the location redirect header.
-            reqStart = time.time()
-            response = None
-            try:
-                response = requests.request(msg['Method'], uri, headers=send_headers, data= msg["Data"], timeout=1800, allow_redirects=False)
-            except Exception as e:
-                # If we fail to make the call then kill the connection.
-                self.Logger.error("Failed to make local request. " + str(e) + " for " + uri)
-                self.OnSessionError(0)
-                return
+        # Make the http call
+        reqStart = time.time()
+        httpCallResult = OctoHttpRequest.MakeHttpCall(self.Logger, msg, msg['Method'], sendHeaders, msg["Data"])
 
-            reqEnd = time.time()         
+        # If None is returned, it failed.
+        if httpCallResult == None:
+            self.Logger.error("Failed to make local http request. ")
+            self.OnSessionError(0)
+            return
 
-            # Prepare to return the response.
-            outMsg = {}
-            outMsg["PairId"] = msg["PairId"]
-            outMsg["IsHttpRequest"] = True
+        # On success, unpack the result.
+        response = httpCallResult.Result
+        uri = httpCallResult.Url
 
-            ogDataSize = 0
-            compressedSize = 0
-            if response != None:
-                # Prepare to send back the response.
-                outMsg["StatusCode"] = response.status_code
-                outMsg["Data"] = response.content
+        reqEnd = time.time()         
+
+        # Prepare to return the response.
+        outMsg = {}
+        outMsg["PairId"] = msg["PairId"]
+        outMsg["IsHttpRequest"] = True
+
+        ogDataSize = 0
+        compressedSize = 0
+        if response != None:
+            # Prepare to send back the response.
+            outMsg["StatusCode"] = response.status_code
+            outMsg["Data"] = response.content
+            ogDataSize = len(outMsg["Data"])
+
+            # Gather up the headers to return.
+            compressData = False
+            returnHeaders = []
+            for name in response.headers:
+                nameLower = name.lower()
+
+                # Since we send the entire result as one non-encoded
+                # payload we want to drop this header. Otherwise the server might emit it to 
+                # the client, when it actually doesn't match what the server sends to the client.
+                # Note: Typically, if the OctoPrint web server sent something chunk encoded, 
+                # our web server will also send it to the client via chunk encoding. But it will handle
+                # that on it's own and set the header accordingly.
+                if nameLower == "transfer-encoding":
+                    continue
+
+                # Add the output header
+                returnHeaders.append({"Name":name, "Value":response.headers[name]})
+
+                # Look for the content type header. Anything that is text or
+                # javascript we will compress before sending.
+                if nameLower == "content-type":
+                    valueLower = response.headers[name].lower()
+                    if valueLower.find("text/") == 0 or valueLower.find("javascript") != -1 or valueLower.find("json") != -1:
+                        compressData = True
+
+            # Set the headers
+            outMsg["Headers"] = returnHeaders
+
+            # Compress the data if needed.
+            if compressData:
                 ogDataSize = len(outMsg["Data"])
+                outMsg["DataCompression"] = "zlib"
+                outMsg["OriginalDataSize"] = ogDataSize
+                outMsg["Data"] = zlib.compress(outMsg["Data"])
+                compressedSize = len(outMsg["Data"])                    
+        else:
+            outMsg["StatusCode"] = 408
 
-                # Gather up the headers to return.
-                compressData = False
-                returnHeaders = []
-                for name in response.headers:
-                    nameLower = name.lower()
+        processTime = time.time() 
 
-                    # Since we send the entire result as one non-encoded
-                    # payload we want to drop this header. Otherwise the server might emit it to 
-                    # the client, when it actually doesn't match what the server sends to the client.
-                    # Note: Typically, if the OctoPrint web server sent something chunk encoded, 
-                    # our web server will also send it to the client via chunk encoding. But it will handle
-                    # that on it's own and set the header accordingly.
-                    if nameLower == "transfer-encoding":
-                        continue
+        # Send the response
+        self.Send(outMsg) 
 
-                    # Add the output header
-                    returnHeaders.append({"Name":name, "Value":response.headers[name]})
-
-                    # Look for the content type header. Anything that is text or
-                    # javascript we will compress before sending.
-                    if nameLower == "content-type":
-                        valueLower = response.headers[name].lower()
-                        if valueLower.find("text/") == 0 or valueLower.find("javascript") != -1 or valueLower.find("json") != -1:
-                            compressData = True
-
-                # Set the headers
-                outMsg["Headers"] = returnHeaders
-
-                # Compress the data if needed.
-                if compressData:
-                    ogDataSize = len(outMsg["Data"])
-                    outMsg["DataCompression"] = "zlib"
-                    outMsg["OriginalDataSize"] = ogDataSize
-                    outMsg["Data"] = zlib.compress(outMsg["Data"])
-                    compressedSize = len(outMsg["Data"])                    
-            else:
-                outMsg["StatusCode"] = 408
-
-            processTime = time.time() 
-
-            # Send the response
-            self.Send(outMsg) 
-
-            # Log about it.
-            sentTime = time.time() 
-            self.Logger.info("Web Request "+msg['Method']+" [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size:("+str(ogDataSize)+"->"+str(compressedSize)+") status:"+str(response.status_code)+" for " + uri)
+        # Log about it.
+        sentTime = time.time() 
+        self.Logger.info("Web Request "+msg['Method']+" [call:"+str(format(reqEnd - reqStart, '.3f'))+"s; process:"+str(format(processTime - reqEnd, '.3f'))+"s; send:"+str(format(sentTime - processTime, '.3f'))+"s] size:("+str(ogDataSize)+"->"+str(compressedSize)+") status:"+str(response.status_code)+" for " + uri)
 
     def StartHandshake(self):
         # Setup the message
@@ -448,6 +439,7 @@ class OctoSession:
         handshakeSyn["Id"] = self.PrinterId
         handshakeSyn["PluginVersion"] = self.PluginVersion
         handshakeSyn["IsPrimaryConnection"] = self.isPrimarySession
+        handshakeSyn["LocalHttpProxyPort"] = OctoHttpRequest.GetLocalHttpProxyPort()
         # We try to get and send the device's local IP, which we can give apps
         # to make the user's setup easier.
         handshakeSyn["LocalDeviceIp"] = LocalIpHelper.TryToGetLocalIp()

@@ -1,7 +1,10 @@
+from .octohttprequest import OctoHttpRequest
+
 class HeaderHelper:    
     
     @staticmethod
-    def GatherRequestHeaders(msg, hostAddress) :
+    def GatherRequestHeaders(msg) :
+        hostAddress = OctoHttpRequest.GetLocalhostAddress()
         send_headers = {}
         for header in msg["Headers"]:
             lowerName = header["Name"].lower()

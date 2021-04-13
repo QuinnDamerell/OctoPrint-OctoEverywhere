@@ -23,10 +23,8 @@ class OctoEverywhere:
     # die but then tries to get used quickly, we will just be summoned again. 
     SecondaryConnectionRunForTimeSec = 60 * 15 # 15 minutes.
 
-    def __init__(self, endpoint, octoPrintLocalPort, mjpgStreamerLocalPort, printerId, logger, uiPopupInvoker, statusChangeHandler, pluginVersion):
+    def __init__(self, endpoint, printerId, logger, uiPopupInvoker, statusChangeHandler, pluginVersion):
         self.Endpoint = endpoint
-        self.OctoPrintLocalPort = octoPrintLocalPort
-        self.MjpgStreamerLocalPort = mjpgStreamerLocalPort
         self.PrinterId = printerId
         self.Logger = logger
         self.UiPopupInvoker = uiPopupInvoker
@@ -42,7 +40,7 @@ class OctoEverywhere:
         while 1:
             try:
                 # Create the primary connection.
-                serverCon = OctoServerCon(self, self.Endpoint, True, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort, self.PrinterId, self.Logger, self.UiPopupInvoker, self.StatusChangeHandler, self.PluginVersion, self.PrimaryConnectionRunForTimeSec)
+                serverCon = OctoServerCon(self, self.Endpoint, True, self.PrinterId, self.Logger, self.UiPopupInvoker, self.StatusChangeHandler, self.PluginVersion, self.PrimaryConnectionRunForTimeSec)
                 serverCon.RunBlocking()
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. ex:" + str(e))
@@ -75,7 +73,7 @@ class OctoEverywhere:
         # Run the secondary connection for until the RunFor time limint. Note RunFor will account for user activity.
         self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl))
         try:
-            serverCon = OctoServerCon(self, summonConnectUrl, False, self.OctoPrintLocalPort, self.MjpgStreamerLocalPort, self.PrinterId, self.Logger, self.UiPopupInvoker, None, self.PluginVersion, self.SecondaryConnectionRunForTimeSec)
+            serverCon = OctoServerCon(self, summonConnectUrl, False, self.PrinterId, self.Logger, self.UiPopupInvoker, None, self.PluginVersion, self.SecondaryConnectionRunForTimeSec)
             serverCon.RunBlocking()
         except Exception as e:
             self.Logger.error("Exception in HandleSecondaryServerCon function. ex:" + str(e))

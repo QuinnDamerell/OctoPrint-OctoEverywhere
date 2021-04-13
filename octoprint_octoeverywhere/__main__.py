@@ -8,6 +8,7 @@ from base64 import b64encode
 from os import urandom
 
 from .octoeverywhereimpl import OctoEverywhere
+from .octohttprequest import OctoHttpRequest
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
@@ -53,12 +54,17 @@ if __name__ == '__main__':
     # Setup a signal handler to kill everything
     signal.signal(signal.SIGINT, SignalHandler)
 
+    # Dev props
     devId = GeneratePrinterId()
     OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"    
     #OctoEverywhereWsUri = "ws://192.168.86.74:5000/octoclientws"
-    OctoPrintLocalPort = 5000
-    MjpgStreamerLocalPort = 8080
+    #devId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
+
+    # Setup the http requester
+    OctoHttpRequest.SetLocalHttpProxyPort(80)
+    OctoHttpRequest.SetLocalOctoPrintPort(5000)
+
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger)
-    oe = OctoEverywhere(OctoEverywhereWsUri, OctoPrintLocalPort, MjpgStreamerLocalPort, devId, logger, uiPopInvoker, statusHandler, "dev")
+    oe = OctoEverywhere(OctoEverywhereWsUri, devId, logger, uiPopInvoker, statusHandler, "dev")
     oe.RunBlocking()
