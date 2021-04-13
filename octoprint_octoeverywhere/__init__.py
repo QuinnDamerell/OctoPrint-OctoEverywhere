@@ -10,6 +10,7 @@ from datetime import datetime
 import flask
 
 from .octoeverywhereimpl import OctoEverywhere
+from .octohttprequest import OctoHttpRequest
 import octoprint.plugin
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
@@ -121,6 +122,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                 self._logger.info("SetFrontendLocalPort API called. Port:"+str(port))
                 self._settings.set(["HttpFrontendPort"], port, force=True)
                 self._settings.save(force=True)
+                # Update the running value.
+                OctoHttpRequest.SetLocalHttpProxyPort(port)
             else:
                 self._logger.info("SetFrontendLocalPort API called with no port.")
         else:
@@ -273,13 +276,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             frontendHttpPort = self.GetFrontendHttpPort()
             self._logger.info("Frontend http port detected as " + str(frontendHttpPort))
 
-            # For now, we will always use 8080 for mjpg-streamer. This is the default port and I think
-            # most all configs will run on it. Ideally we would pull this from the config.
-            mjpgStreamerLocalPort = 8080
+            # Set the ports this instance is running on
+            OctoHttpRequest.SetLocalHttpProxyPort(frontendHttpPort)
+            OctoHttpRequest.SetLocalOctoPrintPort(self.OctoPrintLocalPort)
 
             # Run!
             OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, self.OctoPrintLocalPort, mjpgStreamerLocalPort, printerId, self._logger, self, self, self._plugin_version)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, self._logger, self, self, self._plugin_version)
             oe.RunBlocking()		
         except Exception as e:
             self._logger.error("Exception thrown out of main runner. "+str(e))

@@ -7,7 +7,7 @@ import sys
 
 from .websocketimpl import Client
 from .octoheaderimpl import HeaderHelper
-from .octoutils import Utils
+from .octohttprequest import OctoHttpRequest
 
 #
 # Respresents a websocket connection we are proxying or a http stream we are sending.
@@ -20,9 +20,6 @@ class OctoProxySocket(threading.Thread):
         self.Id = args[1] 
         self.OctoSession = args[2] 
         self.OpenMsg = args[3] 
-        self.LocalHostAddress = args[4] 
-        self.LocalHostPort = args[5] 
-        self.MjpgStreamerLocalPort = args[6]
         self.Ws = None
         self.IsClosed = False
         self.IsOpened = False
@@ -155,7 +152,7 @@ class OctoProxySocket(threading.Thread):
         path = self.OpenMsg["Path"]
 
         # For the websocket use the correct OctoPrint port number
-        uri = "ws://" + self.LocalHostAddress + ":" + str(self.LocalHostPort) + path
+        uri = "ws://" + OctoHttpRequest.GetLocalhostAddress() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
         self.Logger.info('Opening proxy socket websocket ' + str(self.Id) + " , " + uri)
         self.Ws = Client(uri, self.OnWsOpened, None, self.OnWsData, self.OnWsClosed, self.OnWsError)
         if self.IsClosed:
@@ -255,29 +252,26 @@ class OctoProxySocket(threading.Thread):
 
     # Handles websocket proxy sockets
     def HandleHttpStreamConnection(self) :
-        # Get the URI for this message.
-        uri = Utils.GetOctoMessageAbsoluteUri(self.OpenMsg, self.LocalHostAddress, self.LocalHostPort, self.MjpgStreamerLocalPort)
-
-        self.Logger.info("Opening proxy socket http stream " + str(self.Id) + ", " +uri)
 
         # Setup the headers
-        send_headers = HeaderHelper.GatherRequestHeaders(self.OpenMsg, self.LocalHostAddress)
+        sendHeaders = HeaderHelper.GatherRequestHeaders(self.OpenMsg)
 
-        # Try to make the http call.
-        # Note we use a long timeout because some api calls can hang for a while.
-        # For example when plugins are installed, some have to compile which can take some time.
-        # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
-        # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
-        # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
-        # place to set the location redirect header.
+        # Find the method
         method = self.OpenMsg["Method"]
-        if method == "POST" :
-            self.HttpResponse = requests.post(uri, headers=send_headers, data=self.OpenMsg["Data"], timeout=1800, allow_redirects=False, stream=True)
-        elif method == "GET" :
-            self.HttpResponse = requests.get(uri, headers=send_headers, timeout=1800, allow_redirects=False, stream=True)
-        else:
+        if method != "POST" and method != "GET" :
             self.Logger.error(method+" method is not supported for stream sockets.")
             return
+
+        # Make the http request.
+        httpResult = OctoHttpRequest.MakeHttpCall(self.Logger, self.OpenMsg, method, sendHeaders, self.OpenMsg["Data"], True)
+        if httpResult == None:
+            self.Logger.error("Failed to make http request for http stream " + str(self.Id))
+            return
+
+        # Set the results.
+        self.HttpResponse = httpResult.Result
+        uri = httpResult.Url
+        self.Logger.info("Opening proxy socket http stream " + str(self.Id) + ", " +uri)
 
         # The response should indicate the boundary or that it's an event stream.
         # Otherwise this code won't work.
