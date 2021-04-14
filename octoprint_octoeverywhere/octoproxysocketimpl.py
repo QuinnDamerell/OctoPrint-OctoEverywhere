@@ -271,7 +271,7 @@ class OctoProxySocket(threading.Thread):
         # Set the results.
         self.HttpResponse = httpResult.Result
         uri = httpResult.Url
-        self.Logger.info("Opening proxy socket http stream " + str(self.Id) + ", " +uri)
+        self.Logger.info("Opening proxy socket http stream " + str(self.Id) + ": " +uri)
 
         # The response should indicate the boundary or that it's an event stream.
         # Otherwise this code won't work.
@@ -336,6 +336,7 @@ class OctoProxySocket(threading.Thread):
                 for name in self.HttpResponse.headers:
                     returnHeaders.append({"Name":name, "Value":self.HttpResponse.headers[name]})
                 send["Headers"] = returnHeaders
+                self.Logger.info("Streaming proxy socket http stream " + str(self.Id) +  ": status:" + str(self.HttpResponse.status_code) + ", first packet size: " + str(lengthBytes))
 
             # Detect the correct type.   
             send["ProxySocket"]["IsBinary"] = True
