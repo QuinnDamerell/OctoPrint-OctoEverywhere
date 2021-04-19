@@ -62,6 +62,7 @@ if __name__ == '__main__':
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
+    OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
     OctoHttpRequest.SetLocalOctoPrintPort(5000)
 
     uiPopInvoker = UiPopupInvokerStub(logger)
