@@ -119,18 +119,25 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if command == "setFrontendLocalPort":
             # Ensure we can find a port.
             if "port" in data and data["port"] != None:
+
                 # Get vars
                 port = int(data["port"])
                 url = "Unknown"
                 if "url" in data and data["url"] != None:
                     url = str(data["url"])
+                isHttps = False
+                if "isHttps" in data and data["isHttps"] != None:
+                    isHttps = data["isHttps"]
+
                 # Report
-                self._logger.info("SetFrontendLocalPort API called. Port:"+str(port) + " URL:"+url)
+                self._logger.info("SetFrontendLocalPort API called. Port:"+str(port)+" IsHttps:"+str(isHttps)+" URL:"+url)
                 # Save
                 self._settings.set(["HttpFrontendPort"], port, force=True)
+                self._settings.set(["HttpFrontendIsHttps"], isHttps, force=True)
                 self._settings.save(force=True)
                 # Update the running value.
                 OctoHttpRequest.SetLocalHttpProxyPort(port)
+                OctoHttpRequest.SetLocalHttpProxyIsHttps(isHttps)
             else:
                 self._logger.info("SetFrontendLocalPort API called with no port.")
         else:
@@ -234,6 +241,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             return int(self._settings.get(["HttpFrontendPort"]))
         except:
             return 80
+
+    # Returns the if the frontend http proxy for OctoPrint is using https.
+    def GetFrontendIsHttps(self):
+        # Always try to get and parse the settings value. If the value doesn't exist
+        # or it's invalid this will fall back to the default value.
+        try:
+            return self._settings.get(["HttpFrontendIsHttps"])
+        except:
+            return False
     
     # Sends a UI popup message for various uses.
     # title - string, the title text.
@@ -281,11 +297,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # This is the port the user would use if they were accessing OctoPrint locally.
             # Normally this is port 80, but some users might configure it differently.
             frontendHttpPort = self.GetFrontendHttpPort()
-            self._logger.info("Frontend http port detected as " + str(frontendHttpPort))
+            frontendIsHttps = self.GetFrontendIsHttps()
+            self._logger.info("Frontend http port detected as " + str(frontendHttpPort) + ", is https? "+str(frontendIsHttps))
 
             # Set the ports this instance is running on
             OctoHttpRequest.SetLocalHttpProxyPort(frontendHttpPort)
             OctoHttpRequest.SetLocalOctoPrintPort(self.OctoPrintLocalPort)
+            OctoHttpRequest.SetLocalHttpProxyIsHttps(frontendIsHttps)
 
             # Run!
             OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"

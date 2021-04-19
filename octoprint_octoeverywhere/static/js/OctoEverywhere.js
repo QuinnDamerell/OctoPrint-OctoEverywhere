@@ -60,9 +60,9 @@ $(function() {
         // need to make relative url request, we know the correct port. To get that port reliably, we will wait until the user
         // to use the portal locally as they normally would. When we see that local request, we capture the port and send it to
         // our backend.
-        function ReportLocalFrontendPort(port, fullUrl)
+        function ReportLocalFrontendPort(port, isHttps, fullUrl)
         {
-            OctoELog("Local frontend port found ["+port+"] reporting to backend. "+ fullUrl)
+            OctoELog("Local frontend port found [port:"+port+" isHttps:"+isHttps+" url:"+fullUrl+"] reporting to backend.")
             const xhr = new XMLHttpRequest();
             xhr.onload = () => {
                 if (xhr.status > 299) {
@@ -72,6 +72,7 @@ $(function() {
             const payload = {
                 "command":"setFrontendLocalPort",
                 "port": port,
+                "isHttps": isHttps,
                 "url": fullUrl
             };
             xhr.open('POST', '/api/plugin/octoeverywhere');
@@ -79,7 +80,7 @@ $(function() {
             xhr.send(JSON.stringify(payload));
         }
 
-        function DetermineHostnameIsLocalAndReport(hostname, port, fullUrl)
+        function DetermineHostnameIsLocalAndReport(hostname, port, isHttps, fullUrl)
         {
             // Now, we have to figure out if this is a local address or not.
             // 
@@ -91,7 +92,7 @@ $(function() {
             if(hostname.indexOf("[") != -1 && hostname.indexOf("]") != -1)
             {
                 OctoELog("Current hostname detected as IPV6. "+hostname);
-                ReportLocalFrontendPort(port, fullUrl);
+                ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
             }
 
@@ -100,7 +101,7 @@ $(function() {
             if(hostname.endsWith(".local"))
             {
                 OctoELog("Current hostname detected as a .local domain. "+hostname);
-                ReportLocalFrontendPort(port, fullUrl);
+                ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
             }  
 
@@ -120,7 +121,7 @@ $(function() {
             if(isIPv4)
             {
                 OctoELog("Current hostname detected as a IPv4. "+hostname);
-                ReportLocalFrontendPort(port, fullUrl);
+                ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
             }
 
@@ -163,6 +164,9 @@ $(function() {
             // Get the hostname
             var hostname = url.substring(protocolEnd, hostnameEnd)
 
+            // Determine if the protocol is http or https.
+            var isHttps = url.startsWith("https://")
+
             // IPV6 address will be in the following format
             // http://[add:res:tes:blah]:port/stuff
             // Since the following logic is trying to find the port delimiter ':' we need to make sure
@@ -180,13 +184,13 @@ $(function() {
             if(hasPortDelimiter == -1)
             {
                 // Check the url for https or not.
-                if(url.startsWith("https"))
+                if(isHttps)
                 {
-                    DetermineHostnameIsLocalAndReport(hostname, 443, url);
+                    DetermineHostnameIsLocalAndReport(hostname, 443, isHttps, url);
                 }
                 else
                 {
-                    DetermineHostnameIsLocalAndReport(hostname, 80, url);
+                    DetermineHostnameIsLocalAndReport(hostname, 80, isHttps, url);
                 }
                 return;
             }
@@ -201,23 +205,25 @@ $(function() {
 
             // And parse out the main hostname
             hostname = hostname.substring(0, hasPortDelimiter)
-            DetermineHostnameIsLocalAndReport(hostname, port, url);   
+            DetermineHostnameIsLocalAndReport(hostname, port, isHttps, url);   
         }
         FindAndReportLocalFrontendPort(window.location.href);
 
         // For testing.
-        // FindAndReportLocalFrontendPort("https://octoeverywhere.com");
-        // FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com");
-        // FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com:255");
-        // FindAndReportLocalFrontendPort("http://192.168.1.2:255");
-        // FindAndReportLocalFrontendPort("http://192.168.1.2/hello");
-        // FindAndReportLocalFrontendPort("https://192.168.1.2");
-        // FindAndReportLocalFrontendPort("http://octoprint.local");
-        // FindAndReportLocalFrontendPort("http://octoprint.local:555");
-        // FindAndReportLocalFrontendPort("http://octoprint.local/test");
-        // FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]/test");
-        // FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:555/test");
-        // FindAndReportLocalFrontendPort("http://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:78945");
+        FindAndReportLocalFrontendPort("https://octoeverywhere.com");
+        FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com");
+        FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com:255");
+        FindAndReportLocalFrontendPort("http://192.168.1.2:255");
+        FindAndReportLocalFrontendPort("http://192.168.1.2/hello");
+        FindAndReportLocalFrontendPort("https://192.168.1.2");
+        FindAndReportLocalFrontendPort("http://octoprint.local");
+        FindAndReportLocalFrontendPort("http://octoprint.local:555");
+        FindAndReportLocalFrontendPort("http://octoprint.local/test");
+        FindAndReportLocalFrontendPort("hTTps://octoprint.local/test");
+        FindAndReportLocalFrontendPort("httpS://octoprint.local:555/test");
+        FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]/test");
+        FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:555/test");
+        FindAndReportLocalFrontendPort("http://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:78945");
     }
 
      /* view model class, parameters for constructor, container to bind to
