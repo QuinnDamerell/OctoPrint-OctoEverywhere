@@ -2,12 +2,17 @@ import requests
 
 class OctoHttpRequest:
     LocalHttpProxyPort = 80
+    LocalHttpProxyIsHttps = False
     LocalOctoPrintPort = 5000
     LocalHostAddress = "127.0.0.1"
 
     @staticmethod
     def SetLocalHttpProxyPort(port):
         OctoHttpRequest.LocalHttpProxyPort = port
+
+    @staticmethod
+    def SetLocalHttpProxyIsHttps(isHttps):
+        OctoHttpRequest.LocalHttpProxyIsHttps = isHttps
 
     @staticmethod
     def GetLocalHttpProxyPort():
@@ -90,10 +95,16 @@ class OctoHttpRequest:
             path = msg["Path"]
 
             # The main URL is directly to this OctoPrint instance
+            # This URL will only every be http, it can't be https.
             url = "http://" + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort) + path
 
             # The fallback URL is to where we think the http proxy port is.
-            fallbackUrl = "http://" + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + path
+            # For this address, we need set the protocol correctly depending if the client detected https
+            # or not.
+            protocol = "http://"
+            if OctoHttpRequest.LocalHttpProxyIsHttps:
+                protocol = "https://"
+            fallbackUrl = protocol + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + path
 
         elif "AbsUrl" in msg and len(msg["AbsUrl"]) > 0:
             # For absolute URLs, only use the main URL and set it be exactly what
@@ -118,9 +129,11 @@ class OctoHttpRequest:
         mainResponse = None
         try:
             # Try the main URL
-            mainResponse = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream)
-        except Exception:
+            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
+            mainResponse = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
+        except Exception as e:
             # If we fail, we want to try the fallback, if there is one.
+            logger.error("Main http URL threw an exception: "+str(e))
             pass
 
         # Check if we got a valid response, if so we are done.
@@ -131,17 +144,21 @@ class OctoHttpRequest:
         if fallbackUrl == None:
             if mainResponse != None:
                 # If we got something back, always return it (we should only get here on a 404)
+                logger.info("Main URL failed, but we have no fallback. Returning the main URL response.")
                 return OctoHttpRequest.Result(mainResponse, url, False)
             else:
                 # Otherwise return the failure.
+                logger.error("Main URL failed, but we have no fallback.")
                 return None
 
         #
         # If we get here, the main response is None or 404 and we have a valid fallback to try.
         fallbackResponse = None
         try:
-            fallbackResponse = requests.request(method, fallbackUrl, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream)
-        except Exception:
+            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
+            fallbackResponse = requests.request(method, fallbackUrl, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
+        except Exception as e:
+            logger.error("Fallback http URL threw an exception: "+str(e))
             pass
 
         # If the fallback response failed OR the fallback response is also a 404, return either the main response (if we have one)
@@ -151,9 +168,11 @@ class OctoHttpRequest:
         if fallbackResponse == None or fallbackResponse.status_code == 404:
             if mainResponse != None:
                 # If we got something back, always return it (we should only get here on a 404)
+                logger.info("Main & Fallback URL failed. Returning the main URL response.")
                 return OctoHttpRequest.Result(mainResponse, url, False)
             else:
                 # Otherwise return the failure.
+                logger.error("Main & Fallback URL failed.")
                 return None
 
         # If we are here, return the fallback response
