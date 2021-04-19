@@ -210,20 +210,20 @@ $(function() {
         FindAndReportLocalFrontendPort(window.location.href);
 
         // For testing.
-        FindAndReportLocalFrontendPort("https://octoeverywhere.com");
-        FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com");
-        FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com:255");
-        FindAndReportLocalFrontendPort("http://192.168.1.2:255");
-        FindAndReportLocalFrontendPort("http://192.168.1.2/hello");
-        FindAndReportLocalFrontendPort("https://192.168.1.2");
-        FindAndReportLocalFrontendPort("http://octoprint.local");
-        FindAndReportLocalFrontendPort("http://octoprint.local:555");
-        FindAndReportLocalFrontendPort("http://octoprint.local/test");
-        FindAndReportLocalFrontendPort("hTTps://octoprint.local/test");
-        FindAndReportLocalFrontendPort("httpS://octoprint.local:555/test");
-        FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]/test");
-        FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:555/test");
-        FindAndReportLocalFrontendPort("http://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:78945");
+        // FindAndReportLocalFrontendPort("https://octoeverywhere.com");
+        // FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com");
+        // FindAndReportLocalFrontendPort("http://test.local.octoeverywhere.com:255");
+        // FindAndReportLocalFrontendPort("http://192.168.1.2:255");
+        // FindAndReportLocalFrontendPort("http://192.168.1.2/hello");
+        // FindAndReportLocalFrontendPort("https://192.168.1.2");
+        // FindAndReportLocalFrontendPort("http://octoprint.local");
+        // FindAndReportLocalFrontendPort("http://octoprint.local:555");
+        // FindAndReportLocalFrontendPort("http://octoprint.local/test");
+        // FindAndReportLocalFrontendPort("hTTps://octoprint.local/test");
+        // FindAndReportLocalFrontendPort("httpS://octoprint.local:555/test");
+        // FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]/test");
+        // FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:555/test");
+        // FindAndReportLocalFrontendPort("http://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:78945");
     }
 
      /* view model class, parameters for constructor, container to bind to
