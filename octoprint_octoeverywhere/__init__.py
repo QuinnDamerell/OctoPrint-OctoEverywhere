@@ -117,9 +117,16 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     def on_api_command(self, command, data):
         if command == "setFrontendLocalPort":
-            if "port" in data:
+            # Ensure we can find a port.
+            if "port" in data and data["port"] != None:
+                # Get vars
                 port = int(data["port"])
-                self._logger.info("SetFrontendLocalPort API called. Port:"+str(port))
+                url = "Unknown"
+                if "url" in data and data["url"] != None:
+                    url = str(data["url"])
+                # Report
+                self._logger.info("SetFrontendLocalPort API called. Port:"+str(port) + " URL:"+url)
+                # Save
                 self._settings.set(["HttpFrontendPort"], port, force=True)
                 self._settings.save(force=True)
                 # Update the running value.

@@ -60,9 +60,9 @@ $(function() {
         // need to make relative url request, we know the correct port. To get that port reliably, we will wait until the user
         // to use the portal locally as they normally would. When we see that local request, we capture the port and send it to
         // our backend.
-        function ReportLocalFrontendPort(port)
+        function ReportLocalFrontendPort(port, fullUrl)
         {
-            OctoELog("Local frontend port found ["+port+"] reporting to backend.")
+            OctoELog("Local frontend port found ["+port+"] reporting to backend. "+ fullUrl)
             const xhr = new XMLHttpRequest();
             xhr.onload = () => {
                 if (xhr.status > 299) {
@@ -71,14 +71,15 @@ $(function() {
             };
             const payload = {
                 "command":"setFrontendLocalPort",
-                "port": port
+                "port": port,
+                "url": fullUrl
             };
             xhr.open('POST', '/api/plugin/octoeverywhere');
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.send(JSON.stringify(payload));
         }
 
-        function DetermineHostnameIsLocalAndReport(hostname, port)
+        function DetermineHostnameIsLocalAndReport(hostname, port, fullUrl)
         {
             // Now, we have to figure out if this is a local address or not.
             // 
@@ -90,7 +91,7 @@ $(function() {
             if(hostname.indexOf("[") != -1 && hostname.indexOf("]") != -1)
             {
                 OctoELog("Current hostname detected as IPV6. "+hostname);
-                ReportLocalFrontendPort(port);
+                ReportLocalFrontendPort(port, fullUrl);
                 return;
             }
 
@@ -99,7 +100,7 @@ $(function() {
             if(hostname.endsWith(".local"))
             {
                 OctoELog("Current hostname detected as a .local domain. "+hostname);
-                ReportLocalFrontendPort(port);
+                ReportLocalFrontendPort(port, fullUrl);
                 return;
             }  
 
@@ -119,7 +120,7 @@ $(function() {
             if(isIPv4)
             {
                 OctoELog("Current hostname detected as a IPv4. "+hostname);
-                ReportLocalFrontendPort(port);
+                ReportLocalFrontendPort(port, fullUrl);
                 return;
             }
 
@@ -181,11 +182,11 @@ $(function() {
                 // Check the url for https or not.
                 if(url.startsWith("https"))
                 {
-                    DetermineHostnameIsLocalAndReport(hostname, 443);
+                    DetermineHostnameIsLocalAndReport(hostname, 443, url);
                 }
                 else
                 {
-                    DetermineHostnameIsLocalAndReport(hostname, 80);
+                    DetermineHostnameIsLocalAndReport(hostname, 80, url);
                 }
                 return;
             }
@@ -200,7 +201,7 @@ $(function() {
 
             // And parse out the main hostname
             hostname = hostname.substring(0, hasPortDelimiter)
-            DetermineHostnameIsLocalAndReport(hostname, port);   
+            DetermineHostnameIsLocalAndReport(hostname, port, url);   
         }
         FindAndReportLocalFrontendPort(window.location.href);
 
