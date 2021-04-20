@@ -224,6 +224,37 @@ $(function() {
         // FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]/test");
         // FindAndReportLocalFrontendPort("https://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:555/test");
         // FindAndReportLocalFrontendPort("http://[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:78945");
+
+        //
+        // Plugin Connection Check and Data Tunneling.
+        // 
+        // This logic determines if the index is being loaded via OctoEverywhere and if so loading
+        // the plugin connection page which assists the plugin in terms of the data tunneling.
+        //
+        //
+        function InjectServiceHelpers()
+        {
+            var iframe = document.createElement('iframe');
+            iframe.src = "https://octoeverywhere.com/plugin/connectioncheck"
+            iframe.setAttribute("style","height:1px;width:1px;");
+            iframe.setAttribute("frameBorder","0");
+            iframe.setAttribute("scrolling","no");
+            document.body.appendChild(iframe);
+        }
+        function DetectOctoEverywhereLoadedIndexAndInjectionHelpers(url)
+        {
+            // Start with a to lower case to remove complexity.
+            url = url.toLowerCase();
+
+            // If the url has this substring in it, the page must be loaded from our service.
+            // There can be any 
+            if(url.indexOf(".octoeverywhere.com/") != -1)
+            {
+                OctoELog("OctoEverywhere based loading detected.");
+                InjectServiceHelpers();
+            }
+        }
+        DetectOctoEverywhereLoadedIndexAndInjectionHelpers(window.location.href);
     }
 
      /* view model class, parameters for constructor, container to bind to
