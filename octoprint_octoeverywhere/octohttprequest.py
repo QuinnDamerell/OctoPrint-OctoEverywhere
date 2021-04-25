@@ -88,7 +88,8 @@ class OctoHttpRequest:
 
         # Figure out the main and fallback url.
         url = ""
-        fallbackUrl = None   
+        fallbackUrl = None
+        fallbackWebcamUrl = None
 
         if "Path" in msg and msg["Path"] != None and len(msg["Path"]) > 0:            
             # If we have the Path var, it means the http request is relative to this device.
@@ -105,6 +106,19 @@ class OctoHttpRequest:
             if OctoHttpRequest.LocalHttpProxyIsHttps:
                 protocol = "https://"
             fallbackUrl = protocol + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + path
+
+            # If all else fails, and because this logic isn't perfect, yet, we will also try to fallback to the assumed webcam port.
+            # This isn't a great thing though, because more complex webcam setups use different ports and more than one instance.
+            # Only setup this URL if the path starts with /webcam, which again isn't a great indicator because it can change per user.
+            webcamUrlIndicator = "/webcam"
+            pathLower = path.lower()
+            if pathLower.startswith(webcamUrlIndicator):
+                # We need to remove the /webcam* since we are trying to talk directly to mjpg-streamer
+                # We do want to keep the second / though.
+                secondSlash = path.index("/", 1)
+                if secondSlash != -1:
+                    webcamPath = path[secondSlash:]
+                    fallbackWebcamUrl = protocol + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
 
         elif "AbsUrl" in msg and len(msg["AbsUrl"]) > 0:
             # For absolute URLs, only use the main URL and set it be exactly what
@@ -161,19 +175,44 @@ class OctoHttpRequest:
             logger.error("Fallback http URL threw an exception: "+str(e))
             pass
 
-        # If the fallback response failed OR the fallback response is also a 404, return either the main response (if we have one)
-        # or Nothing.
-        # We want to use the OctoPrint 404 over the fallback's if possible, since it might be expected for OctoPrint and it 
-        # could be looking for some header.
-        if fallbackResponse == None or fallbackResponse.status_code == 404:
+        # Check if we got a valid response, if so we are done.
+        if fallbackResponse != None and fallbackResponse.status_code != 404:
+            return OctoHttpRequest.Result(fallbackResponse, fallbackUrl, True)
+
+        # Check if we have a webcam fallback we can try
+        if fallbackWebcamUrl == None:
             if mainResponse != None:
                 # If we got something back, always return it (we should only get here on a 404)
-                logger.info("Main & Fallback URL failed. Returning the main URL response.")
+                logger.info("Fallback and main URL failed, but we have no webcam fallback. Returning the main URL response.")
                 return OctoHttpRequest.Result(mainResponse, url, False)
             else:
                 # Otherwise return the failure.
-                logger.error("Main & Fallback URL failed.")
+                logger.error("Fallback and main URL failed, but we have no webcam fallback.")
                 return None
 
-        # If we are here, return the fallback response
-        return OctoHttpRequest.Result(fallbackResponse, fallbackUrl, True)
+        #
+        # Last, if all else fails, try the webcam fallback.
+        webcamFallbackResponse = None
+        try:
+            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
+            webcamFallbackResponse = requests.request(method, fallbackWebcamUrl, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
+        except Exception as e:
+            logger.error("Webcam fallback http URL threw an exception: "+str(e))
+            pass
+
+        # If the webcam fallback response failed OR the fallback response is also a 404, return either the main response (if we have one)
+        # or Nothing.
+        # We want to use the OctoPrint 404 over the fallback's if possible, since it might be expected for OctoPrint and it 
+        # could be looking for some header.
+        if webcamFallbackResponse == None or webcamFallbackResponse.status_code == 404:
+            if mainResponse != None:
+                # If we got something back, always return it (we should only get here on a 404)
+                logger.info("Main & Fallback & Webcam fallback URL failed. Returning the main URL response.")
+                return OctoHttpRequest.Result(mainResponse, url, False)
+            else:
+                # Otherwise return the failure.
+                logger.error("Main & Fallback & webcam fallback URL failed.")
+                return None
+
+        # If we are here, return the webcam fallback response
+        return OctoHttpRequest.Result(webcamFallbackResponse, fallbackUrl, True)
