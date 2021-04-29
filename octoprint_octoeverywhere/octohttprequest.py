@@ -1,4 +1,5 @@
 import requests
+from .localip import LocalIpHelper
 
 class OctoHttpRequest:
     LocalHttpProxyPort = 80
@@ -90,6 +91,7 @@ class OctoHttpRequest:
         url = ""
         fallbackUrl = None
         fallbackWebcamUrl = None
+        fallbackLocalIpSuffix = None
 
         if "Path" in msg and msg["Path"] != None and len(msg["Path"]) > 0:            
             # If we have the Path var, it means the http request is relative to this device.
@@ -106,6 +108,12 @@ class OctoHttpRequest:
             if OctoHttpRequest.LocalHttpProxyIsHttps:
                 protocol = "https://"
             fallbackUrl = protocol + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + path
+
+            # If the two URLs above don't work, we will try to call the server using the local IP since the server might not be bound to localhost.
+            # Note we only build the suffix part of the string here, because we don't want to do the local IP detection if we don't have to.
+            # Also note this will only work for OctoPrint pages.
+            # This case only seems to apply to OctoPrint instances running on Windows.
+            fallbackLocalIpSuffix = ":" + str(OctoHttpRequest.LocalOctoPrintPort) + path
 
             # If all else fails, and because this logic isn't perfect, yet, we will also try to fallback to the assumed webcam port.
             # This isn't a great thing though, because more complex webcam setups use different ports and more than one instance.
@@ -133,86 +141,94 @@ class OctoHttpRequest:
         if data != None and len(data) == 0:
             data = None
 
-        # Try to make the http call.
-        # Note we use a long timeout because some api calls can hang for a while.
-        # For example when plugins are installed, some have to compile which can take some time.
-        # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
-        # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
-        # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
-        # place to set the location redirect header.
-        mainResponse = None
+        # First, try the main URL.
+        # For the first main url, we set the main response to None and is fallback to False.
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Main request", method, url, headers, data, stream, None, False, fallbackUrl)
+        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # whatever is in the Response, even if it's None.
+        if ret.IsChainDone:
+            return ret.Result
+
+        # We keep track of the main response, if all future fallbacks fail. (This can be None)
+        mainResult = ret.Result
+
+        # Main failed, try the fallback, which should be the http proxy.
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Http proxy fallback", method, fallbackUrl, headers, data, stream, mainResult, True, fallbackLocalIpSuffix)
+        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # whatever is in the Response, even if it's None.
+        if ret.IsChainDone:
+            return ret.Result    
+
+        # Try the local IP, because the server might not be bound to 127.0.0.1
+        localIpFallbackUrl = "http://" + LocalIpHelper.TryToGetLocalIp() + fallbackLocalIpSuffix
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, stream, mainResult, True, fallbackWebcamUrl)   
+        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # whatever is in the Response, even if it's None.
+        if ret.IsChainDone:
+            return ret.Result   
+
+        # If all others fail, try the hardcoded webcam URL.
+        # Note this has to be last, because there commonly isn't a fallbackWebcamUrl, so it will stop the
+        # chain of other attempts.
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Webcam hardcode fallback", method, fallbackWebcamUrl, headers, data, stream, mainResult, True, None)
+        # No matter what, always return the result now.
+        return ret.Result
+
+    # Returned by a single http request attempt.
+    # IsChainDone - indicates if the fallback chain is done and the response should be returned
+    # Result - is the final result. Note the result can be unsuccessful or even `None` if everything failed.
+    class AttemptResult():
+        def __init__(self, isChainDone, result):
+            self.isChainDone = isChainDone
+            self.result = result
+
+        @property
+        def IsChainDone(self):
+            return self.isChainDone
+
+        @property
+        def Result(self):
+            return self.result
+
+    # This function should always return a AttemptResult object.
+    @staticmethod
+    def MakeHttpCallAttempt(logger, attemptName, method, url, headers, data, stream, mainResult, isFallback, nextFallbackUrl):
+        response = None
         try:
-            # Try the main URL
-            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
-            mainResponse = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
+            # Try to make the http call.
+            #
+            # Note we use a long timeout because some api calls can hang for a while.
+            # For example when plugins are installed, some have to compile which can take some time.
+            #
+            # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
+            # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
+            # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
+            # place to set the location redirect header.
+            #
+            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.            
+            response = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
         except Exception as e:
-            # If we fail, we want to try the fallback, if there is one.
-            logger.error("Main http URL threw an exception: "+str(e))
-            pass
+            logger.error(attemptName + " http URL threw an exception: "+str(e))            
 
-        # Check if we got a valid response, if so we are done.
-        if mainResponse != None and mainResponse.status_code != 404:
-            return OctoHttpRequest.Result(mainResponse, url, False)
+        # Check if we got a valid response.
+        if response != None and response.status_code != 404:
+            # We got a valid response, we are done.
+            # Return true and the result object, so it can be returned.
+            return OctoHttpRequest.AttemptResult(True, OctoHttpRequest.Result(response, url, isFallback))
 
-        # Check if we have a fallback we can try
-        if fallbackUrl == None:
-            if mainResponse != None:
-                # If we got something back, always return it (we should only get here on a 404)
-                logger.info("Main URL failed, but we have no fallback. Returning the main URL response.")
-                return OctoHttpRequest.Result(mainResponse, url, False)
-            else:
-                # Otherwise return the failure.
-                logger.error("Main URL failed, but we have no fallback.")
-                return None
+        # Check if we have another fallback URL to try.
+        if nextFallbackUrl != None:
+            # We have more fallbacks to try.
+            # Return false so we keep going, but also return this response if we had one. This lets
+            # use capture the main result object, so we can use it eventually if all fallbacks fail.
+            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest.Result(response, url, isFallback)) 
 
-        #
-        # If we get here, the main response is None or 404 and we have a valid fallback to try.
-        fallbackResponse = None
-        try:
-            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
-            fallbackResponse = requests.request(method, fallbackUrl, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
-        except Exception as e:
-            logger.error("Fallback http URL threw an exception: "+str(e))
-            pass
-
-        # Check if we got a valid response, if so we are done.
-        if fallbackResponse != None and fallbackResponse.status_code != 404:
-            return OctoHttpRequest.Result(fallbackResponse, fallbackUrl, True)
-
-        # Check if we have a webcam fallback we can try
-        if fallbackWebcamUrl == None:
-            if mainResponse != None:
-                # If we got something back, always return it (we should only get here on a 404)
-                logger.info("Fallback and main URL failed, but we have no webcam fallback. Returning the main URL response.")
-                return OctoHttpRequest.Result(mainResponse, url, False)
-            else:
-                # Otherwise return the failure.
-                logger.error("Fallback and main URL failed, but we have no webcam fallback.")
-                return None
-
-        #
-        # Last, if all else fails, try the webcam fallback.
-        webcamFallbackResponse = None
-        try:
-            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
-            webcamFallbackResponse = requests.request(method, fallbackWebcamUrl, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
-        except Exception as e:
-            logger.error("Webcam fallback http URL threw an exception: "+str(e))
-            pass
-
-        # If the webcam fallback response failed OR the fallback response is also a 404, return either the main response (if we have one)
-        # or Nothing.
-        # We want to use the OctoPrint 404 over the fallback's if possible, since it might be expected for OctoPrint and it 
-        # could be looking for some header.
-        if webcamFallbackResponse == None or webcamFallbackResponse.status_code == 404:
-            if mainResponse != None:
-                # If we got something back, always return it (we should only get here on a 404)
-                logger.info("Main & Fallback & Webcam fallback URL failed. Returning the main URL response.")
-                return OctoHttpRequest.Result(mainResponse, url, False)
-            else:
-                # Otherwise return the failure.
-                logger.error("Main & Fallback & webcam fallback URL failed.")
-                return None
-
-        # If we are here, return the webcam fallback response
-        return OctoHttpRequest.Result(webcamFallbackResponse, fallbackUrl, True)
+        # We don't have another fallback, so we need to end this.
+        if mainResult != None:
+            # If we got something back from the main try, always return it (we should only get here on a 404)
+            logger.info(attemptName + " failed and we have no more fallbacks. Returning the main URL response.")
+            return OctoHttpRequest.AttemptResult(True, mainResult)
+        else:
+            # Otherwise return the failure.
+            logger.error(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
+            return OctoHttpRequest.AttemptResult(True, None)
