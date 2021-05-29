@@ -1,7 +1,5 @@
 import requests
-from octoprint_octoeverywhere.Proto.PathTypes import PathTypes
 from .localip import LocalIpHelper
-from .octostreammsgbuilder import OctoStreamMsgBuilder
 
 class OctoHttpRequest:
     LocalHttpProxyPort = 80
@@ -33,10 +31,6 @@ class OctoHttpRequest:
     def GetLocalhostAddress():
         return OctoHttpRequest.LocalHostAddress
 
-    @staticmethod
-    def SetLocalhostAddress(address):
-        OctoHttpRequest.LocalHostAddress = address
-
     # The result of a successfully made http request.
     # "successfully made" means we talked to the server, not the the http 
     # response is good.
@@ -64,7 +58,7 @@ class OctoHttpRequest:
     # The main point of this function is to abstract away the logic around relative paths, absolute URLs, and the fallback logic
     # we use for different ports. See the comments in the function for details.
     @staticmethod
-    def MakeHttpCall(logger, httpInitialContext, method, headers, data=None, stream=False):
+    def MakeHttpCall(logger, msg, method, headers, data=None, stream=False):
 
         # First of all, we need to figure out what the URL is. There are two options
         #
@@ -99,13 +93,9 @@ class OctoHttpRequest:
         fallbackWebcamUrl = None
         fallbackLocalIpSuffix = None
 
-        # Get the path var, this is common between both relative and absolute paths.
-        path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
-        if path == None:
-            raise Exception("Http request has no path field in open message.")
-
-        pathType = httpInitialContext.PathType()
-        if pathType == PathTypes.Relative:            
+        if "Path" in msg and msg["Path"] != None and len(msg["Path"]) > 0:            
+            # If we have the Path var, it means the http request is relative to this device.
+            path = msg["Path"]
 
             # The main URL is directly to this OctoPrint instance
             # This URL will only every be http, it can't be https.
@@ -138,12 +128,13 @@ class OctoHttpRequest:
                     webcamPath = path[secondSlash:]
                     fallbackWebcamUrl = protocol + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
 
-        elif pathType == PathTypes.Absolute:   
+        elif "AbsUrl" in msg and len(msg["AbsUrl"]) > 0:
             # For absolute URLs, only use the main URL and set it be exactly what
             # was requested.
-            url = path
+            url = msg["AbsUrl"]
         else:
-            raise Exception("Http request got a message with an unknown path type. "+str(pathType))
+            logger.error("Http request got a message without a Path or AbsUrl variable.")
+            return None
 
         # Ensure if there's no data we don't set it. Sometimes our json message parsing will leave an empty
         # bytearray where it should be None.

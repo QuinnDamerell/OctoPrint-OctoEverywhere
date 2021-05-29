@@ -2,7 +2,6 @@ import socket
 import struct
 import os
 
-# A helper class to try to detect the local IP of the device.
 class LocalIpHelper:
 
     @staticmethod

@@ -16,9 +16,10 @@ except ImportError:
 
 class Client:
 
-    def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers = None):
+    def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headerArray = None):
 
         def OnOpen(ws):
+            self.IsOpen = True
             if onWsOpen:
                 onWsOpen(self)
 
@@ -36,14 +37,14 @@ class Client:
 
         def OnData(ws, buffer, type, continueFlag):
             if onWsData:
-                onWsData(self, buffer, type)
+                onWsData(self, buffer, type == websocket.ABNF.OPCODE_BINARY)
 
         self.Ws = WebSocketApp(url,        
                                   on_message = OnMsg,
                                   on_close = onClosed,
                                   on_error = OnError,
                                   on_data = OnData,
-                                  header = headers
+                                  header = headerArray
         )
         self.Ws.on_open = OnOpen
 
@@ -61,17 +62,14 @@ class Client:
         t.start()
 
     def Close(self):
+        self.IsOpen = False
         if self.Ws:
             self.Ws.close()
             self.Ws = None
     
     def Send(self, msgBytes, isData):
-        if isData:
-            self.SendWithOptCode(msgBytes, websocket.ABNF.OPCODE_BINARY)
-        else:
-            self.SendWithOptCode(msgBytes, websocket.ABNF.OPCODE_TEXT)
-
-    def SendWithOptCode(self, msgBytes, opcode):
         if self.Ws:
-            self.Ws.send(msgBytes, opcode)
-
+            if isData:
+                self.Ws.send(msgBytes, opcode=websocket.ABNF.OPCODE_BINARY)
+            else:
+                self.Ws.send(msgBytes, opcode=websocket.ABNF.OPCODE_TEXT)

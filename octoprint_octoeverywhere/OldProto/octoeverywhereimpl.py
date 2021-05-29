@@ -1,13 +1,10 @@
 import time
 import random
 import threading
-import requests
-import json
 
 from .websocketimpl import Client
 from .octosessionimpl import OctoSession
 from .octoservercon import OctoServerCon
-from .OldProto.octoservercon import OctoServerConV0
 
 # 
 # This is the main running class that will connect and keep a connection to the service.
@@ -43,7 +40,7 @@ class OctoEverywhere:
         while 1:
             try:
                 # Create the primary connection.
-                serverCon = self.createOctoServerCon(self.Endpoint, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec)                
+                serverCon = OctoServerCon(self, self.Endpoint, True, self.PrinterId, self.Logger, self.UiPopupInvoker, self.StatusChangeHandler, self.PluginVersion, self.PrimaryConnectionRunForTimeSec)
                 serverCon.RunBlocking()
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. ex:" + str(e))
@@ -76,7 +73,7 @@ class OctoEverywhere:
         # Run the secondary connection for until the RunFor time limint. Note RunFor will account for user activity.
         self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl))
         try:
-            serverCon = self.createOctoServerCon(summonConnectUrl, False, None, self.SecondaryConnectionRunForTimeSec) 
+            serverCon = OctoServerCon(self, summonConnectUrl, False, self.PrinterId, self.Logger, self.UiPopupInvoker, None, self.PluginVersion, self.SecondaryConnectionRunForTimeSec)
             serverCon.RunBlocking()
         except Exception as e:
             self.Logger.error("Exception in HandleSecondaryServerCon function. ex:" + str(e))
@@ -97,48 +94,3 @@ class OctoEverywhere:
 
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 
-    # While we migrate our protocol, the plugin will support both versions. 
-    # This is going to be a big pain so we want to do it for as short of a time as possible.
-    # We will ask the server we are going to connect to what version of the protocol we should use.
-    # The v0 protocol is deprecated and won't receive any more updates. In a month or two it will be removed.
-    # Until then, these octoserver objects must remain with the same interface, or things will break.
-    def createOctoServerCon(self, endpoint, isPrimary, statusChangeHandler, runTime):
-        # Remove the protocol
-        protocolIndex = endpoint.find("wss://")
-        if protocolIndex == -1:
-            protocolIndex = endpoint.find("ws://")
-            if protocolIndex == -1:                
-                raise Exception("Invalid endpoint, couldn't find wss:// "+str(endpoint))
-            else:
-                protocolIndex += len("ws://")
-        else:
-            protocolIndex += len("wss://")
-
-        # Get the domain + path
-        endpointWithNoProtocol = endpoint[protocolIndex:]
-
-        # Remove the path
-        pathIndex = endpointWithNoProtocol.find('/')
-        if pathIndex == -1:
-            raise Exception("Invalid endpoint, couldn't path after removing protocol "+str(endpointWithNoProtocol))
-
-        endpointDomain = endpointWithNoProtocol[0:pathIndex]
-
-        # Make a call to the server to get it's version
-        majorProtoVersion = 0
-        versionUrl = "https://"+endpointDomain+'/api/octostream/protocolversion'
-        try:
-            r = requests.get(versionUrl)
-            if r.status_code != 200:
-                raise Exception("Request didn't return 200 - returned "+str(r.status_code))
-            jsonResponse = json.loads(r.content.decode())
-            majorProtoVersion = int(jsonResponse["Result"]["Major"])
-            self.Logger.info("Queried server endpoint ["+versionUrl+"] and got protocol version "+str(majorProtoVersion))
-        except Exception as e:
-            self.Logger.error("FAILED to query server's protocol version. Defaulting to 0. "+str(e))
-
-        # Build the octo server connection that matches the protocol version. This is a temp measure while we migrate protocols.
-        if majorProtoVersion == 1:
-            return OctoServerCon(self, endpoint, isPrimary, self.PrinterId, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)
-        else:
-            return OctoServerConV0(self, endpoint, isPrimary, self.PrinterId, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)
