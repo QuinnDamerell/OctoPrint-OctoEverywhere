@@ -306,7 +306,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             OctoHttpRequest.SetLocalHttpProxyIsHttps(frontendIsHttps)
 
             # Run!
-            OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"
+            OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, self._logger, self, self, self._plugin_version)
             oe.RunBlocking()		
         except Exception as e:
