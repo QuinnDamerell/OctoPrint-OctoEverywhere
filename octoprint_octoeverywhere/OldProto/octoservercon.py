@@ -12,7 +12,7 @@ from .repeattimer import RepeatTimer
 # Handling disconnects, errors, backoff, and retry logic.
 # Handling RunFor logic which limits how long a server connection stays active.
 #
-class OctoServerCon:
+class OctoServerConV0:
 
     # The RunFor system allows the host to specify how long this server connection should be active.
     # This time includes all valid connections and disconnects. Simply put, after x amount of time, the class
@@ -163,7 +163,7 @@ class OctoServerCon:
 
         # Try to close all of the sockets before we disconnect, so we send the messages.
         if self.OctoSession:
-            self.OctoSession.CloseAllWebStreamsAndDisable()
+            self.OctoSession.CloseAllProxySockets()
 
         # Close the websocket, which will cause the run loop to spin and reconnect.
         if self.Ws:
@@ -222,7 +222,7 @@ class OctoServerCon:
 
                 # Ensure all proxy sockets are closed.
                 if self.OctoSession:
-                    self.OctoSession.CloseAllWebStreamsAndDisable()
+                    self.OctoSession.CloseAllProxySockets()
 
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. server con:"+self.GetConnectionString()+" ex:" + str(e))
