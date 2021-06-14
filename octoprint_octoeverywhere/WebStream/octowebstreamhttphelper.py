@@ -15,6 +15,7 @@ from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
 from ..Proto import HttpInitialContext
 from ..Proto import DataCompression
+from ..Proto import MessagePriority
 
 #
 # A helper object that handles http request for the web stream system.
@@ -124,6 +125,9 @@ class OctoWebStreamHttpHelper:
             self.Logger.error(self.getLogMsgPrefix()+" request had a None method type.")
             raise Exception("Http request had a None method type")
 
+        # Before we make the request, make sure we shouldn't defer for a high pri request
+        self.checkForDelayIfNotHighPri()
+
         # Make the http request.
         httpResult = OctoHttpRequest.MakeHttpCall(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer, True)
 
@@ -191,6 +195,10 @@ class OctoWebStreamHttpHelper:
         # Continue as long as the stream isn't closed and we haven't sent the close message.
         # We don't check th body read sizes here, because we don't want to duplicate that logic check.
         while self.IsClosed == False and isLastMessage == False:
+
+            # Before we process the response, make sure we shouldn't defer for a high pri request
+            self.checkForDelayIfNotHighPri()
+
             # Prepare a response.
             # TODO - We should start the buffer at something that's likely to not need expanding for most requests.
             builder = OctoStreamMsgBuilder.CreateBuffer(20000)
@@ -609,5 +617,14 @@ class OctoWebStreamHttpHelper:
                     return data
         except requests.exceptions.StreamConsumedError as _:
             # When this exception is thrown, it means the entire body has been read.
-            return None      
+            return None    
+
+    # To speed up page load, we will defer lower pri requests while higher priority requests
+    # are executing.
+    def checkForDelayIfNotHighPri(self):
+        # Allow anything above Normal priority to always execute
+        if self.WebStreamOpenMsg.MsgPriority() < MessagePriority.MessagePriority.Normal:
+            return
+        # Otherwise, we want to block for a bit if there's a high pri stream processing.
+        self.WebStream.BlockIfHighPriStreamActive()
 

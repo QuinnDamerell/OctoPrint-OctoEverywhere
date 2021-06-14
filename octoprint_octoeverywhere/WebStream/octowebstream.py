@@ -11,6 +11,7 @@ from .octowebstreamwshelper import OctoWebStreamWsHelper
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
+from ..Proto import MessagePriority
 
 #
 # Respresents a web stream, which is how we send http request and web socket messages.
@@ -32,6 +33,12 @@ class OctoWebStream(threading.Thread):
         self.WsHelper = None
         self.IsHelperClosed = False
         self.OpenedTime = time.time()
+
+        # Vars for high pri streams
+        self.IsHighPriStream = False
+        self.HighPriLock = threading.Lock()
+        self.ActiveHighPriStreamCount = 0
+        self.ActiveHighPriStreamStart = time.time()
 
 
     # Called for all messages for this stream id. 
@@ -98,6 +105,10 @@ class OctoWebStream(threading.Thread):
 
         # Ensure we have sent the close message
         self.ensureCloseMessageSent()
+
+        # If this was high pri, clear the state
+        if self.IsHighPriStream:
+            self.highPriStreamEnded()
 
         # If we got a ref to the helper, we need to call close on it.
         try:
@@ -185,6 +196,11 @@ class OctoWebStream(threading.Thread):
 
         # Set the message.
         self.OpenWebStreamMsg = webStreamMsg
+
+        # Check if this is high pri, if so, tell them system a high pri is active
+        if(self.OpenWebStreamMsg.MsgPriority() < MessagePriority.MessagePriority.Normal):
+            self.IsHighPriStream = True
+            self.highPriStreamStarted()
 
         # At this point we know what kind of stream we are, http or ws.
         # Create the helper out of lock and then set it.
@@ -286,3 +302,44 @@ class OctoWebStream(threading.Thread):
             # This is bad, log it and kill the stream.
             self.Logger.error("Exception thrown while trying to send close message for web stream "+str(self.Id))
             self.OctoSession.OnSessionError(0)
+
+    # Called by the OctoStreamHttpHelper if the request is normal pri.
+    # If a high pri request is active, this should block until it's complete or for a little while.
+    def BlockIfHighPriStreamActive(self):
+        # Check the counter, don't worry about taking the lock, worst case
+        # this logic would allow one request through or not block one.
+
+        # If there are no high pri requests, don't block.
+        if self.ActiveHighPriStreamCount == 0:
+            return
+        # As a sanity check, if the high pri request started more than 5 seconds ago
+        # don't block.
+        timeSinceStartSec = time.time() - self.ActiveHighPriStreamStart
+        if timeSinceStartSec > 5.0:
+            return
+
+        # We should block this request
+        # TODO - this would be better if we blocked on a event or something, but for now this is fine.
+        # Note that the http will call this function before the request and on each response read loop, so the delays add up.
+        time.sleep(0.1)
+
+    # Called when a high pri stream is started
+    def highPriStreamStarted(self):
+        self.HighPriLock.acquire()
+        try:
+            self.ActiveHighPriStreamCount += 1
+            self.ActiveHighPriStreamStart = time.time()
+        except Exception as _:
+            raise  
+        finally:
+            self.HighPriLock.release()
+
+    # Called when a high pri stream is ended.
+    def highPriStreamEnded(self):
+        self.HighPriLock.acquire()
+        try:
+            self.ActiveHighPriStreamCount -= 1
+        except Exception as _:
+            raise  
+        finally:
+            self.HighPriLock.release()
