@@ -198,7 +198,7 @@ class OctoWebStream(threading.Thread):
         self.OpenWebStreamMsg = webStreamMsg
 
         # Check if this is high pri, if so, tell them system a high pri is active
-        if(self.OpenWebStreamMsg.MsgPriority() > MessagePriority.MessagePriority.Normal):
+        if(self.OpenWebStreamMsg.MsgPriority() < MessagePriority.MessagePriority.Normal):
             self.IsHighPriStream = True
             self.highPriStreamStarted()
 
@@ -321,10 +321,10 @@ class OctoWebStream(threading.Thread):
         # We should block this request
         # TODO - this would be better if we blocked on a event or something, but for now this is fine.
         # Note that the http will call this function before the request and on each response read loop, so the delays add up.
-        time.sleep(0.2)
+        time.sleep(0.1)
 
     # Called when a high pri stream is started
-    def highPriStreamStarted():
+    def highPriStreamStarted(self):
         self.HighPriLock.acquire()
         try:
             self.ActiveHighPriStreamCount += 1
@@ -335,7 +335,7 @@ class OctoWebStream(threading.Thread):
             self.HighPriLock.release()
 
     # Called when a high pri stream is ended.
-    def highPriStreamEnded():
+    def highPriStreamEnded(self):
         self.HighPriLock.acquire()
         try:
             self.ActiveHighPriStreamCount -= 1
