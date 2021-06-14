@@ -623,7 +623,7 @@ class OctoWebStreamHttpHelper:
     # are executing.
     def checkForDelayIfNotHighPri(self):
         # Allow anything above Normal priority to always execute
-        if self.WebStreamOpenMsg.MsgPriority() > MessagePriority.MessagePriority.Normal:
+        if self.WebStreamOpenMsg.MsgPriority() < MessagePriority.MessagePriority.Normal:
             return
         # Otherwise, we want to block for a bit if there's a high pri stream processing.
         self.WebStream.BlockIfHighPriStreamActive()
