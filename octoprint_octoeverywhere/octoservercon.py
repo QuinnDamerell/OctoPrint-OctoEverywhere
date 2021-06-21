@@ -247,7 +247,10 @@ class OctoServerCon:
             # Increment
             self.WsConnectBackOffSec *= 2
             if self.WsConnectBackOffSec > 180 :
-                self.WsConnectBackOffSec = 180        
+                self.WsConnectBackOffSec = 180     
+                # If we have failed and are waiting over 3 minutes, we will return which will check the server
+                # protocol again, since it might have changed.
+                return        
 
     def SendMsg(self, msgBytes):
         # When we send any message, consider it user activity.        
