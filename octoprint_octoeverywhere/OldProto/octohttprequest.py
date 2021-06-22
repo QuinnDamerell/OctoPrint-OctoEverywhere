@@ -31,6 +31,10 @@ class OctoHttpRequest:
     def GetLocalhostAddress():
         return OctoHttpRequest.LocalHostAddress
 
+    @staticmethod
+    def SetLocalhostAddress(address):
+        OctoHttpRequest.LocalHostAddress = address
+
     # The result of a successfully made http request.
     # "successfully made" means we talked to the server, not the the http 
     # response is good.
