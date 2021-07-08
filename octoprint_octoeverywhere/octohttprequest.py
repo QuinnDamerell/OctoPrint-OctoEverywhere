@@ -2,7 +2,6 @@ import requests
 from octoprint_octoeverywhere.Proto.PathTypes import PathTypes
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
-from .OldProto import octohttprequest as OldOctoHttpRequest
 
 class OctoHttpRequest:
     LocalHttpProxyPort = 80
@@ -13,14 +12,10 @@ class OctoHttpRequest:
     @staticmethod
     def SetLocalHttpProxyPort(port):
         OctoHttpRequest.LocalHttpProxyPort = port
-        # Also set in the backwards compat helper.
-        OldOctoHttpRequest.OctoHttpRequest.SetLocalHttpProxyPort(port)
 
     @staticmethod
     def SetLocalHttpProxyIsHttps(isHttps):
         OctoHttpRequest.LocalHttpProxyIsHttps = isHttps
-        # Also set in the backwards compat helper.
-        OldOctoHttpRequest.OctoHttpRequest.SetLocalHttpProxyIsHttps(isHttps)
 
     @staticmethod
     def GetLocalHttpProxyPort():
@@ -29,9 +24,6 @@ class OctoHttpRequest:
     @staticmethod
     def SetLocalOctoPrintPort(port):
         OctoHttpRequest.LocalOctoPrintPort = port
-        # Also set in the backwards compat helper.
-        OldOctoHttpRequest.OctoHttpRequest.SetLocalOctoPrintPort(port)
-
 
     @staticmethod
     def GetLocalOctoPrintPort():
@@ -44,9 +36,7 @@ class OctoHttpRequest:
     @staticmethod
     def SetLocalhostAddress(address):
         OctoHttpRequest.LocalHostAddress = address
-        # Also set in the backwards compat helper.
-        OldOctoHttpRequest.OctoHttpRequest.SetLocalhostAddress(address)
-
+        
     # The result of a successfully made http request.
     # "successfully made" means we talked to the server, not the the http 
     # response is good.
