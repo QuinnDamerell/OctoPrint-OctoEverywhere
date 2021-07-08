@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # Dev props
     devId = GeneratePrinterId()
-    OctoEverywhereWsUri = "wss://starport.octoeverywhere.com/octoclientws"    
+    OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"    
     #OctoEverywhereWsUri = "ws://192.168.86.74:5000/octoclientws"
     #devId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
 
@@ -67,5 +67,5 @@ if __name__ == '__main__':
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger)
-    oe = OctoEverywhere(OctoEverywhereWsUri, devId, logger, uiPopInvoker, statusHandler, "dev")
+    oe = OctoEverywhere(OctoEverywhereWsUri, devId, logger, uiPopInvoker, statusHandler, "1.0.4")
     oe.RunBlocking()

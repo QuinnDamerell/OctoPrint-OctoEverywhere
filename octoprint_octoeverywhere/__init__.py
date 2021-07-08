@@ -98,7 +98,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Call when the system is ready and running
     def on_after_startup(self):
         # Spin off a thread for us to operate on.
-        self._logger.info("After startup called. Strating workder thread.")
+        self._logger.info("After startup called. Starting worker thread.")
         main_thread = threading.Thread(target=self.main)
         main_thread.daemon = True
         main_thread.start()
