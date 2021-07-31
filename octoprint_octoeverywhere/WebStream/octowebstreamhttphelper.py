@@ -327,8 +327,9 @@ class OctoWebStreamHttpHelper:
         # Check if we are in the state where we have an upload buffer, but don't know the size.
         # If we don't know the full upload buffer size, the UploadBuffer will be larger the actual size
         # since we allocate extra room on it to try to reduce allocations. 
-        # So if we ever have an upload buffer and it's size != the final received buffer size, slice it.
-        if self.UploadBuffer != None and len(self.UploadBuffer) != self.UploadBytesReceivedSoFar:
+        # Note we only do this if the final size is unknown. If the final size is known but doesn't
+        # match how much we have, that's an error that will be thrown later.
+        if self.UploadBuffer != None and self.KnownFullStreamUploadSizeBytes == None:
             # Trim the buffer to the final size that we received.
             self.UploadBuffer = self.UploadBuffer[0:self.UploadBytesReceivedSoFar]
 
