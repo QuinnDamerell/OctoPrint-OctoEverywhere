@@ -325,14 +325,17 @@ class OctoWebStreamHttpHelper:
 
     def finalizeUnknownUploadSizeIfNeeded(self):
         # Check if we are in the state where we have an upload buffer, but don't know the size.
-        if self.UploadBuffer != None and self.KnownFullStreamUploadSizeBytes != None:
-            # Since we allocate a extra space on the end of our buffer, we need to trim
-            # the UploadBuffer down to the final received size.
+        # If we don't know the full upload buffer size, the UploadBuffer will be larger the actual size
+        # since we allocate extra room on it to try to reduce allocations. 
+        # So if we ever have an upload buffer and it's size != the final received buffer size, slice it.
+        if self.UploadBuffer != None and len(self.UploadBuffer) != self.UploadBytesReceivedSoFar:
+            # Trim the buffer to the final size that we received.
             self.UploadBuffer = self.UploadBuffer[0:self.UploadBytesReceivedSoFar]
 
 
     def copyUploadDataFromMsg(self, webStreamMsg):
-        # Check how much data this message has in it.
+        # Check how much data this message has in it. 
+        # This size is the size of the full buffer, which is decompressed sizevif the data is compressed.
         thisMessageDataLen = webStreamMsg.DataLength()
         if thisMessageDataLen <= 0:
             self.Logger.warn(self.getLogMsgPrefix() + " is waiting on upload data but got a message with no data. ")
@@ -366,7 +369,7 @@ class OctoWebStreamHttpHelper:
                 # We know exactly how much to allocate
                 newBufferSizeBytes = self.KnownFullStreamUploadSizeBytes
             else:
-                # IF we don't know the size, allocate this message plus the current size, plus some buffer (50kb).
+                # If we don't know the size, allocate this message plus the current size, plus some buffer (50kb).
                 newBufferSizeBytes = thisMessageDataLen + self.UploadBytesReceivedSoFar + 1204 * 50
 
             # If there's a buffer, grab it since we need to copy it over
