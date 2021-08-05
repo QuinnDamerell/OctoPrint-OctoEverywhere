@@ -32,6 +32,14 @@ class HeaderHelper:
                 # We don't want to accept encoding because it's just a waste of CPU to send over
                 # local host. We will do our own encoding when we send the data over the websocket.
                 continue
+            if lowerName == "transfer-encoding":
+                # We don't want to send the transfter encoding since it' won't be accurate any longer.
+                # If the request was compressed, it will be de-compressed by the server and then we use a different
+                # compression system over the wire.
+                # If the request was chunked, our system will read the entire message and send it on the wire
+                # in multiable stream messages. 
+                # Thus, we don't need to / shouldn't include this header.
+                continue
             if lowerName == "upgrade-insecure-requests":
                 # We don't support https over the local host.
                 continue 
