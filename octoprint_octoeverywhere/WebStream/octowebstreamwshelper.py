@@ -3,6 +3,7 @@
 import threading
 import websocket
 import brotli
+import time
 
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
@@ -31,6 +32,12 @@ class OctoWebStreamWsHelper:
         self.IsClosed = False
         self.StateLock = threading.Lock()
         self.OpenedTime = openedTime
+
+        # These vars indicate if the actual websocket is opened or closed.
+        # This is different from IsClosed, which is tracking if the webstream closed status. 
+        # These are important for when we try to send a message.
+        self.IsWsObjOpened = False
+        self.IsWsObjClosed = False
 
         # Get the initial http context
         httpInitialContext = webStreamOpenMsg.HttpInitialContext()
@@ -92,6 +99,24 @@ class OctoWebStreamWsHelper:
     # This function is called on it's own thread from the web stream, so it's ok to block
     # as long as it gets cleaned up when the socket closes.
     def IncomingServerMessage(self, webStreamMsg):
+
+        # We can get messages from this web stream before the actual websocket has opened and is ready for messages.
+        # If this happens, when we try to send the message on the socket and we will get an error saying "the socket is closed" (which is incorrect, it's not open yet).
+        # So we need to delay until we know the socket is ready or the webstream is shutdown.
+        while self.IsWsObjOpened == False:
+            # Check if the webstream has closed or the socket object is now reporting closed.
+            if self.IsWsObjClosed == True or self.IsClosed:
+                return
+            
+            # Sleep for a bit to wait for the socket open.
+            time.sleep(0.1)
+            
+        # If the websocket object is closed ingore this message. It will throw if the socket is closed
+        # which will take down the entire OctoStream. But since it's closed the web stream is already cleaning up.
+        # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
+        # were already inbound messages on the way.
+        if self.IsWsObjClosed:
+            return         
 
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
         # exist, we need to check for it.
@@ -175,6 +200,7 @@ class OctoWebStreamWsHelper:
     
 
     def onWsClosed(self, ws):
+        self.IsWsObjClosed = True
         # Make sure the stream is closed.
         self.WebStream.Close()
 
@@ -199,7 +225,9 @@ class OctoWebStreamWsHelper:
 
 
     def onWsOpened(self, ws):
-        pass      
+        # Update the state to indicate we are ready to take messages.
+        self.IsWsObjClosed = False
+        self.IsWsObjOpened = True
 
 
     def getLogMsgPrefix(self):
