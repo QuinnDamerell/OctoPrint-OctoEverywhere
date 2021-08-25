@@ -58,7 +58,7 @@ if __name__ == '__main__':
     devId = GeneratePrinterId()
     OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"    
     #OctoEverywhereWsUri = "ws://192.168.86.74:5000/octoclientws"
-    #devId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
+    devId = "3XN27T8SVXZSD4WWSE3GMASBVTNXTRDSAC32F66T95BV2B6GRXY8HEG33WRT"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
