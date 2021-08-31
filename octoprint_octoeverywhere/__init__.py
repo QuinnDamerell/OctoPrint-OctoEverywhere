@@ -194,6 +194,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                     # title = "OctoEverywhere Blastoff!"
                     # message = '<br/>The OctoEverywhere plugin is up and running! Click the button below and in about <strong>15 seconds</strong> you too will enjoy free remote acccess from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
                     # self.ShowUiPopup(title, message, "notice", True)
+                    pass
                 else:
                     title = "We Miss You"
                     message = '<br/>It only takes about <strong>15 seconds</strong> to finish the OctoEverywhere setup and you too can enjoy free remote access from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
