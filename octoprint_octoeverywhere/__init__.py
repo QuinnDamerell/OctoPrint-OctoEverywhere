@@ -40,7 +40,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     # Increment this if we need to pop the wizard again.
     def get_wizard_version(self):
-        return 2
+        return 10
 
     def get_wizard_details(self):
         # Do some sanity checking logic, since this has been sensitive in the past.
