@@ -27,10 +27,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # The port this octoprint instance is listening on.
         self.OctoPrintLocalPort = 80
 
-        # Create the notification object.
-        self.NotificationHandler = NotificationsHandler(self._logger)
-
-    # Assets we use, just for the wizard right now.
+     # Assets we use, just for the wizard right now.
     def get_assets(self):
         return {
             "js"  : ["js/OctoEverywhere.js"],
@@ -98,6 +95,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Get the port the server is listening on, since for some configs it's not the default.
         self.OctoPrintLocalPort = port
         self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort)) 
+
+        # Create the notification object now that we have the logger.
+        self.NotificationHandler = NotificationsHandler(self._logger)
 
         # Ensure they key is created here, so make sure that it is always created before
         # Any of the UI queries for it.
