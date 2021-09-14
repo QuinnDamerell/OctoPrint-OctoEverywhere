@@ -72,7 +72,14 @@ class HandshakeAck(object):
             return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
         return False
 
-def Start(builder): builder.StartObject(5)
+    # HandshakeAck
+    def Octokey(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+def Start(builder): builder.StartObject(6)
 def HandshakeAckStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -100,6 +107,10 @@ def AddRequiresPluginUpdate(builder, requiresPluginUpdate): builder.PrependBoolS
 def HandshakeAckAddRequiresPluginUpdate(builder, requiresPluginUpdate):
     """This method is deprecated. Please switch to AddRequiresPluginUpdate."""
     return AddRequiresPluginUpdate(builder, requiresPluginUpdate)
+def AddOctokey(builder, octokey): builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(octokey), 0)
+def HandshakeAckAddOctokey(builder, octokey):
+    """This method is deprecated. Please switch to AddOctokey."""
+    return AddOctokey(builder, octokey)
 def End(builder): return builder.EndObject()
 def HandshakeAckEnd(builder):
     """This method is deprecated. Please switch to End."""

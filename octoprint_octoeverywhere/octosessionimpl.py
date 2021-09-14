@@ -110,7 +110,9 @@ class OctoSession:
                 while i < connectedAccountsLen:
                     connectedAccounts.append(OctoStreamMsgBuilder.BytesToString(handshakeAck.ConnectedAccounts(i)))
                     i += 1
-            self.OctoStream.OnHandshakeComplete(self.SessionId, connectedAccounts)
+            # Parse out the OctoKey
+            octoKey = OctoStreamMsgBuilder.BytesToString(handshakeAck.Octokey())
+            self.OctoStream.OnHandshakeComplete(self.SessionId, octoKey, connectedAccounts)
         else:
             # Pull out the error.
             error = handshakeAck.Error()
