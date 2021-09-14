@@ -265,7 +265,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     # Fired when the connection to the primary server is established.
     # connectedAccounts - a string list of connected accounts, can be an empty list.
-    def OnPrimaryConnectionEstablished(self, connectedAccounts):
+    def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
         # On connection, set if there are connected accounts. We don't want to save the email
         # addresses in the settings, since they can be read by anyone that has access to the config 
         # file or any plugin.
@@ -274,6 +274,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Clear out the update required flag, since we connected.
         self.SetPluginUpdateRequired(False)
+
+        # Always set the OctoKey as well.
+        self.SetOctoKey(octoKey)
 
         # Clear this old value.
         self._settings.set(["ConnectedAccounts"], "", force=True)
@@ -318,6 +321,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Variable getters and setters.
     # 
+
+    def SetOctoKey(self, key):
+        # We don't save the OctoKey to settings, keep it in memory.
+        self.octoKey = key
+
+    def GetOctoKey(self):
+        if self.octoKey == None:
+            return ""
+        return self.octoKey
 
     def GetHasConnectedAccounts(self):
         return self.GetBoolFromSettings("HasConnectedAccounts", False)    

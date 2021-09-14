@@ -109,7 +109,7 @@ class OctoServerCon:
                 self.Logger.error("Exception in OctoSession.HandleMessage " + self.GetConnectionString() + " :" + str(e))
                 self.OnSessionError(localSessionId, 0)
 
-    def OnHandshakeComplete(self, sessionId, connectedAccounts):
+    def OnHandshakeComplete(self, sessionId, octoKey, connectedAccounts):
         if sessionId != self.ActiveSessionId:
             self.Logger.info("Got a handshake complete for an old session, "+str(sessionId)+", ignoring.")
             return
@@ -118,7 +118,7 @@ class OctoServerCon:
 
         # Only primary connections have this handler.
         if self.StatusChangeHandler != None:
-            self.StatusChangeHandler.OnPrimaryConnectionEstablished(connectedAccounts)
+            self.StatusChangeHandler.OnPrimaryConnectionEstablished(octoKey, connectedAccounts)
 
         # Only set the back off when we are done with the handshake and it was successful.
         self.WsConnectBackOffSec = self.WsConnectBackOffSec_Default
