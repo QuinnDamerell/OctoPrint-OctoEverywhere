@@ -96,12 +96,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.OctoPrintLocalPort = port
         self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort)) 
 
-        # Create the notification object now that we have the logger.
-        self.NotificationHandler = NotificationsHandler(self._logger)
-
         # Ensure they key is created here, so make sure that it is always created before
         # Any of the UI queries for it.
-        self.EnsureAndGetPrinterId()
+        printerId = self.EnsureAndGetPrinterId()
+
+        # Create the notification object now that we have the logger.
+        self.NotificationHandler = NotificationsHandler(self._logger)
+        self.NotificationHandler.SetPrinterId(printerId)
 
     # Call when the system is ready and running
     def on_after_startup(self):
@@ -364,6 +365,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def SetOctoKey(self, key):
         # We don't save the OctoKey to settings, keep it in memory.
         self.octoKey = key
+        # We also need to set it into the notification handler.
+        self.NotificationHandler.SetOctoKey(key)
 
     def GetOctoKey(self):
         if self.octoKey == None:
