@@ -32,18 +32,16 @@ class StatusChangeHandlerStub():
     def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
         self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts) + " - OctoKey:"+str(octoKey))
 
-        # Send a test notification
-        handler = NotificationsHandler(self.Logger)
-        handler.SetOctoKey(octoKey)
-        handler.SetPrinterId(self.PrinterId)
-        handler.SetServerProtocolAndDomain("http://127.0.0.1")
-        handler.OnTest()
-
-        handler.OnStarted("test.gcode")
-        handler.OnPrintProgress(0)        
-        handler.OnPrintProgress(5)
-        handler.OnPrintProgress(10)
-        handler.OnPrintProgress(80)
+        # Send a test notifications if desired.
+        # handler = NotificationsHandler(self.Logger)
+        # handler.SetOctoKey(octoKey)
+        # handler.SetPrinterId(self.PrinterId)
+        # handler.SetServerProtocolAndDomain("http://127.0.0.1")
+        # handler.OnStarted("test.gcode")
+        # handler.OnPrintProgress(10)     
+        # handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")   
+        # handler.OnDone("file name.gcode", 304458605)   
+        # handler.OnPaused("file name.gcode")        
 
     def OnPluginUpdateRequired(self):
         self.Logger.info("On plugin update required message.")

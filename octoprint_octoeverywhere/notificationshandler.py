@@ -44,17 +44,17 @@ class NotificationsHandler:
 
     # Fired when a print fails
     def OnFailed(self, fileName, durationSec, reason):
-        self._sendEvent("failed", {"FileName": fileName, "DurationSec": durationSec, "Reason": reason})
+        self._sendEvent("failed", {"FileName": fileName, "DurationSec": str(durationSec), "Reason": reason})
 
 
     # Fired when a print fails
     def OnDone(self, fileName, durationSec):
-        self._sendEvent("done", {"FileName": fileName, "DurationSec": durationSec })
+        self._sendEvent("done", {"FileName": fileName, "DurationSec": str(durationSec) })
 
         
     # Fired when a print fails
     def OnPaused(self, fileName):
-        self._sendEvent("paused", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : self.CurrentProgressInt})
+        self._sendEvent("paused", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
 
     # Fired when a print is making progress.
@@ -70,13 +70,13 @@ class NotificationsHandler:
             return
 
         # We use the current print file name, which will be empty string if not set correctly.
-        self._sendEvent("progress", {"FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : progressInt })
+        self._sendEvent("progress", {"FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(progressInt) })
 
 
     # Assuming the current time is set at the start of the printer correctly
-    # This returns the time from the last known start as an int.
+    # This returns the time from the last known start as a string.
     def _getCurrentDurationSec(self):
-        return int(time.time() - self.CurrentPrintStartTime)
+        return str(time.time() - self.CurrentPrintStartTime)
 
 
     # Sends the event
