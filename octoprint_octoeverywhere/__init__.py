@@ -23,8 +23,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.EventHandlerPlugin,
                             octoprint.plugin.ProgressPlugin):
 
-    # The port this octoprint instance is listening on.
-    OctoPrintLocalPort = 80
+    def __init__(self):
+        # The port this octoprint instance is listening on.
+        self.OctoPrintLocalPort = 80
+
+        # Create the notification object.
+        self.NotificationHandler = NotificationsHandler(self._logger)
 
     # Assets we use, just for the wizard right now.
     def get_assets(self):
@@ -93,10 +97,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def on_startup(self, ip, port):
         # Get the port the server is listening on, since for some configs it's not the default.
         self.OctoPrintLocalPort = port
-        self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
-
-        # Create the notification object.
-        self.notificationHandler = NotificationsHandler()
+        self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort)) 
 
         # Ensure they key is created here, so make sure that it is always created before
         # Any of the UI queries for it.
@@ -166,7 +167,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Functions are for the Process Plugin
     #
     def on_print_progress(self, storage, path, progressInt):
-        self.notificationHandler.OnPrintProgress(progressInt)
+        self.NotificationHandler.OnPrintProgress(progressInt)
 
     #
     # Functions for the Event Handler Mixin
@@ -183,19 +184,19 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Listen for the rest of these events for notifications.
         if event == "PrintStarted":
             fileName = self.GetDictStringOrEmpty(payload, "name")
-            self.notificationHandler.OnStarted(fileName)
+            self.NotificationHandler.OnStarted(fileName)
         if event == "PrintFailed":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
             reason = self.GetDictStringOrEmpty(payload, "reason")
-            self.notificationHandler.OnFailed(fileName, durationSec, reason)
+            self.NotificationHandler.OnFailed(fileName, durationSec, reason)
         if event == "PrintDone":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
-            self.notificationHandler.OnDone(fileName, durationSec)
+            self.NotificationHandler.OnDone(fileName, durationSec)
         if event == "PrintPaused":
             fileName = self.GetDictStringOrEmpty(payload, "name")
-            self.notificationHandler.OnPaused(fileName)
+            self.NotificationHandler.OnPaused(fileName)
 
 
     def GetDictStringOrEmpty(self, dict, key):
