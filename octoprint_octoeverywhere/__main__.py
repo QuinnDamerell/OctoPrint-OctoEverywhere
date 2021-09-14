@@ -9,6 +9,7 @@ from os import urandom
 
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
+from .notificationshandler import NotificationsHandler
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
@@ -24,11 +25,25 @@ class UiPopupInvokerStub():
 
 # A mock of the popup UI interface.
 class StatusChangeHandlerStub():
-    def __init__(self, logger):
+    def __init__(self, logger, printerId):
         self.Logger = logger
+        self.PrinterId = printerId
 
-    def OnPrimaryConnectionEstablished(self, connectedAccounts):
-        self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts))
+    def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
+        self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts) + " - OctoKey:"+str(octoKey))
+
+        # Send a test notification
+        handler = NotificationsHandler(self.Logger)
+        handler.SetOctoKey(octoKey)
+        handler.SetPrinterId(self.PrinterId)
+        handler.SetServerProtocolAndDomain("http://127.0.0.1")
+        handler.OnTest()
+
+        handler.OnStarted("test.gcode")
+        handler.OnPrintProgress(0)        
+        handler.OnPrintProgress(5)
+        handler.OnPrintProgress(10)
+        handler.OnPrintProgress(80)
 
     def OnPluginUpdateRequired(self):
         self.Logger.info("On plugin update required message.")
@@ -55,10 +70,10 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, SignalHandler)
 
     # Dev props
-    devId = GeneratePrinterId()
+    printerId = GeneratePrinterId()
     OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"    
     #OctoEverywhereWsUri = "ws://192.168.86.74:5000/octoclientws"
-    devId = "3XN27T8SVXZSD4WWSE3GMASBVTNXTRDSAC32F66T95BV2B6GRXY8HEG33WRT"
+    printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
@@ -66,6 +81,6 @@ if __name__ == '__main__':
     OctoHttpRequest.SetLocalOctoPrintPort(5000)
 
     uiPopInvoker = UiPopupInvokerStub(logger)
-    statusHandler = StatusChangeHandlerStub(logger)
-    oe = OctoEverywhere(OctoEverywhereWsUri, devId, logger, uiPopInvoker, statusHandler, "1.0.4")
+    statusHandler = StatusChangeHandlerStub(logger, printerId)
+    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.0.4")
     oe.RunBlocking()

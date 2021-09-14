@@ -11,6 +11,7 @@ import flask
 
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
+from .notificationshandler import NotificationsHandler
 import octoprint.plugin
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
@@ -19,7 +20,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.TemplatePlugin,
                             octoprint.plugin.WizardPlugin,
                             octoprint.plugin.SimpleApiPlugin,
-                            octoprint.plugin.EventHandlerPlugin):
+                            octoprint.plugin.EventHandlerPlugin,
+                            octoprint.plugin.ProgressPlugin):
 
     # The port this octoprint instance is listening on.
     OctoPrintLocalPort = 80
@@ -93,6 +95,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.OctoPrintLocalPort = port
         self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
 
+        # Create the notification object.
+        self.notificationHandler = NotificationsHandler()
+
         # Ensure they key is created here, so make sure that it is always created before
         # Any of the UI queries for it.
         self.EnsureAndGetPrinterId()
@@ -158,12 +163,45 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         )
 
     #
+    # Functions are for the Process Plugin
+    #
+    def on_print_progress(self, storage, path, progressInt):
+        self.notificationHandler.OnPrintProgress(progressInt)
+
+    #
     # Functions for the Event Handler Mixin
     #
     def on_event(self, event, payload):
+        # Ensure there's a payload
+        if payload is None:
+            payload = {}
+
         # Listen for client authed events, these fire whenever a websocket opens and is auth is done.
         if event == "ClientAuthed":
             self.HandleClientAuthedEvent()
+
+        # Listen for the rest of these events for notifications.
+        if event == "PrintStarted":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            self.notificationHandler.OnStarted(fileName)
+        if event == "PrintFailed":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            durationSec = self.GetDictStringOrEmpty(payload, "time")
+            reason = self.GetDictStringOrEmpty(payload, "reason")
+            self.notificationHandler.OnFailed(fileName, durationSec, reason)
+        if event == "PrintDone":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            durationSec = self.GetDictStringOrEmpty(payload, "time")
+            self.notificationHandler.OnDone(fileName, durationSec)
+        if event == "PrintPaused":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            self.notificationHandler.OnPaused(fileName)
+
+
+    def GetDictStringOrEmpty(self, dict, key):
+        if dict[key] is None:
+            return ""
+        return str(dict[key])
 
     def HandleClientAuthedEvent(self):
         hasConnectedAccounts = self.GetHasConnectedAccounts()
