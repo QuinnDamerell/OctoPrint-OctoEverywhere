@@ -11,6 +11,7 @@ import flask
 
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
+from .notificationshandler import NotificationsHandler
 import octoprint.plugin
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
@@ -19,10 +20,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.TemplatePlugin,
                             octoprint.plugin.WizardPlugin,
                             octoprint.plugin.SimpleApiPlugin,
-                            octoprint.plugin.EventHandlerPlugin):
+                            octoprint.plugin.EventHandlerPlugin,
+                            octoprint.plugin.ProgressPlugin):
 
-    # The port this octoprint instance is listening on.
-    OctoPrintLocalPort = 80
+    def __init__(self):
+        # The port this octoprint instance is listening on.
+        self.OctoPrintLocalPort = 80
 
     # Assets we use, just for the wizard right now.
     def get_assets(self):
@@ -95,7 +98,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Ensure they key is created here, so make sure that it is always created before
         # Any of the UI queries for it.
-        self.EnsureAndGetPrinterId()
+        printerId = self.EnsureAndGetPrinterId()
+
+        # Create the notification object now that we have the logger.
+        self.NotificationHandler = NotificationsHandler(self._logger)
+        self.NotificationHandler.SetPrinterId(printerId)
 
     # Call when the system is ready and running
     def on_after_startup(self):
@@ -158,12 +165,82 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         )
 
     #
+    # Functions are for the gcode receive plugin hook
+    #
+    def received_gcode(self, comm, line, *args, **kwargs):
+        # Blocking will block the printer commands from being handled so we can't block here!
+
+        # M600 is a filament change command.
+        # https://marlinfw.org/docs/gcode/M600.html
+        # On my Pursa, I see this "fsensor_update - M600" AND this "echo:Enqueing to the front: "M600""
+        if line:
+            # Look for "M600" OR "fsensor_update" anywhere in the line.
+            if "M600" in line or "fsensor_update" in line:
+                # Ingore "echo:" since that would make us double alert.
+                if "echo:" not in line:
+                    # Spawn a thread to send the notification so we don't block here.
+                    t = threading.Thread(target=self.NotificationHandler.OnFilamentChange)
+                    t.start()
+
+        # We must return line the line won't make it to OctoPrint!
+        return line          
+
+    #
+    # Functions are for the Process Plugin
+    #
+    def on_print_progress(self, storage, path, progressInt):
+        self.NotificationHandler.OnPrintProgress(progressInt)
+
+    #
     # Functions for the Event Handler Mixin
     #
     def on_event(self, event, payload):
+        # Ensure there's a payload
+        if payload is None:
+            payload = {}
+
         # Listen for client authed events, these fire whenever a websocket opens and is auth is done.
         if event == "ClientAuthed":
             self.HandleClientAuthedEvent()
+
+        # Listen for the rest of these events for notifications.
+        # OctoPrint Events
+        elif event == "PrintStarted":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            self.NotificationHandler.OnStarted(fileName)
+        elif event == "PrintFailed":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            durationSec = self.GetDictStringOrEmpty(payload, "time")
+            reason = self.GetDictStringOrEmpty(payload, "reason")
+            self.NotificationHandler.OnFailed(fileName, durationSec, reason)
+        elif event == "PrintDone":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            durationSec = self.GetDictStringOrEmpty(payload, "time")
+            self.NotificationHandler.OnDone(fileName, durationSec)
+        elif event == "PrintPaused":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            self.NotificationHandler.OnPaused(fileName)
+        elif event == "PrintResumed":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            self.NotificationHandler.OnResume(fileName)
+
+        # Printer Connection
+        elif event == "Error":
+            error = self.GetDictStringOrEmpty(payload, "error")
+            self.NotificationHandler.OnError(error)
+
+        # GCODE Events
+        # Note most of these aren't sent when printing from the SD card
+        elif event == "ZChange":
+            self.NotificationHandler.OnZChange() 
+        elif event == "Waiting":
+            self.NotificationHandler.OnWaiting()
+
+
+    def GetDictStringOrEmpty(self, dict, key):
+        if dict[key] is None:
+            return ""
+        return str(dict[key])
 
     def HandleClientAuthedEvent(self):
         hasConnectedAccounts = self.GetHasConnectedAccounts()
@@ -325,6 +402,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def SetOctoKey(self, key):
         # We don't save the OctoKey to settings, keep it in memory.
         self.octoKey = key
+        # We also need to set it into the notification handler.
+        self.NotificationHandler.SetOctoKey(key)
 
     def GetOctoKey(self):
         if self.octoKey == None:
@@ -360,5 +439,6 @@ def __plugin_load__():
 
     global __plugin_hooks__
     __plugin_hooks__ = {
-        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information
+        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
+        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode
     }
