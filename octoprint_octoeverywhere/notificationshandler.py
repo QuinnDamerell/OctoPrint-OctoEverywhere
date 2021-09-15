@@ -66,14 +66,17 @@ class NotificationsHandler:
         self.CurrentFileName = fileName
         self._sendEvent("resume", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
+
     # Fired when OctoPrint or the printer hits an error.
     def OnError(self, error):
         self._sendEvent("error", {"Error": error, "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+
 
     # Fired when the waiting command is received from the printer.
     def OnWaiting(self):
         # Make this the same as the paused command.
         self.OnPaused(self.CurrentFileName)
+
 
     # Fired WHENEVER the z axis changes. 
     def OnZChange(self):
@@ -92,9 +95,11 @@ class NotificationsHandler:
         self.Logger.info("Sending zchange notification. Layer:"+str(self.ZChangeCount))
         self._sendEvent("zchange", {"Layer" : str(self.ZChangeCount), "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
+
     # Fired when we get a M600 command from the printer to change the filament
     def OnFilamentChange(self):
         self._sendEvent("filamentchange", { "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+        
 
     # Fired when a print is making progress.
     def OnPrintProgress(self, progressInt):
