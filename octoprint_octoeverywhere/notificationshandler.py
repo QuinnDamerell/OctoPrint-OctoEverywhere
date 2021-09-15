@@ -76,7 +76,18 @@ class NotificationsHandler:
     # Fired WHENEVER the z axis changes. 
     def OnZChange(self):
         self.ZChangeCount += 1
-        self.Logger.info("~~~~~~~~~~ ZChange "+str(self.ZChangeCount))
+        # Sanity check
+        if self.ZChangeCount < 0:
+            # Set higher than what we send, so we don't send weird notifications
+            self.ZChangeCount = 10
+
+        # The first zchange happens when the printer is actually starting to print the first layer (after temp is reached and bed leveling is done)
+        # The second zchange will happen after the first layer is done.
+        # We report layers 1-5 so that the user has choice of what they want notifications for.
+        if self.ZChangeCount > 5:
+            return
+
+        self._sendEvent("zchange", {"Layer" : str(self.ZChangeCount), "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
     # Fired when we get a M600 command from the printer to change the filament
     def OnFilamentChange(self):
