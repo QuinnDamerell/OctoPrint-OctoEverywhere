@@ -165,9 +165,20 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         )
 
     #
+    # Functions are for the gcode plugin hook
+    #
+    def sent_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
+        # M600 is a filament change command.
+        # https://marlinfw.org/docs/gcode/M600.html
+        if gcode and gcode == "M600":
+            self.NotificationHandler.OnFilamentChange()
+            
+
+    #
     # Functions are for the Process Plugin
     #
     def on_print_progress(self, storage, path, progressInt):
+        self._logger.info("!!!!!!!!!!!!! progress "+progressInt) # remove me
         self.NotificationHandler.OnPrintProgress(progressInt)
 
     #
@@ -183,21 +194,40 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self.HandleClientAuthedEvent()
 
         # Listen for the rest of these events for notifications.
-        if event == "PrintStarted":
+        # OctoPrint Events
+        elif event == "PrintStarted":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             self.NotificationHandler.OnStarted(fileName)
-        if event == "PrintFailed":
+        elif event == "PrintFailed":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
             reason = self.GetDictStringOrEmpty(payload, "reason")
             self.NotificationHandler.OnFailed(fileName, durationSec, reason)
-        if event == "PrintDone":
+        elif event == "PrintDone":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
             self.NotificationHandler.OnDone(fileName, durationSec)
-        if event == "PrintPaused":
+        elif event == "PrintPaused":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             self.NotificationHandler.OnPaused(fileName)
+        elif event == "PrintResumed":
+            fileName = self.GetDictStringOrEmpty(payload, "name")
+            self.NotificationHandler.OnResume(fileName)
+
+        # Printer Connection
+        elif event == "Error":
+            error = self.GetDictStringOrEmpty(payload, "error")
+            self.NotificationHandler.OnError(error)
+
+        # GCODE Events
+        # Note most of these aren't sent when printing from the SD card
+        elif event == "ZChange":
+            self.NotificationHandler.OnZChange() 
+        elif event == "Waiting":
+            self.NotificationHandler.OnWaiting()
+    
+
+          #  // temp ready
 
 
     def GetDictStringOrEmpty(self, dict, key):
@@ -402,5 +432,6 @@ def __plugin_load__():
 
     global __plugin_hooks__
     __plugin_hooks__ = {
-        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information
+        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
+        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode
     }

@@ -10,10 +10,15 @@ class NotificationsHandler:
         self.PrinterId = None
         self.ProtocolAndDomain = "https://octoeverywhere.com"
 
-        # Since the progress notification doesn't send the file name or time, we will keep track of it
+        # Since all of the commands don't send things we need, we will also track them.
+        self.ResetForNewPrint()
+ 
+
+    def ResetForNewPrint(self):
         self.CurrentFileName = ""
         self.CurrentPrintStartTime = time.time()
         self.CurrentProgressInt = 0
+        self.ZChangeCount = 0
 
     
     def SetPrinterId(self, printerId):
@@ -36,9 +41,7 @@ class NotificationsHandler:
 
     # Fired when a print starts.
     def OnStarted(self, fileName):
-        self.CurrentFileName = fileName
-        self.CurrentPrintStartTime = time.time()
-        self.CurrentProgressInt = 0
+        self.ResetForNewPrint()
         self._sendEvent("started", {"FileName": fileName})
 
 
@@ -47,15 +50,37 @@ class NotificationsHandler:
         self._sendEvent("failed", {"FileName": fileName, "DurationSec": str(durationSec), "Reason": reason})
 
 
-    # Fired when a print fails
+    # Fired when a print done
     def OnDone(self, fileName, durationSec):
         self._sendEvent("done", {"FileName": fileName, "DurationSec": str(durationSec) })
 
         
-    # Fired when a print fails
+    # Fired when a print is paused
     def OnPaused(self, fileName):
         self._sendEvent("paused", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
+
+    # Fired when a print is resumed
+    def OnResume(self, fileName):
+        self._sendEvent("resume", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+
+    # Fired when OctoPrint or the printer hits an error.
+    def OnError(self, error):
+        self._sendEvent("error", {"Error": error, "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+
+    # Fired when the waiting command is received from the printer.
+    def OnWaiting(self):
+        # Make this the same as the paused command.
+        self.OnPaused(self.CurrentFileName)
+
+    # Fired WHENEVER the z axis changes. 
+    def OnZChange(self):
+        self.ZChangeCount += 1
+        self.Logger.info("~~~~~~~~~~ ZChange "+str(self.ZChangeCount))
+
+    # Fired when we get a M600 command from the printer to change the filament
+    def OnFilamentChange(self):
+        self._sendEvent("filamentchange", { "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
     # Fired when a print is making progress.
     def OnPrintProgress(self, progressInt):
