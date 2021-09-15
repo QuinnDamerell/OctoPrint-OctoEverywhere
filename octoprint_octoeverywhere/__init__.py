@@ -178,7 +178,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Functions are for the Process Plugin
     #
     def on_print_progress(self, storage, path, progressInt):
-        self._logger.info("!!!!!!!!!!!!! progress "+progressInt) # remove me
+        self._logger.info("!!!!!!!!!!!!! progress "+str(progressInt)) # remove me
         self.NotificationHandler.OnPrintProgress(progressInt)
 
     #
