@@ -39,6 +39,7 @@
         "Proto",
         "referer",
         "struct",
-        "urandom"
+        "urandom",
+        "zchange"
     ]
 }
