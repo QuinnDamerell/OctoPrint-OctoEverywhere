@@ -169,21 +169,26 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     def sent_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
         # Blocking will block the printer commands from being handled so we can't block here!
-
-        # M600 is a filament change command.
-        # https://marlinfw.org/docs/gcode/M600.html
-        if gcode:
-            self._logger.info("sent "+str(gcode))
-        if gcode and gcode == "M600":
-            self.NotificationHandler.OnFilamentChange()
+        pass
 
     #
     # Functions are for the gcode receive plugin hook
     #
     def received_gcode(self, comm, line, *args, **kwargs):
         # Blocking will block the printer commands from being handled so we can't block here!
+
+        # M600 is a filament change command.
+        # https://marlinfw.org/docs/gcode/M600.html
+        # On my Pursa, I see this "fsensor_update - M600" AND this "echo:Enqueing to the front: "M600""
         if line:
-            self._logger.info("line "+str(line))  
+            # Look for "M600" OR "fsensor_update" anywhere in the line.
+            if "M600" in line or "fsensor_update" in line:
+                # Ingore "echo:" since that would make us double alert.
+                if "echo:" not in line:
+                    # Spawn a thread to send the notification so we don't block here.
+                    t = threading.Thread(target=self.NotificationHandler.OnFilamentChange)
+                    t.start()
+
         # We must return line the line won't make it to OctoPrint!
         return line          
 
