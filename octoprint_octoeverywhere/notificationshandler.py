@@ -42,6 +42,7 @@ class NotificationsHandler:
     # Fired when a print starts.
     def OnStarted(self, fileName):
         self.ResetForNewPrint()
+        self.CurrentFileName = fileName
         self._sendEvent("started", {"FileName": fileName})
 
 
@@ -62,6 +63,7 @@ class NotificationsHandler:
 
     # Fired when a print is resumed
     def OnResume(self, fileName):
+        self.CurrentFileName = fileName
         self._sendEvent("resume", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
     # Fired when OctoPrint or the printer hits an error.
