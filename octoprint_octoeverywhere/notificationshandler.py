@@ -89,6 +89,7 @@ class NotificationsHandler:
         if self.ZChangeCount > 5:
             return
 
+        self.Logger.info("Sending zchange notification. Layer:"+str(self.ZChangeCount))
         self._sendEvent("zchange", {"Layer" : str(self.ZChangeCount), "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
 
     # Fired when we get a M600 command from the printer to change the filament

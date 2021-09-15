@@ -165,14 +165,25 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         )
 
     #
-    # Functions are for the gcode plugin hook
+    # Functions are for the gcode sent plugin hook
     #
     def sent_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
+        # Blocking will block the printer commands from being handled so we can't block here!
+
         # M600 is a filament change command.
         # https://marlinfw.org/docs/gcode/M600.html
+        if gcode:
+            self._logger.info("sent "+str(gcode))
         if gcode and gcode == "M600":
             self.NotificationHandler.OnFilamentChange()
-            
+
+    #
+    # Functions are for the gcode receive plugin hook
+    #
+    def received_gcode(self, comm, line, *args, **kwargs):
+        # Blocking will block the printer commands from being handled so we can't block here!
+        if line:
+            self._logger.info("line "+str(line))            
 
     #
     # Functions are for the Process Plugin
@@ -429,5 +440,6 @@ def __plugin_load__():
     global __plugin_hooks__
     __plugin_hooks__ = {
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
-        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode
+        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode,
+        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode
     }
