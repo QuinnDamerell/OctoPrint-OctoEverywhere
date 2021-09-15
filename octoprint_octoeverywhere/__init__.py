@@ -183,7 +183,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def received_gcode(self, comm, line, *args, **kwargs):
         # Blocking will block the printer commands from being handled so we can't block here!
         if line:
-            self._logger.info("line "+str(line))            
+            self._logger.info("line "+str(line))  
+        # We must return line the line won't make it to OctoPrint!
+        return line          
 
     #
     # Functions are for the Process Plugin
@@ -440,5 +442,6 @@ def __plugin_load__():
     global __plugin_hooks__
     __plugin_hooks__ = {
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
-        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode
+        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode,
+        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode
     }
