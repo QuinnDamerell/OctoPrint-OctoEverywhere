@@ -101,7 +101,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         printerId = self.EnsureAndGetPrinterId()
 
         # Create the notification object now that we have the logger.
-        self.NotificationHandler = NotificationsHandler(self._logger)
+        self.NotificationHandler = NotificationsHandler(self._logger, self._printer)
         self.NotificationHandler.SetPrinterId(printerId)
 
     # Call when the system is ready and running
@@ -241,6 +241,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if dict[key] is None:
             return ""
         return str(dict[key])
+
 
     def HandleClientAuthedEvent(self):
         hasConnectedAccounts = self.GetHasConnectedAccounts()
