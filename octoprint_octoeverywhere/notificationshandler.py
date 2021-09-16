@@ -174,7 +174,7 @@ class NotificationsHandler:
     # This function will get the estimated time remaning for the current print.
     # It will first try to get a more accurate from plugins like PrintTimeGenius, otherwise it will fallback to the default OctoPrint total print time estimate.
     # Returns -1 if the estimate is unknown.
-    def GetPrintTimeRemaningEstimateInSeconds(self) -> int:
+    def GetPrintTimeRemaningEstimateInSeconds(self):
 
         # If the printer object isn't set, we can't get an estimate.
         if self.OctoPrintPrinterObject == None:
@@ -211,7 +211,7 @@ class NotificationsHandler:
         return -1
 
     # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self) -> float:
+    def GetCurrentZOffset(self):
         if self.OctoPrintPrinterObject == None:
             return -1
 
