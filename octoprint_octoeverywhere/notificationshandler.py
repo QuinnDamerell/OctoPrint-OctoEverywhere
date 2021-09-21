@@ -1,15 +1,18 @@
 import requests
 import time
+import io
+from PIL import Image
 
 class NotificationsHandler:
 
-    def __init__(self, logger, octoPrintPrinterObject = None):
+    def __init__(self, logger, octoPrintPrinterObject = None, octoPrintSettingsObject = None):
         self.Logger = logger
         # On init, set the key to empty.
         self.OctoKey = None
         self.PrinterId = None
         self.ProtocolAndDomain = "https://octoeverywhere.com"
         self.OctoPrintPrinterObject = octoPrintPrinterObject
+        self.OctoPrintSettingsObject = octoPrintSettingsObject
 
         # Since all of the commands don't send things we need, we will also track them.
         self.ResetForNewPrint()
@@ -123,6 +126,60 @@ class NotificationsHandler:
         # We use the current print file name, which will be empty string if not set correctly.
         self._sendEvent("progress", {"FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(progressInt) })
 
+    # If possible, gets a snapshot from the snapshot URL configured in OctoPrint.
+    # If this fails for any reason, None is returned.
+    def getSnapshot(self):
+        try:
+            # Get the vars we need.
+            snapshotUrl = ""
+            flipH = False
+            flipV = False
+            rotate90 = False
+            if self.OctoPrintSettingsObject != None :
+                # This is the normal plugin case
+                snapshotUrl = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"])
+                flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"])
+                flipV = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"])
+                rotate90 = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"])
+            else:
+                # This is the dev case
+                snapshotUrl = "http://192.168.86.57/webcam/?action=snapshot"
+
+            # Make the http call.
+            snapshot = requests.get(snapshotUrl, stream=True).content
+
+            # Ensure the snapshot is a reasonable size.
+            # Right now we will limit to < 2mb
+            if len(snapshot) > 2 * 1024 * 1204:
+                self.Logger.error("Snapshot size if too large to send. Size: "+len(snapshot))
+                return None
+
+            # Correct the image if needed.
+            if rotate90 or flipH or flipV:
+                # Update the image
+                pilImage = Image.open(io.BytesIO(snapshot))
+                if rotate90:
+                    pilImage = pilImage.rotate(90)
+                if flipH:
+                    pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
+                if flipV:
+                    pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM) 
+
+                # Write back to bytes.               
+                buffer = io.BytesIO()
+                pilImage.save(buffer, format="JPEG")
+                snapshot = buffer.getvalue()
+                buffer.close()
+            
+            # Return the image
+            return snapshot
+
+        except Exception as e:
+            self.Logger.info("Snapshot http call failed. " + str(e))
+        
+        # On failure return nothing.
+        return None
+
 
     # Assuming the current time is set at the start of the printer correctly
     # This returns the time from the last known start as a string.
@@ -155,8 +212,16 @@ class NotificationsHandler:
             timeRemainEstStr =  str(self.GetPrintTimeRemaningEstimateInSeconds())
             args["TimeRemaningSec"] = timeRemainEstStr
 
+            # Also always include a snapshot if we can get one.
+            files = {}
+            snapshot = self.getSnapshot()
+            if snapshot != None:
+                files['attachment'] = ("snapshot.jpg", snapshot) 
+
             # Make the request.
-            r = requests.post(eventApiUrl, json=args)
+            # Since we are sending the snapshot, we must send a multipart form.
+            # Thus we must use the data and files fields, the json field will not work.
+            r = requests.post(eventApiUrl, data=args, files=files)
 
             # Check for success.
             if r.status_code == 200:
