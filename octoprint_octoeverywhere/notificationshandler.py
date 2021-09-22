@@ -25,6 +25,7 @@ class NotificationsHandler:
         self.CurrentFileName = ""
         self.CurrentPrintStartTime = time.time()
         self.CurrentProgressInt = 0
+        self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
@@ -166,7 +167,14 @@ class NotificationsHandler:
     def OnPrintTimerProgress(self):
         # This event is fired by our internal timer only while prints are running.
         # It will only fire every hour.
-        self._sendEvent("timerprogress")
+
+        # We send a duration, but that duration is controlled by OctoPrint and can be changed.
+        # Since we allow the user to pick "every x hours" to be notified, it's easier for the server to
+        # keep track if we just send an int as well.
+        # Since this fires once an hour, everytime it fires just add one.
+        self.PingTimerHoursReported += 1
+
+        self._sendEvent("timerprogress", { "HoursCount": str(self.PingTimerHoursReported) })
 
 
     # If possible, gets a snapshot from the snapshot URL configured in OctoPrint.
@@ -368,6 +376,9 @@ class NotificationsHandler:
     def SetupPingTimer(self):
         # First, stop any timer that's currently running.
         self.StopPingTimer()
+
+        # Make sure the hours flag is cleared when we start a new timer.
+        self.PingTimerHoursReported = 0
 
         # Setup the new timer
         intervalSec = 60 * 60 # Fire every hour.
