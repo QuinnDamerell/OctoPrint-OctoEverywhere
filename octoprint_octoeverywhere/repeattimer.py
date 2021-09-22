@@ -20,6 +20,7 @@ class RepeatTimer(threading.Thread):
                 self.callback()
             except Exception as e:
                 self.logger.error("Exception in RepeatTimer thread. "+str(e))
+        self.logger.info("RepeatTimer thread exit")
     
     # Used to stop the timer.
     def Stop(self):

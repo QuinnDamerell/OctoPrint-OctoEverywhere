@@ -3,6 +3,8 @@ import time
 import io
 from PIL import Image
 
+from .repeattimer import RepeatTimer
+
 class NotificationsHandler:
 
     def __init__(self, logger, octoPrintPrinterObject = None, octoPrintSettingsObject = None):
@@ -13,6 +15,7 @@ class NotificationsHandler:
         self.ProtocolAndDomain = "https://octoeverywhere.com"
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.OctoPrintSettingsObject = octoPrintSettingsObject
+        self.PingTimer = None
 
         # Since all of the commands don't send things we need, we will also track them.
         self.ResetForNewPrint()
@@ -22,8 +25,10 @@ class NotificationsHandler:
         self.CurrentFileName = ""
         self.CurrentPrintStartTime = time.time()
         self.CurrentProgressInt = 0
-        self.HasSendFirstFewLayersMessage = False
-
+        self.HasSendFirstLayerDoneMessage = False
+        # The following values are used to figure out when the first layer is done.
+        self.zOffsetLowestSeenMM = 1337.0
+        self.zOffsetNotAtLowestCount = 0
     
     def SetPrinterId(self, printerId):
         self.PrinterId = printerId
@@ -46,34 +51,43 @@ class NotificationsHandler:
     # Fired when a print starts.
     def OnStarted(self, fileName):
         self.ResetForNewPrint()
-        self.CurrentFileName = fileName
-        self._sendEvent("started", {"FileName": fileName})
+        self._updateCurrentFileName(fileName)
+        self.SetupPingTimer()
+        self._sendEvent("started")
 
 
     # Fired when a print fails
-    def OnFailed(self, fileName, durationSec, reason):
-        self._sendEvent("failed", {"FileName": fileName, "DurationSec": str(durationSec), "ProgressPercentage" : str(self.CurrentProgressInt), "Reason": reason})
+    def OnFailed(self, fileName, durationSecStr, reason):
+        self._updateCurrentFileName(fileName)
+        self._updateToKnownDuration(durationSecStr)
+        self.StopPingTimer()
+        self._sendEvent("failed", { "Reason": reason})
 
 
     # Fired when a print done
-    def OnDone(self, fileName, durationSec):
-        self._sendEvent("done", {"FileName": fileName, "DurationSec": str(durationSec) })
+    def OnDone(self, fileName, durationSecStr):
+        self._updateCurrentFileName(fileName)
+        self._updateToKnownDuration(durationSecStr)
+        self.StopPingTimer()
+        self._sendEvent("done")
 
         
     # Fired when a print is paused
     def OnPaused(self, fileName):
-        self._sendEvent("paused", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+        self._updateCurrentFileName(fileName)
+        self._sendEvent("paused")
 
 
     # Fired when a print is resumed
     def OnResume(self, fileName):
-        self.CurrentFileName = fileName
-        self._sendEvent("resume", {"FileName": fileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+        self._updateCurrentFileName(fileName)
+        self._sendEvent("resume")
 
 
     # Fired when OctoPrint or the printer hits an error.
     def OnError(self, error):
-        self._sendEvent("error", {"Error": error, "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+        self.StopPingTimer()
+        self._sendEvent("error", {"Error": error })
 
 
     # Fired when the waiting command is received from the printer.
@@ -84,31 +98,52 @@ class NotificationsHandler:
 
     # Fired WHENEVER the z axis changes. 
     def OnZChange(self):
-        # If we have already sent the "first few layers" message there's nothing to do.
-        if self.HasSendFirstFewLayersMessage:
+        # If we have already sent the first layer done message there's nothing to do.
+        if self.HasSendFirstLayerDoneMessage:
             return
 
-        # We can't found the number of times the z-height changes because if slicers use "z-hop" the z will change multiple times
-        # on the same layer. We can get the current z-offset, but we don't know the layer height of the print. So for that reason
-        # when the zchange goes above some threadhold, we fire the "first few layers" event. 
+        # Get the current zoffset value.
         currentZOffsetMM = self.GetCurrentZOffset()
 
         # Make sure we know it.
         if currentZOffsetMM == -1:
             return
 
-        # Only fire once the z offset is greater than. Most layer heights are 0.07 - 0.3.
-        if currentZOffsetMM < 3.1:
+        # The trick here is how we do figure out when the first layer is done with out knowing the print layer height
+        # or how the gcode is written to do zhops.
+        #
+        # Our current solution is to keep track of the lowest zvalue we have seen for this print.
+        # Everytime we don't see the zvalue be the lowest, we increment a counter. After n number of reports above the lowest value, we
+        # consider the first layer done because we haven't seen the printer return to the first layer height.
+        #
+        # Typically, the flow looks something like... 0.4 -> 0.2 -> 0.4 -> 0.2 -> 0.4 -> 0.5 -> 0.7 -> 0.5 -> 0.7...
+        # Where the layer hight is 0.2 (because it's the lowest first value) and the zhops are 0.4 or more.
+
+        # Since this is a float, avoid ==
+        if currentZOffsetMM > self.zOffsetLowestSeenMM - 0.01 and currentZOffsetMM < self.zOffsetLowestSeenMM + 0.01:
+            # The zOffset is the same as the lowest we have seen.
+            self.zOffsetNotAtLowestCount = 0
+        elif currentZOffsetMM < self.zOffsetLowestSeenMM:
+            # We found a new low, record it.
+            self.zOffsetLowestSeenMM = currentZOffsetMM
+            self.zOffsetNotAtLowestCount = 0        
+        else:
+            # The zOffset is higher than the lowest we have seen.
+            self.zOffsetNotAtLowestCount += 1
+
+        # After zOffsetNotAtLowestCount >= 2, we consider the first layer to be done.
+        # This means we won't fire the event until we see two zmoves that are above the known min.
+        if self.zOffsetNotAtLowestCount < 2:
             return
 
         # Send the message.
-        self.HasSendFirstFewLayersMessage = True
-        self._sendEvent("firstfewlayersdone", {"ZOffsetMM" : str(currentZOffsetMM), "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+        self.HasSendFirstLayerDoneMessage = True
+        self._sendEvent("firstlayerdone", {"ZOffsetMM" : str(currentZOffsetMM) })
 
 
     # Fired when we get a M600 command from the printer to change the filament
     def OnFilamentChange(self):
-        self._sendEvent("filamentchange", { "FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(self.CurrentProgressInt)})
+        self._sendEvent("filamentchange")
 
 
     # Fired when a print is making progress.
@@ -124,7 +159,15 @@ class NotificationsHandler:
             return
 
         # We use the current print file name, which will be empty string if not set correctly.
-        self._sendEvent("progress", {"FileName": self.CurrentFileName, "DurationSec" : self._getCurrentDurationSec(), "ProgressPercentage" : str(progressInt) })
+        self._sendEvent("progress")
+
+
+    # Fired every hour while a print is running
+    def OnPrintTimerProgress(self):
+        # This event is fired by our internal timer only while prints are running.
+        # It will only fire every hour.
+        self._sendEvent("timerprogress")
+
 
     # If possible, gets a snapshot from the snapshot URL configured in OctoPrint.
     # If this fails for any reason, None is returned.
@@ -187,6 +230,26 @@ class NotificationsHandler:
         return str(time.time() - self.CurrentPrintStartTime)
 
 
+    # When OctoPrint tells us the duration, make sure we are in sync.
+    def _updateToKnownDuration(self, durationSecStr):
+        # If the string is empty return.
+        if len(durationSecStr) == 0:
+            return
+
+        # If we fail this logic don't kill the event.
+        try:
+            self.CurrentPrintStartTime = time.time() - float(durationSecStr)
+        except Exception as e:
+            self.Logger.error("_updateToKnownDuration exception "+str(e))
+
+    
+    # Updates the current file name, if there is a new name to set.
+    def _updateCurrentFileName(self, fileNameStr):
+        if len(fileNameStr) == 0:
+            return
+        self.CurrentFileName = fileNameStr
+
+
     # Sends the event
     # Returns True on success, otherwise False
     def _sendEvent(self, event, args = None):
@@ -208,9 +271,18 @@ class NotificationsHandler:
             args["OctoKey"] = self.OctoKey
             args["Event"] = event
 
+            # Always add the file name
+            args["FileName"] = str(self.CurrentFileName)
+
             # Always include the ETA, note this will be -1 if the time is unknown.
             timeRemainEstStr =  str(self.GetPrintTimeRemaningEstimateInSeconds())
             args["TimeRemaningSec"] = timeRemainEstStr
+
+            # Always add the current progress
+            args["ProgressPercentage"] = str(self.CurrentProgressInt)
+
+            # Always add the current duration
+            args["DurationSec"] = str(self._getCurrentDurationSec())         
 
             # Also always include a snapshot if we can get one.
             files = {}
@@ -291,3 +363,44 @@ class NotificationsHandler:
 
         # Failed to find it.
         return -1
+
+    # Starts a ping timer which is used to fire "every x mintues events".
+    def SetupPingTimer(self):
+        # First, stop any timer that's currently running.
+        self.StopPingTimer()
+
+        # Setup the new timer
+        intervalSec = 60 * 60 # Fire every hour.
+        timer = RepeatTimer(self.Logger, intervalSec, self.PingTimerCallback)
+        timer.start()
+        self.PingTimer = timer
+
+
+    # Stops any running ping timer.
+    def StopPingTimer(self):
+        # Capture locally
+        pingTimer = self.PingTimer
+        self.PingTimer = None
+        if pingTimer != None:
+            pingTimer.Stop()
+
+    # Fired when the ping timer fires.
+    def PingTimerCallback(self):
+        # Get the current state
+        # States can be found here:
+        # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
+        state = "UNKNOWN"
+        if self.OctoPrintPrinterObject == None:
+            self.Logger.warn("Notification ping timer doesn't have a OctoPrint printer object.")
+            state = "PRINTING"
+        else:
+            state = self.OctoPrintPrinterObject.get_state_id()
+
+        # Ensure the state is still printing or paused, if not we are done.
+        if state != "PRINTING" and state != "PAUSED":
+            self.Logger.info("Notification ping timer state doesn't seem to be printing, stopping timer. State: "+str(state))
+            self.StopPingTimer()
+            return
+
+        # Fire the event.
+        self.OnPrintTimerProgress()       
