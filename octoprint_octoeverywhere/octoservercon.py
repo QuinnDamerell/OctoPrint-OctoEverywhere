@@ -76,7 +76,7 @@ class OctoServerCon:
     def Cleanup(self):  
         # Stop the RunFor time checker if we have one.
         if self.RunForTimeChecker != None:
-            self.RunForTimeChecker.cancel() 
+            self.RunForTimeChecker.Stop() 
 
     # Returns a printable string that says the endpoint and the active session id.
     def GetConnectionString(self):
