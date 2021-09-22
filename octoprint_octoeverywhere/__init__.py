@@ -104,6 +104,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
         self.NotificationHandler.SetPrinterId(printerId)
 
+
     # Call when the system is ready and running
     def on_after_startup(self):
         # Spin off a thread for us to operate on.

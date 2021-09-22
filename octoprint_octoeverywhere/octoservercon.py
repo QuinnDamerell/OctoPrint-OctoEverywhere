@@ -70,7 +70,7 @@ class OctoServerCon:
         self.CreationTime = datetime.now()
         self.LastUserActivityTime = self.CreationTime
         # Start the RunFor time checker.
-        self.RunForTimeChecker = RepeatTimer(self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
+        self.RunForTimeChecker = RepeatTimer(self.Logger, self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
         self.RunForTimeChecker.start()
 
     def Cleanup(self):  
@@ -165,9 +165,13 @@ class OctoServerCon:
         if self.OctoSession:
             self.OctoSession.CloseAllWebStreamsAndDisable()
 
+        self.Logger.info("OctoServerCon websocket close start")        
+
         # Close the websocket, which will cause the run loop to spin and reconnect.
         if self.Ws:
             self.Ws.Close()
+
+        self.Logger.info("OctoServerCon disconnect complete.")
 
     # Returns if the RunFor time has expired, including considering user activity.
     def IsRunForTimeComplete(self):
