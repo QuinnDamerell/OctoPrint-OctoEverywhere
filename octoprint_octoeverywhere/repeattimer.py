@@ -1,5 +1,4 @@
 import threading
-from typing_extensions import runtime
 
 class RepeatTimer(threading.Thread):
     def __init__(self, logger, intervalSec, func):
