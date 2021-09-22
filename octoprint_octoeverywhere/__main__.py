@@ -10,6 +10,7 @@ from os import urandom
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
+from .threaddebug import ThreadDebug
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
@@ -60,6 +61,7 @@ def GeneratePrinterId():
 
 
 if __name__ == '__main__':
+
     # Setup the logger.
     logger = logging.getLogger("octoeverywhere")
     logger.setLevel(logging.DEBUG)
@@ -68,6 +70,10 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+    # This is a tool to help track stuck or leaked threads.
+    threadDebugger = ThreadDebug()
+    threadDebugger.Start(logger, 30)
 
     # Setup a signal handler to kill everything
     signal.signal(signal.SIGINT, SignalHandler)

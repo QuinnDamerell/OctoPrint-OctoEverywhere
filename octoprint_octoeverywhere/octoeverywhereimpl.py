@@ -88,7 +88,7 @@ class OctoEverywhere:
             else:
                 self.Logger.error("Secondary ended but there's not an ref of it in the map?")
         except Exception as _:
-            self.Logger.Error("Exception when removing secondary connection from map. "+str(e))             
+            self.Logger.error("Exception when removing secondary connection from map. "+str(e))             
         finally:
             # Always unlock                
             self.SecondaryServerConsLock.release()

@@ -1,15 +1,21 @@
 import threading
-import sys
 
-# A simple class to make a timer that repeats.
-# Unfortunately, due to differences in PY 2 and 3, we have to this hacky mess.
-if sys.version_info[0] < 3:
-    class RepeatTimer(threading._Timer):
-        def run(self):
-            while not self.finished.wait(self.interval):
-                self.function(*self.args, **self.kwargs)
-else:
-    class RepeatTimer(threading.Timer):
-        def run(self):
-            while not self.finished.wait(self.interval):
-                self.function(*self.args, **self.kwargs)
+class RepeatTimer(threading.Thread):
+    def __init__(self, logger, intervalSec, func):
+        threading.Thread.__init__(self)
+        self.stopEvent = threading.Event()
+        self.logger = logger
+        self.intervalSec = intervalSec
+        self.callback = func
+
+    # Overwrite of the thread function.
+    def run(self):
+        # Loop while the event isn't set and the thread is still alive.
+        while not self.stopEvent.wait(self.intervalSec) and self.is_alive():
+            try:
+                self.callback()
+            except Exception as e:
+                self.logger.error("Exception in RepeatTimer thread. "+str(e))
+    
+    def stop(self):
+        self.stopEvent.set()
