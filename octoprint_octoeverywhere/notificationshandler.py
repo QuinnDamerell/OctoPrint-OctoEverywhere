@@ -196,6 +196,10 @@ class NotificationsHandler:
                 # This is the dev case
                 snapshotUrl = "http://192.168.86.57/webcam/?action=snapshot"
 
+            # If there's no URL, don't bother
+            if snapshotUrl == None or len(snapshotUrl) == 0:
+                return None
+
             # Make the http call.
             snapshot = requests.get(snapshotUrl, stream=True).content
 
@@ -226,7 +230,10 @@ class NotificationsHandler:
             return snapshot
 
         except Exception as e:
-            self.Logger.info("Snapshot http call failed. " + str(e))
+            # Don't log here, because for those users with no webcam setup this will fail often.
+            # TODO - Ideally we would log, but filter out the expected errors when snapshots are setup by the user.
+            #self.Logger.info("Snapshot http call failed. " + str(e))
+            pass
         
         # On failure return nothing.
         return None
