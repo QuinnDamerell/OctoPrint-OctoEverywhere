@@ -1,30 +1,34 @@
-# OctoEverywhere!
+<p align="center"><img src="https://octoeverywhere.com/img/logo.png" alt="OctoEverywhere's Logo" style="width:100px" /></p>
+<h1 align="center" style="margin-bottom:20px">OctoEverywhere</h1>
 
-An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, and secure access to your OctoPrint instance** (plugins, camera, remote control, and more) from everywhere! 
+An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, and secure access to your OctoPrint portal** from everywhere! Developed for the maker community, powered by the maker community.
 
-OctoEverywhere allows you access to the full OctoPrint web portal on all of your devices and also with your favorite 3rd party OctoPrint apps!
+## Features
+
+- Free & full remote access to your OctoPrint portal from everywhere
+- Full resolution and frame-rate webcam streaming
+- Real-time printer notifications sent to SMS, Email, Discord, Telegram, Slack, and more
+- Works with your favorite OctoPrint apps on any platform
+- Full OctoPrint plugin functionality
+- Secure sharing of your OctoPrint portal for friends and family
+- Full multicam support
+- ... and much, much more!
 
 ## Try It Out!
 
-What are you waiting for? [Try it out now - it's free and takes less than 2 minutes to setup!](https://octoeverywhere.com/getstarted?source=github_plugin_repo)
+With a rating of **[4.6/5 stars](https://www.trustpilot.com/review/octoeverywhere.com)** and over **25k** makers are already using OctoEverywhere, what are you waiting for? 
+<br/>
+[Try it out now - it's free and takes less than 2 minutes to setup!](https://octoeverywhere.com/getstarted?source=github_plugin_repo)
 
 
 ## Bugs & Feedback
 
-Please submit bugs or feedback on our github page or our [subreddit](https://reddit.com/r/octoeverywhere).
+We love to hear from you! Please submit bugs or feedback on this github page, our [Discord server](https://discord.gg/v3qbxPee4E), or via [our support system](https://octoeverywhere.com/support).
 
+## Contributing 
 
-## Setup
+Feel free to fork, hack, slash, and PR code into this plugin! OctoEverywhere is made for the maker community, we appreciate any ideas or help we can get!
 
-### Recommended
+## Plugin Setup
 
-Follow the quick and easy setup guide on our website, [which can be found here.](https://octoeverywhere.com/getstarted?source=github_plugin_repo).
-
-### Manual
-
-The plugin is listed in the official OctoPrint plugin repo, so you can find it by searching for it via the Plugin Manager on you OctoPrint portal.
-
-### Super Manual
-
-You can also install it with the Plugin Manager by using a direct URL:
-https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/master.zip
+Simply follow our [Getting Started Guide](https://octoeverywhere.com/getstarted?source=github_plugin_repo) to get up and running in less than 2 minutes!
