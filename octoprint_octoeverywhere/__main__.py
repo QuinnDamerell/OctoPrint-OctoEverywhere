@@ -40,7 +40,7 @@ class StatusChangeHandlerStub():
         #handler.SetServerProtocolAndDomain("http://127.0.0.1")
         #handler.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")   
-        #handler.OnDone("filename.gcode", 304458605)   
+        #handler.OnDone("filename.gcode", "304458605")   
         #handler.OnPaused("filename.gcode") 
         #handler.OnResume("filename.gcode") 
         #handler.OnError("test error string")
@@ -91,5 +91,5 @@ if __name__ == '__main__':
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.0.4")
+    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.3.2")
     oe.RunBlocking()
