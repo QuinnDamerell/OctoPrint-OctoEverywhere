@@ -1,6 +1,7 @@
 import ssl
 import time
 import threading
+import certifi
 
 import websocket
 from websocket import WebSocketApp
@@ -53,7 +54,11 @@ class Client:
         # The client is responsible for sending keep alive pings the server will then pong respond to.
         # If that's not done, the connection will timeout.        
         # We will send a ping every 10 minutes, and expected a pong back within 5 mintues.
-        self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300)
+        #
+        # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
+        # Since let's encrypt updated their CA root, we need to use certify's root or the connection will likely fail.
+        # The requests lib already does this, so we only need to worry about it for websockets.
+        self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300, sslopt={"ca_certs":certifi.where()})
 
     def RunAsync(self):
         t = threading.Thread(target=self.RunUntilClosed, args=())
