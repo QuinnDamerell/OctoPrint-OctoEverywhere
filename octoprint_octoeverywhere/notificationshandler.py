@@ -5,6 +5,20 @@ from PIL import Image
 
 from .repeattimer import RepeatTimer
 
+class ProgressCompletionReportItem: 
+    def __init__(self, value, reported): 
+        self.value = value 
+        self.reported = reported
+
+    def Value(self):
+        return self.value
+
+    def Reported(self):
+        return self.reported
+
+    def SetReported(self, reported):
+        self.reported = reported
+
 class NotificationsHandler:
 
     def __init__(self, logger, octoPrintPrinterObject = None, octoPrintSettingsObject = None):
@@ -24,12 +38,28 @@ class NotificationsHandler:
     def ResetForNewPrint(self):
         self.CurrentFileName = ""
         self.CurrentPrintStartTime = time.time()
-        self.CurrentProgressInt = 0
+        self.OctoPrintReportedProgressInt = 0
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
+        self.LastFilamentChangeNotificationTime = 0
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
+
+        # Build the progress completion reported list.
+        # Add an entry for each progress we want to report, not including 0 and 100%.
+        # This list must be in order, from the loweset value to the highest.
+        # See _getCurrentProgressFloat for usage.
+        self.ProgressCompletionReported = []
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(10.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(20.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(30.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(40.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(50.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(60.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(70.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(80.0, False))
+        self.ProgressCompletionReported.append(ProgressCompletionReportItem(90.0, False))
     
     def SetPrinterId(self, printerId):
         self.PrinterId = printerId
@@ -144,19 +174,49 @@ class NotificationsHandler:
 
     # Fired when we get a M600 command from the printer to change the filament
     def OnFilamentChange(self):
+        # We might see the "m600" text in the commands back to back for one event,
+        # so we will time limit how often we send this.
+        # We also fire this notification on "paused for user" notifications from the printer.
+        if self.LastFilamentChangeNotificationTime > 0:
+            # Only send every 5 mintues at most.
+            deltaSec = time.time() - self.LastFilamentChangeNotificationTime
+            if deltaSec < (60.0 * 5.0):
+                return
+
+        # Update the time we sent the notification.
+        self.LastFilamentChangeNotificationTime = time.time()
         self._sendEvent("filamentchange")
 
 
     # Fired when a print is making progress.
     def OnPrintProgress(self, progressInt):
-        # Save a local value.
-        self.CurrentProgressInt = progressInt
 
-        # Don't handle 0 or 100, since other notifications will handle that.
-        if progressInt == 0 or progressInt == 100:
-            return
-        # Only send update for 10% increments.
-        if progressInt % 10 != 0:
+        # Update the local reported value.
+        self.OctoPrintReportedProgressInt = progressInt
+
+        # Get the computed print progress value. (see _getCurrentProgressFloat about why)
+        computedProgressFloat = self._getCurrentProgressFloat()
+
+        # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
+        # It's possible we get duplicate ints or even progresses that go back in time.
+        # To account for this, we will make sure we only send the update for each progress update once.
+        # We will also collapse many progress updates down to one event. For example, if the progress went from 5% -> 45%, we wil only report once for 10, 20, 30, and 40%.
+        needsToSend = False
+        for item in self.ProgressCompletionReported:
+            # Keep going through the items until we find one that's over our current progress.
+            # At that point, we are done.
+            if item.Value() > computedProgressFloat:
+                break
+
+            # If we are over this value and it's not reported, we need to report.
+            if item.Reported() == False:
+                needsToSend = True
+
+            # Make sure this is marked reported.
+            item.SetReported(True)
+
+        # Return if there is nothing to do.
+        if needsToSend == False:
             return
 
         # We use the current print file name, which will be empty string if not set correctly.
@@ -240,9 +300,8 @@ class NotificationsHandler:
 
 
     # Assuming the current time is set at the start of the printer correctly
-    # This returns the time from the last known start as a string.
-    def _getCurrentDurationSec(self):
-        return str(time.time() - self.CurrentPrintStartTime)
+    def _getCurrentDurationSecFloat(self):
+        return float(time.time() - self.CurrentPrintStartTime)
 
 
     # When OctoPrint tells us the duration, make sure we are in sync.
@@ -263,6 +322,45 @@ class NotificationsHandler:
         if len(fileNameStr) == 0:
             return
         self.CurrentFileName = fileNameStr
+
+
+    # Returns the current print progress as a float.
+    def _getCurrentProgressFloat(self):
+        # OctoPrint updates us with a progress int, but it turns out that's not the same progress as shown in the web UI.
+        # The web UI computes the progress % based on the total print time and ETA. Thus for our notifications to have accurate %s that match
+        # the web UIs, we will also try to do the same.
+        try:
+            # Try to get the print time remaining, which will use smart ETA plugins if possible.
+            ptrSec = self.GetPrintTimeRemaningEstimateInSeconds()
+            # If we can't get the ETA, default to OctoPrint's value.
+            if ptrSec == -1:
+                return float(self.OctoPrintReportedProgressInt)
+
+            # Compute the total print time (estimated) and the time thus far
+            currentDurationSecFloat = self._getCurrentDurationSecFloat()
+            totalPrintTimeSec = currentDurationSecFloat + ptrSec
+
+            # Sanity check for / 0
+            if totalPrintTimeSec == 0:
+                return float(self.OctoPrintReportedProgressInt)                
+
+            # Compute the progress
+            printProgressFloat = float(currentDurationSecFloat) / float(totalPrintTimeSec) * float(100.0)
+
+            # Bounds check
+            if printProgressFloat < 0.0:
+                printProgressFloat = 0.0
+            if printProgressFloat > 100.0:
+                printProgressFloat = 100.0
+
+            # Return the computed value.
+            return printProgressFloat
+
+        except Exception as e:
+            self.Logger.error("_getCurrentProgressFloat failed to compute progress. Exception: "+str(e))
+
+        # On failure, default to what OctoPrint has reported.
+        return float(self.OctoPrintReportedProgressInt)
 
 
     # Sends the event
@@ -294,10 +392,11 @@ class NotificationsHandler:
             args["TimeRemaningSec"] = timeRemainEstStr
 
             # Always add the current progress
-            args["ProgressPercentage"] = str(self.CurrentProgressInt)
+            # -> int to round -> to string for the API.
+            args["ProgressPercentage"] = str(int(self._getCurrentProgressFloat()))
 
             # Always add the current duration
-            args["DurationSec"] = str(self._getCurrentDurationSec())         
+            args["DurationSec"] = str(self._getCurrentDurationSecFloat())         
 
             # Also always include a snapshot if we can get one.
             files = {}
