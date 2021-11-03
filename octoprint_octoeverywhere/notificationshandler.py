@@ -1,6 +1,7 @@
 import requests
 import time
 import io
+import threading
 from PIL import Image
 
 from .repeattimer import RepeatTimer
@@ -371,6 +372,16 @@ class NotificationsHandler:
             self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
             return False
 
+        # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
+        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, ))
+        thread.start()
+
+        return True
+
+
+    # Sends the event
+    # Returns True on success, otherwise False
+    def _sendEventThreadWorker(self, event, args = None):
         try:
             # Setup the event.
             eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
