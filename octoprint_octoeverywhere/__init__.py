@@ -26,6 +26,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def __init__(self):
         # The port this octoprint instance is listening on.
         self.OctoPrintLocalPort = 80
+        # Default the handler to None since that will make the var name exist
+        # but we can't actually create the class yet until the system is more initalized.
+        self.NotificationHandler = None
 
     # Assets we use, just for the wizard right now.
     def get_assets(self):
@@ -175,13 +178,20 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # https://marlinfw.org/docs/gcode/M600.html
         # On my Pursa, I see this "fsensor_update - M600" AND this "echo:Enqueing to the front: "M600""
         if line:
-            # Look for "M600" OR "fsensor_update" anywhere in the line.
-            if "M600" in line or "fsensor_update" in line:
-                # Ingore "echo:" since that would make us double alert.
-                if "echo:" not in line:
-                    # Spawn a thread to send the notification so we don't block here.
-                    t = threading.Thread(target=self.NotificationHandler.OnFilamentChange)
-                    t.start()
+            # ToLower the line for better detection.
+            line = line.lower()
+
+            # Look for a M600 command or fsensor_update in the line.
+            # We also look for "paused for user" which can also indicate a filament change is required.
+            # Note that OnFilamentChange will limit how often we send notifications, so it's ok to send multiple back-to-back.
+            # TODO - really "paused for user" can include more things the user must do, but for now we will just use it for this.
+            sendFilamentChangeNotification = "m600" in line or "fsensor_update" in line or line.startswith("echo:busy: paused for user") or line.startswith("// action:paused")
+
+            # If we need to send, do it!
+            if sendFilamentChangeNotification and self.NotificationHandler != None:
+                # Spawn a thread to send the notification so we don't block here.
+                t = threading.Thread(target=self.NotificationHandler.OnFilamentChange)
+                t.start()
 
         # We must return line the line won't make it to OctoPrint!
         return line          
@@ -190,7 +200,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Functions are for the Process Plugin
     #
     def on_print_progress(self, storage, path, progressInt):
-        self.NotificationHandler.OnPrintProgress(progressInt)
+        if self.NotificationHandler != None:
+            self.NotificationHandler.OnPrintProgress(progressInt)
 
     #
     # Functions for the Event Handler Mixin
@@ -203,6 +214,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Listen for client authed events, these fire whenever a websocket opens and is auth is done.
         if event == "ClientAuthed":
             self.HandleClientAuthedEvent()
+            
+        # Only check the event after the notificaiton handler has been created.
+        # Sepcifically here, we have seen the Error event be fired before `on_startup` is fired,
+        # and thus the handler isn't created.
+        if self.NotificationHandler == None:
+            return
 
         # Listen for the rest of these events for notifications.
         # OctoPrint Events
@@ -405,7 +422,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # We don't save the OctoKey to settings, keep it in memory.
         self.octoKey = key
         # We also need to set it into the notification handler.
-        self.NotificationHandler.SetOctoKey(key)
+        if self.NotificationHandler != None:
+            self.NotificationHandler.SetOctoKey(key)
 
     def GetOctoKey(self):
         if self.octoKey == None:
