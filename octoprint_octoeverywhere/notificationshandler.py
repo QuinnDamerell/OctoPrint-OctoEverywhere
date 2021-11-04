@@ -197,12 +197,13 @@ class NotificationsHandler:
 
         # Get the computed print progress value. (see _getCurrentProgressFloat about why)
         computedProgressFloat = self._getCurrentProgressFloat()
-
+        
         # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
         # It's possible we get duplicate ints or even progresses that go back in time.
         # To account for this, we will make sure we only send the update for each progress update once.
         # We will also collapse many progress updates down to one event. For example, if the progress went from 5% -> 45%, we wil only report once for 10, 20, 30, and 40%.
-        needsToSend = False
+        # We keep track of the highest progress that hasn't been reported yet.
+        progressToSendFloat = 0.0
         for item in self.ProgressCompletionReported:
             # Keep going through the items until we find one that's over our current progress.
             # At that point, we are done.
@@ -210,18 +211,20 @@ class NotificationsHandler:
                 break
 
             # If we are over this value and it's not reported, we need to report.
+            # Since these items are in order, the largest progress will always overwrite.
             if item.Reported() == False:
-                needsToSend = True
+                progressToSendFloat = item.Value()
 
             # Make sure this is marked reported.
             item.SetReported(True)
 
         # Return if there is nothing to do.
-        if needsToSend == False:
+        if progressToSendFloat < 0.1:
             return
 
-        # We use the current print file name, which will be empty string if not set correctly.
-        self._sendEvent("progress")
+        # It's important we send the "snapped" progress here (rounded to the tens place) because the service depends on it
+        # to filter out % increments the user didn't want to get notifications for.
+        self._sendEvent("progress", None, progressToSendFloat)
 
 
     # Fired every hour while a print is running
@@ -366,14 +369,14 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEvent(self, event, args = None):
+    def _sendEvent(self, event, args = None, progressOverwriteFloat = None):
         # Ensure we are ready.
         if self.PrinterId == None or self.OctoKey == None:
             self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
             return False
 
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
-        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, ))
+        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, ))
         thread.start()
 
         return True
@@ -381,7 +384,7 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEventThreadWorker(self, event, args = None):
+    def _sendEventThreadWorker(self, event, args=None, progressOverwriteFloat=None):
         try:
             # Setup the event.
             eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
@@ -404,7 +407,13 @@ class NotificationsHandler:
 
             # Always add the current progress
             # -> int to round -> to string for the API.
-            args["ProgressPercentage"] = str(int(self._getCurrentProgressFloat()))
+            # Allow the caller to overwrite the progress we report. This allows the progress update to snap the progress to a hole 10s value.
+            progressFloat = 0.0
+            if progressOverwriteFloat != None:
+                progressFloat = progressOverwriteFloat
+            else:
+                progressFloat = self._getCurrentProgressFloat()
+            args["ProgressPercentage"] = str(int(progressFloat))
 
             # Always add the current duration
             args["DurationSec"] = str(self._getCurrentDurationSecFloat())         
@@ -462,7 +471,7 @@ class NotificationsHandler:
                 printTimeEstSec = int(jobData["estimatedPrintTime"])
                 # Compute how long this print has been running and subtract
                 # Sanity check the duration isn't longer than the ETA.
-                currentDurationSec = int(float(self._getCurrentDurationSec()))
+                currentDurationSec = int(self._getCurrentDurationSecFloat())
                 if currentDurationSec > printTimeEstSec:
                     return 0
                 return printTimeEstSec - currentDurationSec
