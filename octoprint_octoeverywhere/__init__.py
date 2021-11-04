@@ -179,13 +179,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # On my Pursa, I see this "fsensor_update - M600" AND this "echo:Enqueing to the front: "M600""
         if line:
             # ToLower the line for better detection.
-            line = line.lower()
+            lineLower = line.lower()
 
             # Look for a M600 command or fsensor_update in the line.
             # We also look for "paused for user" which can also indicate a filament change is required.
             # Note that OnFilamentChange will limit how often we send notifications, so it's ok to send multiple back-to-back.
             # TODO - really "paused for user" can include more things the user must do, but for now we will just use it for this.
-            sendFilamentChangeNotification = "m600" in line or "fsensor_update" in line or line.startswith("echo:busy: paused for user") or line.startswith("// action:paused")
+            sendFilamentChangeNotification = "m600" in lineLower or "fsensor_update" in lineLower or lineLower.startswith("echo:busy: paused for user") or lineLower.startswith("// action:paused")
 
             # If we need to send, do it!
             if sendFilamentChangeNotification and self.NotificationHandler != None:
