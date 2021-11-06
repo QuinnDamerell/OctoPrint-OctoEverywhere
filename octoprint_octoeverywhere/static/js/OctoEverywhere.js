@@ -241,21 +241,102 @@ $(function() {
             iframe.setAttribute("scrolling","no");
             document.body.appendChild(iframe);
         }
-        function DetectOctoEverywhereLoadedIndexAndInjectionHelpers(url)
+        function IsConnectedViaOctoEverywhere()
         {
             // Start with a to lower case to remove complexity.
-            url = url.toLowerCase();
+            url = window.location.href.toLowerCase();
 
-            // If the url has this substring in it, the page must be loaded from our service.
-            // There can be any 
-            if(url.indexOf(".octoeverywhere.com/") != -1)
+            // Check if the URL contains our domain name.
+            // If so, we know we are loaded via our service.
+            return url.indexOf(".octoeverywhere.com") != -1;
+        }
+        function DetectOctoEverywhereLoadedIndexAndInjectionHelpers()
+        {
+            // Only if we are connected via OctoEverywhere, inject the service connection helpers.
+            if(IsConnectedViaOctoEverywhere())
             {
                 OctoELog("OctoEverywhere based loading detected.");
                 InjectServiceHelpers();
             }
         }
-        DetectOctoEverywhereLoadedIndexAndInjectionHelpers(window.location.href);
+        DetectOctoEverywhereLoadedIndexAndInjectionHelpers();
+
+        //
+        //
+        //
+        //
+        // This logic is used to ping the octoeverywhere service when the page is loaded to detect if there are any
+        // notifications for this user.
+        //
+        function DoNotificationCheckIn(printerId, pluginVersion, isConnectedViaOctoEverywhere)
+        {
+            // Create the payload
+            var payload = {
+                "PrinterId": printerId,
+                "PluginVersion": pluginVersion,
+                "IsConnectedViaOctoEverywhere" : isConnectedViaOctoEverywhere
+            };
+
+            // Make the JS request to allow the service to be aware of us and connect up.
+            $.ajax({
+                url: "https://octoeverywhere.com/api/plugin/checkin",
+                type: "POST",
+                dataType: "json",
+                data: JSON.stringify(payload),
+                contentType: "application/json; charset=UTF-8",
+                success: function(response) {
+                    try
+                    {
+                        if(response.Status !== 200)
+                        {
+                            OctoELog("Failed to call api/plugin/checkin; "+response.Status);
+                            return;
+                        }
+                        // If there's a notification, fire it.
+                        if(response.Result.Notification !== undefined && response.Result.Notification !== null)
+                        {
+                            new PNotify({
+                                'title': response.Result.Notification.Title,
+                                'text':  response.Result.Notification.Message,
+                                'type':  response.Result.Notification.Type,
+                                'hide':  response.Result.Notification.AutoHide,
+                                'delay': response.Result.Notification.ShowForMs,
+                                'mouseReset' : response.Result.Notification.MouseReset
+                            });
+                        }
+                    }
+                    catch (error)
+                    {
+                        OctoELog("Exception in DoNotificationCheckIn; "+error)
+                    }
+                },
+                failed: function(error){
+                    OctoELog("Failed to call plugin check in API "+error);
+                }
+            });
+        }
+
+        // Called when our plugin settings are ready and can be used.
+        function OnSettingsReady(octoEverywhereSettings)
+        {
+            // Try to get the settings required for the notification check in
+            try {
+                DoNotificationCheckIn(octoEverywhereSettings.PrinterKey(), octoEverywhereSettings.PluginVersion(), IsConnectedViaOctoEverywhere())
+            } catch (error) {
+                OctoELog("DoNotificationCheckIn failed." + error);                
+            }
+        }
+
+        // We need to wait for the settings to be ready.
+        // The SettingsViewModel is passed as the second param, because we list it as the second dependency in OCTOPRINT_VIEWMODELS
+        self.settingsViewModel = parameters[1]
+        self.onBeforeBinding = function() {
+            // Set the settings and fire the callback.
+            self.settings = self.settingsViewModel.settings;   
+            OnSettingsReady(self.settings.plugins.octoeverywhere)         
+        };
     }
+  
 
      /* view model class, parameters for constructor, container to bind to
       * Please see http://docs.octoprint.org/en/master/plugins/viewmodels.html#registering-custom-viewmodels for more details
@@ -263,7 +344,7 @@ $(function() {
      */
      OCTOPRINT_VIEWMODELS.push({
          construct: OctoeverywhereViewModel,
-         dependencies: ["wizardViewModel"],
+         dependencies: ["wizardViewModel", "settingsViewModel"],
          elements: ["#wizard_plugin_octoeverywhere"]
      });
  });
