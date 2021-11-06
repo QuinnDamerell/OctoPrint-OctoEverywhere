@@ -103,6 +103,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Any of the UI queries for it.
         printerId = self.EnsureAndGetPrinterId()
 
+        # Ensure the plugin version is updated in the settings for the frontend.
+        self.EnsurePluginVersionSet()
+
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
         self.NotificationHandler.SetPrinterId(printerId)
@@ -317,6 +320,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Ensures we have generated a printer id and returns it.
     def EnsureAndGetPrinterId(self):
         # Try to get the current.
+        # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
         currentId = self._settings.get(["PrinterKey"])
 
         # Make sure the current ID is valid.
@@ -328,9 +332,16 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Always update the settings, so they are always correct.
         self._settings.set(["AddPrinterUrl"], self.c_OctoEverywhereAddPrinterUrl + currentId, force=True)
+        # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
         self._settings.set(["PrinterKey"], currentId, force=True)
         self._settings.save(force=True)
         return currentId
+
+    # Ensures the plugin version is set into the settings for the frontend.
+    def EnsurePluginVersionSet(self):
+        # We save the current plugin version into the settings so the frontend JS can get it.
+        self._settings.set(["PluginVersion"], self._plugin_version, force=True)
+        self._settings.save(force=True)
 
     # Returns the frontend http port OctoPrint's http proxy is running on.
     def GetFrontendHttpPort(self):
