@@ -2,8 +2,10 @@
     "python.pythonPath": "py3venv/bin/python",
     "cSpell.words": [
         "ABNF",
+        "Analysing",
         "authed",
         "brotli",
+        "certifi",
         "crypo",
         "Damerell",
         "didnt",
@@ -37,9 +39,14 @@
         "octowebstreamimpl",
         "octowebstreamwshelper",
         "Proto",
+        "Pylint",
+        "pytest",
         "referer",
+        "sdist",
         "struct",
         "urandom",
         "zchange"
-    ]
+    ],
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true
 }

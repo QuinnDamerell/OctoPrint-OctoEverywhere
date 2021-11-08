@@ -6,9 +6,9 @@ from PIL import Image
 
 from .repeattimer import RepeatTimer
 
-class ProgressCompletionReportItem: 
-    def __init__(self, value, reported): 
-        self.value = value 
+class ProgressCompletionReportItem:
+    def __init__(self, value, reported):
+        self.value = value
         self.reported = reported
 
     def Value(self):
@@ -32,9 +32,17 @@ class NotificationsHandler:
         self.OctoPrintSettingsObject = octoPrintSettingsObject
         self.PingTimer = None
 
-        # Since all of the commands don't send things we need, we will also track them.
+        # Set all of these in init and then initialize them to the new print values
+        self.zOffsetNotAtLowestCount = 0
+        self.zOffsetLowestSeenMM = 0
+        self.HasSendFirstLayerDoneMessage = False
+        self.LastFilamentChangeNotificationTime = 0
+        self.OctoPrintReportedProgressInt = 0
+        self.CurrentPrintStartTime = time.time()
+        self.CurrentFileName = ""
+        self.PingTimerHoursReported = 0
         self.ResetForNewPrint()
- 
+
 
     def ResetForNewPrint(self):
         self.CurrentFileName = ""
@@ -61,7 +69,7 @@ class NotificationsHandler:
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(70.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(80.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(90.0, False))
-    
+
     def SetPrinterId(self, printerId):
         self.PrinterId = printerId
 
@@ -103,7 +111,7 @@ class NotificationsHandler:
         self.StopPingTimer()
         self._sendEvent("done")
 
-        
+
     # Fired when a print is paused
     def OnPaused(self, fileName):
         self._updateCurrentFileName(fileName)
@@ -128,7 +136,7 @@ class NotificationsHandler:
         self.OnPaused(self.CurrentFileName)
 
 
-    # Fired WHENEVER the z axis changes. 
+    # Fired WHENEVER the z axis changes.
     def OnZChange(self):
         # If we have already sent the first layer done message there's nothing to do.
         if self.HasSendFirstLayerDoneMessage:
@@ -158,7 +166,7 @@ class NotificationsHandler:
         elif currentZOffsetMM < self.zOffsetLowestSeenMM:
             # We found a new low, record it.
             self.zOffsetLowestSeenMM = currentZOffsetMM
-            self.zOffsetNotAtLowestCount = 0        
+            self.zOffsetNotAtLowestCount = 0
         else:
             # The zOffset is higher than the lowest we have seen.
             self.zOffsetNotAtLowestCount += 1
@@ -197,7 +205,7 @@ class NotificationsHandler:
 
         # Get the computed print progress value. (see _getCurrentProgressFloat about why)
         computedProgressFloat = self._getCurrentProgressFloat()
-        
+
         # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
         # It's possible we get duplicate ints or even progresses that go back in time.
         # To account for this, we will make sure we only send the update for each progress update once.
@@ -282,23 +290,23 @@ class NotificationsHandler:
                 if flipH:
                     pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
                 if flipV:
-                    pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM) 
+                    pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
 
-                # Write back to bytes.               
+                # Write back to bytes.
                 buffer = io.BytesIO()
                 pilImage.save(buffer, format="JPEG")
                 snapshot = buffer.getvalue()
                 buffer.close()
-            
+
             # Return the image
             return snapshot
 
-        except Exception as e:
+        except Exception as _:
             # Don't log here, because for those users with no webcam setup this will fail often.
             # TODO - Ideally we would log, but filter out the expected errors when snapshots are setup by the user.
             #self.Logger.info("Snapshot http call failed. " + str(e))
             pass
-        
+
         # On failure return nothing.
         return None
 
@@ -320,7 +328,7 @@ class NotificationsHandler:
         except Exception as e:
             self.Logger.error("_updateToKnownDuration exception "+str(e))
 
-    
+
     # Updates the current file name, if there is a new name to set.
     def _updateCurrentFileName(self, fileNameStr):
         if len(fileNameStr) == 0:
@@ -346,7 +354,7 @@ class NotificationsHandler:
 
             # Sanity check for / 0
             if totalPrintTimeSec == 0:
-                return float(self.OctoPrintReportedProgressInt)                
+                return float(self.OctoPrintReportedProgressInt)
 
             # Compute the progress
             printProgressFloat = float(currentDurationSecFloat) / float(totalPrintTimeSec) * float(100.0)
@@ -416,13 +424,13 @@ class NotificationsHandler:
             args["ProgressPercentage"] = str(int(progressFloat))
 
             # Always add the current duration
-            args["DurationSec"] = str(self._getCurrentDurationSecFloat())         
+            args["DurationSec"] = str(self._getCurrentDurationSecFloat())
 
             # Also always include a snapshot if we can get one.
             files = {}
             snapshot = self.getSnapshot()
             if snapshot != None:
-                files['attachment'] = ("snapshot.jpg", snapshot) 
+                files['attachment'] = ("snapshot.jpg", snapshot)
 
             # Make the request.
             # Since we are sending the snapshot, we must send a multipart form.
@@ -540,4 +548,4 @@ class NotificationsHandler:
             return
 
         # Fire the event.
-        self.OnPrintTimerProgress()       
+        self.OnPrintTimerProgress()

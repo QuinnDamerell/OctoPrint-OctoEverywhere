@@ -1,8 +1,6 @@
 import octoflatbuffers
 
 from octoprint_octoeverywhere import Proto
-from .Proto import OctoStreamMessage
-from .Proto import HandshakeSyn
 from .Proto import MessageContext
 
 # A helper class that builds our OctoStream messages as flatbuffers.
@@ -44,7 +42,7 @@ class OctoStreamMsgBuilder:
         Proto.OctoStreamMessage.AddContext(builder, contextOffset)
         streamMsgOffset = Proto.OctoStreamMessage.End(builder)
 
-        # Finalize the message. We use the size prefixed 
+        # Finalize the message. We use the size prefixed
         builder.FinishSizePrefixed(streamMsgOffset)
         return builder.Output()
 

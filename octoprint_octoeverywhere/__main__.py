@@ -4,12 +4,8 @@ import sys
 import random
 import string
 
-from base64 import b64encode
-from os import urandom
-
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
-from .notificationshandler import NotificationsHandler
 from .threaddebug import ThreadDebug
 
 #
@@ -21,8 +17,8 @@ class UiPopupInvokerStub():
     def __init__(self, logger):
         self.Logger = logger
 
-    def ShowUiPopup(self, title, text, type, autoHide):
-        self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+type+"; AutoHide:"+str(autoHide))
+    def ShowUiPopup(self, title, text, t, autoHide):
+        self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+t+"; AutoHide:"+str(autoHide))
 
 # A mock of the popup UI interface.
 class StatusChangeHandlerStub():

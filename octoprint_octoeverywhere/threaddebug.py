@@ -32,7 +32,6 @@ class ThreadDebug:
 
             except Exception as e:
                 logger.error("Exception in ThreadDebug : "+str(e))
-                pass
 
             time.sleep(delaySec)
 

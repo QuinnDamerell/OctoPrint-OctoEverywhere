@@ -1,8 +1,8 @@
 from octoprint_octoeverywhere.octostreammsgbuilder import OctoStreamMsgBuilder
 from ..octohttprequest import OctoHttpRequest
 
-class HeaderHelper:    
-    
+class HeaderHelper:
+
     @staticmethod
     def GatherRequestHeaders(httpInitialContext, logger) :
 
@@ -10,7 +10,7 @@ class HeaderHelper:
 
         # Get the count of headers in the message.
         sendHeaders = {}
-        headersLen = httpInitialContext.HeadersLength()                  
+        headersLen = httpInitialContext.HeadersLength()
 
         # Convert each header and fix them up.
         i = 0
@@ -22,7 +22,7 @@ class HeaderHelper:
             # Get the values & validate
             name = OctoStreamMsgBuilder.BytesToString(header.Key())
             value = OctoStreamMsgBuilder.BytesToString(header.Value())
-            if name == None or value == None:
+            if name is None or value is None:
                 logger.warn("GatherRequestHeaders found a header that has a null name or value.")
                 continue
             lowerName = name.lower()
@@ -37,12 +37,12 @@ class HeaderHelper:
                 # If the request was compressed, it will be de-compressed by the server and then we use a different
                 # compression system over the wire.
                 # If the request was chunked, our system will read the entire message and send it on the wire
-                # in multiable stream messages. 
+                # in multiable stream messages.
                 # Thus, we don't need to / shouldn't include this header.
                 continue
             if lowerName == "upgrade-insecure-requests":
                 # We don't support https over the local host.
-                continue 
+                continue
             if lowerName == "x-forwarded-for":
                 # We should never send these to OctoPrint, or it will detect the IP as external and show
                 # the external connection warning.
@@ -67,9 +67,9 @@ class HeaderHelper:
         # hostname and port are. This allows it to set outbound urls and references to be correct to the right host.
         # Note! This can do weird things with redirect! Because the redirect location header will actually reflect this
         # hostname. So when your doing local testing, this host name must be correct from the service or incorrect redirects
-        # will happen.   
+        # will happen.
         octoHostBytes = httpInitialContext.OctoHost()
-        if octoHostBytes == None:
+        if octoHostBytes is None:
             raise Exception("Http headers found no OctoHost in http initial context.")
         sendHeaders["X-Forwarded-Host"] = OctoStreamMsgBuilder.BytesToString(octoHostBytes)
 
@@ -79,8 +79,8 @@ class HeaderHelper:
 
         # We exclude this from being set above, but even more so, we want to define it as empty.
         # If we exclude it, the py request lib seems to add it by itself.
-        # We don't want to mess with encoding, because doing to encoding over local host is a waste of time.    
-        # Unless we can get the already encoded bytes out of the request client, then that might be intereting.    
+        # We don't want to mess with encoding, because doing to encoding over local host is a waste of time.
+        # Unless we can get the already encoded bytes out of the request client, then that might be intereting.
         sendHeaders["Accept-Encoding"] = ""
 
         return sendHeaders

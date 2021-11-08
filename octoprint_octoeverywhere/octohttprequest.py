@@ -20,7 +20,7 @@ class OctoHttpRequest:
     @staticmethod
     def GetLocalHttpProxyPort():
         return OctoHttpRequest.LocalHttpProxyPort
-    
+
     @staticmethod
     def SetLocalOctoPrintPort(port):
         OctoHttpRequest.LocalOctoPrintPort = port
@@ -174,7 +174,7 @@ class OctoHttpRequest:
         # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
-            return ret.Result   
+            return ret.Result
 
         # If all others fail, try the hardcoded webcam URL.
         # Note this has to be last, because there commonly isn't a fallbackWebcamUrl, so it will stop the
