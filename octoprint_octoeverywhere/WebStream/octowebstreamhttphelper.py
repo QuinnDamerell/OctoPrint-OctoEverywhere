@@ -192,6 +192,7 @@ class OctoWebStreamHttpHelper:
         nonCompressedContentReadSizeBytes = 0
         isFirstResponse = True
         isLastMessage = False
+        messageCount = 0        
         # Continue as long as the stream isn't closed and we haven't sent the close message.
         # We don't check th body read sizes here, because we don't want to duplicate that logic check.
         while self.IsClosed == False and isLastMessage == False:
@@ -279,10 +280,11 @@ class OctoWebStreamHttpHelper:
 
             # Clear this flag
             isFirstResponse = False
+            messageCount += 1
 
         # Log about it.
         resposneWriteDone = time.time() 
-        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(resposneWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
+        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(resposneWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
 
 
 
@@ -430,7 +432,7 @@ class OctoWebStreamHttpHelper:
         #   - Anything that's octet-stream. (we do this because some of the .less files don't get set as text correctly)
         return (contentTypeLower.find("text/") != -1 or contentTypeLower.find("javascript") != -1 
                 or contentTypeLower.find("json") != -1 or contentTypeLower.find("xml") != -1
-                or contentTypeLower.find("svg") != -1 or contentTypeLower.find("octet-stream") == -1)
+                or contentTypeLower.find("svg") != -1 or contentTypeLower.find("octet-stream") != -1)
         
 
     # Reads data from the response body, puts it in a data vector, and returns the offset.
