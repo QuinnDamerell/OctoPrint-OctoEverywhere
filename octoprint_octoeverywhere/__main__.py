@@ -81,15 +81,19 @@ if __name__ == '__main__':
     # Dev props
     printerId = GeneratePrinterId()
     OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"    
-    #OctoEverywhereWsUri = "ws://192.168.86.74:5000/octoclientws"
-    printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
     OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
     OctoHttpRequest.SetLocalOctoPrintPort(5000)
 
+    # Special - Dev Env Setup
+    printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
+    OctoHttpRequest.SetLocalhostAddress("192.168.86.45")
+    OctoHttpRequest.SetLocalOctoPrintPort(80)
+    OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
+
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.3.2")
+    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.4.0")
     oe.RunBlocking()

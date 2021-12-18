@@ -47,6 +47,7 @@ class Client:
                                   header = headers
         )
         self.Ws.on_open = OnOpen
+        self.onWsError = onWsError
 
     def RunUntilClosed(self):
         # Note we must set the ping_interval and ping_timeout or we won't get a multithread
@@ -58,7 +59,18 @@ class Client:
         # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
         # Since let's encrypt updated their CA root, we need to use certify's root or the connection will likely fail.
         # The requests lib already does this, so we only need to worry about it for websockets.
-        self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300, sslopt={"ca_certs":certifi.where()})
+        try:
+            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300, sslopt={"ca_certs":certifi.where()})
+        except Exception as e:
+            # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
+            # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ingore that error,
+            # But for others we will call OnError.
+            #
+            # If it is the error message we will just return indication that the socket is closed.
+            msg = str(e)
+            if "'Thread' object has no attribute 'isAlive'" not in msg:
+                if self.onWsError:
+                    self.onWsError(self, "run_forever threw and exception: "+msg)
 
     def RunAsync(self):
         t = threading.Thread(target=self.RunUntilClosed, args=())

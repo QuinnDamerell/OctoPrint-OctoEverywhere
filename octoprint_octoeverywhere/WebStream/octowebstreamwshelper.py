@@ -2,8 +2,8 @@
 
 import threading
 import websocket
-import brotli
 import time
+import zlib
 
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
@@ -34,7 +34,7 @@ class OctoWebStreamWsHelper:
         self.OpenedTime = openedTime
 
         # These vars indicate if the actual websocket is opened or closed.
-        # This is different from IsClosed, which is tracking if the webstream closed status. 
+        # This is different from IsClosed, which is tracking if the webstream closed status.
         # These are important for when we try to send a message.
         self.IsWsObjOpened = False
         self.IsWsObjClosed = False
@@ -83,7 +83,7 @@ class OctoWebStreamWsHelper:
             # We will close now, so set the flag.
             self.IsClosed = True
         except Exception as _:
-            raise  
+            raise
         finally:
             self.StateLock.release()
 
@@ -107,16 +107,16 @@ class OctoWebStreamWsHelper:
             # Check if the webstream has closed or the socket object is now reporting closed.
             if self.IsWsObjClosed == True or self.IsClosed:
                 return
-            
+
             # Sleep for a bit to wait for the socket open.
             time.sleep(0.1)
-            
+
         # If the websocket object is closed ingore this message. It will throw if the socket is closed
         # which will take down the entire OctoStream. But since it's closed the web stream is already cleaning up.
         # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
         # were already inbound messages on the way.
         if self.IsWsObjClosed:
-            return         
+            return
 
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
         # exist, we need to check for it.
@@ -126,7 +126,9 @@ class OctoWebStreamWsHelper:
 
         # If the message is compressed, decompress it.
         if webStreamMsg.DataCompression() == DataCompression.DataCompression.Brotli:
-            buffer = brotli.decompress(buffer)
+            raise Exception("IncomingServerMessage Failed - Brotli decompress not possible.")
+        elif webStreamMsg.DataCompression() == DataCompression.DataCompression.Zlib:
+            buffer = zlib.decompress(buffer)
 
         # Get the send type.
         sendType = 0
@@ -167,9 +169,9 @@ class OctoWebStreamWsHelper:
             usingCompression = len(buffer) > 200
             originalDataSize = 0
             if usingCompression:
-                # See notes about the quality and such in the http helper.
+                # See notes about the quality and such in the readContentFromBodyAndMakeDataVector.
                 originalDataSize = len(buffer)
-                buffer = brotli.compress(buffer, mode=brotli.MODE_TEXT, quality=0)
+                buffer = zlib.compress(buffer, 3)
 
             # Send the message along!
             builder = OctoStreamMsgBuilder.CreateBuffer(len(buffer) + 200)
@@ -185,7 +187,7 @@ class OctoWebStreamWsHelper:
             WebStreamMsg.AddIsControlFlagsOnly(builder, False)
             WebStreamMsg.AddWebsocketDataType(builder, sendType)
             if usingCompression:
-                WebStreamMsg.AddDataCompression(builder, DataCompression.DataCompression.Brotli)
+                WebStreamMsg.AddDataCompression(builder, DataCompression.DataCompression.Zlib)
                 WebStreamMsg.AddOriginalDataSize(builder, originalDataSize)
             if dataOffset != None:
                 WebStreamMsg.AddData(builder, dataOffset)
@@ -197,7 +199,7 @@ class OctoWebStreamWsHelper:
         except Exception as e:
             self.Logger.error(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service. "+str(e))
             self.WebStream.Close()
-    
+
 
     def onWsClosed(self, ws):
         self.IsWsObjClosed = True

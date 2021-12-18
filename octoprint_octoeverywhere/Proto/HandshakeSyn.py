@@ -59,7 +59,28 @@ class HandshakeSyn(object):
             return self._tab.Get(octoflatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
         return 0
 
-def Start(builder): builder.StartObject(5)
+    # HandshakeSyn
+    def Key(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # HandshakeSyn
+    def RsaChallenge(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # HandshakeSyn
+    def RasChallengeVersion(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
+        return 0
+
+def Start(builder): builder.StartObject(8)
 def HandshakeSynStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -83,6 +104,18 @@ def AddLocalHttpProxyPort(builder, localHttpProxyPort): builder.PrependUint32Slo
 def HandshakeSynAddLocalHttpProxyPort(builder, localHttpProxyPort):
     """This method is deprecated. Please switch to AddLocalHttpProxyPort."""
     return AddLocalHttpProxyPort(builder, localHttpProxyPort)
+def AddKey(builder, key): builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(key), 0)
+def HandshakeSynAddKey(builder, key):
+    """This method is deprecated. Please switch to AddKey."""
+    return AddKey(builder, key)
+def AddRsaChallenge(builder, rsaChallenge): builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(rsaChallenge), 0)
+def HandshakeSynAddRsaChallenge(builder, rsaChallenge):
+    """This method is deprecated. Please switch to AddRsaChallenge."""
+    return AddRsaChallenge(builder, rsaChallenge)
+def AddRasChallengeVersion(builder, rasChallengeVersion): builder.PrependInt8Slot(7, rasChallengeVersion, 0)
+def HandshakeSynAddRasChallengeVersion(builder, rasChallengeVersion):
+    """This method is deprecated. Please switch to AddRasChallengeVersion."""
+    return AddRasChallengeVersion(builder, rasChallengeVersion)
 def End(builder): return builder.EndObject()
 def HandshakeSynEnd(builder):
     """This method is deprecated. Please switch to End."""

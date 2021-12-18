@@ -79,7 +79,14 @@ class HandshakeAck(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
-def Start(builder): builder.StartObject(6)
+    # HandshakeAck
+    def RsaResult(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+def Start(builder): builder.StartObject(7)
 def HandshakeAckStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -111,6 +118,10 @@ def AddOctokey(builder, octokey): builder.PrependUOffsetTRelativeSlot(5, octofla
 def HandshakeAckAddOctokey(builder, octokey):
     """This method is deprecated. Please switch to AddOctokey."""
     return AddOctokey(builder, octokey)
+def AddRsaResult(builder, rsaResult): builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(rsaResult), 0)
+def HandshakeAckAddRsaResult(builder, rsaResult):
+    """This method is deprecated. Please switch to AddRsaResult."""
+    return AddRsaResult(builder, rsaResult)
 def End(builder): return builder.EndObject()
 def HandshakeAckEnd(builder):
     """This method is deprecated. Please switch to End."""

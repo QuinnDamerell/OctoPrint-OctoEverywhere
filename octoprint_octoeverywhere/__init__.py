@@ -197,7 +197,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                 t.start()
 
         # We must return line the line won't make it to OctoPrint!
-        return line          
+        return line
 
     #
     # Functions are for the Process Plugin
@@ -217,7 +217,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Listen for client authed events, these fire whenever a websocket opens and is auth is done.
         if event == "ClientAuthed":
             self.HandleClientAuthedEvent()
-            
+
         # Only check the event after the notificaiton handler has been created.
         # Sepcifically here, we have seen the Error event be fired before `on_startup` is fired,
         # and thus the handler isn't created.
@@ -421,7 +421,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Run!
             OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, self._logger, self, self, self._plugin_version)
-            oe.RunBlocking()		
+            oe.RunBlocking()
         except Exception as e:
             self._logger.error("Exception thrown out of main runner. "+str(e))
 

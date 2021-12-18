@@ -11,7 +11,7 @@ plugin_package = "octoprint_octoeverywhere"
 plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
-plugin_version = "1.3.10"
+plugin_version = "1.4.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -33,7 +33,7 @@ plugin_license = "AGPLv3"
 # Note! Some older version of OctoPrint seems to have a system dependency that locks websocket_client to exactly 0.56.0. When we tried to update to a newer version,
 # this broke that dependency and make all of OctoPrint unhappy. So don't update the version unless we really need to.
 # We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.
-plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "octoflatbuffers==2.0.3", "brotli>=1.0.6", "pillow", "certifi" ]
+plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "octoflatbuffers==2.0.3", "pillow", "certifi" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point
