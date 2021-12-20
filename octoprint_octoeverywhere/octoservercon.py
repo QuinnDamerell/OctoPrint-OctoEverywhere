@@ -6,7 +6,7 @@ from .websocketimpl import Client
 from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer
 
-# 
+#
 # This class is responsible for connecting and maintaining a connection to a server.
 # This includes making manaing all of the websocket connections and making sure they are cleaned up
 # Handling disconnects, errors, backoff, and retry logic.
@@ -35,7 +35,7 @@ class OctoServerCon:
 
     # The max amount of time beyond the RunFor limit we will wait for user activity to stop.
     RunForMaxUserActivityWaitTimeSec = 60 * 60 * 2 # 2 hours.
-    
+
 
     # Must be > 0 or the increment logic will fail (since it's value X 2)
     # We want to keep this low though, so incase the connection closes due to a OctoStream error,
@@ -45,7 +45,7 @@ class OctoServerCon:
     WsConnectRandomMinSec = 2
     # We always add a random second count to the reconnect sleep to add variance. This is the max value.
     WsConnectRandomMaxSec = 10
-    
+
     def __init__(self, host, endpoint, isPrimaryConnection, printerId, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, runForSeconds):
         self.ProtocolVersion = 1
         self.OctoSession = None
@@ -73,10 +73,10 @@ class OctoServerCon:
         self.RunForTimeChecker = RepeatTimer(self.Logger, self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
         self.RunForTimeChecker.start()
 
-    def Cleanup(self):  
+    def Cleanup(self):
         # Stop the RunFor time checker if we have one.
         if self.RunForTimeChecker != None:
-            self.RunForTimeChecker.Stop() 
+            self.RunForTimeChecker.Stop()
 
     # Returns a printable string that says the endpoint and the active session id.
     def GetConnectionString(self):
@@ -96,7 +96,7 @@ class OctoServerCon:
         self.Logger.error("OctoEverywhere Ws error: " +str(err))
 
     def OnMsg(self, ws, msg):
-        # When we get any message, consider it user activity.        
+        # When we get any message, consider it user activity.
         self.LastUserActivityTime = datetime.now()
 
         if self.OctoSession :
@@ -122,7 +122,7 @@ class OctoServerCon:
 
         # Only set the back off when we are done with the handshake and it was successful.
         self.WsConnectBackOffSec = self.WsConnectBackOffSec_Default
-    
+
     # Called by the session if we should kill this socket.
     def OnSessionError(self, sessionId, backoffModifierSec):
         if sessionId != self.ActiveSessionId:
@@ -152,7 +152,7 @@ class OctoServerCon:
     def OnSummonRequest(self, sessionId, summonConnectUrl):
         self.Host.OnSummonRequest(summonConnectUrl)
 
-    def Disconnect(self):  
+    def Disconnect(self):
         # If we have already gotten the disconnect signal, ingore future requests.
         # This can happen because disconnecting might case proxy socket errors, for example
         # if we closed all of the sockets locally and then the server tries to close one.   

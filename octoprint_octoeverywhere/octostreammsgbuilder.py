@@ -9,7 +9,7 @@ from .Proto import MessageContext
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, isPrimarySession, pluginVersion, localHttpProxyPort, localIp):
+    def BuildHandshakeSyn(printerId, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt):
         # Get the a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -20,6 +20,9 @@ class OctoStreamMsgBuilder:
         if localIp != None:
             localIpOffset = builder.CreateString(localIp)
 
+        # Setup the data vectors
+        rasChallengeOffset = builder.CreateByteVector(rsaChallenge)
+
         # Build the handshake syn
         Proto.HandshakeSyn.Start(builder)
         Proto.HandshakeSyn.AddPrinterId(builder, printerIdOffset)
@@ -28,6 +31,8 @@ class OctoStreamMsgBuilder:
         if localIpOffset != None:
             Proto.HandshakeSyn.AddLocalDeviceIp(builder, localIpOffset)
         Proto.HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)
+        Proto.HandshakeSyn.AddRsaChallenge(builder, rasChallengeOffset)
+        Proto.HandshakeSyn.AddRasChallengeVersion(builder, rasKeyVersionInt)
         synOffset = Proto.HandshakeSyn.End(builder)
 
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)
