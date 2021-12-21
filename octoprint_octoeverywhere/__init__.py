@@ -4,10 +4,11 @@ import logging
 import threading
 import random
 import string
+import json
 from datetime import datetime
 
-# Use for the simple api mixin
 import flask
+import requests
 
 import octoprint.plugin
 
@@ -53,7 +54,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     def get_wizard_details(self):
         # Do some sanity checking logic, since this has been sensitive in the past.
-        printerUrl = self._settings.get(["AddPrinterUrl"])
+        printerUrl = self.GetAddPrinterUrl()
         if printerUrl is None:
             self._logger.error("Failed to get OctoPrinter Url for wizard.")
             printerUrl = "https://octoeverywhere.com/getstarted"
@@ -67,7 +68,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def get_template_vars(self):
         return dict(
             PrinterKey=self._settings.get(["PrinterKey"]),
-            AddPrinterUrl=self._settings.get(["AddPrinterUrl"])
+            AddPrinterUrl=self.GetAddPrinterUrl()
         )
 
     def get_template_configs(self):
@@ -269,37 +270,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     def HandleClientAuthedEvent(self):
-        hasConnectedAccounts = self.GetHasConnectedAccounts()
-        addPrinterUrl = self._settings.get(["AddPrinterUrl"])
-        # Check if we know there are connected accounts or not, if we have a add printer URL, and finally if there are no accounts setup yet.
-        # If we don't know about connected accounts or have a printer URL, we will skip this until we know for sure.
-        if hasConnectedAccounts is False and addPrinterUrl is not None:
-            #
-            # We will only inform the user there are no connected accounts when it's first
-            # detected and then every little while.
-            #
-            # Note! The time must also be longer than the primary socket refresh time, because when an account
-            # is connected in the service our plugin currently doesn't get a message.
-            minTimeBetweenInformsSec = 60 * 60 * 48 # Every 48 hours
-
-            # Check the time since the last message.
-            lastInformTime = self._settings.get(["NoAccountConnectedLastInformTime"])
-            if lastInformTime is None or (datetime.now() - lastInformTime).total_seconds() > minTimeBetweenInformsSec:
-                # Update the last show time.
-                self._settings.set(["NoAccountConnectedLastInformTime"], datetime.now(), force=True)
-
-                # Send the UI message.
-                if lastInformTime is None:
-                    # Show a different messsage for the first time.
-                    # Disable for now since the wizard should be working.
-                    # title = "OctoEverywhere Blastoff!"
-                    # message = '<br/>The OctoEverywhere plugin is up and running! Click the button below and in about <strong>15 seconds</strong> you too will enjoy free remote acccess from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
-                    # self.ShowUiPopup(title, message, "notice", True)
-                    pass
-                else:
-                    title = "We Miss You"
-                    message = '<br/>It only takes about <strong>15 seconds</strong> to finish the OctoEverywhere setup and you too can enjoy free remote access from everywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'&source=plugin_popup">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
-                    self.ShowUiPopup(title, message, "notice", True)
+        # When the user is authed (opens the webpage in a new tab) we want to check if we should show the
+        # finish setup message. This helps users setup the plugin if the miss the wizard or something.
+        self.ShowLinkAccountMessageIfNeeded()
 
         # Check if an update is required, if so, tell the user everytime they login.
         pluginUpdateRequired = self.GetPluginUpdateRequired()
@@ -307,6 +280,71 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             title = "OctoEverywhere Disabled"
             message = '<br/><strong>You need to update your OctoEverywhere plugin before you can continue using OctoEverywhere.</strong><br/><br/>We are always improving OctoEverywhere to make things faster and add features. Sometimes, that means we have to break things. If you need info about how to update your plugin, <a target="_blank" href="https://octoeverywhere.com/pluginupdate">check this out.</i></a>'
             self.ShowUiPopup(title, message, "notice", True)
+
+
+    def ShowLinkAccountMessageIfNeeded(self):
+        addPrinterUrl = self.GetAddPrinterUrl()
+        hasConnectedAccounts = self.GetHasConnectedAccounts()
+        lastInformTimeDateTime = self.GetNoAccountConnectedLastInformDateTime()
+        # Check if we know there are connected accounts or not, if we have a add printer URL, and finally if there are no accounts setup yet.
+        # If we don't know about connected accounts or have a printer URL, we will skip this until we know for sure.
+        if hasConnectedAccounts is False and addPrinterUrl is not None:
+            # We will show a popup to help the user setup the plugin every little while. I have gotten a lot of feedback from support
+            # tickets indicating this is a problem, so this might help it.
+            #
+            # We don't want to show the message the first time we load, since the wizard should show. After that we will show it some what frequently.
+            # Ideally the user will either setup the plugin or remove it so it doesn't consume server resources.
+            minTimeBetweenInformsSec = 60 * 10 # Every 10 mintues
+
+            # Check the time since the last message.
+            if lastInformTimeDateTime is None or (datetime.now() - lastInformTimeDateTime).total_seconds() > minTimeBetweenInformsSec:
+                # Update the last show time.
+                self.SetNoAccountConnectedLastInformDateTime(datetime.now())
+
+                # Send the UI message.
+                if lastInformTimeDateTime is None:
+                    # Since the wizard is working now, we will skip the first time we detect this.
+                    pass
+                else:
+                    # We want to show the finish setup message, but we only want to show it if the account is still unlinked.
+                    # So we will kick off a new thread to make a http request to check before we show it.
+                    t = threading.Thread(target=self.CheckIfPrinterIsSetupAndShowMessageIfNot)
+                    t.start()
+
+
+    # Should be called on a non-main thread!
+    # Make a http request to ensure this printer is not owned and shows a pop-up to help the user finish the install if not.
+    def CheckIfPrinterIsSetupAndShowMessageIfNot(self):
+        try:
+            # Check if this printer is owned or not.
+            response = requests.post('https://octoeverywhere.com/api/printer/info', json={ "Id": self.EnsureAndGetPrinterId() })
+            if response.status_code != 200:
+                raise Exception("Invalid status code "+str(response.status_code))
+
+            # Parse
+            jsonData = response.json()
+            hasOwners = jsonData["Result"]["HasOwners"]
+            self._logger.info("Printer has owner: "+str(hasOwners))
+
+            # If we are owned, update our settings and return!
+            if hasOwners is True:
+                self.SetHasConnectedAccounts(True)
+                return
+
+            # Ensure the printer URL - Add our source tag to it.
+            addPrinterUrl = self.GetAddPrinterUrl()
+            if addPrinterUrl is None:
+                return
+            addPrinterUrl += "&source=plugin_popup"
+
+            # If not, show the message.
+            title = "Complete Your Setup"
+            message = '<br/>You\'re <strong>only 15 seconds</strong> away from OctoEverywhere\'s free remote access to OctoPrint from anywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
+            self.ShowUiPopup(title, message, "notice", True)
+
+        except Exception as e:
+            self._logger.error("CheckIfPrinterIsSetupAndShowMessageIfNot failed "+str(e))
+
 
     # The length the printer ID should be.
     c_OctoEverywherePrinterIdIdealLength = 60
@@ -333,7 +371,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self._logger.info("New printer id is: "+currentId)
 
         # Always update the settings, so they are always correct.
-        self._settings.set(["AddPrinterUrl"], self.c_OctoEverywhereAddPrinterUrl + currentId, force=True)
+        self.SetAddPrinterUrl(self.c_OctoEverywhereAddPrinterUrl + currentId)
         # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
         self._settings.set(["PrinterKey"], currentId, force=True)
         self._settings.save(force=True)
@@ -455,6 +493,19 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def SetPluginUpdateRequired(self, pluginUpdateRequired):
         self._settings.set(["PluginUpdateRequired"], pluginUpdateRequired is True, force=True)
 
+    def GetNoAccountConnectedLastInformDateTime(self):
+        return self.GetFromSettings("NoAccountConnectedLastInformDateTime", None)
+
+    def SetNoAccountConnectedLastInformDateTime(self, dateTime):
+        self._settings.set(["NoAccountConnectedLastInformDateTime"], dateTime, force=True)
+
+    # Returns None if there is no url set.
+    def GetAddPrinterUrl(self):
+        return self.GetFromSettings("AddPrinterUrl", None)
+
+    def SetAddPrinterUrl(self, url):
+        self._settings.set(["AddPrinterUrl"], url, force=True)
+
     # Gets the current setting or the default value.
     def GetBoolFromSettings(self, name, default):
         value = self._settings.get([name])
@@ -462,6 +513,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             return default
         return value is True
 
+    # Gets the current setting or the default value.
+    def GetFromSettings(self, name, default):
+        value = self._settings.get([name])
+        if value is None:
+            return default
+        return value
 
 __plugin_name__ = "OctoEverywhere!"
 __plugin_pythoncompat__ = ">=2.7,<4" # py 2.7 or 3
