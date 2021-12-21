@@ -1,15 +1,8 @@
-import ssl
-import time
 import threading
 import certifi
 
 import websocket
 from websocket import WebSocketApp
-
-try:
-    import thread
-except ImportError:
-    import _thread as thread
 
 #
 # This class gives a bit of an abstraction over the normal ws
@@ -35,11 +28,11 @@ class Client:
             if onWsError:
                 onWsError(self, msg)
 
-        def OnData(ws, buffer, type, continueFlag):
+        def OnData(ws, buffer, msgType, continueFlag):
             if onWsData:
-                onWsData(self, buffer, type)
+                onWsData(self, buffer, msgType)
 
-        self.Ws = WebSocketApp(url,        
+        self.Ws = WebSocketApp(url,
                                   on_message = OnMsg,
                                   on_close = onClosed,
                                   on_error = OnError,
@@ -53,7 +46,7 @@ class Client:
         # Note we must set the ping_interval and ping_timeout or we won't get a multithread
         # safe socket... python. >.>
         # The client is responsible for sending keep alive pings the server will then pong respond to.
-        # If that's not done, the connection will timeout.        
+        # If that's not done, the connection will timeout.
         # We will send a ping every 10 minutes, and expected a pong back within 5 mintues.
         #
         # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
@@ -81,7 +74,7 @@ class Client:
         if self.Ws:
             self.Ws.close()
             self.Ws = None
-    
+
     def Send(self, msgBytes, isData):
         if isData:
             self.SendWithOptCode(msgBytes, websocket.ABNF.OPCODE_BINARY)
@@ -91,4 +84,3 @@ class Client:
     def SendWithOptCode(self, msgBytes, opcode):
         if self.Ws:
             self.Ws.send(msgBytes, opcode)
-

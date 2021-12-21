@@ -4,25 +4,21 @@ import sys
 import random
 import string
 
-from base64 import b64encode
-from os import urandom
-
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
-from .notificationshandler import NotificationsHandler
 from .threaddebug import ThreadDebug
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
-# 
+#
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub():
     def __init__(self, logger):
         self.Logger = logger
 
-    def ShowUiPopup(self, title, text, type, autoHide):
-        self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+type+"; AutoHide:"+str(autoHide))
+    def ShowUiPopup(self, title, text, msgType, autoHide):
+        self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; AutoHide:"+str(autoHide))
 
 # A mock of the popup UI interface.
 class StatusChangeHandlerStub():
@@ -39,15 +35,15 @@ class StatusChangeHandlerStub():
         #handler.SetPrinterId(self.PrinterId)
         #handler.SetServerProtocolAndDomain("http://127.0.0.1")
         #handler.OnStarted("test.gcode")
-        #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")   
-        #handler.OnDone("filename.gcode", "304458605")   
-        #handler.OnPaused("filename.gcode") 
-        #handler.OnResume("filename.gcode") 
+        #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
+        #handler.OnDone("filename.gcode", "304458605")
+        #handler.OnPaused("filename.gcode")
+        #handler.OnResume("filename.gcode")
         #handler.OnError("test error string")
         #handler.OnZChange()
         #handler.OnZChange()
         #handler.OnFilamentChange()
-        #handler.OnPrintProgress(20)     
+        #handler.OnPrintProgress(20)
 
     def OnPluginUpdateRequired(self):
         self.Logger.info("On plugin update required message.")
@@ -80,7 +76,7 @@ if __name__ == '__main__':
 
     # Dev props
     printerId = GeneratePrinterId()
-    OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"    
+    OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)

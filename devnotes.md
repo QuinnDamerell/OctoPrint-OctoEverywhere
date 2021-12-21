@@ -15,7 +15,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/next-gen.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/bug.zip
 
 
 ## Before checking in:

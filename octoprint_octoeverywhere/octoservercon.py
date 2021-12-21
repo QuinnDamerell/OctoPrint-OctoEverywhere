@@ -24,7 +24,7 @@ class OctoServerCon:
     # This feature is also used for secondary connections, which allows the printer to connect ot multiple servers at once.
     # Secondary server connections are used when a shared connection url resolves to a different server than we are currently connected.
     #
-    # The run for system accounts for user activity, and will allow extra time after the run for time if the user is still using the 
+    # The run for system accounts for user activity, and will allow extra time after the run for time if the user is still using the
     # connection.
 
     # How frequency we check if RunFor is done.
@@ -75,7 +75,7 @@ class OctoServerCon:
 
     def Cleanup(self):
         # Stop the RunFor time checker if we have one.
-        if self.RunForTimeChecker != None:
+        if self.RunForTimeChecker is not None:
             self.RunForTimeChecker.Stop()
 
     # Returns a printable string that says the endpoint and the active session id.
@@ -117,7 +117,7 @@ class OctoServerCon:
         self.Logger.info("Handshake complete, server con "+self.GetConnectionString()+", successfully connected to OctoEverywhere!")
 
         # Only primary connections have this handler.
-        if self.StatusChangeHandler != None:
+        if self.StatusChangeHandler is not None:
             self.StatusChangeHandler.OnPrimaryConnectionEstablished(octoKey, connectedAccounts)
 
         # Only set the back off when we are done with the handshake and it was successful.
@@ -143,7 +143,7 @@ class OctoServerCon:
     # and this notification will be handled by the UI to show the user a message.
     def OnPluginUpdateRequired(self):
         # This will be null for secondary connections
-        if self.StatusChangeHandler != None:
+        if self.StatusChangeHandler is not None:
             self.StatusChangeHandler.OnPluginUpdateRequired()
 
     # A summon request can be sent by the services if the user is connected to a different
@@ -155,17 +155,17 @@ class OctoServerCon:
     def Disconnect(self):
         # If we have already gotten the disconnect signal, ingore future requests.
         # This can happen because disconnecting might case proxy socket errors, for example
-        # if we closed all of the sockets locally and then the server tries to close one.   
-        if self.IsDisconnecting == True:
+        # if we closed all of the sockets locally and then the server tries to close one.
+        if self.IsDisconnecting is True:
             self.Logger.info("Ignoring the session disconnect command because we are already working on it.")
             return
-        self.IsDisconnecting = True        
+        self.IsDisconnecting = True
 
         # Try to close all of the sockets before we disconnect, so we send the messages.
         if self.OctoSession:
             self.OctoSession.CloseAllWebStreamsAndDisable()
 
-        self.Logger.info("OctoServerCon websocket close start")        
+        self.Logger.info("OctoServerCon websocket close start")
 
         # Close the websocket, which will cause the run loop to spin and reconnect.
         if self.Ws:
@@ -198,10 +198,10 @@ class OctoServerCon:
         if self.IsRunForTimeComplete():
             try:
                 self.Logger.info("Server con "+self.GetConnectionString()+" RunFor is complete and will be disconnected.")
-                self.Disconnect()                
+                self.Disconnect()
             except Exception as e:
                 self.Logger.error("Exception in OnRunForTimerCallback durring disconnect. "+self.GetConnectionString()+" ex:" + str(e))
-    
+
     def RunBlocking(self):
         while 1:
             # Since we want to run forever, we want to make sure any exceptions get caught but then we try again.
@@ -221,7 +221,7 @@ class OctoServerCon:
                 self.Ws = Client(self.Endpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
                 self.Ws.RunUntilClosed()
 
-                # Handle disconnects            
+                # Handle disconnects
                 self.Logger.info("Disconnected from OctoEverywhere, server con "+self.GetConnectionString())
 
                 # Ensure all proxy sockets are closed.
@@ -231,7 +231,7 @@ class OctoServerCon:
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. server con:"+self.GetConnectionString()+" ex:" + str(e))
                 time.sleep(20)
-            
+
             # On each disconnect, check if the RunFor time is now done.
             if self.IsRunForTimeComplete():
                 # If our run for time expired, cleanup and return.
@@ -242,8 +242,8 @@ class OctoServerCon:
 
             # We have a back off time, but always add some random noise as well so not all client try to use the exact
             # same time.
-            self.WsConnectBackOffSec += random.randint(self.WsConnectRandomMinSec, self.WsConnectRandomMaxSec)            
-            
+            self.WsConnectBackOffSec += random.randint(self.WsConnectRandomMinSec, self.WsConnectRandomMaxSec)
+
             # Sleep before incrmenting, so on the first failure we instantly try again.
             self.Logger.info("Sleeping for " + str(self.WsConnectBackOffSec) + " seconds before trying again.")
             time.sleep(self.WsConnectBackOffSec)
@@ -251,12 +251,12 @@ class OctoServerCon:
             # Increment
             self.WsConnectBackOffSec *= 2
             if self.WsConnectBackOffSec > 180 :
-                self.WsConnectBackOffSec = 180     
+                self.WsConnectBackOffSec = 180
                 # If we have failed and are waiting over 3 minutes, we will return which will check the server
                 # protocol again, since it might have changed.
-                return        
+                return
 
     def SendMsg(self, msgBytes):
-        # When we send any message, consider it user activity.        
+        # When we send any message, consider it user activity.
         self.LastUserActivityTime = datetime.now()
         self.Ws.Send(msgBytes, True)

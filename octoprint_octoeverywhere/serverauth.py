@@ -41,7 +41,7 @@ class ServerAuthHelper:
 
     # Validates the decrypted challenge the server returned is correct.
     def ValidateChallengResponse(self, response):
-        if response == None:
+        if response is None:
             return False
         if response != self.Challenge:
             return False

@@ -5,7 +5,7 @@ import sys
 import traceback
 
 class ThreadDebug:
-    
+
     def Start(self, logger, delaySec):
         try:
             th = threading.Thread(target=self.threadWorker, args=(logger, delaySec))
@@ -18,9 +18,10 @@ class ThreadDebug:
         while True:
             try:
                 logger.info("ThreadDump - Starting Thread Dump")
+                 # pylint: disable=protected-access
                 for threadId, stack in sys._current_frames().items():
                     trace = ""
-                    for filename, lineno, name, line in traceback.extract_stack(stack):
+                    for filename, _, name, _ in traceback.extract_stack(stack):
                         parts = filename.split("\\")
                         if len(parts) == 0:
                             parts  = filename.split("/")
@@ -32,7 +33,5 @@ class ThreadDebug:
 
             except Exception as e:
                 logger.error("Exception in ThreadDebug : "+str(e))
-                pass
 
             time.sleep(delaySec)
-

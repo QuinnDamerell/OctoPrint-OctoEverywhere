@@ -1,5 +1,7 @@
 # coding=utf-8
 
+from setuptools import setup
+
 # The plugin's identifier, has to be unique
 plugin_identifier = "octoeverywhere"
 
@@ -11,7 +13,7 @@ plugin_package = "octoprint_octoeverywhere"
 plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
-plugin_version = "1.4.1"
+plugin_version = "1.4.2"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -63,15 +65,13 @@ additional_setup_parameters = {}
 
 ########################################################################################################################
 
-from setuptools import setup
-
 try:
-	import octoprint_setuptools
-except:
-	print("Could not import OctoPrint's setuptools, are you sure you are running that under "
-	      "the same python installation that OctoPrint is installed under?")
-	import sys
-	sys.exit(-1)
+    import octoprint_setuptools
+except Exception:
+    print("Could not import OctoPrint's setuptools, are you sure you are running that under "
+        "the same python installation that OctoPrint is installed under?")
+    import sys
+    sys.exit(-1)
 
 setup_parameters = octoprint_setuptools.create_plugin_setup_parameters(
 	identifier=plugin_identifier,
@@ -90,7 +90,7 @@ setup_parameters = octoprint_setuptools.create_plugin_setup_parameters(
 )
 
 if len(additional_setup_parameters):
-	from octoprint.util import dict_merge
-	setup_parameters = dict_merge(setup_parameters, additional_setup_parameters)
+    from octoprint.util import dict_merge
+    setup_parameters = dict_merge(setup_parameters, additional_setup_parameters)
 
 setup(**setup_parameters)

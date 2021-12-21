@@ -1,14 +1,15 @@
-import requests
 import time
 import io
 import threading
+
+import requests
 from PIL import Image
 
 from .repeattimer import RepeatTimer
 
-class ProgressCompletionReportItem: 
-    def __init__(self, value, reported): 
-        self.value = value 
+class ProgressCompletionReportItem:
+    def __init__(self, value, reported):
+        self.value = value
         self.reported = reported
 
     def Value(self):
@@ -32,9 +33,20 @@ class NotificationsHandler:
         self.OctoPrintSettingsObject = octoPrintSettingsObject
         self.PingTimer = None
 
+        # Define all the vars
+        self.CurrentFileName = ""
+        self.CurrentPrintStartTime = time.time()
+        self.OctoPrintReportedProgressInt = 0
+        self.PingTimerHoursReported = 0
+        self.HasSendFirstLayerDoneMessage = False
+        self.LastFilamentChangeNotificationTime = 0
+        self.zOffsetLowestSeenMM = 1337.0
+        self.zOffsetNotAtLowestCount = 0
+        self.ProgressCompletionReported = []
+
         # Since all of the commands don't send things we need, we will also track them.
         self.ResetForNewPrint()
- 
+
 
     def ResetForNewPrint(self):
         self.CurrentFileName = ""
@@ -61,7 +73,7 @@ class NotificationsHandler:
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(70.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(80.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(90.0, False))
-    
+
     def SetPrinterId(self, printerId):
         self.PrinterId = printerId
 
@@ -103,7 +115,7 @@ class NotificationsHandler:
         self.StopPingTimer()
         self._sendEvent("done")
 
-        
+
     # Fired when a print is paused
     def OnPaused(self, fileName):
         self._updateCurrentFileName(fileName)
@@ -128,7 +140,7 @@ class NotificationsHandler:
         self.OnPaused(self.CurrentFileName)
 
 
-    # Fired WHENEVER the z axis changes. 
+    # Fired WHENEVER the z axis changes.
     def OnZChange(self):
         # If we have already sent the first layer done message there's nothing to do.
         if self.HasSendFirstLayerDoneMessage:
@@ -158,7 +170,7 @@ class NotificationsHandler:
         elif currentZOffsetMM < self.zOffsetLowestSeenMM:
             # We found a new low, record it.
             self.zOffsetLowestSeenMM = currentZOffsetMM
-            self.zOffsetNotAtLowestCount = 0        
+            self.zOffsetNotAtLowestCount = 0
         else:
             # The zOffset is higher than the lowest we have seen.
             self.zOffsetNotAtLowestCount += 1
@@ -197,7 +209,7 @@ class NotificationsHandler:
 
         # Get the computed print progress value. (see _getCurrentProgressFloat about why)
         computedProgressFloat = self._getCurrentProgressFloat()
-        
+
         # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
         # It's possible we get duplicate ints or even progresses that go back in time.
         # To account for this, we will make sure we only send the update for each progress update once.
@@ -212,7 +224,7 @@ class NotificationsHandler:
 
             # If we are over this value and it's not reported, we need to report.
             # Since these items are in order, the largest progress will always overwrite.
-            if item.Reported() == False:
+            if item.Reported() is False:
                 progressToSendFloat = item.Value()
 
             # Make sure this is marked reported.
@@ -250,7 +262,7 @@ class NotificationsHandler:
             flipH = False
             flipV = False
             rotate90 = False
-            if self.OctoPrintSettingsObject != None :
+            if self.OctoPrintSettingsObject is not None :
                 # This is the normal plugin case
                 snapshotUrl = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"])
                 flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"])
@@ -261,7 +273,7 @@ class NotificationsHandler:
                 snapshotUrl = "http://192.168.86.57/webcam/?action=snapshot"
 
             # If there's no URL, don't bother
-            if snapshotUrl == None or len(snapshotUrl) == 0:
+            if snapshotUrl is None or len(snapshotUrl) == 0:
                 return None
 
             # Make the http call.
@@ -282,23 +294,23 @@ class NotificationsHandler:
                 if flipH:
                     pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
                 if flipV:
-                    pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM) 
+                    pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
 
-                # Write back to bytes.               
+                # Write back to bytes.
                 buffer = io.BytesIO()
                 pilImage.save(buffer, format="JPEG")
                 snapshot = buffer.getvalue()
                 buffer.close()
-            
+
             # Return the image
             return snapshot
 
-        except Exception as e:
+        except Exception as _:
             # Don't log here, because for those users with no webcam setup this will fail often.
             # TODO - Ideally we would log, but filter out the expected errors when snapshots are setup by the user.
             #self.Logger.info("Snapshot http call failed. " + str(e))
             pass
-        
+
         # On failure return nothing.
         return None
 
@@ -320,7 +332,7 @@ class NotificationsHandler:
         except Exception as e:
             self.Logger.error("_updateToKnownDuration exception "+str(e))
 
-    
+
     # Updates the current file name, if there is a new name to set.
     def _updateCurrentFileName(self, fileNameStr):
         if len(fileNameStr) == 0:
@@ -346,7 +358,7 @@ class NotificationsHandler:
 
             # Sanity check for / 0
             if totalPrintTimeSec == 0:
-                return float(self.OctoPrintReportedProgressInt)                
+                return float(self.OctoPrintReportedProgressInt)
 
             # Compute the progress
             printProgressFloat = float(currentDurationSecFloat) / float(totalPrintTimeSec) * float(100.0)
@@ -371,7 +383,7 @@ class NotificationsHandler:
     # Returns True on success, otherwise False
     def _sendEvent(self, event, args = None, progressOverwriteFloat = None):
         # Ensure we are ready.
-        if self.PrinterId == None or self.OctoKey == None:
+        if self.PrinterId is None or self.OctoKey is None:
             self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
             return False
 
@@ -390,7 +402,7 @@ class NotificationsHandler:
             eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
 
             # Setup the post body
-            if args == None:
+            if args is None:
                 args = {}
 
             # Add the required vars
@@ -409,20 +421,20 @@ class NotificationsHandler:
             # -> int to round -> to string for the API.
             # Allow the caller to overwrite the progress we report. This allows the progress update to snap the progress to a hole 10s value.
             progressFloat = 0.0
-            if progressOverwriteFloat != None:
+            if progressOverwriteFloat is not None:
                 progressFloat = progressOverwriteFloat
             else:
                 progressFloat = self._getCurrentProgressFloat()
             args["ProgressPercentage"] = str(int(progressFloat))
 
             # Always add the current duration
-            args["DurationSec"] = str(self._getCurrentDurationSecFloat())         
+            args["DurationSec"] = str(self._getCurrentDurationSecFloat())
 
             # Also always include a snapshot if we can get one.
             files = {}
             snapshot = self.getSnapshot()
-            if snapshot != None:
-                files['attachment'] = ("snapshot.jpg", snapshot) 
+            if snapshot is not None:
+                files['attachment'] = ("snapshot.jpg", snapshot)
 
             # Make the request.
             # Since we are sending the snapshot, we must send a multipart form.
@@ -448,7 +460,7 @@ class NotificationsHandler:
     def GetPrintTimeRemaningEstimateInSeconds(self):
 
         # If the printer object isn't set, we can't get an estimate.
-        if self.OctoPrintPrinterObject == None:
+        if self.OctoPrintPrinterObject is None:
             return -1
 
         # Try to get the progress object from the current data. This is at least set by things like PrintTimeGenius and is more accurate.
@@ -458,7 +470,7 @@ class NotificationsHandler:
                 if "printTimeLeft" in currentData["progress"]:
                     # When the print is just starting, the printTimeLeft will be None.
                     printTimeLeftSec = currentData["progress"]["printTimeLeft"]
-                    if printTimeLeftSec != None:
+                    if printTimeLeftSec is not None:
                         printTimeLeft = int(float(currentData["progress"]["printTimeLeft"]))
                         return printTimeLeft
         except Exception as e:
@@ -483,7 +495,7 @@ class NotificationsHandler:
 
     # Returns the current zoffset if known, otherwise -1.
     def GetCurrentZOffset(self):
-        if self.OctoPrintPrinterObject == None:
+        if self.OctoPrintPrinterObject is None:
             return -1
 
         # Try to get the current value from the data.
@@ -518,7 +530,7 @@ class NotificationsHandler:
         # Capture locally
         pingTimer = self.PingTimer
         self.PingTimer = None
-        if pingTimer != None:
+        if pingTimer is not None:
             pingTimer.Stop()
 
     # Fired when the ping timer fires.
@@ -527,7 +539,7 @@ class NotificationsHandler:
         # States can be found here:
         # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
         state = "UNKNOWN"
-        if self.OctoPrintPrinterObject == None:
+        if self.OctoPrintPrinterObject is None:
             self.Logger.warn("Notification ping timer doesn't have a OctoPrint printer object.")
             state = "PRINTING"
         else:
@@ -540,4 +552,4 @@ class NotificationsHandler:
             return
 
         # Fire the event.
-        self.OnPrintTimerProgress()       
+        self.OnPrintTimerProgress()

@@ -15,13 +15,13 @@ class RepeatTimer(threading.Thread):
         while not self.stopEvent.wait(self.intervalSec) and self.is_alive() and self.running:
             try:
                 # Ensure we don't fire the callback if we were asked not to.
-                if self.running != True:
+                if self.running is not True:
                     return
                 self.callback()
             except Exception as e:
                 self.logger.error("Exception in RepeatTimer thread. "+str(e))
         self.logger.info("RepeatTimer thread exit")
-    
+
     # Used to stop the timer.
     def Stop(self):
         self.running = False

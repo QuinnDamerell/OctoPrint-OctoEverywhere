@@ -20,7 +20,7 @@ class OctoHttpRequest:
     @staticmethod
     def GetLocalHttpProxyPort():
         return OctoHttpRequest.LocalHttpProxyPort
-    
+
     @staticmethod
     def SetLocalOctoPrintPort(port):
         OctoHttpRequest.LocalOctoPrintPort = port
@@ -36,9 +36,9 @@ class OctoHttpRequest:
     @staticmethod
     def SetLocalhostAddress(address):
         OctoHttpRequest.LocalHostAddress = address
-        
+
     # The result of a successfully made http request.
-    # "successfully made" means we talked to the server, not the the http 
+    # "successfully made" means we talked to the server, not the the http
     # response is good.
     class Result():
         def __init__(self, result, url, didFallback):
@@ -81,14 +81,14 @@ class OctoHttpRequest:
         # on. However, for our setup its a little more complex. The issue is the OctoEverywhere plugin not knowing how the user's system is setup.
         # The plugin can with 100% certainty query and know the port OctoPrint's http server is running on directly. So we do that to know exactly what
         # OctoPrint server to talk to. (consider there might be multiple instances running on one device.)
-        # 
+        #
         # But, the other most common use case for http calls are the webcam streams to mjpegstreamer. This is the tricky part. There are two ways it can be
         # setup. 1) the webcam stream uses an absolute local LAN url with the ip and port. This is coverted by the abolute URL system above. 2) The webcam stream
         # uses a relative URL and haproxy handles detecting the webcam path to send it to the proper mjpegstreamer instance. This is the tricky one, because we can't
-        # directly query or know what the correct port for haproxy or mjpegstreamer is. We could look at the configs, but a user might not setup the configs in the 
+        # directly query or know what the correct port for haproxy or mjpegstreamer is. We could look at the configs, but a user might not setup the configs in the
         # standard places. So to fix the issue, we use logic in the frontend JS to determin if a web browser is connecting locally, and if so what the port is. That gives
         # use a reliable way to know what port haproxy is running on. It sends that to the plugin, which is then given here as `localHttpProxyPort`.
-        # 
+        #
         # The last problem is knowing which calls should be sent to OctoPrint directly and which should be sent to haproxy. We can't rely on any URL matching, because
         # the user can setup the webcam stream to start with anything they want. So the method we use right now is to simply always request to OctoPrint first, and if we
         # get a 404 back try the haproxy. This adds a little bit of unneeded overhead, but it works really well to cover all of the cases.
@@ -101,11 +101,11 @@ class OctoHttpRequest:
 
         # Get the path var, this is common between both relative and absolute paths.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
-        if path == None:
+        if path is None:
             raise Exception("Http request has no path field in open message.")
 
         pathType = httpInitialContext.PathType()
-        if pathType == PathTypes.Relative:            
+        if pathType == PathTypes.Relative:
 
             # The main URL is directly to this OctoPrint instance
             # This URL will only every be http, it can't be https.
@@ -138,7 +138,7 @@ class OctoHttpRequest:
                     webcamPath = path[secondSlash:]
                     fallbackWebcamUrl = protocol + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
 
-        elif pathType == PathTypes.Absolute:   
+        elif pathType == PathTypes.Absolute:
             # For absolute URLs, only use the main URL and set it be exactly what
             # was requested.
             url = path
@@ -147,7 +147,7 @@ class OctoHttpRequest:
 
         # Ensure if there's no data we don't set it. Sometimes our json message parsing will leave an empty
         # bytearray where it should be None.
-        if data != None and len(data) == 0:
+        if data is not None and len(data) == 0:
             data = None
 
         # First, try the main URL.
@@ -166,15 +166,15 @@ class OctoHttpRequest:
         # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
-            return ret.Result    
+            return ret.Result
 
         # Try the local IP, because the server might not be bound to 127.0.0.1
         localIpFallbackUrl = "http://" + LocalIpHelper.TryToGetLocalIp() + fallbackLocalIpSuffix
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, stream, mainResult, True, fallbackWebcamUrl)   
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, stream, mainResult, True, fallbackWebcamUrl)
         # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
-            return ret.Result   
+            return ret.Result
 
         # If all others fail, try the hardcoded webcam URL.
         # Note this has to be last, because there commonly isn't a fallbackWebcamUrl, so it will stop the
@@ -214,26 +214,26 @@ class OctoHttpRequest:
             # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
             # place to set the location redirect header.
             #
-            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.            
+            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
             response = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=stream, verify=False)
         except Exception as e:
-            logger.error(attemptName + " http URL threw an exception: "+str(e))            
+            logger.error(attemptName + " http URL threw an exception: "+str(e))
 
         # Check if we got a valid response.
-        if response != None and response.status_code != 404:
+        if response is not None and response.status_code != 404:
             # We got a valid response, we are done.
             # Return true and the result object, so it can be returned.
             return OctoHttpRequest.AttemptResult(True, OctoHttpRequest.Result(response, url, isFallback))
 
         # Check if we have another fallback URL to try.
-        if nextFallbackUrl != None:
+        if nextFallbackUrl is not None:
             # We have more fallbacks to try.
             # Return false so we keep going, but also return this response if we had one. This lets
             # use capture the main result object, so we can use it eventually if all fallbacks fail.
-            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest.Result(response, url, isFallback)) 
+            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest.Result(response, url, isFallback))
 
         # We don't have another fallback, so we need to end this.
-        if mainResult != None:
+        if mainResult is not None:
             # If we got something back from the main try, always return it (we should only get here on a 404)
             logger.info(attemptName + " failed and we have no more fallbacks. Returning the main URL response.")
             return OctoHttpRequest.AttemptResult(True, mainResult)

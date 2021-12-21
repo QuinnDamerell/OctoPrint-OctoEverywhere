@@ -2,13 +2,18 @@
     "python.pythonPath": "py3venv/bin/python",
     "cSpell.words": [
         "ABNF",
+        "Analysing",
         "authed",
         "brotli",
+        "certifi",
         "crypo",
         "Damerell",
+        "DGRAM",
         "didnt",
+        "fsensor",
         "gcode",
         "hacky",
+        "INET",
         "ints",
         "jsonify",
         "localip",
@@ -37,9 +42,17 @@
         "octowebstreamimpl",
         "octowebstreamwshelper",
         "Proto",
+        "Pursa",
+        "Pylint",
         "referer",
         "struct",
         "urandom",
-        "zchange"
-    ]
+        "zchange",
+        "zhops",
+        "zmoves",
+        "zoffset",
+        "zvalue"
+    ],
+    "python.linting.pylintEnabled": true,
+    "python.linting.enabled": true
 }

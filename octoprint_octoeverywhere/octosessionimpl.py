@@ -1,11 +1,7 @@
-import time
-import json
 import sys
 import struct
 import threading
-import requests
 import traceback
-import zlib
 
 #
 # This file respresents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
@@ -17,7 +13,6 @@ from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
 
-from octoprint_octoeverywhere import Proto
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
 from .Proto import MessageContext
@@ -60,7 +55,7 @@ class OctoSession:
             summonMsg = OctoSummon.OctoSummon()
             summonMsg.Init(msg.Context().Bytes, msg.Context().Pos)
             serverConnectUrl = OctoStreamMsgBuilder.BytesToString(summonMsg.ServerConnectUrl())
-            if serverConnectUrl == None or len(serverConnectUrl) == 0:
+            if serverConnectUrl is None or len(serverConnectUrl) == 0:
                 self.Logger.error("Summon notification is missing a server url.")
                 return
             # Process it!
@@ -76,21 +71,21 @@ class OctoSession:
             notificationMsg.Init(msg.Context().Bytes, msg.Context().Pos)
             title = OctoStreamMsgBuilder.BytesToString(notificationMsg.Title())
             text = OctoStreamMsgBuilder.BytesToString(notificationMsg.Text())
-            type = notificationMsg.Type()
+            msgType = notificationMsg.Type()
             autoHide = notificationMsg.AutoHide()
 
             # Validate
-            if title == None or text == None or len(title) == 0 or len(text) == 0:
+            if title is None or text is None or len(title) == 0 or len(text) == 0:
                 self.Logger.error("Octo notification is missing a title or text.")
                 return
 
             # Convert type
             typeStr = "notice"
-            if type == OctoNotificationTypes.OctoNotificationTypes.Success:
+            if msgType == OctoNotificationTypes.OctoNotificationTypes.Success:
                 typeStr = "success"
-            elif type == OctoNotificationTypes.OctoNotificationTypes.Info:
+            elif msgType == OctoNotificationTypes.OctoNotificationTypes.Info:
                 typeStr = "info"
-            elif type == OctoNotificationTypes.OctoNotificationTypes.Error:
+            elif msgType == OctoNotificationTypes.OctoNotificationTypes.Error:
                 typeStr = "error"
 
             # Send it to the UI
@@ -108,7 +103,7 @@ class OctoSession:
             # Accepted!
             # Parse and validate the RAS challenge.
             rasChallengeResponse = OctoStreamMsgBuilder.BytesToString(handshakeAck.RsaChallengeResult())
-            if self.ServerAuth.ValidateChallengResponse(rasChallengeResponse) == False:
+            if self.ServerAuth.ValidateChallengResponse(rasChallengeResponse) is False:
                 raise Exception("Server RAS challenge failed!")
             # Parse out the response and report.
             connectedAccounts = None
@@ -126,7 +121,7 @@ class OctoSession:
         else:
             # Pull out the error.
             error = handshakeAck.Error()
-            if error != None:
+            if error is not None:
                 error = OctoStreamMsgBuilder.BytesToString(error)
             else:
                 error = "no error given"
@@ -153,7 +148,7 @@ class OctoSession:
         if streamId == 0:
             self.Logger.error("We got a web stream message for an invalid stream id of 0")
             # throwing here will terminate this entire OcotoSocket and reset.
-            raise Exception("We got a web stream message for an invalid stream id of 0") 
+            raise Exception("We got a web stream message for an invalid stream id of 0")
 
         # Grab the lock before messing with the map.
         localStream = None
@@ -165,18 +160,18 @@ class OctoSession:
                 localStream = self.ActiveWebStreams[streamId]
             else:
                 # It doesn't exist. Validate this is a open message.
-                if webStreamMsg.IsOpenMsg() == False:
+                if webStreamMsg.IsOpenMsg() is False:
                     # TODO - Handle messages that arrive for just closed streams better.
-                    isCloseMessage = webStreamMsg.IsCloseMsg()                  
+                    isCloseMessage = webStreamMsg.IsCloseMsg()
                     self.Logger.warn("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
                     # Don't throw, because this message maybe be coming in from the server as the local side closed.
                     return
 
                 # Check that we are still accepting streams
-                if self.IsAcceptingStreams == False:
+                if self.IsAcceptingStreams is False:
                     self.Logger.info("OctoSession got a webstream open request after we stopped accpeting streams. streamId:"+str(streamId))
                     return
-                
+
                 # Create the new stream object now.
                 localStream = octowebstream.OctoWebStream(args=(self.Logger, streamId, self,))
                 # Set it in the map
@@ -184,11 +179,11 @@ class OctoSession:
                 # Start it's main worker thread
                 localStream.start()
 
-        except Exception as _:
+        except Exception as e:
             # rethrow any exceptions in the code
-            raise                
+            raise e
         finally:
-            # Always unlock                
+            # Always unlock
             self.ActiveWebStreamsLock.release()
 
         # If we get here, we know we must have a localStream
@@ -201,16 +196,16 @@ class OctoSession:
         try:
             if streamId in self.ActiveWebStreams :
                 self.ActiveWebStreams.pop(streamId)
-            else:                                
+            else:
                 self.Logger.error("A web stream asked to close that wasn't in our webstream map.")
-        except Exception as _:
+        except Exception as e:
             # rethrow any exceptions in the code
-            raise                
+            raise e
         finally:
-            # Always unlock                
+            # Always unlock
             self.ActiveWebStreamsLock.release()
-            
-            
+
+
     def CloseAllWebStreamsAndDisable(self):
         # The streams will remove them selves from the map when they close, so all we need to do is ask them
         # to close.
@@ -224,12 +219,13 @@ class OctoSession:
             self.IsAcceptingStreams = False
 
             # Copy all of the streams locally.
-            for id in self.ActiveWebStreams:
-                localWebStreamList.append(self.ActiveWebStreams[id])
+            # pylint: disable=consider-using-dict-items
+            for streamId in self.ActiveWebStreams:
+                localWebStreamList.append(self.ActiveWebStreams[streamId])
 
-        except Exception as _:
+        except Exception as e:
             # rethrow any exceptions in the code
-            raise
+            raise e
         finally:
             # Always unlock
             self.ActiveWebStreamsLock.release()
@@ -241,7 +237,7 @@ class OctoSession:
                 try:
                     webStream.Close()
                 except Exception as e:
-                    self.Logger.error("Exception thrown while closing web streamId " +str(id)+ " - " + str(e))
+                    self.Logger.error("Exception thrown while closing web streamId - " + str(e))
         except Exception as ex:
             self.Logger.error("Exception thrown while closing all web streams: " + str(ex))
 
@@ -251,7 +247,7 @@ class OctoSession:
         try:
             # Get our unique challenge
             rasChallenge = self.ServerAuth.GetEncryptedChallenge()
-            if rasChallenge == None:
+            if rasChallenge is None:
                 raise Exception("Rsa challenge generation failed.")
             rasChallengeKeyVerInt = ServerAuthHelper.c_ServerAuthKeyVersion
 
@@ -275,13 +271,13 @@ class OctoSession:
     def HandleMessage(self, msgBytes):
         # Decode the message.
         msg = None
-        try:            
+        try:
             msg = self.DecodeOctoStreamMessage(msgBytes)
         except Exception as e:
             self.Logger.error("Failed to decode message local request. " + str(e))
             self.OnSessionError(0)
             return
-    
+
         # Handle it.
         try:
             # If this is a handshake ack, handle it.
@@ -327,7 +323,7 @@ class OctoSession:
                 return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
             else:
                 return (buffer[0 + bufferOffset] << 24) + (buffer[1 + bufferOffset] << 16) + (buffer[2 + bufferOffset] << 8) + (buffer[3 + bufferOffset])
-    
+
     def DecodeOctoStreamMessage(self, buf):
         # Our wire protocol is a uint32 followed by the flatbuffer message.
 
@@ -340,4 +336,4 @@ class OctoSession:
             raise Exception("We got an OctoStreamMsg that's not the correct size! MsgSize:"+str(messageSize)+"; BufferLen:"+str(len(buf)))
 
         # Decode and return
-        return OctoStreamMessage.OctoStreamMessage.GetRootAs(buf, 4)      
+        return OctoStreamMessage.OctoStreamMessage.GetRootAs(buf, 4)
