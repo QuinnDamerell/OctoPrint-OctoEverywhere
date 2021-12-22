@@ -12,6 +12,7 @@ import requests
 
 import octoprint.plugin
 
+from .localauth import LocalAuth
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
@@ -109,6 +110,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Ensure the plugin version is updated in the settings for the frontend.
         self.EnsurePluginVersionSet()
+
+        # Init the static local auth helper
+        LocalAuth.Init(self._logger, self.get_plugin_data_folder())
 
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
@@ -347,6 +351,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # The length the printer ID should be.
+    # Note that the max length for a subdomain part (strings between . ) is 63 chars!
+    # Making this a max of 60 chars allows for the service to use 3 chars prefixes for inter-service calls.
     c_OctoEverywherePrinterIdIdealLength = 60
     c_OctoEverywherePrinterIdMinLength = 40
     # The url for the add printer process. Note this must have at least one ? and arg because users of it might append &source=blah

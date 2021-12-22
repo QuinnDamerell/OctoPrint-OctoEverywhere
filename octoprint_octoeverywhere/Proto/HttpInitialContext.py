@@ -77,7 +77,14 @@ class HttpInitialContext(object):
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
         return o == 0
 
-def Start(builder): builder.StartObject(5)
+    # HttpInitialContext
+    def UseOctoeverywhereAuth(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
+        return 0
+
+def Start(builder): builder.StartObject(6)
 def HttpInitialContextStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -105,6 +112,10 @@ def StartHeadersVector(builder, numElems): return builder.StartVector(4, numElem
 def HttpInitialContextStartHeadersVector(builder, numElems):
     """This method is deprecated. Please switch to Start."""
     return StartHeadersVector(builder, numElems)
+def AddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth): builder.PrependInt8Slot(5, useOctoeverywhereAuth, 0)
+def HttpInitialContextAddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth):
+    """This method is deprecated. Please switch to AddUseOctoeverywhereAuth."""
+    return AddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth)
 def End(builder): return builder.EndObject()
 def HttpInitialContextEnd(builder):
     """This method is deprecated. Please switch to End."""

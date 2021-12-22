@@ -46,6 +46,7 @@
         "Pylint",
         "referer",
         "struct",
+        "unauth",
         "urandom",
         "zchange",
         "zhops",
