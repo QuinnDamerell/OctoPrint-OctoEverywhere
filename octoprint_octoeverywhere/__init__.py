@@ -235,7 +235,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Listen for the rest of these events for notifications.
         # OctoPrint Events
-        elif event == "PrintStarted":
+        if event == "PrintStarted":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             self.NotificationHandler.OnStarted(fileName)
         elif event == "PrintFailed":

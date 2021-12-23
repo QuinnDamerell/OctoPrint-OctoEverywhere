@@ -694,7 +694,7 @@ class OctoWebStreamHttpHelper:
         # Finally, return how much we put into the temp buffer!
         return tempBufferFilledSize
 
-
+    # pylint: disable=inconsistent-return-statements
     def doBodyRead(self, response, readSize):
         try:
             # This won't always read the full size if it's not all here yet.

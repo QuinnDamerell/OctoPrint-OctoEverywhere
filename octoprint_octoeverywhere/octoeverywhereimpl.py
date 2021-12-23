@@ -45,8 +45,8 @@ class OctoEverywhere:
 
     def OnSummonRequest(self, summonConnectUrl):
         # Grab the map lock.
-        self.SecondaryServerConsLock.acquire()
-        try:
+        with self.SecondaryServerConsLock:
+
             # Check if we already have a secondary connection to this server.
             if summonConnectUrl in self.SecondaryServerCons :
                 self.Logger.warn("We got a summon request for a server that we already have a secondary connection to. "+str(summonConnectUrl))
@@ -58,13 +58,6 @@ class OctoEverywhere:
             thread.start()
             self.SecondaryServerCons[summonConnectUrl] = thread
 
-        except Exception as e:
-            # rethrow any exceptions in the code
-            raise e
-        finally:
-            # Always unlock
-            self.SecondaryServerConsLock.release()
-
     def HandleSecondaryServerCon(self, summonConnectUrl):
         # Run the secondary connection for until the RunFor time limint. Note RunFor will account for user activity.
         self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl))
@@ -75,18 +68,15 @@ class OctoEverywhere:
             self.Logger.error("Exception in HandleSecondaryServerCon function. ex:" + str(e))
 
         # Since this is a secondary connection, when RunBlocking returns we want to be done.
-        self.SecondaryServerConsLock.acquire()
-        try:
-            # Check if we already have a secondary connection to this server.
-            if summonConnectUrl in self.SecondaryServerCons :
-                del self.SecondaryServerCons[summonConnectUrl]
-            else:
-                self.Logger.error("Secondary ended but there's not an ref of it in the map?")
-        except Exception as _:
-            self.Logger.error("Exception when removing secondary connection from map. "+str(e))
-        finally:
-            # Always unlock
-            self.SecondaryServerConsLock.release()
+        with self.SecondaryServerConsLock:
+            try:
+                # Check if we already have a secondary connection to this server.
+                if summonConnectUrl in self.SecondaryServerCons :
+                    del self.SecondaryServerCons[summonConnectUrl]
+                else:
+                    self.Logger.error("Secondary ended but there's not an ref of it in the map?")
+            except Exception as _:
+                self.Logger.error("Exception when removing secondary connection from map. "+str(e))
 
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 

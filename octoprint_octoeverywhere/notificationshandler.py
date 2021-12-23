@@ -364,10 +364,8 @@ class NotificationsHandler:
             printProgressFloat = float(currentDurationSecFloat) / float(totalPrintTimeSec) * float(100.0)
 
             # Bounds check
-            if printProgressFloat < 0.0:
-                printProgressFloat = 0.0
-            if printProgressFloat > 100.0:
-                printProgressFloat = 100.0
+            printProgressFloat = max(printProgressFloat, 0.0)
+            printProgressFloat = min(printProgressFloat, 100.0)
 
             # Return the computed value.
             return printProgressFloat

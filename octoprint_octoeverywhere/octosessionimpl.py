@@ -152,8 +152,7 @@ class OctoSession:
 
         # Grab the lock before messing with the map.
         localStream = None
-        self.ActiveWebStreamsLock.acquire()
-        try:
+        with self.ActiveWebStreamsLock:
             # First, check if the stream exists.
             if streamId in self.ActiveWebStreams :
                 # It exists, so use it.
@@ -179,39 +178,24 @@ class OctoSession:
                 # Start it's main worker thread
                 localStream.start()
 
-        except Exception as e:
-            # rethrow any exceptions in the code
-            raise e
-        finally:
-            # Always unlock
-            self.ActiveWebStreamsLock.release()
-
         # If we get here, we know we must have a localStream
         localStream.OnIncomingServerMessage(webStreamMsg)
 
 
     def WebStreamClosed(self, streamId):
         # Called from the webstream when it's closing.
-        self.ActiveWebStreamsLock.acquire()
-        try:
+        with self.ActiveWebStreamsLock:
             if streamId in self.ActiveWebStreams :
                 self.ActiveWebStreams.pop(streamId)
             else:
                 self.Logger.error("A web stream asked to close that wasn't in our webstream map.")
-        except Exception as e:
-            # rethrow any exceptions in the code
-            raise e
-        finally:
-            # Always unlock
-            self.ActiveWebStreamsLock.release()
 
 
     def CloseAllWebStreamsAndDisable(self):
         # The streams will remove them selves from the map when they close, so all we need to do is ask them
         # to close.
         localWebStreamList = []
-        self.ActiveWebStreamsLock.acquire()
-        try:
+        with self.ActiveWebStreamsLock:
             # Close them all.
             self.Logger.info("Closing all open web stream sockets ("+str(len(self.ActiveWebStreams))+")")
 
@@ -222,13 +206,6 @@ class OctoSession:
             # pylint: disable=consider-using-dict-items
             for streamId in self.ActiveWebStreams:
                 localWebStreamList.append(self.ActiveWebStreams[streamId])
-
-        except Exception as e:
-            # rethrow any exceptions in the code
-            raise e
-        finally:
-            # Always unlock
-            self.ActiveWebStreamsLock.release()
 
         # Try catch all of this so we don't leak exceptions.
         # Use our local web stream list to tell them all to close.

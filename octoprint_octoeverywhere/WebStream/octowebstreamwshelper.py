@@ -76,17 +76,12 @@ class OctoWebStreamWsHelper:
     # Called by the main socket thread so this should be quick!
     def Close(self):
         # Don't try to close twice.
-        self.StateLock.acquire()
-        try:
+        with self.StateLock:
             # If we are already closed, there's nothing to do.
             if self.IsClosed is True:
                 return
             # We will close now, so set the flag.
             self.IsClosed = True
-        except Exception as e:
-            raise e
-        finally:
-            self.StateLock.release()
 
         # Since the ws is created in the constructor, we know it must exist and must be running
         # (or at least connecting). So all we have to do here is call close.
@@ -107,7 +102,7 @@ class OctoWebStreamWsHelper:
         while self.IsWsObjOpened is False:
             # Check if the webstream has closed or the socket object is now reporting closed.
             if self.IsWsObjClosed is True or self.IsClosed:
-                return
+                return True
 
             # Sleep for a bit to wait for the socket open.
             time.sleep(0.1)
@@ -117,7 +112,7 @@ class OctoWebStreamWsHelper:
         # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
         # were already inbound messages on the way.
         if self.IsWsObjClosed:
-            return
+            return True
 
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
         # exist, we need to check for it.
@@ -211,13 +206,8 @@ class OctoWebStreamWsHelper:
     def onWsError(self, ws, error):
         # If we are closed, don't bother reporting.
         skipReport = True
-        self.StateLock.acquire()
-        try:
+        with self.StateLock:
             skipReport = self.IsClosed
-        except Exception as e:
-            raise e
-        finally:
-            self.StateLock.release()
 
         if skipReport is False:
             self.Logger.error(self.getLogMsgPrefix()+" got an error from the websocket: "+str(error))

@@ -9,6 +9,8 @@ class ThreadDebug:
     def Start(self, logger, delaySec):
         try:
             th = threading.Thread(target=self.threadWorker, args=(logger, delaySec))
+            # pylint: disable=deprecated-method
+            # This is deprecated in PY3.10
             th.setDaemon(True)
             th.start()
         except Exception as e:

@@ -73,8 +73,8 @@ class OctoWebStream(threading.Thread):
         # once.
         localHttpHelper = None
         localWsHelper = None
-        self.StateLock.acquire()
-        try:
+
+        with self.StateLock:
             # If we are already closed, there's nothing to do.
             if self.IsClosed is True:
                 return
@@ -91,10 +91,6 @@ class OctoWebStream(threading.Thread):
                     self.IsHelperClosed = True
                     localHttpHelper = self.HttpHelper
                     localWsHelper = self.WsHelper
-        except Exception as e:
-            raise e
-        finally:
-            self.StateLock.release()
 
         # Remove ourselves from the session map
         self.OctoSession.WebStreamClosed(self.Id)
@@ -213,8 +209,7 @@ class OctoWebStream(threading.Thread):
             httpHelper = OctoWebStreamHttpHelper(self.Id, self.Logger, self, self.OpenWebStreamMsg, self.OpenedTime)
 
         needsToCallCloseOnHelper = False
-        self.StateLock.acquire()
-        try:
+        with self.StateLock:
             # Set the helper, which ever we made.
             self.HttpHelper = httpHelper
             self.WsHelper = wsHelper
@@ -226,10 +221,6 @@ class OctoWebStream(threading.Thread):
                     # We need to call it now.
                     self.IsHelperClosed = True
                     needsToCallCloseOnHelper = True
-        except Exception as e:
-            raise e
-        finally:
-            self.StateLock.release()
 
         # Outside of lock, if we need to close this helper, do it.
         if needsToCallCloseOnHelper is True:
@@ -242,8 +233,7 @@ class OctoWebStream(threading.Thread):
     # Called by the helpers to send messages to the server.
     def SendToOctoStream(self, buffer, isCloseFlagSet = False, silentlyFail = False):
         # Make sure we aren't closed. If we are, don't allow the message to be sent.
-        self.StateLock.acquire()
-        try:
+        with self.StateLock:
             if self.IsClosed is True:
                 # The only reason we are allowed to send after a close is if we are sending the
                 # close flag message.
@@ -260,10 +250,6 @@ class OctoWebStream(threading.Thread):
             # No matter what, if the close flag is set, set the has sent now.
             if isCloseFlagSet:
                 self.HasSentCloseMessage = True
-        except Exception as e:
-            raise e
-        finally:
-            self.StateLock.release()
 
         # Send now
         try:
@@ -324,21 +310,11 @@ class OctoWebStream(threading.Thread):
 
     # Called when a high pri stream is started
     def highPriStreamStarted(self):
-        self.HighPriLock.acquire()
-        try:
+        with self.HighPriLock:
             self.ActiveHighPriStreamCount += 1
             self.ActiveHighPriStreamStart = time.time()
-        except Exception as e:
-            raise e
-        finally:
-            self.HighPriLock.release()
 
     # Called when a high pri stream is ended.
     def highPriStreamEnded(self):
-        self.HighPriLock.acquire()
-        try:
+        with self.HighPriLock:
             self.ActiveHighPriStreamCount -= 1
-        except Exception as e:
-            raise e
-        finally:
-            self.HighPriLock.release()
