@@ -299,7 +299,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             #
             # We don't want to show the message the first time we load, since the wizard should show. After that we will show it some what frequently.
             # Ideally the user will either setup the plugin or remove it so it doesn't consume server resources.
-            minTimeBetweenInformsSec = 60 * 5 # Every 5 mintues
+            minTimeBetweenInformsSec = 60 * 1 # Every 1 mintue
 
             # Check the time since the last message.
             if lastInformTimeDateTime is None or (datetime.now() - lastInformTimeDateTime).total_seconds() > minTimeBetweenInformsSec:
