@@ -201,6 +201,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # If we need to send, do it!
             if sendFilamentChangeNotification and self.NotificationHandler is not None:
                 # Spawn a thread to send the notification so we don't block here.
+                self._logger.info("Fireing On Filament Change Notification "+str(line))
                 t = threading.Thread(target=self.NotificationHandler.OnFilamentChange)
                 t.start()
 
