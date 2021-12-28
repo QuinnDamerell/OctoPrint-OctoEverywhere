@@ -4,6 +4,7 @@ import logging
 import threading
 import random
 import string
+import socket
 import json
 from datetime import datetime
 
@@ -117,6 +118,10 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
         self.NotificationHandler.SetPrinterId(printerId)
+
+        # Spin off a thread to try to resolve hostnames for logging and debugging.
+        resolverThread = threading.Thread(target=self.TryToPrintHostNameIps)
+        resolverThread.start()
 
 
     # Call when the system is ready and running
@@ -471,6 +476,24 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             oe.RunBlocking()
         except Exception as e:
             self._logger.error("Exception thrown out of main runner. "+str(e))
+
+    # For logging and debugging purposes, print the IPs the hostname is resolving to.
+    def TryToPrintHostNameIps(self):
+        try:
+            try:
+                starportIp = socket.getaddrinfo('starport-v1.octoeverywhere.com', None, socket.AF_INET)[0][4][0]
+                mainSiteIp = socket.getaddrinfo('octoeverywhere.com', None, socket.AF_INET)[0][4][0]
+                self._logger.info("IPV4 - starport:"+str(starportIp)+" main:"+str(mainSiteIp))
+            except Exception as e:
+                self._logger.info("Failed to resolve host ipv4 name "+str(e))
+            try:
+                starportIp = socket.getaddrinfo('starport-v1.octoeverywhere.com', None, socket.AF_INET6)[0][4][0]
+                mainSiteIp = socket.getaddrinfo('octoeverywhere.com', None, socket.AF_INET6)[0][4][0]
+                self._logger.info("IPV6 - starport:"+str(starportIp)+" main:"+str(mainSiteIp))
+            except Exception as e:
+                self._logger.info("Failed to resolve host ipv6 name "+str(e))
+        except Exception as _:
+            pass
 
     #
     # Variable getters and setters.
