@@ -1,12 +1,7 @@
-import threading
-import json
-import os
+import random
+import string
 
-import requests
-
-from .WebStream.octoheaderimpl import HeaderHelper
-from .octohttprequest import OctoHttpRequest
-
+from octoprint.access.permissions import Permissions
 
 # A class that manages the local auth rights of OctoEverywhere.
 #
@@ -18,191 +13,56 @@ from .octohttprequest import OctoHttpRequest
 # but using the API calls makes the flow for the service to use the APIs easier. When a special http request message is sent from the server,
 # the plugin will add the app key auth headers to the call. Since the server's validity has been secured by the RSA challenge, we know that only,
 # OctoEverywhere servers are able to set the flag to make the requests.
+#
+# We use an plugin hook that only exists since OctoPrint 1.3.6. If this is running on older versions our authed calls will fail because we won't get the
+# ValidateApiKey callback. Less than 2% of all global OctoPrint instances are running 1.3.12
 class LocalAuth:
 
-    _OctoEverywhereAppName = "OctoEverywhere"
     _Instance = None
+    # We use the same key length as OctoPrint, because why not.
+    _ApiGeneratedKeyLength = 32
 
     @staticmethod
-    def Init(logger, pluginDataFolderPath):
-        LocalAuth._Instance = LocalAuth(logger, pluginDataFolderPath)
+    def Init(logger, userManager):
+        LocalAuth._Instance = LocalAuth(logger, userManager)
 
     @staticmethod
     def Get():
         return LocalAuth._Instance
 
-    def __init__(self, logger, pluginDataFolderPath):
+    def __init__(self, logger, userManager):
         self.Logger = logger
-        self.KeyFilePath = os.path.join(pluginDataFolderPath, "AppKey.json")
+        # Note our test running main.py passes None for the userManger.
+        # But it will never call ValidateApiKey anyways.
+        self.OctoPrintUserManager = userManager
+        # Create a new random API key each time OctoPrint is started so we don't have to write it to disk and it changes over time.
+        self.ApiKey = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(LocalAuth._ApiGeneratedKeyLength))
 
-        self.Lock = threading.Lock()
-        self.IsRunningAuthCall = False
+    # Used only for testing without actual OctoPrint, this can set the API key
+    # that's actually created in a real OctoPrint instance.
+    def SetApiKeyForTesting(self, apiKey):
+        self.Logger.warn("LocalAuth is using a dev API key: "+str(apiKey))
+        self.ApiKey = apiKey
 
-        # If we have an app key this is set, if not, it's None
-        self.AppKey = None
-
-        # Try to load the app key now
-        self._LoadAppKeyFromFile()
-
-    # If OctoEverywhere has been able to setup it's own local app key, this will return it.
-    # Otherwise this returns None.
-    # This must be thread safe.
-    def GetOctoEverywhereAppKeyIfExists(self):
-        return self.AppKey
-
-    # If the auth header is created and valid, this adds the header and returns True
-    # Otherwise, it returns false.
-    def AddAuthHeaderIfPossible(self, headers):
-        key = self.GetOctoEverywhereAppKeyIfExists()
-        if key is None:
-            return False
+    # Adds the auth header with the auth key.
+    def AddAuthHeader(self, headers):
         # This will overwrite any existing keys.
-        headers["X-Api-Key"] = key
-        return True
+        headers["X-Api-Key"] = self.ApiKey
 
-    # Called when the OctoEverywhere app key failed to auth a request.
-    def ReportOctoEverywhereAppKeyFailed(self):
-        self.Logger.info("Invalid App Auth Key reported, destorying")
-        self._InvalidateAppKey()
+    # Called by OctoPrint when a request is made with an API key.
+    # If the key is invlaid or we don't know, return None, otherwise we must return a user.
+    # See for an example: https://github.com/OctoPrint/OctoPrint/blob/master/src/octoprint/plugins/appkeys/__init__.py
+    def ValidateApiKey(self, api_key):
+        # If the key doesn't match our auth key, we have nothing to do.
+        if(api_key is None or api_key != self.ApiKey):
+            return None
 
-    # Called when a successfull api call has been made and we can use this opportunity to create an auth key.
-    def GenerateOctoEverywhereAppKeyIfNeeded(self, initialHttpContext):
+        # This is us trying to make a request.
+        # We need to return a valid user with admin permissions.
+        allUsers = self.OctoPrintUserManager.get_all_users()
+        for user in allUsers:
+            if user.has_permission(Permissions.ADMIN):
+                return user
 
-        # Check if we have a valid auth, if so, don't request new auth.
-        if self.GetOctoEverywhereAppKeyIfExists() is not None:
-            return
-
-        # We will use the same headers the original request did.
-        sendHeaders = HeaderHelper.GatherRequestHeaders(initialHttpContext, self.Logger)
-
-        # Start the work on a new thread so we don't block the request thread.
-        t = threading.Thread(target=self._GenerateAppKey, args=(sendHeaders,))
-        t.start()
-
-    def _GenerateAppKey(self, sendHeaders):
-        # Note this must be thread safe! Many api calls can call GenerateOctoEverywhereAppKeyIfNeeded at once
-        # but we only want to allow one auth attempt at a time.
-        # We must set this back to false on exit!
-        with self.Lock:
-            if self.IsRunningAuthCall:
-                return
-            self.IsRunningAuthCall = True
-
-        # Do the work. Do the work in a try catch in a function to ensure all exceptions and return calls
-        # still make us clear the processing flag.
-        try:
-            self._GenerateAppKeysUnderLock(sendHeaders)
-        except Exception as e:
-            self.Logger.error("_GenerateAppKey failed "+str(e))
-
-        # We must set this back to false on exit!
-        with self.Lock:
-            self.IsRunningAuthCall = False
-
-    def _GenerateAppKeysUnderLock(self, sendHeaders):
-        # We use the direct OctoPrint local host address and port, since it's the most likely to be successful.
-        baseUrl = "http://" + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort)
-
-        # First, we need to get the user name and check if they are an admin
-        # Note that when a user isn't logged in, /api/login will be called and thus this will execute!
-        # But that user will be a guest and they won't have permissions to generate the key.
-        userLoginUrl = baseUrl + "/api/currentuser"
-        response = requests.get(userLoginUrl, headers=sendHeaders)
-        if response.status_code != 200:
-            raise Exception("Failed to get user login "+str(response.status_code))
-
-        # Parse
-        jsonData = response.json()
-        permissions = jsonData["permissions"]
-        userName = jsonData["name"]
-
-        # Ensure user is admin, otherwise we can't generate a key
-        hasAdmin = False
-        for permission in permissions:
-            if permission.lower() == "admin":
-                hasAdmin = True
-                break
-
-        if hasAdmin is False:
-            # If the user isn't an admin, no big deal, but we can't do anything here.
-            self.Logger.info("_GenerateAppKey had user login, but user isn't an admin.")
-            return
-
-        # Now try to generate the app key
-        appKeysUrl = baseUrl + "/api/plugin/appkeys"
-        response = requests.post(appKeysUrl, headers=sendHeaders, json={ "command":"generate", "app": LocalAuth._OctoEverywhereAppName, "user": userName })
-        if response.status_code != 200:
-            raise Exception("Call to API keys failed. "+str(response.status_code))
-
-        # Parse
-        jsonData = response.json()
-        apiKey = jsonData["api_key"]
-        if len(apiKey) == 0:
-            raise Exception("App Keys Gen Call Success But there's no API key?")
-
-        # On success, set the app key
-        self._SetAppKey(apiKey)
-        self.Logger.info("New OctoEverywhere App Auth Key Generated!")
-
-    # Blocks to write the API key to our file and also sets it when successful.
-    def _SetAppKey(self, appKey):
-        try:
-            # Try to save the file first.
-            data = {}
-            data['AppKey'] = appKey
-
-            # pylint: disable=unspecified-encoding
-            # encoding only supported in py3
-            with open(self.KeyFilePath, 'w') as f:
-                json.dump(data, f)
-
-            # When successful, set the app key
-            self.AppKey = appKey
-
-        except Exception as e:
-            # On any failure, reset the app key.
-            self.AppKey = None
-            self.Logger.error("_SetAppKeyToFile failed "+str(e))
-
-    def _InvalidateAppKey(self):
-        try:
-            # Kill the local key
-            self.AppKey = None
-
-            # Delete the file.
-            if os.path.exists(self.KeyFilePath) is False:
-                return
-            os.remove(self.KeyFilePath)
-
-        except Exception as e:
-            self.AppKey = None
-            self.Logger.error("_InvalidateAppKey failed "+str(e))
-
-    # Does a blocking call to load the app key from a file and store it in the
-    # AppKey var.
-    def _LoadAppKeyFromFile(self):
-        try:
-            # First check if there's a file. No file means no key.
-            if os.path.exists(self.KeyFilePath) is False:
-                self.AppKey = None
-                return
-
-            # Try to open it and get the key. Any failure will null out the key.
-            # pylint: disable=unspecified-encoding
-            # encoding only supported in py3
-            with open(self.KeyFilePath) as f:
-                data = json.load(f)
-            appKey = data["AppKey"]
-
-            # Validate
-            if len(appKey) == 0:
-                raise Exception("AppKey has no length")
-
-            # Set
-            self.AppKey = appKey
-            self.Logger.info("App Auth Key loaded from file successfully")
-
-        except Exception as e:
-            # On any failure, reset the app key.
-            self.AppKey = None
-            self.Logger.error("_LoadAppKeyFromFile failed "+str(e))
+        self.Logger.warn("Failed to find local user with admin permissions to return for authed call.")
+        return None

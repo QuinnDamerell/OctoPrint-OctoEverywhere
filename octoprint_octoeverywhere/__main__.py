@@ -89,12 +89,13 @@ if __name__ == '__main__':
     printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
     OctoHttpRequest.SetLocalhostAddress("192.168.86.57")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
-    OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
+    #OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
 
     # Setup the local auth healper
-    LocalAuth.Init(logger, "C:\\Users\\quinn\\")
+    LocalAuth.Init(logger, None)
+    LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.4.0")
+    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.5.2")
     oe.RunBlocking()

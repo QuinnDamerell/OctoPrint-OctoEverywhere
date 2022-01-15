@@ -124,13 +124,9 @@ class OctoWebStreamHttpHelper:
 
         # Figure out if this is a special OctoEverywhere Auth call.
         isOeAuthCall = httpInitialContext.UseOctoeverywhereAuth() == OeAuthAllowed.OeAuthAllowed.Allow
-        hasValidOeAuth = False
         if isOeAuthCall:
-            # If so, add the auth header if we can.
-            # This will return if the header was added or not.
-            # If the header wasn't added, the call should fail due to not being authed, and we will set the status code
-            # with our special code.
-            hasValidOeAuth = LocalAuth.Get().AddAuthHeaderIfPossible(sendHeaders)
+            # If so, add the auth header.
+            LocalAuth.Get().AddAuthHeader(sendHeaders)
 
         # Find the method
         method = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Method())
@@ -249,9 +245,9 @@ class OctoWebStreamHttpHelper:
                 statusCode = response.status_code
 
                 # We use special logic for the calls that need the OctoEverywhere Auth.
-                # If we don't have an auth key we expect the call to fail.
-                # If the call fails, we will check to see if we had a valid auth key, and if not, indicate that with a special error.
-                if isOeAuthCall is True and hasValidOeAuth is False and statusCode >= 400:
+                # If the call fails, indicate that with a special error.
+                # This should only happen if this plugin is running on a version of OctoPrint that's older than 1.3.6, which doesn't support the key validation system.
+                if isOeAuthCall is True and statusCode >= 400:
                     statusCode = OctoWebStreamHttpHelper.Error_NoOeAuthKey
 
                 # Gather the headers, if there are any. This will return None if there are no headers to send.
@@ -304,19 +300,6 @@ class OctoWebStreamHttpHelper:
         # Log about it.
         resposneWriteDone = time.time()
         self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(resposneWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
-
-        # Check if the request was successful and and API call. This indicates the auth used was valid and we can use this
-        # opportunity to setup a new auth key.
-        uriLower = uri.lower()
-        if isOeAuthCall is False and response.status_code == 200:
-            if "/api/login" in uriLower:
-                LocalAuth.Get().GenerateOctoEverywhereAppKeyIfNeeded(httpInitialContext)
-
-        # If the call failed due to unauth, check if we are trying to use the OE auth token.
-        # In that case, report the token we tired to use was invalid.
-        # We always report a 701 is auth is bad, even if we know we don't have a good auth key, so the service understands.
-        if isOeAuthCall and (response.status_code == 401 or response.status_code == 403):
-            LocalAuth.Get().ReportOctoEverywhereAppKeyFailed()
 
 
     def buildHeaderVector(self, builder, response):

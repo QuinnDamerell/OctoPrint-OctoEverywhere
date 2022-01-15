@@ -113,7 +113,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.EnsurePluginVersionSet()
 
         # Init the static local auth helper
-        LocalAuth.Init(self._logger, self.get_plugin_data_folder())
+        LocalAuth.Init(self._logger, self._user_manager)
 
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
@@ -198,10 +198,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             lineLower = line.lower()
 
             # Look for a M600 command or fsensor_update in the line.
-            # We also look for "paused for user" which can also indicate a filament change is required.
-            # Note that OnFilamentChange will limit how often we send notifications, so it's ok to send multiple back-to-back.
-            # TODO - really "paused for user" can include more things the user must do, but for now we will just use it for this.
-            sendFilamentChangeNotification = "m600" in lineLower or "fsensor_update" in lineLower or lineLower.startswith("echo:busy: paused for user") or lineLower.startswith("// action:paused")
+            sendFilamentChangeNotification = "m600" in lineLower or "fsensor_update" in lineLower
 
             # If we need to send, do it!
             if sendFilamentChangeNotification and self.NotificationHandler is not None:
@@ -212,6 +209,16 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # We must return line the line won't make it to OctoPrint!
         return line
+
+    #
+    # Functions for the key validator hook.
+    #
+    def key_validator(self, api_key, *args, **kwargs):
+        try:
+            # Use LocalAuth to handle the request.
+            return LocalAuth.Get().ValidateApiKey(api_key)
+        except Exception as e:
+            self._logger.error("key_validator failed "+str(e))
 
     #
     # Functions are for the Process Plugin
@@ -559,6 +566,7 @@ def __plugin_load__():
 
     global __plugin_hooks__
     __plugin_hooks__ = {
+        "octoprint.accesscontrol.keyvalidator": __plugin_implementation__.key_validator,
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
         "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode
     }
