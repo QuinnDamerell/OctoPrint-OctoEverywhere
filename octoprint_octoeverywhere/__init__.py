@@ -219,6 +219,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             return LocalAuth.Get().ValidateApiKey(api_key)
         except Exception as e:
             self._logger.error("key_validator failed "+str(e))
+        return None
 
     #
     # Functions are for the Process Plugin

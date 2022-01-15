@@ -434,18 +434,35 @@ class NotificationsHandler:
             if snapshot is not None:
                 files['attachment'] = ("snapshot.jpg", snapshot)
 
-            # Make the request.
-            # Since we are sending the snapshot, we must send a multipart form.
-            # Thus we must use the data and files fields, the json field will not work.
-            r = requests.post(eventApiUrl, data=args, files=files)
+            # Attempt to send the notification twice. If the first time fails,
+            # we will wait a bit and try again. It's really unlikely for a notification to fail, the biggest reason
+            # would be if the server is updating, there can be a ~20 second window where the call might fail
+            attempts = 0
+            while attempts < 2:
+                attempts += 1
 
-            # Check for success.
-            if r.status_code == 200:
-                self.Logger.info("NotificationsHandler successfully sent '"+event+"'; ETA: "+str(timeRemainEstStr))
-                return True
+                # Make the request.
+                # Since we are sending the snapshot, we must send a multipart form.
+                # Thus we must use the data and files fields, the json field will not work.
+                r = requests.post(eventApiUrl, data=args, files=files)
 
-            # On failure, log the issue.
-            self.Logger.error("NotificationsHandler failed to send event. Code:"+str(r.status_code) + "; Body:"+r.content.decode())
+                # Check for success.
+                if r.status_code == 200:
+                    self.Logger.info("NotificationsHandler successfully sent '"+event+"'; ETA: "+str(timeRemainEstStr))
+                    return True
+
+                # On failure, log the issue.
+                self.Logger.error("NotificationsHandler failed to send event "+str(event)+". Code:"+str(r.status_code) + "; Body:"+r.content.decode())
+
+                # If the error is in the 400 class, don't retry since these are all indications there's something
+                # wrong with the request, which won't change.
+                if r.status_code < 500:
+                    return False
+
+                # If the error is a 500 error, we will try again. Sleep for about 30 seconds to give the server time
+                # to boot and be ready again. We would rather wait too long but succeeded, rather than not wait long
+                # enough and fail again.
+                time.sleep(30)
 
         except Exception as e:
             self.Logger.error("NotificationsHandler failed to send event code "+str(event)+". Exception: "+str(e))
