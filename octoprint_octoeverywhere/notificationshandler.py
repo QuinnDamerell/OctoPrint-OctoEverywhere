@@ -3,7 +3,13 @@ import io
 import threading
 
 import requests
-from PIL import Image
+try:
+    # On some systems this package will install but the import will fail due to a missing system .so.
+    # Since most setups don't use this package, we will import it with a try catch and if it fails we
+    # wont use it.
+    from PIL import Image
+except Exception as _:
+    pass
 
 from .repeattimer import RepeatTimer
 
@@ -287,20 +293,26 @@ class NotificationsHandler:
 
             # Correct the image if needed.
             if rotate90 or flipH or flipV:
-                # Update the image
-                pilImage = Image.open(io.BytesIO(snapshot))
-                if rotate90:
-                    pilImage = pilImage.rotate(90)
-                if flipH:
-                    pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
-                if flipV:
-                    pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
+                try:
+                    if Image is not None:
+                        # Update the image
+                        pilImage = Image.open(io.BytesIO(snapshot))
+                        if rotate90:
+                            pilImage = pilImage.rotate(90)
+                        if flipH:
+                            pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
+                        if flipV:
+                            pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
 
-                # Write back to bytes.
-                buffer = io.BytesIO()
-                pilImage.save(buffer, format="JPEG")
-                snapshot = buffer.getvalue()
-                buffer.close()
+                        # Write back to bytes.
+                        buffer = io.BytesIO()
+                        pilImage.save(buffer, format="JPEG")
+                        snapshot = buffer.getvalue()
+                        buffer.close()
+                    else:
+                        self.Logger.warm("Can't flip image because the Image rotation lib failed to import.")
+                except Exception as ex:
+                    self.Logger.warm("Failed to flip image for notifications: "+str(ex))
 
             # Return the image
             return snapshot
