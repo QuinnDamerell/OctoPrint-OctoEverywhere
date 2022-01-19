@@ -296,13 +296,15 @@ class NotificationsHandler:
                 try:
                     if Image is not None:
                         # Update the image
+                        # Note the order of the flips and the rotates are important!
+                        # If they are reordered, when multiple are applied the result will not be correct.
                         pilImage = Image.open(io.BytesIO(snapshot))
-                        if rotate90:
-                            pilImage = pilImage.rotate(90)
                         if flipH:
                             pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
                         if flipV:
                             pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
+                        if rotate90:
+                            pilImage = pilImage.rotate(90)
 
                         # Write back to bytes.
                         buffer = io.BytesIO()
