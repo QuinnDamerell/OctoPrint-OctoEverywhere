@@ -45,7 +45,7 @@ class NotificationsHandler:
         self.OctoPrintReportedProgressInt = 0
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
-        self.LastFilamentChangeNotificationTime = 0
+        self.LastUserInteractionNotificationTime = 0
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
         self.ProgressCompletionReported = []
@@ -60,7 +60,7 @@ class NotificationsHandler:
         self.OctoPrintReportedProgressInt = 0
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
-        self.LastFilamentChangeNotificationTime = 0
+        self.LastUserInteractionNotificationTime = 0
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
@@ -193,18 +193,36 @@ class NotificationsHandler:
 
     # Fired when we get a M600 command from the printer to change the filament
     def OnFilamentChange(self):
-        # We might see the "m600" text in the commands back to back for one event,
-        # so we will time limit how often we send this.
-        # We also fire this notification on "paused for user" notifications from the printer.
-        if self.LastFilamentChangeNotificationTime > 0:
+        # This event might fire over and over or might be paired with a filament change event.
+        # In anycase, we only want to fire it every so often.
+        if self._shouldFireUserInteractionEvent() is False:
+            return
+
+        # Otherwise, send it.
+        self._sendEvent("filamentchange")
+
+
+    # Fired when the printer needs user interaction to continue
+    def OnUserInteractionNeeded(self):
+        # This event might fire over and over or might be paired with a filament change event.
+        # In anycase, we only want to fire it every so often.
+        if self._shouldFireUserInteractionEvent() is False:
+            return
+
+        # Otherwise, send it.
+        self._sendEvent("userinteractionneeded")
+
+
+    def _shouldFireUserInteractionEvent(self):
+        if self.LastUserInteractionNotificationTime > 0:
             # Only send every 5 mintues at most.
-            deltaSec = time.time() - self.LastFilamentChangeNotificationTime
+            deltaSec = time.time() - self.LastUserInteractionNotificationTime
             if deltaSec < (60.0 * 5.0):
-                return
+                return False
 
         # Update the time we sent the notification.
-        self.LastFilamentChangeNotificationTime = time.time()
-        self._sendEvent("filamentchange")
+        self.LastUserInteractionNotificationTime = time.time()
+        return True
 
 
     # Fired when a print is making progress.

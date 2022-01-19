@@ -190,25 +190,43 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def received_gcode(self, comm, line, *args, **kwargs):
         # Blocking will block the printer commands from being handled so we can't block here!
 
-        # M600 is a filament change command.
-        # https://marlinfw.org/docs/gcode/M600.html
-        # On my Pursa, I see this "fsensor_update - M600" AND this "echo:Enqueuing to the front: "M600""
-        if line:
+        if line and self.NotificationHandler is not None:
             # ToLower the line for better detection.
             lineLower = line.lower()
 
-            # Look for a M600 command or fsensor_update in the line.
-            sendFilamentChangeNotification = "m600" in lineLower or "fsensor_update" in lineLower
-
-            # If we need to send, do it!
-            if sendFilamentChangeNotification and self.NotificationHandler is not None:
-                # Spawn a thread to send the notification so we don't block here.
-                self._logger.info("Fireing On Filament Change Notification "+str(line))
-                t = threading.Thread(target=self.NotificationHandler.OnFilamentChange)
-                t.start()
+            # M600 is a filament change command.
+            # https://marlinfw.org/docs/gcode/M600.html
+            # On my Pursa, I see this "fsensor_update - M600" AND this "echo:Enqueuing to the front: "M600""
+            # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
+            # This m600 usually comes from when the printer sensor has detected a filament run out.
+            if "m600" in lineLower or "fsensor_update" in lineLower:
+                self._logger.info("Fireing On Filament Change Notification From GcodeReceived: "+str(line))
+                # No need to use a thread since all events are handled on a new thread.
+                self.NotificationHandler.OnFilamentChange()
+            else:
+                # Look for a line indicating user interaction is needed.
+                if "paused for user" in lineLower or "// action:paused" in lineLower:
+                    self._logger.info("Fireing On User Interaction Required From GcodeReceived: "+str(line))
+                    # No need to use a thread since all events are handled on a new thread.
+                    self.NotificationHandler.OnUserInteractionNeeded()
 
         # We must return line the line won't make it to OctoPrint!
         return line
+
+    #
+    # Functions are for the gcode sent plugin hook
+    #
+    def sent_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
+        # Blocking will block the printer commands from being handled so we can't block here!
+
+        # M600 is a filament change command.
+        # https://marlinfw.org/docs/gcode/M600.html
+        # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
+        # This M600 usually comes from filament change required commands embedded in the gocde, for color changes and such.
+        if self.NotificationHandler is not None and gcode and gcode == "M600":
+            self._logger.info("Fireing On Filament Change Notification From GcodeSent: "+str(gcode))
+            # No need to use a thread since all events are handled on a new thread.
+            self.NotificationHandler.OnFilamentChange()
 
     #
     # Functions for the key validator hook.
@@ -569,5 +587,6 @@ def __plugin_load__():
     __plugin_hooks__ = {
         "octoprint.accesscontrol.keyvalidator": __plugin_implementation__.key_validator,
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
-        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode
+        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode,
+        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode,
     }
