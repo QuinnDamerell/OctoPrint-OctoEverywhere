@@ -7,8 +7,9 @@ An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, a
 
 - Free & full remote access to your OctoPrint portal from everywhere
 - Full resolution and frame-rate webcam streaming
+- Empowers your favorite OctoPrint iOS and Android apps with remote access
+- Live stream your prints to your friends or the entire world with [Live Links](https://octoeverywhere.com/live)
 - Real-time printer notifications sent to SMS, Email, Discord, Telegram, Slack, and more
-- Works with your favorite OctoPrint apps on any platform
 - Full OctoPrint plugin functionality
 - Secure sharing of your OctoPrint portal for friends and family
 - Full multicam support
@@ -16,9 +17,9 @@ An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, a
 
 ## Try It Out!
 
-With a rating of **[4.6/5 stars](https://www.trustpilot.com/review/octoeverywhere.com)** and over **25k** makers are already using OctoEverywhere, what are you waiting for? 
+With a rating of **[4.8/5 stars](https://www.trustpilot.com/review/octoeverywhere.com)** and over **34k** makers are already using OctoEverywhere, what are you waiting for? 
 <br/>
-[Try it out now - it's free and takes less than 2 minutes to setup!](https://octoeverywhere.com/getstarted?source=github_plugin_repo)
+[Try it out now - it's free and takes less than 30 seconds to setup!](https://octoeverywhere.com/getstarted?source=github_plugin_repo)
 
 
 ## Bugs & Feedback
