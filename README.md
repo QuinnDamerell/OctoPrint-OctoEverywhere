@@ -11,7 +11,7 @@ An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, a
 - Live stream your prints to your friends or the entire world with [Live Links](https://octoeverywhere.com/live)
 - Real-time printer notifications sent to SMS, Email, Discord, Telegram, Slack, and more
 - Full OctoPrint plugin functionality
-- Secure sharing of your OctoPrint portal for friends and family
+- Share secure access of your full OctoPrint portal with others
 - Full multicam support
 - ... and much, much more!
 
