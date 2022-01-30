@@ -12,6 +12,7 @@ except Exception as _:
     pass
 
 from .repeattimer import RepeatTimer
+from .snapshothelper import SnapshotHelper
 
 class ProgressCompletionReportItem:
     def __init__(self, value, reported):
@@ -282,26 +283,34 @@ class NotificationsHandler:
     def getSnapshot(self):
         try:
             # Get the vars we need.
-            snapshotUrl = ""
             flipH = False
             flipV = False
             rotate90 = False
             if self.OctoPrintSettingsObject is not None :
                 # This is the normal plugin case
-                snapshotUrl = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"])
                 flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"])
                 flipV = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"])
                 rotate90 = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"])
-            else:
-                # This is the dev case
-                snapshotUrl = "http://192.168.86.57/webcam/?action=snapshot"
 
-            # If there's no URL, don't bother
-            if snapshotUrl is None or len(snapshotUrl) == 0:
+            # Use the snapshot helper to get the snapshot. This will handle advance logic like relative and absolute URLs
+            # as well as getting a snapshot directly from a mjpeg stream if there's no snapshot URL.
+            octoHttpResponse = SnapshotHelper.Get().GetSnapshot()
+
+            # Check for a valid response.
+            if octoHttpResponse is None or octoHttpResponse.Result is None or octoHttpResponse.Result.status_code != 200:
                 return None
 
-            # Make the http call.
-            snapshot = requests.get(snapshotUrl, stream=True).content
+            # There are two options here for a result buffer, either
+            #   1) it will be already read for us
+            #   2) we need to read it out of the http response.
+            snapshot = None
+            if octoHttpResponse.FullBodyBuffer is not None:
+                snapshot = octoHttpResponse.FullBodyBuffer
+            else:
+                snapshot = octoHttpResponse.Result.content
+            if snapshot is None:
+                self.Logger.error("Notification snapshot failed, snapshot is None")
+                return None
 
             # Ensure the snapshot is a reasonable size.
             # Right now we will limit to < 2mb

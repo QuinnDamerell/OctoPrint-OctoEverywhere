@@ -14,6 +14,7 @@ import requests
 import octoprint.plugin
 
 from .localauth import LocalAuth
+from .snapshothelper import SnapshotHelper
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
@@ -114,6 +115,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Init the static local auth helper
         LocalAuth.Init(self._logger, self._user_manager)
+
+        # Init the static snapshot helper
+        SnapshotHelper.Init(self._logger, self._settings)
 
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
@@ -222,7 +226,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # M600 is a filament change command.
         # https://marlinfw.org/docs/gcode/M600.html
         # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
-        # This M600 usually comes from filament change required commands embedded in the gocde, for color changes and such.
+        # This M600 usually comes from filament change required commands embedded in the gcode, for color changes and such.
         if self.NotificationHandler is not None and gcode and gcode == "M600":
             self._logger.info("Fireing On Filament Change Notification From GcodeSent: "+str(gcode))
             # No need to use a thread since all events are handled on a new thread.

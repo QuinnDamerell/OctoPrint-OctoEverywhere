@@ -9,6 +9,7 @@ from ..localauth import LocalAuth
 from .octoheaderimpl import HeaderHelper
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
+from ..snapshothelper import SnapshotHelper
 from ..Proto import HttpHeader
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
@@ -137,19 +138,26 @@ class OctoWebStreamHttpHelper:
         # Before we make the request, make sure we shouldn't defer for a high pri request
         self.checkForDelayIfNotHighPri()
 
-        # Make the http request.
-        httpResult = OctoHttpRequest.MakeHttpCall(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer, True)
+        # If the service noted this as a snapshot request, use our special snapshot handler since it might do some extra
+        # magic to try to make the request. Note that not all snapshot requests will be flaged, this is only used for requests from
+        # Oracle, that the service knows are snapshot requests.
+        octoHttpResult = None
+        if SnapshotHelper.Get().IsSnapshotOracleRequest(sendHeaders):
+            octoHttpResult = SnapshotHelper.Get().MakeHttpCall(httpInitialContext, method, sendHeaders, self.UploadBuffer)
+        else:
+            # Make the the normal http request.
+            octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer)
 
         # If None is returned, it failed.
         # Since the request failed, we want to just close the stream, since it's not a protcol failure.
-        if httpResult is None:
-            self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. httpResult was None")
+        if octoHttpResult is None:
+            self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None")
             self.WebStream.Close()
             return
 
         # On success, unpack the result.
-        response = httpResult.Result
-        uri = httpResult.Url
+        response = octoHttpResult.Result
+        uri = octoHttpResult.Url
         requestExecutionEnd = time.time()
 
         # If there's no response, it means we failed to connect to whatever the request was trying to connect to.
@@ -216,7 +224,7 @@ class OctoWebStreamHttpHelper:
             # Start by reading data from the response.
             # This function will return a read length of 0 and a null data offset if there's nothing to read.
             # Otherwise, it will return the length of the read data and the data offset in the buffer.
-            nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, response, boundaryStr, compressBody)
+            nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody)
             contentReadBytes += lastBodyReadLength
             nonCompressedContentReadSizeBytes += nonCompressedBodyReadSize
 
@@ -296,6 +304,14 @@ class OctoWebStreamHttpHelper:
             # Clear this flag
             isFirstResponse = False
             messageCount += 1
+
+        # Since this is a stream, ideally we close it as soon as possible to not waste resources.
+        # Otherwise this will be auto closed when the object is GCed, which happens really quickly after it
+        # goes out of scope. Thus it's not a big deal if we early return and don't close it.
+        try:
+            response.close()
+        except Exception:
+            pass
 
         # Log about it.
         resposneWriteDone = time.time()
@@ -454,7 +470,7 @@ class OctoWebStreamHttpHelper:
     # Reads data from the response body, puts it in a data vector, and returns the offset.
     # If the body has been fully read, this should return ogLen == 0, len = 0, and offset == None
     # The read style depends on the presense of the boundary string existing.
-    def readContentFromBodyAndMakeDataVector(self, builder, response, boundaryStr_opt, shouldCompress):
+    def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult, response, boundaryStr_opt, shouldCompress):
         # This is the max size each body read will be. Since we are making local calls, most of the time
         # we will always get this full amount as long as theres more body to read.
         # Note that this amount is larger than a single read of the websocket on the server. After some testing
@@ -465,21 +481,28 @@ class OctoWebStreamHttpHelper:
         if shouldCompress:
             defaultBodyReadSizeBytes = defaultBodyReadSizeBytes * 4
 
-        # If the boundary string exist and is not empty, we will use it to try to read the data.
-        # Unless the self.ChunkedBodyHasNoContentLengthHeaders flag has been set, which indicate we have read the body has chunks
-        # and failed to find any content length headers. In that case, we will just read fixed sized chunks.
+        # Special requests (like snapshots due to the fallback logic) might already have a fully read body. In this case
+        # we use the existing body buffer instead of reading from the body.
+        # Note it's the creator of the FullBodyBuffer's responsibly to make sure the buffer matches the content length,
+        # otherwise this octoHttpResult.Result read loop will do bad things.
         finalDataBuffer = None
-        if self.ChunkedBodyHasNoContentLengthHeaders is False and boundaryStr_opt is not None and len(boundaryStr_opt) != 0:
-            # Try to read a single boundary chunk
-            readLength = self.readStreamChunk(response, boundaryStr_opt)
-            # If we get a length, set the final buffer using the temp buffer.
-            # This isn't a copy, just a reference to a subset of the buffer.
-            if readLength != 0:
-                finalDataBuffer = self.BodyReadTempBuffer[0:readLength]
+        if octoHttpResult.FullBodyBuffer is not None:
+            finalDataBuffer = octoHttpResult.FullBodyBuffer
         else:
-            # If there is no boundary string, we will just read as much as possible up to our limit
-            # If this returns None, we are done.
-            finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
+            # If the boundary string exist and is not empty, we will use it to try to read the data.
+            # Unless the self.ChunkedBodyHasNoContentLengthHeaders flag has been set, which indicate we have read the body has chunks
+            # and failed to find any content length headers. In that case, we will just read fixed sized chunks.
+            if self.ChunkedBodyHasNoContentLengthHeaders is False and boundaryStr_opt is not None and len(boundaryStr_opt) != 0:
+                # Try to read a single boundary chunk
+                readLength = self.readStreamChunk(response, boundaryStr_opt)
+                # If we get a length, set the final buffer using the temp buffer.
+                # This isn't a copy, just a reference to a subset of the buffer.
+                if readLength != 0:
+                    finalDataBuffer = self.BodyReadTempBuffer[0:readLength]
+            else:
+                # If there is no boundary string, we will just read as much as possible up to our limit
+                # If this returns None, we are done.
+                finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
 
         # If the final data buffer has been set to None, it means the body is not empty
         if finalDataBuffer is None:
@@ -686,6 +709,10 @@ class OctoWebStreamHttpHelper:
                 # Skip keep alive
                 if data:
                     return data
+            # In the case where the stream is complete but the response didn't know that last read, instead of throwing
+            # the function will just return without running the for loop. In this case the response is done and we return
+            # None to indicate that.
+            return None
         except requests.exceptions.StreamConsumedError as _:
             # When this exception is thrown, it means the entire body has been read.
             return None

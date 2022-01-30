@@ -17,6 +17,7 @@
         "ints",
         "jsonify",
         "localip",
+        "mjpeg",
         "mjpegstreamer",
         "Mjpg",
         "nbsp",

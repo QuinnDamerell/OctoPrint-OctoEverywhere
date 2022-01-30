@@ -5,10 +5,12 @@ import random
 import string
 
 from octoprint_octoeverywhere.localauth import LocalAuth
+from octoprint_octoeverywhere.snapshothelper import SnapshotHelper
 
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .threaddebug import ThreadDebug
+#from .notificationshandler import NotificationsHandler
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
@@ -32,9 +34,9 @@ class StatusChangeHandlerStub():
         self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts) + " - OctoKey:"+str(octoKey))
 
         # Send a test notifications if desired.
-        #handler = NotificationsHandler(self.Logger)
-        #handler.SetOctoKey(octoKey)
-        #handler.SetPrinterId(self.PrinterId)
+        # handler = NotificationsHandler(self.Logger)
+        # handler.SetOctoKey(octoKey)
+        # handler.SetPrinterId(self.PrinterId)
         #handler.SetServerProtocolAndDomain("http://127.0.0.1")
         #handler.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
@@ -94,6 +96,9 @@ if __name__ == '__main__':
     # Setup the local auth healper
     LocalAuth.Init(logger, None)
     LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
+
+    # Setup the snapshot helper
+    SnapshotHelper.Init(logger, None)
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)
