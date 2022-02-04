@@ -1,7 +1,5 @@
-from http import server
 import os
 import json
-import re
 import threading
 import time
 import requests
@@ -57,7 +55,7 @@ class OctoPingPong:
         # Always sleep a little extra time to let the system settle since we sometimes will start doing work right after a boot.
         time.sleep(60)
 
-        while(True):
+        while True:
             try:
                 # Compute how long it's been since the last update.
                 # Since this is written to disk, it's stays across boots / restarts.
@@ -108,6 +106,7 @@ class OctoPingPong:
             self.Stats[OctoPingPong.ServerStatsKey] = {}
 
         # Update our stats
+        # pylint: disable=consider-using-dict-items
         for sub in serverResults:
             timeMsOrNone = None
             if serverResults[sub] is not None:
