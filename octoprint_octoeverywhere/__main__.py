@@ -10,6 +10,7 @@ from octoprint_octoeverywhere.snapshothelper import SnapshotHelper
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .threaddebug import ThreadDebug
+from .octopingpong import OctoPingPong
 #from .notificationshandler import NotificationsHandler
 
 #
@@ -96,6 +97,9 @@ if __name__ == '__main__':
     # Setup the local auth healper
     LocalAuth.Init(logger, None)
     LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
+
+    # Init the ping pong helper.
+    OctoPingPong.Init(logger, "C:\\Users\\quinn")
 
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)

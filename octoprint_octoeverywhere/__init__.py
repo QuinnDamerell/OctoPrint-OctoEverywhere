@@ -18,6 +18,7 @@ from .snapshothelper import SnapshotHelper
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
+from .octopingpong import OctoPingPong
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.SettingsPlugin,
@@ -118,6 +119,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Init the static snapshot helper
         SnapshotHelper.Init(self._logger, self._settings)
+
+        # Init the ping helper
+        OctoPingPong.Init(self._logger, self.get_plugin_data_folder())
 
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)

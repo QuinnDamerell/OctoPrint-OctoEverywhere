@@ -15,7 +15,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/snapshot-helper.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/ping.zip
 
 ## Before checking in:
 - Run in py2 env
