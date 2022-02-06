@@ -66,7 +66,9 @@ class OctoPingPong:
 
                 # Compute how long until we should do work, this will be negative if the time has passed.
                 # We want to do work about every 23 hours. 23 hours will make the cycle of work vary over time.
-                timeUntilNextWorkSec = (oneHourOfSeconds * 23) - secondsSinceLastWork
+                #timeUntilNextWorkSec = (oneHourOfSeconds * 23) - secondsSinceLastWork
+                # TODO - Temp make this 10 hours to capture initial data faster.
+                timeUntilNextWorkSec = (oneHourOfSeconds * 10) - secondsSinceLastWork
 
                 # If it's not time to work, sleep until it is time.
                 if timeUntilNextWorkSec > 0:
