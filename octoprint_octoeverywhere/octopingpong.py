@@ -180,7 +180,7 @@ class OctoPingPong:
             lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
             self.Logger.info("Server Latency Computed. Default:"+str(defaultServerName) + " latency:"+str(defaultServerLatencyMs)+"; Lowest Latency:"+str(lowestLatencyName)+" latency:"+str(lowestLatencyMs))
             data = {
-                "Key":"PluginLatency",
+                "Key":"PluginLatencyV2",
                 "Value": float(defaultServerLatencyMs),
                 "Properties":{
                     "IsDefaultLowest": str(isDefaultLowest),
@@ -204,13 +204,17 @@ class OctoPingPong:
             # Make the URL
             if subdomain is None:
                 subdomain = "starport-v1"
-            url = "https://" + subdomain +".octoeverywhere.com/api/plugin/ping"
 
-            # Make the request
-            start = time.time()
-            response = requests.get(url, timeout=10)
-            end = time.time()
-            elapsedMs = (end - start) * 1000.0
+            # Setup the URLs
+            host = "https://"+subdomain+".octoeverywhere.com"
+            pingInfoApiUrl = host+"/api/plugin/ping"
+            pingDirectApiUrl = host+"/api/nginx-direct/ping/"
+
+            # We have to make two calls, because the first call will query DNS, open the TCP connection, start SSL, and get a connection in the pool.
+            # The extra stuff above will add an extra 100-150 more MS to the call.
+            # For the first call we hit the actual API to get data back.
+            s = requests.Session()
+            response = s.get(pingInfoApiUrl, timeout=10)
 
             # Check for failure
             if response.status_code != 200:
@@ -223,6 +227,25 @@ class OctoPingPong:
             if servers is None or len(servers) == 0:
                 return None
             if thisServer is None:
+                return None
+
+            # Close this response so the connection gets put back into the pool
+            response.close()
+
+            # Now using the same session, use the direct ping call.
+            # The session will prevent all of the overhead and should have a pooled open connection
+            # So this is as close to an actual realtime ping as we can get.
+            start = time.time()
+            response = s.get(pingDirectApiUrl, timeout=10)
+            end = time.time()
+            elapsedMs = (end - start) * 1000.0
+
+            # Close the session to clean up all connections
+            # (not required, this will be auto closed, but we do it anyways)
+            s.close()
+
+            # Check for failure
+            if response.status_code != 200:
                 return None
 
             # Success.
