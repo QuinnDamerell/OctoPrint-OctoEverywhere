@@ -27,7 +27,7 @@ class OctoPingPong:
 
     def __init__(self, logger, pluginDataFolderPath):
         self.Logger = logger
-        self.StatsFilePath = os.path.join(pluginDataFolderPath, "PingPongData.json")
+        self.StatsFilePath = os.path.join(pluginDataFolderPath, "PingPongDataV2.json")
 
         # Try to load past stats from the file.
         self.Stats = None
