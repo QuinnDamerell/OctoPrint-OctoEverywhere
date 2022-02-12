@@ -176,6 +176,7 @@ class OctoPingPong:
 
     def _ReportTelemetry(self, defaultServerName, defaultServerLatencyMs, lowestLatencyName, lowestLatencyMs):
         try:
+            # Make the first telemetry post
             isDefaultLowest = defaultServerName == lowestLatencyName
             lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
             self.Logger.info("Server Latency Computed. Default:"+str(defaultServerName) + " latency:"+str(defaultServerLatencyMs)+"; Lowest Latency:"+str(lowestLatencyName)+" latency:"+str(lowestLatencyMs))
@@ -193,6 +194,22 @@ class OctoPingPong:
             if response.status_code != 200:
                 self.Logger.warn("Failed to report ping latency "+response.status_code)
                 return
+
+            # If this isn't the lowest ping server, send a follow-up as well.
+            if isDefaultLowest is False:
+                data = {
+                    "Key":"PluginLowestLatency",
+                    "Value": float(lowestLatencyDelta),
+                    "Properties":{
+                        "DefaultSub" : defaultServerName,
+                        "LowestLatSub": lowestLatencyName,
+                        "LowestLatMs": str(lowestLatencyMs)
+                    }
+                }
+                response = requests.post('https://octoeverywhere.com/api/stats/telemetryaccumulator', json=data)
+                if response.status_code != 200:
+                    self.Logger.warn("Failed to report ping non-default latency "+response.status_code)
+                    return
         except Exception as e:
             self.Logger.warm("Failed to report ping latency " + str(e))
 

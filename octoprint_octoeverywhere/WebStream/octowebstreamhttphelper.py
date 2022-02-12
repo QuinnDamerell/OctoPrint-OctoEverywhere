@@ -650,9 +650,6 @@ class OctoWebStreamHttpHelper:
                             # We found the content-length header!
                             p = header.split(':')
                             if len(p) == 2:
-                                # TODO - there's a bug here, if the content length value could be truncated by
-                                # the end of the chunk we read. So really we should check there's a /r/n after this
-                                # value, to make sure we have the full int.
                                 frameSize = int(p[1].strip())
                                 foundContentLength = True
                             break
