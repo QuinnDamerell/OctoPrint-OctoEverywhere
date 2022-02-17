@@ -8,6 +8,7 @@ import websocket
 
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
+from ..localip import LocalIpHelper
 from ..websocketimpl import Client
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
@@ -33,6 +34,8 @@ class OctoWebStreamWsHelper:
         self.IsClosed = False
         self.StateLock = threading.Lock()
         self.OpenedTime = openedTime
+        self.Ws = None
+        self.FirstWsMessageSentToLocal = False
 
         # These vars indicate if the actual websocket is opened or closed.
         # This is different from IsClosed, which is tracking if the webstream closed status.
@@ -40,36 +43,114 @@ class OctoWebStreamWsHelper:
         self.IsWsObjOpened = False
         self.IsWsObjClosed = False
 
-        # Get the initial http context
-        httpInitialContext = webStreamOpenMsg.HttpInitialContext()
-        if httpInitialContext is None:
+        # Capture the initial http context
+        self.HttpInitialContext = webStreamOpenMsg.HttpInitialContext()
+        if self.HttpInitialContext is None:
             raise Exception("Web stream ws helper got a open message with no http context")
-
-        # Get the path
-        path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
-        if path is None:
-            raise Exception("Web stream ws helper got a open message with no path")
-
-        # Build the uri
-        uri = None
-        pathType = httpInitialContext.PathType()
-        if pathType is PathTypes.PathTypes.Relative:
-            # Make a relative path
-            uri = "ws://" + OctoHttpRequest.GetLocalhostAddress() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
-        elif pathType is PathTypes.PathTypes.Absolute:
-            # Make an absolute path
-            uri = path
-        else:
-            raise Exception("Web stream ws helper got a open message with an unknown path type "+str(pathType))
 
         # Get the headers
         # TODO - enable this. The headers we generate right now don't work for websockets.
         #headers = HeaderHelper.GatherRequestHeaders(httpInitialContext, self.Logger)
 
+        # It might take multiple attempts depending on the network setup of the client.
+        # This value keeps track of them.
+        self.ConnectionAttempt = 0
+        # This boolean tracks if a connection attempt was ever successful or not.
+        self.SuccessfullyOpenedSocket = False
+
+        # Attempt to connect to the websocket.
+        if self.AttemptConnection() is False:
+            raise Exception("Web stream ws AttemptConnection didn't try to connect?")
+
+
+    # This function will attempt to connect to the desired websocket.
+    # Due to different port binding or network setups, we might need to try a few different IP and PORT combinations
+    # before we succeeded. For that reason, this function is called when the object is first created and also when there's a
+    # websocket error. Each call will attempt a new connection until there are no more possibilities, and then the function will return False.
+    #
+    # Returns True if a new connection is being attempted.
+    # Returns False if a new connection is not being attempted.
+    def AttemptConnection(self):
+        # If this webstream context has already opened a successful websocket connection to something,
+        # never try to connect again.
+        if self.SuccessfullyOpenedSocket is True:
+            return False
+
+        # If this is not the first attempt, make sure the websocket is closed (which it most likely is)
+        if self.Ws is not None:
+            try:
+                # Since the current websocket has callback handers attached, first grab a local copy and null
+                # it out before calling close. This allows the callbacks to check if they are firing for the current
+                # websocket or an old one.
+                ws = self.Ws
+                self.Ws = None
+                ws.Close()
+            except Exception as _:
+                pass
+
+        # Get the path
+        path = OctoStreamMsgBuilder.BytesToString(self.HttpInitialContext.Path())
+        if path is None:
+            raise Exception("Web stream ws helper got a open message with no path")
+
+        # Depending on the connection attempt, build the URI
+        uri = None
+        pathType = self.HttpInitialContext.PathType()
+        if pathType is PathTypes.PathTypes.Relative:
+            # If the path is relative, we will make a few attempts to connect.
+            # Note these attempts are very closely related to the logic in the OctoHttpRequest class and should stay in sync.
+            if self.ConnectionAttempt == 0:
+                # Try to connect using the main URL, this is what we expect to work.
+                uri = "ws://" + str(OctoHttpRequest.GetLocalhostAddress()) + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
+            elif self.ConnectionAttempt == 1:
+                # Attempt 2 is to where we think the http proxy port is.
+                # For this address, we need set the protocol correctly depending if the client detected https or not.
+                protocol = "ws://"
+                if OctoHttpRequest.GetLocalHttpProxyIsHttps():
+                    protocol = "wss://"
+                uri = protocol + str(OctoHttpRequest.GetLocalhostAddress()) + ":" +str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
+            elif self.ConnectionAttempt == 2:
+                # Attempt 3 will be to try to connect with the device IP.
+                # This is needed if the server isn't bound to localhost, but only the public IP. Try the http proxy port.
+                # Since we are using the public IP, it's more likely that the http proxy port will be bound and not firewalled, since the OctoPrint port is usually internal only.
+                protocol = "ws://"
+                if OctoHttpRequest.GetLocalHttpProxyIsHttps():
+                    protocol = "wss://"
+                uri = protocol + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
+            elif self.ConnectionAttempt == 3:
+                # Attempt 4 will be to try to connect with the device IP.
+                # This is needed if the server isn't bound to localhost, but only the public IP. Try the OctoPrint local port as a last attempt.
+                uri = "ws://" + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
+            else:
+                # Report the issue and return False to indicate we aren't trying to connect.
+                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to relative path and has nothing else to try.")
+                return False
+        elif pathType is PathTypes.PathTypes.Absolute:
+            # If the path is absolute, we only have this one path to try.
+            if self.ConnectionAttempt != 0:
+                # Report the issue and return False to indicate we aren't trying to connect.
+                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to absolute path and has nothing else to try.")
+                return False
+
+            # Make an absolute path
+            uri = path
+        else:
+            raise Exception("Web stream ws helper got a open message with an unknown path type "+str(pathType))
+
+        # Validate a URI was set
+        if uri is None:
+            raise Exception(self.getLogMsgPrefix()+" AttemptConnection failed to create a URI")
+
+        # Increment the connection attempt.
+        self.ConnectionAttempt += 1
+
         # Make the websocket object and start it running.
-        self.Logger.info(self.getLogMsgPrefix()+"opening websocket to "+str(uri))
+        self.Logger.info(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
         self.Ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError)
         self.Ws.RunAsync()
+
+        # Return true to indicate we are trying to connect again.
+        return True
 
 
     # When close is called, all http operations should be shutdown.
@@ -85,7 +166,7 @@ class OctoWebStreamWsHelper:
 
         # Since the ws is created in the constructor, we know it must exist and must be running
         # (or at least connecting). So all we have to do here is call close.
-        self.Logger.info(self.getLogMsgPrefix()+"websocket closed")
+        self.Logger.info(self.getLogMsgPrefix()+"websocket closed after" +str(time.time() - self.OpenedTime) + " seconds")
         self.Ws.Close()
 
 
@@ -104,8 +185,9 @@ class OctoWebStreamWsHelper:
             if self.IsWsObjClosed is True or self.IsClosed:
                 return True
 
-            # Sleep for a bit to wait for the socket open.
-            time.sleep(0.1)
+            # Sleep for a bit to wait for the socket open. The socket will open super quickly (5-10ms), so don't delay long.
+            # Sleep for 5ms.
+            time.sleep(0.005)
 
         # If the websocket object is closed ingore this message. It will throw if the socket is closed
         # which will take down the entire OctoStream. But since it's closed the web stream is already cleaning up.
@@ -141,11 +223,20 @@ class OctoWebStreamWsHelper:
         # Send!
         self.Ws.SendWithOptCode(buffer, sendType)
 
+        # Log for perf tracking
+        if self.FirstWsMessageSentToLocal is False:
+            self.Logger.info(self.getLogMsgPrefix()+"first message sent to local server after " +str(time.time() - self.OpenedTime) + " seconds")
+            self.FirstWsMessageSentToLocal = True
+
         # Always return false, to keep the socket alive.
         return False
 
 
     def onWsData(self, ws, buffer, msgType):
+        # Only handle callbacks for the current websocket.
+        if self.Ws is not None and self.Ws != ws:
+            return
+
         try:
             # Figure out the data type
             # TODO - we should support the OPCODE_CONT type at some point. But it's not needed right now.
@@ -198,18 +289,39 @@ class OctoWebStreamWsHelper:
 
 
     def onWsClosed(self, ws):
+        # Only handle callbacks for the current websocket.
+        if self.Ws is not None and self.Ws != ws:
+            return
+
+        # Indicate the socket is closed.
         self.IsWsObjClosed = True
+
         # Make sure the stream is closed.
         self.WebStream.Close()
 
 
     def onWsError(self, ws, error):
-        # If we are closed, don't bother reporting.
-        skipReport = True
-        with self.StateLock:
-            skipReport = self.IsClosed
+        # Only handle callbacks for the current websocket.
+        if self.Ws is not None and self.Ws != ws:
+            return
 
-        if skipReport is False:
+        # If we are closed, don't bother reporting or reconnecting.
+        isClosed = True
+        with self.StateLock:
+            isClosed = self.IsClosed
+
+        # Check to see if this webstream is closed or not.
+        # If the webstream is closed we don't want to bother with any other attempts to re-connect.
+        if isClosed is False:
+            # If we got an error before the websocket was ever opened, it was an issue connecting the websocket.
+            # In that case this function will handle trying to connect again.
+            if self.SuccessfullyOpenedSocket is False:
+                if self.AttemptConnection() is True:
+                    # If AttemptConnection returns true, a new connection is being attempted.
+                    # We should not close the webstream, but instead just close to give this connection a chance.
+                    return
+
+            # Since the webstream still thinks it's open, report this error since it will be the one shutting the web stream down.
             self.Logger.error(self.getLogMsgPrefix()+" got an error from the websocket: "+str(error))
 
         # Always call close on the web stream, because it's safe to call even if it's closed already
@@ -218,9 +330,15 @@ class OctoWebStreamWsHelper:
 
 
     def onWsOpened(self, ws):
+        # Only handle callbacks for the current websocket.
+        if self.Ws is not None and self.Ws != ws:
+            return
+
         # Update the state to indicate we are ready to take messages.
         self.IsWsObjClosed = False
         self.IsWsObjOpened = True
+        self.SuccessfullyOpenedSocket = True
+        self.Logger.info(self.getLogMsgPrefix()+"opened, attempt "+str(self.ConnectionAttempt) + " after " +str(time.time() - self.OpenedTime) + " seconds")
 
 
     def getLogMsgPrefix(self):
