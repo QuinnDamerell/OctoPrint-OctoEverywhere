@@ -151,7 +151,8 @@ class OctoWebStreamHttpHelper:
         # If None is returned, it failed.
         # Since the request failed, we want to just close the stream, since it's not a protcol failure.
         if octoHttpResult is None:
-            self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None")
+            path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+            self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None; url:"+str(path))
             self.WebStream.Close()
             return
 
