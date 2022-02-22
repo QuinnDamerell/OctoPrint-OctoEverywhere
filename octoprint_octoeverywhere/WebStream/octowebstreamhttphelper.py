@@ -220,7 +220,8 @@ class OctoWebStreamHttpHelper:
         compressBody = self.shouldCompressBody(contentTypeLower, octoHttpResult, contentLength)
 
         # Since streams with unknown content-lengths can run for a while, report now when we start one.
-        if contentLength is None:
+        # If the status code is 304 or 204, we don't expect content.
+        if contentLength is None and response.status_code != 304 and response.status_code != 204:
             self.Logger.info(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
 
         # Setup a loop to read the stream and push it out in multiple messages.
@@ -242,7 +243,8 @@ class OctoWebStreamHttpHelper:
 
             # Unless we are skipping the body read, do it now.
             # If there's a 304, we might have a body, but we don't want to read it.
-            if response.status_code == 304:
+            # If the response is 204, there will be no content, so don't bother.
+            if response.status_code == 304 or response.status_code == 204:
                 # Use zero read defaults.
                 nonCompressedBodyReadSize = 0
                 lastBodyReadLength = 0
