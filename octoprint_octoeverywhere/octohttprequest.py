@@ -1,7 +1,8 @@
 import requests
-from octoprint_octoeverywhere.Proto.PathTypes import PathTypes
+
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
+from .Proto.PathTypes import PathTypes
 
 class OctoHttpRequest:
     LocalHttpProxyPort = 80
@@ -58,6 +59,8 @@ class OctoHttpRequest:
             self.url = url
             self.didFallback = didFallback
             self.fullBodyBuffer = fullBodyBuffer
+            self.isZlibCompressed = False
+            self.fullBodyBufferPreCompressedSize = 0
 
         @property
         def Result(self):
@@ -75,6 +78,23 @@ class OctoHttpRequest:
         def FullBodyBuffer(self):
             # Defaults to None
             return self.fullBodyBuffer
+
+        @property
+        def IsBodyBufferZlibCompressed(self):
+            # There must be a buffer and the flag must be set.
+            return self.isZlibCompressed and self.fullBodyBuffer is not None
+
+        @property
+        def BodyBufferPreCompressSize(self):
+            # There must be a buffer
+            if self.fullBodyBuffer is None:
+                return 0
+            return self.fullBodyBufferPreCompressedSize
+
+        def SetFullBodyBuffer(self, buffer, isZlibCompressed, preCompressedSize):
+            self.fullBodyBuffer = buffer
+            self.isZlibCompressed = isZlibCompressed
+            self.fullBodyBufferPreCompressedSize = preCompressedSize
 
     # Handles making all http calls out of the plugin to OctoPrint or other services running locally on the device or
     # even on other devices on the LAN.

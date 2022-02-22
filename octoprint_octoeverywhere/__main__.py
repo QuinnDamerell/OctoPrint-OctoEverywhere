@@ -11,6 +11,7 @@ from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .threaddebug import ThreadDebug
 from .octopingpong import OctoPingPong
+from .slipstream import Slipstream
 #from .notificationshandler import NotificationsHandler
 
 #
@@ -103,6 +104,9 @@ if __name__ == '__main__':
 
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)
+
+    # Init slipstream - This must be inited after localauth
+    Slipstream.Init(logger)
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)

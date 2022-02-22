@@ -191,7 +191,7 @@ class SnapshotHelper:
                             break
 
                     # If we didn't get the full buffer sleep for a bit, so we don't spin in a tight loop.
-                    time.sleep(0.1)
+                    time.sleep(0.01)
 
             # Since this is a stream, ideally we close it as soon as possible to not waste resources.
             # Otherwise this will be auto closed when the object is GCed, which happens really quickly after it

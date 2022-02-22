@@ -2,6 +2,7 @@
 
 import time
 import zlib
+import sys
 
 import requests
 
@@ -10,6 +11,7 @@ from .octoheaderimpl import HeaderHelper
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..snapshothelper import SnapshotHelper
+from ..slipstream import Slipstream
 from ..Proto import HttpHeader
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
@@ -121,7 +123,7 @@ class OctoWebStreamHttpHelper:
             raise Exception("Http request open message had no initial context")
 
         # Setup the headers
-        sendHeaders = HeaderHelper.GatherRequestHeaders(httpInitialContext, self.Logger)
+        sendHeaders = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext)
 
         # Figure out if this is a special OctoEverywhere Auth call.
         isOeAuthCall = httpInitialContext.UseOctoeverywhereAuth() == OeAuthAllowed.OeAuthAllowed.Allow
@@ -142,11 +144,21 @@ class OctoWebStreamHttpHelper:
         # magic to try to make the request. Note that not all snapshot requests will be flaged, this is only used for requests from
         # Oracle, that the service knows are snapshot requests.
         octoHttpResult = None
+        isFromCache = False
         if SnapshotHelper.Get().IsSnapshotOracleRequest(sendHeaders):
             octoHttpResult = SnapshotHelper.Get().MakeHttpCall(httpInitialContext, method, sendHeaders, self.UploadBuffer)
         else:
-            # Make the the normal http request.
-            octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer)
+            # For all web requests, check our in memory read-to-go cache.
+            # If available, this will return the object. On a miss it will return None
+            octoHttpResult = Slipstream.Get().GetCachedOctoHttpResult(httpInitialContext)
+
+            # Check if we got a cache hit.
+            if octoHttpResult is not None:
+                isFromCache = True
+            else:
+                # If we don't have a valid result yet, do the normal http path.
+                octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer)
+
 
         # If None is returned, it failed.
         # Since the request failed, we want to just close the stream, since it's not a protcol failure.
@@ -167,6 +179,12 @@ class OctoWebStreamHttpHelper:
             self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. There was no response.")
             self.WebStream.Close()
             return
+
+        # As a caching technique, if the request has the correct modified headers and the response has them as well, send back a 304,
+        # which indicates the body hasn't been modified and we can save the bandwidth by not sending it.
+        # We need to do this before we process the response headers.
+        # This function will check if we want to do a 304 return and update the request correctly.
+        self.checkForNotModifiedCacheAndUpdateResponseIfSo(sendHeaders, response)
 
         # Look at the headers to see what kind of response we are dealing with.
         # See if we find a content length, for http request that are streams, there is no content length.
@@ -199,7 +217,7 @@ class OctoWebStreamHttpHelper:
         # We also look at the content-type to determine if we should add compression to this request or not.
         # general rule of thumb is that compression is quite cheap but really helps with text, so we should compress when we
         # can.
-        compressBody = self.shouldCompressBody(contentTypeLower, contentLength)
+        compressBody = self.shouldCompressBody(contentTypeLower, octoHttpResult, contentLength)
 
         # Since streams with unknown content-lengths can run for a while, report now when we start one.
         if contentLength is None:
@@ -222,10 +240,18 @@ class OctoWebStreamHttpHelper:
             # TODO - We should start the buffer at something that's likely to not need expanding for most requests.
             builder = OctoStreamMsgBuilder.CreateBuffer(20000)
 
-            # Start by reading data from the response.
-            # This function will return a read length of 0 and a null data offset if there's nothing to read.
-            # Otherwise, it will return the length of the read data and the data offset in the buffer.
-            nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody)
+            # Unless we are skipping the body read, do it now.
+            # If there's a 304, we might have a body, but we don't want to read it.
+            if response.status_code == 304:
+                # Use zero read defaults.
+                nonCompressedBodyReadSize = 0
+                lastBodyReadLength = 0
+                dataOffset = None
+            else:
+                # Start by reading data from the response.
+                # This function will return a read length of 0 and a null data offset if there's nothing to read.
+                # Otherwise, it will return the length of the read data and the data offset in the buffer.
+                nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody)
             contentReadBytes += lastBodyReadLength
             nonCompressedContentReadSizeBytes += nonCompressedBodyReadSize
 
@@ -316,7 +342,7 @@ class OctoWebStreamHttpHelper:
 
         # Log about it.
         resposneWriteDone = time.time()
-        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(resposneWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
+        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(resposneWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
 
 
     def buildHeaderVector(self, builder, response):
@@ -332,6 +358,9 @@ class OctoWebStreamHttpHelper:
             # our web server will also send it to the client via chunk encoding. But it will handle
             # that on it's own and set the header accordingly.
             if nameLower == "transfer-encoding":
+                continue
+            # Don't send this easter egg.
+            if nameLower == "x-clacks-overhead":
                 continue
 
             # Allocate strings
@@ -437,13 +466,66 @@ class OctoWebStreamHttpHelper:
             return webStreamMsg.DataAsByteArray()
 
 
+    def checkForNotModifiedCacheAndUpdateResponseIfSo(self, sentHeaders, response):
+        # Check if the sent headers have any conditional http headers.
+        etag = None
+        modifiedDate = None
+        for key in sentHeaders:
+            keyLower = key.lower()
+            if keyLower == "if-modified-since":
+                modifiedDate = sentHeaders[key]
+            if keyLower == "if-none-match":
+                etag = sentHeaders[key]
+
+        # If there were none found, there's nothing do to.
+        if etag is None and modifiedDate is None:
+            return
+
+        # Look through the response headers
+        for key in response.headers:
+            keyLower = key.lower()
+            if etag is not None and keyLower == "etag":
+                # Both have etags, check them.
+                # If the request etag starts with the weak indicator, remove it
+                if etag.startswith("W/"):
+                    etag = etag[2:]
+                # Check for an exact match.
+                if etag == response.headers[key]:
+                    self.updateResponseFor304(response)
+                    return
+            if modifiedDate is not None and keyLower == "last-modified":
+                # There are actual ways to parse and compare these,
+                # But for now we will just do exact matches.
+                if modifiedDate == response.headers[key]:
+                    self.updateResponseFor304(response)
+                    return
+
+
+    def updateResponseFor304(self, response):
+        # First of all, update the status code.
+        response.status_code = 304
+        # Remove any headers we don't want to send. Including some of these seems to trip up some browsers.
+        # However, there are some we must send...
+        # Quote - Note that the server generating a 304 response MUST generate any of the following header fields that would have been sent in a 200 (OK) response to the same request: Cache-Control, Content-Location, Date, ETag, Expires, and Vary.
+        #         https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match
+        removeHeaders = []
+        for key in response.headers:
+            keyLower = key.lower()
+            if keyLower == "content-length":
+                removeHeaders.append(key)
+            if keyLower == "content-type":
+                removeHeaders.append(key)
+        for key in removeHeaders:
+            del response.headers[key]
+
+
     def getLogMsgPrefix(self):
         return "Web Stream http ["+str(self.Id)+"] "
 
 
     # Based on the content-type header, this determins if we would apply compression or not.
     # Returns true or false
-    def shouldCompressBody(self, contentTypeLower, contentLengthOpt):
+    def shouldCompressBody(self, contentTypeLower, octoHttpResult, contentLengthOpt):
         # Compression isn't too expensive in terms of cpu cost but for text, it drastically
         # cuts the size down (ike a 75% reduction.) So we are quite liberal with our compression.
 
@@ -454,6 +536,12 @@ class OctoWebStreamHttpHelper:
 
         # If we don't know what this is, might as well compress it.
         if contentTypeLower is None:
+            return True
+
+        # If there is a full body buffer and and it's already compressed, always return true.
+        # This ensures the message is flagged correctly for compression and the body reading system
+        # will also read the flag and skip the compression.
+        if octoHttpResult.IsBodyBufferZlibCompressed:
             return True
 
         # We will compress...
@@ -512,7 +600,14 @@ class OctoWebStreamHttpHelper:
 
         # If we were asked to compress, do it
         originalBufferSize = len(finalDataBuffer)
-        if shouldCompress:
+
+        # Check to see if this was a full body buffer, if it was already compressed.
+        if octoHttpResult.IsBodyBufferZlibCompressed:
+            # If so, use pre compress size it's supplies.
+            # And skip compression since it's already done.
+            originalBufferSize = octoHttpResult.BodyBufferPreCompressSize
+        # Otherwise, check if we should compress
+        elif shouldCompress:
             # Some setups can't install brotli since it requires gcc and c++ to complie native code.
             # zlib is part of PY so all plugins us it. Right now it's not worth the tradeoff from testing to enable brotli.
             #
@@ -566,6 +661,15 @@ class OctoWebStreamHttpHelper:
             #2021-12-17 22:45:06,447 - octoprint.plugins.octoeverywhere - INFO - brotli level: 9 time:33.3149433136 size: 4989 og:13503
             #2021-12-17 22:45:06,499 - octoprint.plugins.octoeverywhere - INFO - brotli level: 10 time:50.5220890045 size: 4609 og:13503
             #2021-12-17 22:45:06,636 - octoprint.plugins.octoeverywhere - INFO - brotli level: 11 time:135.287046432 size: 4503 og:13503
+
+            # PY2 zlib.compress can't accept a bytearray, which will be used for octoHttpResult.FullBodyBuffer or self.readStreamChunk, so
+            # we must convert them before compressing. Since most things that use self.readStreamChunk don't use compression, this isn't a big deal.
+            # Right now only the Slipstream cached Index pages have to do this.
+            if sys.version_info[0] < 3:
+                if isinstance(finalDataBuffer, bytearray):
+                    self.Logger.info("PY2 bytearray->bytes conversion applied.")
+                    finalDataBuffer = bytes(finalDataBuffer)
+
             start = time.time()
             finalDataBuffer = zlib.compress(finalDataBuffer, 3)
             if self.CompressionTimeSec == -1:

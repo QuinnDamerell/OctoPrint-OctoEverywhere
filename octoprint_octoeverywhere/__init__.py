@@ -19,6 +19,7 @@ from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
 from .octopingpong import OctoPingPong
+from .slipstream import Slipstream
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.SettingsPlugin,
@@ -139,6 +140,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         main_thread = threading.Thread(target=self.main)
         main_thread.daemon = True
         main_thread.start()
+
+        # Init slipstream - This must be inited after LocalAuth since it requires the auth key.
+        # Is also must be done when the OctoPrint server is ready, since it's going to kick off a thread to
+        # pull and cache the index.
+        Slipstream.Init(self._logger)
 
     #
     # Functions for the Simple API Mixin

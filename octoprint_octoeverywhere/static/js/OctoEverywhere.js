@@ -46,16 +46,51 @@ $(function() {
         }
 
         //
+        // Index Session Validation
+        //
+        // What's this?
+        //
+        // Due to the caching used to speed up page loading, the logic that detects non-logged in users will break.
+        // To combat this, immediately when this page loads we will do a request for a standard OctoPrint API. If we get
+        // an unauthorized error code back, we will redirect to login. This will make the login page load a bit longer,
+        // since the user will have to bounce through this page first. But that one time hit is worth it to make things load
+        // faster the rest of the time.
+        function CheckForUserAuth()
+        {
+            doRedirect = function()
+            {
+                OctoELog("Unauthed session detected. Redirecting to login.");
+                window.location.href = "./login/?wasFromOe=true"
+            };
+
+            // This API will test for auth, but has a small response and latency.
+            $.ajax({
+                url: "./api/printerprofiles",
+                type: "GET",
+                success: function (_) {},
+                statusCode: {
+                    403: function (_) {
+                        doRedirect();
+                    },
+                    401: function (_) {
+                        doRedirect();
+                    }
+                }
+            });
+        }
+        CheckForUserAuth();
+
+        //
         // Local Frontend Port Detection
         //
         //
         // What's this?
-        // 
+        //
         // We have an interesting problem where by default most all users run the OctoPrint http proxy
         // on port 80, but some don't. In our relay logic, we talk directly to OctoPrint PY server via it's port
         // and we can query that to know it for 100% sure. However, webcams can be setup in many ways. We already cover
         // the absolute local URL case with out logic, but we can't cover relative URLs with that logic. 
-        // 
+        //
         // So, for all of the reasons above, we need to reliably know what port the http proxy is running on - so if we
         // need to make relative url request, we know the correct port. To get that port reliably, we will wait until the user
         // to use the portal locally as they normally would. When we see that local request, we capture the port and send it to
@@ -83,10 +118,10 @@ $(function() {
         function DetermineHostnameIsLocalAndReport(hostname, port, isHttps, fullUrl)
         {
             // Now, we have to figure out if this is a local address or not.
-            // 
+            //
             // This logic isn't prefect, but we will consider any address that either an IP or .local a local IP address.
             // But this will false positive is a users access their computer publicly directly via a IP or something.
-            
+
             // Detect IPV6
             // IPV6 must be enclosed in []
             if(hostname.indexOf("[") != -1 && hostname.indexOf("]") != -1)
@@ -103,7 +138,7 @@ $(function() {
                 OctoELog("Current hostname detected as a .local domain. "+hostname);
                 ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
-            }  
+            }
 
             // Detect IPV4
             // Check if the entire hostname is only numbers and '.'
@@ -205,7 +240,7 @@ $(function() {
 
             // And parse out the main hostname
             hostname = hostname.substring(0, hasPortDelimiter)
-            DetermineHostnameIsLocalAndReport(hostname, port, isHttps, url);   
+            DetermineHostnameIsLocalAndReport(hostname, port, isHttps, url);
         }
         FindAndReportLocalFrontendPort(window.location.href);
 
@@ -227,7 +262,7 @@ $(function() {
 
         //
         // Plugin Connection Check and Data Tunneling.
-        // 
+        //
         // This logic determines if the index is being loaded via OctoEverywhere and if so loading
         // the plugin connection page which assists the plugin in terms of the data tunneling.
         //
@@ -323,7 +358,7 @@ $(function() {
             try {
                 DoNotificationCheckIn(octoEverywhereSettings.PrinterKey(), octoEverywhereSettings.PluginVersion(), IsConnectedViaOctoEverywhere())
             } catch (error) {
-                OctoELog("DoNotificationCheckIn failed." + error);                
+                OctoELog("DoNotificationCheckIn failed." + error);
             }
         }
 
@@ -332,11 +367,11 @@ $(function() {
         self.settingsViewModel = parameters[1]
         self.onBeforeBinding = function() {
             // Set the settings and fire the callback.
-            self.settings = self.settingsViewModel.settings;   
-            OnSettingsReady(self.settings.plugins.octoeverywhere)         
+            self.settings = self.settingsViewModel.settings;
+            OnSettingsReady(self.settings.plugins.octoeverywhere);
         };
     }
-  
+
 
      /* view model class, parameters for constructor, container to bind to
       * Please see http://docs.octoprint.org/en/master/plugins/viewmodels.html#registering-custom-viewmodels for more details

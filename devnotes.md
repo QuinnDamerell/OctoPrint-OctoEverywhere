@@ -15,7 +15,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/advance-ws.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/slipstream.zip
 
 ## Before checking in:
 - Run in py2 env
