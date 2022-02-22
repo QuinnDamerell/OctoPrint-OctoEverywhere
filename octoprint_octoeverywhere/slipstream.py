@@ -201,6 +201,10 @@ class Slipstream:
         # We explicitly look for known files in the index should reference that are large.
         # If we don't find them, no big deal.
         # It's no ideal that we need to de-compress this, but it's fine since we are in the background.
+        # PY2 zlib.decompress can't accept a bytearray, so we must convert them before compressing.
+        # This isn't ideal, but not a big deal since this is in the background.
+        if sys.version_info[0] < 3:
+            indexBodyBuffer = bytes(indexBodyBuffer)
         indexBodyStr = zlib.decompress(indexBodyBuffer).decode(errors="ignore")
         for subPath in Slipstream.OptionalPartialCachePaths:
             # This function will try to find the full url or path in the index body, including the query string.
