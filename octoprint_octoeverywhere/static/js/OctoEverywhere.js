@@ -60,12 +60,12 @@ $(function() {
             doRedirect = function()
             {
                 OctoELog("Unauthed session detected. Redirecting to login.");
-                window.location.href = "./login/?wasFromOe=true"
+                window.location.href = "/login/?isFromOe=true"
             };
 
             // This API will test for auth, but has a small response and latency.
             $.ajax({
-                url: "./api/printerprofiles",
+                url: "/api/printerprofiles",
                 type: "GET",
                 success: function (_) {},
                 statusCode: {
@@ -78,7 +78,15 @@ $(function() {
                 }
             });
         }
-        CheckForUserAuth();
+        // As of OctoPrint 1.7.3, on startup is called after the connection has been established and the passive user login has
+        // been attempted, but before the settings load is called, which will fail if the user isn't logged in. It's important
+        // to not check for user auth before onStartup, because the user auth state depends on the passive login call the start-up
+        // process makes.
+        self.onStartup = function() 
+        {
+            CheckForUserAuth();
+        }
+
 
         //
         // Local Frontend Port Detection
