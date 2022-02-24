@@ -50,43 +50,95 @@ $(function() {
         //
         // What's this?
         //
-        // Due to the caching used to speed up page loading, the logic that detects non-logged in users will break.
-        // To combat this, immediately when this page loads we will do a request for a standard OctoPrint API. If we get
-        // an unauthorized error code back, we will redirect to login. This will make the login page load a bit longer,
-        // since the user will have to bounce through this page first. But that one time hit is worth it to make things load
-        // faster the rest of the time.
-        function CheckForUserAuth()
+        // Normally for OctoPrint the client's first call to the index will check the client's session to ensure they are logged in
+        // and have permission to read the settings, which is required to load the main index. If they don't, the index call is redirected to the login page.
+        // However, since we cache the index page to speed things up, that logic won't happen.
+        // In our case, this index page will always be sent back. So we need to use the following logic to ensure the user is logged in and has permissions
+        // to read the settings, so the page load doesn't fail.
+        //
+        // A few notes. The page start up is as follows:
+        //    Start the DataUploaded (which is the WS connection)
+        //    Call passive login to get the user
+        //    Call to get the settings.
+        //
+        // Normally we would be able to use the loginStateViewModel to access the current user and get callbacks when permissions change.
+        // However, during the startup process all of the returned user info is hidden in the class and deferred to be processed until after the settings are read.
+        // That means for us we can't get access to that object until the settings fail to load and it's too late.
+        // To work around that, we will make our own passive login call which does two things:
+        //    1) It ensures the cookie set in the browser is refreshed and not stale (if we made an normal API call we race the internal passive login call and can have a stale cookie.)
+        //    2) It returns us the exact permissions the user has, and thus we can tell if they are logged in and/or can access the settings.
+        try
         {
-            doRedirect = function()
+            self.doLoginRedirect = function()
             {
                 OctoELog("Unauthed session detected. Redirecting to login.");
                 window.location.href = "/login/?isFromOe=true"
             };
 
-            // This API will test for auth, but has a small response and latency.
-            $.ajax({
-                url: "/api/printerprofiles",
-                type: "GET",
-                success: function (_) {},
-                statusCode: {
-                    403: function (_) {
-                        doRedirect();
-                    },
-                    401: function (_) {
-                        doRedirect();
+            // Using the OctoPrint JS lib (which is already loaded into this page)
+            // make the passive login call.
+            OctoPrint.browser
+                .passiveLogin()
+                .done(function(result)
+                {
+                    // Validate
+                    if(result === null || result.needs === undefined || result.needs.group === undefined)
+                    {
+                        OctoELog("Returned passive login user doesn't have expected properties.");
+                        return;
                     }
-                }
-            });
-        }
-        // As of OctoPrint 1.7.3, on startup is called after the connection has been established and the passive user login has
-        // been attempted, but before the settings load is called, which will fail if the user isn't logged in. It's important
-        // to not check for user auth before onStartup, because the user auth state depends on the passive login call the start-up
-        // process makes.
-        self.onStartup = function() 
-        {
-            CheckForUserAuth();
-        }
 
+                    // Ideally we use the roles array, but for no logged in users that are "guests", it doesn't exist.
+                    // If the user is not logged in, they will be treated as a "guests" in the user group.
+                    if(result.needs.role === undefined)
+                    {
+                        for (let i = 0; i < result.needs.group.length; ++i)
+                        {
+                            if(result.needs.group[i].toLowerCase() == "guests")
+                            {
+                                // We know the guest group doesn't have permission to settings, and thus the user needs to log in.
+                                // The guest group is a generated anonymous user that gets assigned to any session that's no logged in.
+                                self.doLoginRedirect();
+                                return;
+                            }
+                        }
+
+                        // This shouldn't happen, but in-case it does, just do nothing.
+                        OctoELog("Returned passive doesn't have guests group role but also doesn't have a role array. "+result.needs.group);
+                        return;
+                    }
+
+                    // Use the role array to check if the logged in user has the correct permission.
+                    var settingsRoleFound = false;
+                    for (let i = 0; i < result.needs.role.length; ++i)
+                    {
+                        // If the user has either the settings (read and write) or settings_read (read only) they are good.
+                        const role = result.needs.role[i].toLowerCase();
+                        if(role === "settings" || role === "settings_read")
+                        {
+                            settingsRoleFound = true;
+                            break;
+                        }
+                    }
+
+                    // If the settings permission wasn't found, redirect to login.
+                    if(!settingsRoleFound)
+                    {
+                        self.doLoginRedirect();
+                        return;
+                    }
+                })
+                .fail(function ()
+                {
+                    // This fail will only occur if something is very wrong, like the network can't be reached.
+                    // If no user is logged in, done() will still be called with an anonymous user.
+                    OctoELog("Passive login operation failed.");
+                });
+            }
+        catch(error)
+        {
+            OctoELog("Failed to make passive login call." + error);
+        }
 
         //
         // Local Frontend Port Detection
@@ -97,7 +149,7 @@ $(function() {
         // We have an interesting problem where by default most all users run the OctoPrint http proxy
         // on port 80, but some don't. In our relay logic, we talk directly to OctoPrint PY server via it's port
         // and we can query that to know it for 100% sure. However, webcams can be setup in many ways. We already cover
-        // the absolute local URL case with out logic, but we can't cover relative URLs with that logic. 
+        // the absolute local URL case with out logic, but we can't cover relative URLs with that logic.
         //
         // So, for all of the reasons above, we need to reliably know what port the http proxy is running on - so if we
         // need to make relative url request, we know the correct port. To get that port reliably, we will wait until the user
