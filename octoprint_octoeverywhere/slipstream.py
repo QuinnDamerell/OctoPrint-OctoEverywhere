@@ -124,6 +124,19 @@ class Slipstream:
             # We request a 20s delay so that the rest of the portal load isn't effected by the cache refreshing.
             self.UpdateCache(20000)
 
+            # Special case for the index page.
+            # Normally the call to the index is responsible for redirecting the user to the login screen if the calling
+            # user don't have permissions to access the OctoPrint settings, aka, they aren't logged in. Since we cache the index
+            # that logic doesn't get applied. We have logic in our static JS (which is part of the index) that will check for a not logged in user
+            # and redirect them, but it's not ideal and make the first login page load take longer.
+            # For that reason, we will quickly check to see if there's any OctoPrint session cookie present. If not, we know the user  isn't logged in
+            # and then we WONT use the cache so the redirect happens as normal.
+            # Note, this doesn't (and can't) validate if the session cookie respresents a signed in user, it just can detect if there is no cookie, like on the
+            # very first user visit to a printer subdomain.
+            if self.HasOctoPrintSessionCookie(httpInitialContext) is False:
+                self.Logger.info("Slipstream got an index request but there's no OctoPrint session cookie found, so we aren't returning a cached index.")
+                return None
+
         # We have our path, check if it's in the map
         with self.Lock:
             if path in self.Cache:
@@ -356,3 +369,38 @@ class Slipstream:
 
         # Return the URL
         return indexBody[openQuote:endQuote]
+
+
+    # Returns True if a OctoPrint session cookie has been found, otherwise False.
+    def HasOctoPrintSessionCookie(self, httpInitialContext):
+        if httpInitialContext is None:
+            self.Logger.info("Slipstream looking for OctoPrint session was called with no httpInitialContext.")
+            return False
+
+        # Go through all of the headers cooking for a cookie header.
+        headersLen = httpInitialContext.HeadersLength()
+        i = 0
+        while i < headersLen:
+            # Get the header
+            header = httpInitialContext.Headers(i)
+            i += 1
+
+            # Get the header key value.
+            name = OctoStreamMsgBuilder.BytesToString(header.Key())
+            if name is None:
+                continue
+
+            nameLower = name.lower()
+            if nameLower == "cookie":
+                # Get the cookie value
+                value = OctoStreamMsgBuilder.BytesToString(header.Value())
+                if value is None:
+                    self.Logger.info("Slipstream looking for OctoPrint session cookie found a cookie key with no value.")
+                    return False
+
+                # Now that we have found the cookie header, check if the session_p443 value exists.
+                # The session_P443 value is the session cookie that the toradio server used in OctoPrint sets.
+                valueLower = value.lower()
+                if "session_p443" in valueLower:
+                    return True
+                return False
