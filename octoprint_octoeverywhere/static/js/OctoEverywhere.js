@@ -5,7 +5,11 @@
  * License: AGPLv3
  */
 $(function() {
-    function OctoeverywhereViewModel(parameters) {
+    function OctoeverywhereViewModel(parameters)
+    {
+        //
+        // Common Stuff
+        //
         var self = this;
 
         // Used for the settings page to get the URL
@@ -35,15 +39,25 @@ $(function() {
             });
         }
 
-        // ;)
-        console.log("***********************************")
-        console.log("   Hello From OctoEverywhere! 🚀   ")
-        console.log("***********************************")
+        function IsConnectedViaOctoEverywhere()
+        {
+            // Start with a to lower case to remove complexity.
+            url = window.location.href.toLowerCase();
+
+            // Check if the URL contains our domain name.
+            // If so, we know we are loaded via our service.
+            return url.indexOf(".octoeverywhere.com") != -1 || url.indexOf(".octoeverywhere.dev") != -1;
+        }
 
         function OctoELog(text)
         {
             console.log("OctoEverywhere: "+text)
         }
+
+        // ;)
+        console.log("***********************************")
+        console.log("   Hello From OctoEverywhere! 🚀   ")
+        console.log("***********************************")
 
         //
         // Index Session Validation
@@ -69,72 +83,76 @@ $(function() {
         //    2) It returns us the exact permissions the user has, and thus we can tell if they are logged in and/or can access the settings.
         try
         {
-            self.doLoginRedirect = function()
+            // Only do this is being used via OctoEverywhere, since that's the only time this index cache will be a problem.
+            if(IsConnectedViaOctoEverywhere())
             {
-                OctoELog("Unauthed session detected. Redirecting to login.");
-                window.location.href = "/login/?isFromOe=true"
-            };
-
-            // Using the OctoPrint JS lib (which is already loaded into this page)
-            // make the passive login call.
-            OctoPrint.browser
-                .passiveLogin()
-                .done(function(result)
+                self.doLoginRedirect = function()
                 {
-                    // Validate
-                    if(result === null || result.needs === undefined || result.needs.group === undefined)
-                    {
-                        OctoELog("Returned passive login user doesn't have expected properties.");
-                        return;
-                    }
+                    OctoELog("Unauthed session detected. Redirecting to login.");
+                    window.location.href = "/login/?isFromOe=true"
+                };
 
-                    // Ideally we use the roles array, but for no logged in users that are "guests", it doesn't exist.
-                    // If the user is not logged in, they will be treated as a "guests" in the user group.
-                    if(result.needs.role === undefined)
+                // Using the OctoPrint JS lib (which is already loaded into this page)
+                // make the passive login call.
+                OctoPrint.browser
+                    .passiveLogin()
+                    .done(function(result)
                     {
-                        for (let i = 0; i < result.needs.group.length; ++i)
+                        // Validate
+                        if(result === null || result.needs === undefined || result.needs.group === undefined)
                         {
-                            if(result.needs.group[i].toLowerCase() == "guests")
+                            OctoELog("Returned passive login user doesn't have expected properties.");
+                            return;
+                        }
+
+                        // Ideally we use the roles array, but for no logged in users that are "guests", it doesn't exist.
+                        // If the user is not logged in, they will be treated as a "guests" in the user group.
+                        if(result.needs.role === undefined)
+                        {
+                            for (let i = 0; i < result.needs.group.length; ++i)
                             {
-                                // We know the guest group doesn't have permission to settings, and thus the user needs to log in.
-                                // The guest group is a generated anonymous user that gets assigned to any session that's no logged in.
-                                self.doLoginRedirect();
-                                return;
+                                if(result.needs.group[i].toLowerCase() == "guests")
+                                {
+                                    // We know the guest group doesn't have permission to settings, and thus the user needs to log in.
+                                    // The guest group is a generated anonymous user that gets assigned to any session that's no logged in.
+                                    self.doLoginRedirect();
+                                    return;
+                                }
+                            }
+
+                            // This shouldn't happen, but in-case it does, just do nothing.
+                            OctoELog("Returned passive doesn't have guests group role but also doesn't have a role array. "+result.needs.group);
+                            return;
+                        }
+
+                        // Use the role array to check if the logged in user has the correct permission.
+                        var settingsRoleFound = false;
+                        for (let i = 0; i < result.needs.role.length; ++i)
+                        {
+                            // If the user has either the settings (read and write) or settings_read (read only) they are good.
+                            const role = result.needs.role[i].toLowerCase();
+                            if(role === "settings" || role === "settings_read")
+                            {
+                                settingsRoleFound = true;
+                                break;
                             }
                         }
 
-                        // This shouldn't happen, but in-case it does, just do nothing.
-                        OctoELog("Returned passive doesn't have guests group role but also doesn't have a role array. "+result.needs.group);
-                        return;
-                    }
-
-                    // Use the role array to check if the logged in user has the correct permission.
-                    var settingsRoleFound = false;
-                    for (let i = 0; i < result.needs.role.length; ++i)
-                    {
-                        // If the user has either the settings (read and write) or settings_read (read only) they are good.
-                        const role = result.needs.role[i].toLowerCase();
-                        if(role === "settings" || role === "settings_read")
+                        // If the settings permission wasn't found, redirect to login.
+                        if(!settingsRoleFound)
                         {
-                            settingsRoleFound = true;
-                            break;
+                            self.doLoginRedirect();
+                            return;
                         }
-                    }
-
-                    // If the settings permission wasn't found, redirect to login.
-                    if(!settingsRoleFound)
+                    })
+                    .fail(function ()
                     {
-                        self.doLoginRedirect();
-                        return;
-                    }
-                })
-                .fail(function ()
-                {
-                    // This fail will only occur if something is very wrong, like the network can't be reached.
-                    // If no user is logged in, done() will still be called with an anonymous user.
-                    OctoELog("Passive login operation failed.");
-                });
-            }
+                        // This fail will only occur if something is very wrong, like the network can't be reached.
+                        // If no user is logged in, done() will still be called with an anonymous user.
+                        OctoELog("Passive login operation failed.");
+                    });
+                }
+        }
         catch(error)
         {
             OctoELog("Failed to make passive login call." + error);
@@ -336,15 +354,6 @@ $(function() {
             iframe.setAttribute("scrolling","no");
             document.body.appendChild(iframe);
         }
-        function IsConnectedViaOctoEverywhere()
-        {
-            // Start with a to lower case to remove complexity.
-            url = window.location.href.toLowerCase();
-
-            // Check if the URL contains our domain name.
-            // If so, we know we are loaded via our service.
-            return url.indexOf(".octoeverywhere.com") != -1;
-        }
         function DetectOctoEverywhereLoadedIndexAndInjectionHelpers()
         {
             // Only if we are connected via OctoEverywhere, inject the service connection helpers.
@@ -398,6 +407,14 @@ $(function() {
                                 'delay': response.Result.Notification.ShowForMs,
                                 'mouseReset' : response.Result.Notification.MouseReset
                             });
+                        }
+                        // If the printer name is returned and this session is connected via OctoEverywhere, update the title so it's easier for users to tell multiple printers apart.
+                        if(response.Result.PrinterName !== undefined && response.Result.PrinterName !== null)
+                        {
+                            if(IsConnectedViaOctoEverywhere())
+                            {
+                                document.title = document.title + " - " + response.Result.PrinterName
+                            }
                         }
                     }
                     catch (error)
