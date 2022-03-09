@@ -12,6 +12,7 @@ from .octohttprequest import OctoHttpRequest
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
+from .snapshothelper import SnapshotHelper
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
@@ -229,9 +230,10 @@ class OctoSession:
             rasChallengeKeyVerInt = ServerAuthHelper.c_ServerAuthKeyVersion
 
             # Build the message
-            buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.isPrimarySession,
-                self.PluginVersion, OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt)
+            buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.isPrimarySession, self.PluginVersion,
+                OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
+                rasChallenge, rasChallengeKeyVerInt,
+                SnapshotHelper.Get().GetWebcamFlipH(), SnapshotHelper.Get().GetWebcamFlipV(), SnapshotHelper.Get().GetWebcamRotate90())
 
             # Send!
             self.OctoStream.SendMsg(buf)

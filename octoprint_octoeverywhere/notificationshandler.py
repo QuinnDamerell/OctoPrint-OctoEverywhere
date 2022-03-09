@@ -30,14 +30,13 @@ class ProgressCompletionReportItem:
 
 class NotificationsHandler:
 
-    def __init__(self, logger, octoPrintPrinterObject = None, octoPrintSettingsObject = None):
+    def __init__(self, logger, octoPrintPrinterObject = None):
         self.Logger = logger
         # On init, set the key to empty.
         self.OctoKey = None
         self.PrinterId = None
         self.ProtocolAndDomain = "https://octoeverywhere.com"
         self.OctoPrintPrinterObject = octoPrintPrinterObject
-        self.OctoPrintSettingsObject = octoPrintSettingsObject
         self.PingTimer = None
 
         # Define all the vars
@@ -282,15 +281,6 @@ class NotificationsHandler:
     # If this fails for any reason, None is returned.
     def getSnapshot(self):
         try:
-            # Get the vars we need.
-            flipH = False
-            flipV = False
-            rotate90 = False
-            if self.OctoPrintSettingsObject is not None :
-                # This is the normal plugin case
-                flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"])
-                flipV = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"])
-                rotate90 = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"])
 
             # Use the snapshot helper to get the snapshot. This will handle advance logic like relative and absolute URLs
             # as well as getting a snapshot directly from a mjpeg stream if there's no snapshot URL.
@@ -319,6 +309,9 @@ class NotificationsHandler:
                 return None
 
             # Correct the image if needed.
+            flipH = SnapshotHelper.Get().GetWebcamFlipH()
+            flipV = SnapshotHelper.Get().GetWebcamFlipV()
+            rotate90 = SnapshotHelper.Get().GetWebcamRotate90()
             if rotate90 or flipH or flipV:
                 try:
                     if Image is not None:

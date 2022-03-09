@@ -107,7 +107,28 @@ class HandshakeSyn(object):
             return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
         return 0
 
-def Start(builder): builder.StartObject(8)
+    # HandshakeSyn
+    def WebcamFlipH(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(20))
+        if o != 0:
+            return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
+    # HandshakeSyn
+    def WebcamFlipV(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(22))
+        if o != 0:
+            return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
+    # HandshakeSyn
+    def WebcamFlipRotate90(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(24))
+        if o != 0:
+            return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
+def Start(builder): builder.StartObject(11)
 def HandshakeSynStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -147,6 +168,18 @@ def AddRasChallengeVersion(builder, rasChallengeVersion): builder.PrependInt8Slo
 def HandshakeSynAddRasChallengeVersion(builder, rasChallengeVersion):
     """This method is deprecated. Please switch to AddRasChallengeVersion."""
     return AddRasChallengeVersion(builder, rasChallengeVersion)
+def AddWebcamFlipH(builder, webcamFlipH): builder.PrependBoolSlot(8, webcamFlipH, 0)
+def HandshakeSynAddWebcamFlipH(builder, webcamFlipH):
+    """This method is deprecated. Please switch to AddWebcamFlipH."""
+    return AddWebcamFlipH(builder, webcamFlipH)
+def AddWebcamFlipV(builder, webcamFlipV): builder.PrependBoolSlot(9, webcamFlipV, 0)
+def HandshakeSynAddWebcamFlipV(builder, webcamFlipV):
+    """This method is deprecated. Please switch to AddWebcamFlipV."""
+    return AddWebcamFlipV(builder, webcamFlipV)
+def AddWebcamFlipRotate90(builder, webcamFlipRotate90): builder.PrependBoolSlot(10, webcamFlipRotate90, 0)
+def HandshakeSynAddWebcamFlipRotate90(builder, webcamFlipRotate90):
+    """This method is deprecated. Please switch to AddWebcamFlipRotate90."""
+    return AddWebcamFlipRotate90(builder, webcamFlipRotate90)
 def End(builder): return builder.EndObject()
 def HandshakeSynEnd(builder):
     """This method is deprecated. Please switch to End."""

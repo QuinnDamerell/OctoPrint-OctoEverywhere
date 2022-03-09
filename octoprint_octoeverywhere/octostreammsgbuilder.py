@@ -8,7 +8,8 @@ from .Proto import OctoStreamMessage
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt):
+    def BuildHandshakeSyn(printerId, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt,
+        webcamFlipH, webcamFlipV, webcamRotate90):
         # Get the a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -32,6 +33,9 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)
         HandshakeSyn.AddRsaChallenge(builder, rasChallengeOffset)
         HandshakeSyn.AddRasChallengeVersion(builder, rasKeyVersionInt)
+        HandshakeSyn.AddWebcamFlipH(builder, webcamFlipH)
+        HandshakeSyn.AddWebcamFlipV(builder, webcamFlipV)
+        HandshakeSyn.AddWebcamFlipRotate90(builder, webcamRotate90)
         synOffset = HandshakeSyn.End(builder)
 
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)

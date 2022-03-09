@@ -125,7 +125,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         OctoPingPong.Init(self._logger, self.get_plugin_data_folder())
 
         # Create the notification object now that we have the logger.
-        self.NotificationHandler = NotificationsHandler(self._logger, self._printer, self._settings)
+        self.NotificationHandler = NotificationsHandler(self._logger, self._printer)
         self.NotificationHandler.SetPrinterId(printerId)
 
         # Spin off a thread to try to resolve hostnames for logging and debugging.

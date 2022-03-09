@@ -39,6 +39,37 @@ class SnapshotHelper:
             # This is the dev case
             return "http://192.168.86.57/webcam/?action=snapshot"
 
+    # Returns if flip H is set in the settings.
+    def GetWebcamFlipH(self):
+        if self.OctoPrintSettingsObject is not None :
+            # This is the normal plugin case
+            flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"])
+            if flipH is None:
+                return False
+            return flipH
+        else:
+            return False
+
+    # Returns if flip V is set in the settings.
+    def GetWebcamFlipV(self):
+        if self.OctoPrintSettingsObject is not None :
+            flipV = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"])
+            if flipV is None:
+                return False
+            return flipV
+        else:
+            return False
+
+    # Returns if rotate 90 is set in the settings.
+    def GetWebcamRotate90(self):
+        if self.OctoPrintSettingsObject is not None :
+            rotate = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"])
+            if rotate is None:
+                return False
+            return rotate
+        else:
+            return False
+
     # Returns the mjpeg stream URL from the settings. Can be null if there is no URL set in the settings!
     # This URL can be absolute or relative.
     def GetMjpegStreamUrl(self):
