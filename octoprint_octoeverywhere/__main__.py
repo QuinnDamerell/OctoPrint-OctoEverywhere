@@ -91,6 +91,7 @@ if __name__ == '__main__':
 
     # Special - Dev Env Setup
     printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
+    privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
     OctoHttpRequest.SetLocalhostAddress("192.168.86.57")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
     #OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
@@ -110,5 +111,5 @@ if __name__ == '__main__':
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, logger, uiPopInvoker, statusHandler, "1.5.2")
+    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, logger, uiPopInvoker, statusHandler, "1.6.5")
     oe.RunBlocking()

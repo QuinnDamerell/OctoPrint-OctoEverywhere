@@ -128,7 +128,14 @@ class HandshakeSyn(object):
             return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
         return False
 
-def Start(builder): builder.StartObject(11)
+    # HandshakeSyn
+    def PrivateKey(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(26))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+def Start(builder): builder.StartObject(12)
 def HandshakeSynStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -180,6 +187,10 @@ def AddWebcamFlipRotate90(builder, webcamFlipRotate90): builder.PrependBoolSlot(
 def HandshakeSynAddWebcamFlipRotate90(builder, webcamFlipRotate90):
     """This method is deprecated. Please switch to AddWebcamFlipRotate90."""
     return AddWebcamFlipRotate90(builder, webcamFlipRotate90)
+def AddPrivateKey(builder, privateKey): builder.PrependUOffsetTRelativeSlot(11, octoflatbuffers.number_types.UOffsetTFlags.py_type(privateKey), 0)
+def HandshakeSynAddPrivateKey(builder, privateKey):
+    """This method is deprecated. Please switch to AddPrivateKey."""
+    return AddPrivateKey(builder, privateKey)
 def End(builder): return builder.EndObject()
 def HandshakeSynEnd(builder):
     """This method is deprecated. Please switch to End."""

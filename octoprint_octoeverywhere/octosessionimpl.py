@@ -24,7 +24,7 @@ from .Proto import OctoSummon
 
 class OctoSession:
 
-    def __init__(self, octoStream, logger, printerId, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion):
+    def __init__(self, octoStream, logger, printerId, privateKey, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion):
         self.ActiveWebStreams = {}
         self.ActiveWebStreamsLock = threading.Lock()
         self.IsAcceptingStreams = True
@@ -33,6 +33,7 @@ class OctoSession:
         self.SessionId = sessionId
         self.OctoStream = octoStream
         self.PrinterId = printerId
+        self.PrivateKey = privateKey
         self.isPrimarySession = isPrimarySession
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
@@ -230,7 +231,7 @@ class OctoSession:
             rasChallengeKeyVerInt = ServerAuthHelper.c_ServerAuthKeyVersion
 
             # Build the message
-            buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.isPrimarySession, self.PluginVersion,
+            buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
                 rasChallenge, rasChallengeKeyVerInt,
                 SnapshotHelper.Get().GetWebcamFlipH(), SnapshotHelper.Get().GetWebcamFlipV(), SnapshotHelper.Get().GetWebcamRotate90())

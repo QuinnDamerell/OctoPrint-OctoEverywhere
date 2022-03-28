@@ -19,9 +19,10 @@ class OctoEverywhere:
     # die but then tries to get used quickly, we will just be summoned again.
     SecondaryConnectionRunForTimeSec = 60 * 15 # 15 minutes.
 
-    def __init__(self, endpoint, printerId, logger, uiPopupInvoker, statusChangeHandler, pluginVersion):
+    def __init__(self, endpoint, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion):
         self.Endpoint = endpoint
         self.PrinterId = printerId
+        self.PrivateKey = privateKey
         self.Logger = logger
         self.UiPopupInvoker = uiPopupInvoker
         self.StatusChangeHandler = statusChangeHandler
@@ -82,4 +83,4 @@ class OctoEverywhere:
 
     def createOctoServerCon(self, endpoint, isPrimary, statusChangeHandler, runTime):
         # The protocol transition is done! Always make a v1 OctoServerCon!
-        return OctoServerCon(self, endpoint, isPrimary, self.PrinterId, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)
+        return OctoServerCon(self, endpoint, isPrimary, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)

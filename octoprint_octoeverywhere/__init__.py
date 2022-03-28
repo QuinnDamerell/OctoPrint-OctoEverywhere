@@ -108,9 +108,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.OctoPrintLocalPort = port
         self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort)) 
 
-        # Ensure they key is created here, so make sure that it is always created before
-        # Any of the UI queries for it.
+        # Ensure they keys are created here, so make sure that they are always created before any of the UI queries for them.
         printerId = self.EnsureAndGetPrinterId()
+        self.EnsureAndGetPrivateKey()
 
         # Ensure the plugin version is updated in the settings for the frontend.
         self.EnsurePluginVersionSet()
@@ -401,13 +401,18 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Making this a max of 60 chars allows for the service to use 3 chars prefixes for inter-service calls.
     c_OctoEverywherePrinterIdIdealLength = 60
     c_OctoEverywherePrinterIdMinLength = 40
+    c_OctoEverywherePrivateKeyLength = 80
+
     # The url for the add printer process. Note this must have at least one ? and arg because users of it might append &source=blah
     c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/getstarted?isFromOctoPrint=true&printerid="
 
-    # Returns a new printer Id. This needs to be crypo-random to make sure it's not
-    # predictable.
+    # Returns a new printer Id. This needs to be crypo-random to make sure it's not predictable.
     def GeneratePrinterId(self):
         return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(self.c_OctoEverywherePrinterIdIdealLength))
+
+    # Returns a new private key. This needs to be crypo-random to make sure it's not predictable.
+    def GeneratePrivateKey(self):
+        return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(self.c_OctoEverywherePrivateKeyLength))
 
     # Ensures we have generated a printer id and returns it.
     def EnsureAndGetPrinterId(self):
@@ -417,8 +422,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Make sure the current ID is valid.
         if currentId is None or len(currentId) < self.c_OctoEverywherePrinterIdMinLength:
+            if currentId is None:
+                self._logger.info("No printer id found, regenerating.")
+            else:
+                self._logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
             # Create and save the new value
-            self._logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
             currentId = self.GeneratePrinterId()
             self._logger.info("New printer id is: "+currentId)
 
@@ -428,6 +436,30 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._settings.set(["PrinterKey"], currentId, force=True)
         self._settings.save(force=True)
         return currentId
+
+    # Ensures we have generated a private key and returns it.
+    # This key not a key used for crypo purposes, but instead generated and tied to this instance's printer id.
+    # The Printer id is used to ID the printer around the website, so it's more well known. This key is stored by this plugin
+    # and is only used during the handshake to send to the server. Once set it can never be changed, or the server will reject the
+    # handshake for the given printer ID.
+    def EnsureAndGetPrivateKey(self):
+        # Try to get the current.
+        currentKey = self._settings.get(["Pid"])
+
+        # Make sure the current ID is valid.
+        if currentKey is None or len(currentKey) < self.c_OctoEverywherePrivateKeyLength:
+            if currentKey is None:
+                self._logger.info("No private key found, regenerating.")
+            else:
+                self._logger.info("Old private key of length " + str(len(currentKey)) + " is invlaid, regenerating.")
+
+            # Create and save the new value
+            currentKey = self.GeneratePrivateKey()
+
+        # Save and return.
+        self._settings.set(["Pid"], currentKey, force=True)
+        self._settings.save(force=True)
+        return currentKey
 
     # Ensures the plugin version is set into the settings for the frontend.
     def EnsurePluginVersionSet(self):
@@ -497,6 +529,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         try:
             # Get or create a printer id.
             printerId = self.EnsureAndGetPrinterId()
+            privateKey = self.EnsureAndGetPrivateKey()
 
             # Get the frontend http port OctoPrint or it's proxy is running on.
             # This is the port the user would use if they were accessing OctoPrint locally.
@@ -512,7 +545,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
             # Run!
             OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, self._logger, self, self, self._plugin_version)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version)
             oe.RunBlocking()
         except Exception as e:
             self._logger.error("Exception thrown out of main runner. "+str(e))
