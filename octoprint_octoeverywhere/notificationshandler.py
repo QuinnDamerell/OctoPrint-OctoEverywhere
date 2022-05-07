@@ -529,6 +529,12 @@ class NotificationsHandler:
         try:
             jobData = self.OctoPrintPrinterObject.get_current_job()
             if "estimatedPrintTime" in jobData:
+
+                # When the print is first starting and there is no known time, this can be none.
+                # In that case, return -1, unknown.
+                if jobData["estimatedPrintTime"] is None:
+                    return -1
+
                 printTimeEstSec = int(jobData["estimatedPrintTime"])
                 # Compute how long this print has been running and subtract
                 # Sanity check the duration isn't longer than the ETA.
