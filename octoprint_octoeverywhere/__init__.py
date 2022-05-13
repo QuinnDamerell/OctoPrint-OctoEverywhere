@@ -63,7 +63,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if printerUrl is None:
             self._logger.error("Failed to get OctoPrinter Url for wizard.")
             printerUrl = "https://octoeverywhere.com/getstarted"
-        return {"AddPrinterUrl": printerUrl}
+        return {"AddPrinterUrl": printerUrl + "&source=octoprint_wizard"}
 
     # Return the default settings.
     def get_settings_defaults(self):
@@ -73,7 +73,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def get_template_vars(self):
         return dict(
             PrinterKey=self._settings.get(["PrinterKey"]),
-            AddPrinterUrl=self.GetAddPrinterUrl()
+            AddPrinterUrl=self.GetAddPrinterUrl() + "&source=octoprint_settings"
         )
 
     def get_template_configs(self):
@@ -603,6 +603,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._settings.set(["NoAccountConnectedLastInformDateTime"], dateTime, force=True)
 
     # Returns None if there is no url set.
+    # Note the URL will always have a ?, so it's safe to append a &source=bar on it.
     def GetAddPrinterUrl(self):
         return self.GetFromSettings("AddPrinterUrl", None)
 

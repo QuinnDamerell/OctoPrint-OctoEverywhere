@@ -1,15 +1,83 @@
+<!-- Common Header -->
 <div style="display: flex; align-items: center; justify-content: center; flex-direction:column; margin-bottom:30px;">
     <img src="https://octoeverywhere.com/img/logo.png" height="80px" width="80px" />
-    <h3>OctoEverywhere!</h3>
+    <h3>OctoEverywhere</h3>
 </div>
 
-<p style="padding-bottom:10px">Blast off 🚀 with <a href="https://octoeverywhere.com">OctoEverywhere.com</a>! Access your full OctoPrint portal, printer controls, camera streams, and plugins from anywhere! OctoEverywhere works on your desktop, laptop, tablet, phone, and your favorite OctoPrint apps!</p>
+<!-- Printer Not Setup UI -->
+<div id="octoeverywhere-printer-not-setup">
+    <p style="padding-bottom:10px">Blast off 🚀 with <a href="https://octoeverywhere.com">OctoEverywhere.com</a>! Access your full OctoPrint portal, printer controls, camera streams, and plugins from anywhere! OctoEverywhere works on your desktop, laptop, tablet, phone, and your favorite OctoPrint apps!</p>
+    <p style="padding-bottom:10px">OctoEverywhere is <b>free, secure, and super easy to setup!</b></p>
+    <p>
+        <a class="btn btn-primary" target="_blank" href="" data-bind="attr: { href: settings.plugins.octoeverywhere.AddPrinterUrl } ">Finish Your Two Minute Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>
+    </p>
+</div>
 
-<p style="padding-bottom:10px">OctoEverywhere is <b>free, secure, and super easy to setup!</b></p>
+<!-- Printer Setup UI -->
+<div id="octoeverywhere-setup-complete" style="display:none">
+    <p style="padding-bottom:5px"><b>✅ Your printer is connected and ready to go!</b></p>
+    <p style="padding-bottom:5px">You can access your printer anytime, anywhere, on any device at <a target="_blank" href="https://octoeverywhere.com/dashboard?source=plugin_settings">OctoEverywhere.com</a></p>
 
-<p>
-    <a class="btn btn-primary" target="_blank" href="" data-bind="attr: { href: settings.plugins.octoeverywhere.AddPrinterUrl } ">Finish Your Two Minute Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>
-</p>
+    <p style="padding-bottom:5px;padding-top:20px;"><b>Did you know....</b> you can empower your favorite apps to work anywhere?!?</p>
+    <p style="padding-bottom:5px">Experience the full power of your favorite OctoPrint app from anywhere, including full frame rate and full resolution webcam streaming. <b>Try it now, it takes less than 30 seconds to setup!</b></p>
+
+    <div style="display:flex; align-items:center; justify-content:center;">
+        <div style="display:flex; flex-direction:row">
+            <div class="oe-appBox">
+                <div>
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_octopod&interest=octopod"><img src="https://octoeverywhere.com/img/appsetup/octopod.png" class="oe-appIcon" /></a>
+                </div>
+                <div class="oe-appTitle">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_octopod&interest=octopod">OctoPod</a>
+                </div>
+                <div class="oe-appiOS">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_octopod&interest=octopod">For iOS</a>
+                </div>
+            </div>
+            <div class="oe-appBox">
+                <div>
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_polymer&interest=polymer"><img src="https://octoeverywhere.com/img/appsetup/polymer.png" class="oe-appIcon" /></a>
+                </div>
+                <div class="oe-appTitle">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_polymer&interest=polymer">Polymer</a>
+                </div>
+                <div class="oe-appiOS">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_polymer&interest=polymer">For iOS</a>
+                </div>
+            </div>
+            <div class="oe-appBox">
+                <div>
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_printoid&interest=printoid"><img src="https://octoeverywhere.com/img/appsetup/printoid.png" class="oe-appIcon" /></a>
+                </div>
+                <div class="oe-appTitle">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_printoid&interest=printoid">Printoid</a>
+                </div>
+                <div class="oe-appAndroid">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_printoid&interest=printoid">For Android</a>
+                </div>
+            </div>
+            <div class="oe-appBox">
+                <div>
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_octoapp&interest=octoapp"><img src="https://octoeverywhere.com/img/appsetup/octoapp.png" class="oe-appIcon" /></a>
+                </div>
+                <div class="oe-appTitle">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_octoapp&interest=octoapp">OctoApp</a>
+                </div>
+                <div class="oe-appAndroid">
+                    <a target="_blank" href="https://octoeverywhere.com/appsetup?source=plugin_settings_octoapp&interest=octoapp">For Android</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p style="padding-bottom:5px;padding-top:50px;"><b style="color:#78a4fa">NEW! Free and Instant Printer Notifications</b><br/>Setup alerts for print progress, print completion, print errors, filament changes, and so more!</p>
+    <p style="padding-bottom:5px">Our notifications include a wealth of information and high-resolution screenshots. We can send you notifications via <b>Email, SMS, Discord, Telegram, Windows, Mac, Android, Slack, Pushover, and Pushbullet.</b></p>
+    <p style="margin-bottom:20px">
+        <a class="btn btn-primary" target="_blank" href="https://octoeverywhere.com/notifications?source=plugin_settings">Setup Your Notifications Now!</a>
+    </p>
+</div>
+
+<!-- Common Footer -->
 <br/>
 <p>
     <a href="https://octoeverywhere.com/support">Need help or want to send feedback?</a>
@@ -21,12 +89,12 @@
             <a href="#" class="muted" onclick="$(this).children().toggleClass('fa-caret-right fa-caret-down').parent().parent().parent().next().slideToggle('fast')"><i class="fa fa-caret-right"></i> Advanced</a>
         </small>
     </div>
-    <div class="hide">        
+    <div class="hide">
         <div class="control-group">
             <label class="control-label" style="padding-top:20px;">Your Printer Id: <strong>(don't share this!)</strong></label>
             <div class="controls">
                 <span data-bind="text: settings.plugins.octoeverywhere.PrinterKey"></span>
             </div>
-        </div>        
+        </div>
     </div>
 </div>

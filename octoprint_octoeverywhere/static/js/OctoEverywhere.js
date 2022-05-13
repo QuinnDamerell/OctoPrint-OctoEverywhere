@@ -416,6 +416,31 @@ $(function() {
                                 document.title = document.title + " - " + response.Result.PrinterName
                             }
                         }
+                        // Setup the settings UI to reflect if this printer is setup or not.
+                        if(response.Result.IsLinked !== undefined)
+                        {
+                            // If the printer is linked, don't show the default setup help.
+                            if(response.Result.IsLinked === true)
+                            {
+                                // Setup a worker to update the UI. Sometimes if this API call comes back really fast,
+                                // it can seem to execute before the UI is fully loaded and these elements don't exist.
+                                // In that case we will wait for them to exist and the set them.
+                                var worker = function()
+                                {
+                                    var notSetupUi = $("#octoeverywhere-printer-not-setup");
+                                    var setupUi = $("#octoeverywhere-setup-complete");
+                                    if(notSetupUi.length === 0 || setupUi.length === 0)
+                                    {
+                                        console.log("OE is waiting for the settings to load.")
+                                        setTimeout(worker, 1000);
+                                        return;
+                                    }
+                                    notSetupUi.hide();
+                                    setupUi.show();
+                                }
+                                worker();
+                            }
+                        }
                     }
                     catch (error)
                     {
