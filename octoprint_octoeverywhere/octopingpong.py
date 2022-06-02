@@ -354,7 +354,7 @@ class OctoPingPong:
 
             # Ensure we got at least one result
             if len(results) == 0:
-                return
+                return None
 
             # Since the lowest time is the fastest the server responded, that's all we care about.
             minElapsedTimeMs = None
