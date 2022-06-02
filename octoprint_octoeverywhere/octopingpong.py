@@ -259,7 +259,6 @@ class OctoPingPong:
             # Make the first telemetry post
             isDefaultLowest = defaultServerName == lowestLatencyName
             lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
-            self.Logger.info("Server Latency Computed. Default:"+str(defaultServerName) + " latency:"+str(defaultServerLatencyMs)+"; Lowest Latency:"+str(lowestLatencyName)+" latency:"+str(lowestLatencyMs))
             data = {
                 "Key":"PluginLatencyV3",
                 "Value": float(defaultServerLatencyMs),
