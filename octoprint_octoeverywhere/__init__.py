@@ -34,7 +34,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # The port this octoprint instance is listening on.
         self.OctoPrintLocalPort = 80
         # Default the handler to None since that will make the var name exist
-        # but we can't actually create the class yet until the system is more initalized.
+        # but we can't actually create the class yet until the system is more initialized.
         self.NotificationHandler = None
         # Init member vars
         self.octoKey = ""
@@ -122,7 +122,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         SnapshotHelper.Init(self._logger, self._settings)
 
         # Init the ping helper
-        OctoPingPong.Init(self._logger, self.get_plugin_data_folder())
+        OctoPingPong.Init(self._logger, self.get_plugin_data_folder(), printerId)
 
         # Create the notification object now that we have the logger.
         self.NotificationHandler = NotificationsHandler(self._logger, self._printer)
@@ -214,13 +214,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
             # This m600 usually comes from when the printer sensor has detected a filament run out.
             if "m600" in lineLower or "fsensor_update" in lineLower:
-                self._logger.info("Fireing On Filament Change Notification From GcodeReceived: "+str(line))
+                self._logger.info("Firing On Filament Change Notification From GcodeReceived: "+str(line))
                 # No need to use a thread since all events are handled on a new thread.
                 self.NotificationHandler.OnFilamentChange()
             else:
                 # Look for a line indicating user interaction is needed.
                 if "paused for user" in lineLower or "// action:paused" in lineLower:
-                    self._logger.info("Fireing On User Interaction Required From GcodeReceived: "+str(line))
+                    self._logger.info("Firing On User Interaction Required From GcodeReceived: "+str(line))
                     # No need to use a thread since all events are handled on a new thread.
                     self.NotificationHandler.OnUserInteractionNeeded()
 
@@ -238,7 +238,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
         # This M600 usually comes from filament change required commands embedded in the gcode, for color changes and such.
         if self.NotificationHandler is not None and gcode and gcode == "M600":
-            self._logger.info("Fireing On Filament Change Notification From GcodeSent: "+str(gcode))
+            self._logger.info("Firing On Filament Change Notification From GcodeSent: "+str(gcode))
             # No need to use a thread since all events are handled on a new thread.
             self.NotificationHandler.OnFilamentChange()
 
@@ -324,7 +324,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # finish setup message. This helps users setup the plugin if the miss the wizard or something.
         self.ShowLinkAccountMessageIfNeeded()
 
-        # Check if an update is required, if so, tell the user everytime they login.
+        # Check if an update is required, if so, tell the user every time they login.
         pluginUpdateRequired = self.GetPluginUpdateRequired()
         if pluginUpdateRequired is True:
             title = "OctoEverywhere Disabled"
@@ -344,7 +344,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             #
             # We don't want to show the message the first time we load, since the wizard should show. After that we will show it some what frequently.
             # Ideally the user will either setup the plugin or remove it so it doesn't consume server resources.
-            minTimeBetweenInformsSec = 60 * 1 # Every 1 mintue
+            minTimeBetweenInformsSec = 60 * 1 # Every 1 minute
 
             # Check the time since the last message.
             if lastInformTimeDateTime is None or (datetime.now() - lastInformTimeDateTime).total_seconds() > minTimeBetweenInformsSec:
@@ -425,7 +425,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             if currentId is None:
                 self._logger.info("No printer id found, regenerating.")
             else:
-                self._logger.info("Old printer id of length " + str(len(currentId)) + " is invlaid, regenerating.")
+                self._logger.info("Old printer id of length " + str(len(currentId)) + " is invalid, regenerating.")
             # Create and save the new value
             currentId = self.GeneratePrinterId()
             self._logger.info("New printer id is: "+currentId)
@@ -451,7 +451,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             if currentKey is None:
                 self._logger.info("No private key found, regenerating.")
             else:
-                self._logger.info("Old private key of length " + str(len(currentKey)) + " is invlaid, regenerating.")
+                self._logger.info("Old private key of length " + str(len(currentKey)) + " is invalid, regenerating.")
 
             # Create and save the new value
             currentKey = self.GeneratePrivateKey()

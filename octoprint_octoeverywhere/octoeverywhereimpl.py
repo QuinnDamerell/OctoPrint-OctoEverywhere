@@ -14,7 +14,7 @@ class OctoEverywhere:
     PrimaryConnectionRunForTimeSec = 60 * 60 * 47 # 47 hours.
 
     # How long secondary connections will stay connected for.
-    # Currently set to 15 mintues.
+    # Currently set to 15 minutes.
     # The RunFor system will keep the connection alive if there's user activity on it. If the connection does
     # die but then tries to get used quickly, we will just be summoned again.
     SecondaryConnectionRunForTimeSec = 60 * 15 # 15 minutes.
@@ -37,7 +37,8 @@ class OctoEverywhere:
         while 1:
             try:
                 # Create the primary connection.
-                serverCon = self.createOctoServerCon(self.Endpoint, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec)
+                # Allow this connection to use the lowest latency server if possible.
+                serverCon = self.createOctoServerCon(self.Endpoint, True, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec)
                 serverCon.RunBlocking()
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. ex:" + str(e))
@@ -60,10 +61,11 @@ class OctoEverywhere:
             self.SecondaryServerCons[summonConnectUrl] = thread
 
     def HandleSecondaryServerCon(self, summonConnectUrl):
-        # Run the secondary connection for until the RunFor time limint. Note RunFor will account for user activity.
+        # Run the secondary connection for until the RunFor time limit. Note RunFor will account for user activity.
         self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl))
         try:
-            serverCon = self.createOctoServerCon(summonConnectUrl, False, None, self.SecondaryConnectionRunForTimeSec)
+            # Never allow the lowest latency server to be used for secondary connection, since it won't connect to where it needs to be.
+            serverCon = self.createOctoServerCon(summonConnectUrl, False, False, None, self.SecondaryConnectionRunForTimeSec)
             serverCon.RunBlocking()
         except Exception as e:
             self.Logger.error("Exception in HandleSecondaryServerCon function. ex:" + str(e))
@@ -81,6 +83,5 @@ class OctoEverywhere:
 
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 
-    def createOctoServerCon(self, endpoint, isPrimary, statusChangeHandler, runTime):
-        # The protocol transition is done! Always make a v1 OctoServerCon!
-        return OctoServerCon(self, endpoint, isPrimary, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)
+    def createOctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, statusChangeHandler, runTime):
+        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)

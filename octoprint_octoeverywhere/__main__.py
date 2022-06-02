@@ -9,10 +9,10 @@ from octoprint_octoeverywhere.snapshothelper import SnapshotHelper
 
 from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
-from .threaddebug import ThreadDebug
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
 #from .notificationshandler import NotificationsHandler
+#from .threaddebug import ThreadDebug
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
@@ -74,8 +74,8 @@ if __name__ == '__main__':
     logger.addHandler(handler)
 
     # This is a tool to help track stuck or leaked threads.
-    threadDebugger = ThreadDebug()
-    threadDebugger.Start(logger, 30)
+    #threadDebugger = ThreadDebug()
+    #threadDebugger.Start(logger, 30)
 
     # Setup a signal handler to kill everything
     signal.signal(signal.SIGINT, SignalHandler)
@@ -96,12 +96,12 @@ if __name__ == '__main__':
     OctoHttpRequest.SetLocalOctoPrintPort(80)
     #OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
 
-    # Setup the local auth healper
+    # Setup the local auth helper
     LocalAuth.Init(logger, None)
     LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
 
     # Init the ping pong helper.
-    OctoPingPong.Init(logger, "C:\\Users\\quinn")
+    OctoPingPong.Init(logger, "C:\\Users\\quinn", printerId)
 
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)

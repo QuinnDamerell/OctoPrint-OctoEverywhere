@@ -5,19 +5,20 @@ import time
 import requests
 
 #
-# The point of this class is to simply ping the aviable OctoEverywhere server regions occasionally to track which region is has the best
+# The point of this class is to simply ping the available OctoEverywhere server regions occasionally to track which region is has the best
 # latency to. This information is used by the plugin to ensure it's connected to the best possible server.
 #
 class OctoPingPong:
 
     LastWorkTimeKey = "LastWorkTime"
     ServerStatsKey = "ServerStats"
+    LowestLatencyServerSubKey = "LowestLatencyServerSub"
     _Instance = None
 
 
     @staticmethod
-    def Init(logger, pluginDataFolderPath):
-        OctoPingPong._Instance = OctoPingPong(logger, pluginDataFolderPath)
+    def Init(logger, pluginDataFolderPath, printerId):
+        OctoPingPong._Instance = OctoPingPong(logger, pluginDataFolderPath, printerId)
 
 
     @staticmethod
@@ -25,9 +26,11 @@ class OctoPingPong:
         return OctoPingPong._Instance
 
 
-    def __init__(self, logger, pluginDataFolderPath):
+    def __init__(self, logger, pluginDataFolderPath, printerId):
         self.Logger = logger
+        self.PrinterId = printerId
         self.StatsFilePath = os.path.join(pluginDataFolderPath, "PingPongDataV2.json")
+        self.PluginFirstRunLatencyCompleteCallback = None
 
         # Try to load past stats from the file.
         self.Stats = None
@@ -48,12 +51,34 @@ class OctoPingPong:
             self.Logger.error("Failed to start OctoPingPong Thread: "+str(e))
 
 
+    # Returns a string to the lowest latency server is known, otherwise None.
+    def GetLowestLatencyServerSub(self):
+        # Do this in a thread safe way, if we fail, just return None.
+        try:
+            stats = self.Stats
+            if stats is None:
+                return None
+            if OctoPingPong.LowestLatencyServerSubKey not in stats:
+                return None
+            lowestLatencyServerSub = stats[OctoPingPong.LowestLatencyServerSubKey]
+            if lowestLatencyServerSub is None:
+                return None
+            return lowestLatencyServerSub
+        except Exception as e:
+            self.Logger.error("Exception in OctoPingPong GetLowestLatencyServerSub: "+str(e))
+        return None
+
+
+    # A special function used when the plugin is first installed and ran.
+    # Since there will be no known latency data, the connection will default to the default endpoint.
+    # When the latency data is ready, this class will fire the callback and allow the main connection to reconnect using it.
+    def RegisterPluginFirstRunLatencyCompleteCallback(self, callback):
+        self.PluginFirstRunLatencyCompleteCallback = callback
+
+
     # The main worker thread.
     def _WorkerThread(self):
         oneHourOfSeconds = 60 * 60
-
-        # Always sleep a little extra time to let the system settle since we sometimes will start doing work right after a boot.
-        time.sleep(60)
 
         while True:
             try:
@@ -65,10 +90,15 @@ class OctoPingPong:
                 secondsSinceLastWork = time.time() - lastWorkTime
 
                 # Compute how long until we should do work, this will be negative if the time has passed.
-                # We want to do work about every 23 hours. 23 hours will make the cycle of work vary over time.
-                #timeUntilNextWorkSec = (oneHourOfSeconds * 23) - secondsSinceLastWork
-                # TODO - Temp make this 10 hours to capture initial data faster.
-                timeUntilNextWorkSec = (oneHourOfSeconds * 10) - secondsSinceLastWork
+                timeUntilNextWorkSec = (oneHourOfSeconds * 18) - secondsSinceLastWork
+
+                # If lastWorkTime is 0, the file was just created, so this is the first time the plugin has ran.
+                if lastWorkTime == 0:
+                    self.Logger.info("PingPong has detected a first time run. Updating latency stats now.")
+                    timeUntilNextWorkSec = 0
+                    # Since the first run will be a little after OctoPrint or device boot, we need to wait a bit before for things to settle.
+                    # For reference, it takes slipstream about 20 seconds to get the full index cache after OctoPrint boot.
+                    time.sleep(30)
 
                 # If it's not time to work, sleep until it is time.
                 if timeUntilNextWorkSec > 0:
@@ -81,6 +111,13 @@ class OctoPingPong:
 
                 # Update now
                 self._UpdateStats()
+
+                # Only for the very first time this runs after the plugin is installed, fire this callback
+                # which might reconnect the main OctoSocket connection to the best possible server.
+                if lastWorkTime == 0 and self.GetLowestLatencyServerSub() is not None:
+                    callback = self.PluginFirstRunLatencyCompleteCallback
+                    if callback is not None:
+                        self.PluginFirstRunLatencyCompleteCallback()
 
             except Exception as e:
                 self.Logger.error("Exception in OctoPingPong thread: "+str(e))
@@ -123,10 +160,23 @@ class OctoPingPong:
 
     # Given the default response and the currently updated stats, this computes values.
     def _ComputeStats(self, defaultServerResult):
+
+        # Before we compute stats, remove any servers from our on disk stats that are no longer in the default response.
+        # This is important to ensure the lowest latency server doesn't get stuck to a hostname that doesn't exist.
+        toRemove = []
+        for sub in self.Stats[OctoPingPong.ServerStatsKey]:
+            if sub not in defaultServerResult[1]:
+                toRemove.append(sub)
+        for sub in toRemove:
+            del self.Stats[OctoPingPong.ServerStatsKey][sub]
+
+        c_largeInt = 99999
         computedStats = {}
-        lowestLatencyValueMs = 99999
-        lowestLatencyName = None
+        lowestLatencyValueMs = c_largeInt
+        lowestLatencySubName = None
         defaultServerComputedAvgMs = None
+        selectedLatencyMs = None
+        smallestBucketStatCount = c_largeInt
         for sub in self.Stats[OctoPingPong.ServerStatsKey]:
 
             # Trim the list to never be longer than a count of data points.
@@ -145,71 +195,88 @@ class OctoPingPong:
                 s += v
                 c += 1
 
-            # Don't report a stat unless there are more than 2 records, to reduce noise.
-            if c < 3:
+            # Keep track of which server we have the lowest result counts for.
+            if c < smallestBucketStatCount:
+                smallestBucketStatCount = c
+
+            # Prevent divide by zero
+            if c == 0:
                 continue
 
             avg = s/c
             computedStats[sub] = avg
             if avg < lowestLatencyValueMs:
                 lowestLatencyValueMs = avg
-                lowestLatencyName = sub
-            if defaultServerResult is not None and defaultServerResult[2] == sub:
+                lowestLatencySubName = sub
+            if defaultServerResult[2] == sub:
                 defaultServerComputedAvgMs = avg
+
+        # We need to set the lowest latency server into settings if we have the right data.
+        # defaultServerResult[3] is the server flag indicating if the plugins should try to connect to the lowest latency servers.
+        # This needs to be done before we return if smallestBucketStatCount is too low, because we still want to set the lowest latency server even with few data points.
+        #
+        # Even if this is the default server we will set it, just so we stay pinned to the lowest latency server
+        # The notion of the default server can change over time, as traffic manager changes it's mind.
+        #
+        # Note, we should be mindful that if the printer is not connected to the default server, there's a higher chance that an app connection
+        # will need to make a secondary connection. But since that system is reliable, we won't account for it now.
+        #
+        # Note that if there isn't enough data to compute stats, lowestLatencySubName can be None.
+        if defaultServerResult[3] is True and lowestLatencySubName is not None:
+            self.Stats[OctoPingPong.LowestLatencyServerSubKey] = lowestLatencySubName
+            selectedLatencyMs = lowestLatencyValueMs
+        else:
+            self.Stats[OctoPingPong.LowestLatencyServerSubKey] = None
+            selectedLatencyMs = defaultServerComputedAvgMs
 
         # Save the new stats to disk.
         self._SaveStatsToFile()
 
-        # If there is no lowest latency name, we don't have enough stats to use yet.
-        if lowestLatencyName is None:
+        # Report info
+        self.Logger.info("Ping Pong Stats: Default:["+str(defaultServerResult[2])+","+str(defaultServerComputedAvgMs)+"], Lowest:["+str(lowestLatencySubName)+","+str(lowestLatencyValueMs)+"] Use Low Latency Enabled: "+str(defaultServerResult[3]))
+
+        # If any of the stats buckers are too low of readings, don't report stats yet.
+        # Note this does mean that when a new server is added, we won't report status until 2 readings have been taken.
+        if smallestBucketStatCount < 3:
             return
-        if defaultServerResult is None:
+
+        # Ensure we got a lowest latency server, we always should if minStatCount is > 0
+        if lowestLatencySubName is None:
             return
+
+        # Sanity check we found the default server.
         if defaultServerComputedAvgMs is None:
             self.Logger.warn("PingPong default server name not found in results "+defaultServerResult[2])
             return
 
         # Report
         # Use the average for the default server so it's smoothed the same way the "lowest latency" is.
-        self._ReportTelemetry(defaultServerResult[2], defaultServerComputedAvgMs, lowestLatencyName, lowestLatencyValueMs)
+        self._ReportTelemetry(defaultServerResult[2], defaultServerComputedAvgMs, lowestLatencySubName, lowestLatencyValueMs, selectedLatencyMs)
 
 
-    def _ReportTelemetry(self, defaultServerName, defaultServerLatencyMs, lowestLatencyName, lowestLatencyMs):
+    def _ReportTelemetry(self, defaultServerName, defaultServerLatencyMs, lowestLatencyName, lowestLatencyMs, selectedLatencyMs):
         try:
             # Make the first telemetry post
             isDefaultLowest = defaultServerName == lowestLatencyName
             lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
             self.Logger.info("Server Latency Computed. Default:"+str(defaultServerName) + " latency:"+str(defaultServerLatencyMs)+"; Lowest Latency:"+str(lowestLatencyName)+" latency:"+str(lowestLatencyMs))
             data = {
-                "Key":"PluginLatencyV2",
+                "Key":"PluginLatencyV3",
                 "Value": float(defaultServerLatencyMs),
                 "Properties":{
+                    "PrinterId": str(self.PrinterId),
                     "IsDefaultLowest": str(isDefaultLowest),
                     "DefaultSub" : defaultServerName,
                     "LowestLatSub": lowestLatencyName,
-                    "LowestLatDelta": str(lowestLatencyDelta)
+                    "LowestLatDelta": str(lowestLatencyDelta),
+                    "LowestLatMs": str(lowestLatencyMs),
+                    "SelectedLatencyMs": str(selectedLatencyMs)
                 }
             }
             response = requests.post('https://octoeverywhere.com/api/stats/telemetryaccumulator', json=data)
             if response.status_code != 200:
                 self.Logger.warn("Failed to report ping latency "+response.status_code)
                 return
-
-            # If this isn't the lowest ping server, send a follow-up as well.
-            if isDefaultLowest is False:
-                data = {
-                    "Key":"PluginLowestLatency",
-                    "Value": float(lowestLatencyDelta),
-                    "Properties":{
-                        "DefaultSub" : defaultServerName,
-                        "LowestLatSub": lowestLatencyName,
-                        "LowestLatMs": str(lowestLatencyMs)
-                    }
-                }
-                response = requests.post('https://octoeverywhere.com/api/stats/telemetryaccumulator', json=data)
-                if response.status_code != 200:
-                    self.Logger.warn("Failed to report ping non-default latency "+response.status_code)
-                    return
         except Exception as e:
             self.Logger.warm("Failed to report ping latency " + str(e))
 
@@ -239,8 +306,21 @@ class OctoPingPong:
 
             # Parse and check.
             obj = response.json()
+            if "Result" not in obj:
+                self.Logger.warn("OctoPingPong server response had no result obj.")
+                return None
+            if "Servers" not in obj["Result"]:
+                self.Logger.warn("OctoPingPong server response had no servers obj.")
+                return None
             servers = obj["Result"]["Servers"]
+            if "ThisServer" not in obj["Result"]:
+                self.Logger.warn("OctoPingPong server response had no ThisServer obj.")
+                return None
             thisServer = obj["Result"]["ThisServer"]
+            if "EnablePluginAutoLowestLatency" not in obj["Result"]:
+                self.Logger.warn("OctoPingPong server response had no EnablePluginAutoLowestLatency obj.")
+                return None
+            enablePluginAutoLowestLatency = obj["Result"]["EnablePluginAutoLowestLatency"]
             if servers is None or len(servers) == 0:
                 return None
             if thisServer is None:
@@ -252,21 +332,38 @@ class OctoPingPong:
             # Now using the same session, use the direct ping call.
             # The session will prevent all of the overhead and should have a pooled open connection
             # So this is as close to an actual realtime ping as we can get.
-            start = time.time()
-            response = s.get(pingDirectApiUrl, timeout=10)
-            end = time.time()
-            elapsedMs = (end - start) * 1000.0
+            #
+            results = []
+            for _ in range(0, 3):
+                # Do the test.
+                start = time.time()
+                response = s.get(pingDirectApiUrl, timeout=10)
+                end = time.time()
+                # Close the response so it's back in the pool.
+                response.close()
+                # Only consider 200s valid, otherwise the request might have never made it to the server.
+                if response.status_code == 200:
+                    elapsedTimeMs = (end - start) * 1000.0
+                    results.append(elapsedTimeMs)
+                # Give the new test a few ms before starting again.
+                time.sleep(0.05)
 
             # Close the session to clean up all connections
             # (not required, this will be auto closed, but we do it anyways)
             s.close()
 
-            # Check for failure
-            if response.status_code != 200:
-                return None
+            # Ensure we got at least one result
+            if len(results) == 0:
+                return
+
+            # Since the lowest time is the fastest the server responded, that's all we care about.
+            minElapsedTimeMs = None
+            for result in results:
+                if minElapsedTimeMs is None or result < minElapsedTimeMs:
+                    minElapsedTimeMs = result
 
             # Success.
-            return [elapsedMs, servers, thisServer]
+            return [minElapsedTimeMs, servers, thisServer, enablePluginAutoLowestLatency]
 
         except Exception as e:
             self.Logger.info("Failed to call _DoPing "+str(e))
@@ -277,10 +374,9 @@ class OctoPingPong:
     def _ResetStats(self):
         self.Logger.info("OctoPingPong stats reset")
         self.Stats = {}
-        # To ensure we don't constantly fail to read the file, restart, and then work,
-        # Set this time to be now.
-        self.Stats[OctoPingPong.LastWorkTimeKey] = time.time()
+        self.Stats[OctoPingPong.LastWorkTimeKey] = 0
         self.Stats[OctoPingPong.ServerStatsKey] = {}
+        self.Stats[OctoPingPong.LowestLatencyServerSubKey] = None
 
 
     # Blocks to write the current stats to a file.
