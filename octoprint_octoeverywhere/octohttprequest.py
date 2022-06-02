@@ -118,11 +118,11 @@ class OctoHttpRequest:
         # First of all, we need to figure out what the URL is. There are two options
         #
         # 1) Absolute URLs
-        # These are the easiest, because we just want to make a request to exactly what the abolute URL is. These are used
+        # These are the easiest, because we just want to make a request to exactly what the absolute URL is. These are used
         # when the OctoPrint portal is trying to make an local LAN http request to the same device or even a different device.
         # For these to work properly on a remote browser, the OctoEverywhere service will detect and convert the URLs in to encoded relative
-        # URLs for the portal. This ensures when the remote browser tries to access the HTTP endpoint, it will hit OctoEverywhere. The OctoEverywere
-        # server detects the special relative URL, decodes the abolute URL, and sends that in the OctoMessage as "AbsUrl". For these URLs we just try
+        # URLs for the portal. This ensures when the remote browser tries to access the HTTP endpoint, it will hit OctoEverywhere. The OctoEverywhere
+        # server detects the special relative URL, decodes the absolute URL, and sends that in the OctoMessage as "AbsUrl". For these URLs we just try
         # to hit them and we take whatever we get, we don't care if fails or not.
         #
         # 2) Relative Urls
@@ -132,10 +132,10 @@ class OctoHttpRequest:
         # OctoPrint server to talk to. (consider there might be multiple instances running on one device.)
         #
         # But, the other most common use case for http calls are the webcam streams to mjpegstreamer. This is the tricky part. There are two ways it can be
-        # setup. 1) the webcam stream uses an absolute local LAN url with the ip and port. This is coverted by the abolute URL system above. 2) The webcam stream
+        # setup. 1) the webcam stream uses an absolute local LAN url with the ip and port. This is covered by the absolute URL system above. 2) The webcam stream
         # uses a relative URL and haproxy handles detecting the webcam path to send it to the proper mjpegstreamer instance. This is the tricky one, because we can't
         # directly query or know what the correct port for haproxy or mjpegstreamer is. We could look at the configs, but a user might not setup the configs in the
-        # standard places. So to fix the issue, we use logic in the frontend JS to determin if a web browser is connecting locally, and if so what the port is. That gives
+        # standard places. So to fix the issue, we use logic in the frontend JS to determine if a web browser is connecting locally, and if so what the port is. That gives
         # use a reliable way to know what port haproxy is running on. It sends that to the plugin, which is then given here as `localHttpProxyPort`.
         #
         # The last problem is knowing which calls should be sent to OctoPrint directly and which should be sent to haproxy. We can't rely on any URL matching, because
@@ -202,7 +202,7 @@ class OctoHttpRequest:
         # First, try the main URL.
         # For the first main url, we set the main response to None and is fallback to False.
         ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Main request", method, url, headers, data, None, False, fallbackUrl)
-        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
             return ret.Result
@@ -212,7 +212,7 @@ class OctoHttpRequest:
 
         # Main failed, try the fallback, which should be the http proxy.
         ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Http proxy fallback", method, fallbackUrl, headers, data, mainResult, True, fallbackLocalIpHttpProxySuffix)
-        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
             return ret.Result
@@ -225,7 +225,7 @@ class OctoHttpRequest:
         # It's important we use the right http proxy protocol with the http proxy port.
         localIpFallbackUrl = httpProxyProtocol + localIp + fallbackLocalIpHttpProxySuffix
         ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP Http Proxy Fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackLocalIpOctoPrintPortSuffix)
-        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
             return ret.Result
@@ -233,7 +233,7 @@ class OctoHttpRequest:
         # Now try the OcotoPrint direct port with the local IP.
         localIpFallbackUrl = "http://" + localIp + fallbackLocalIpOctoPrintPortSuffix
         ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackWebcamUrl)
-        # If the function reports the chain is done, the next fallback URL is invlaid and we should always return
+        # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
             return ret.Result
@@ -276,7 +276,7 @@ class OctoHttpRequest:
             # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
             # place to set the location redirect header.
             #
-            # It's important to set the `verify` = False, since if the server is using SSL it's probally a self-signed cert.
+            # It's important to set the `verify` = False, since if the server is using SSL it's probably a self-signed cert.
             #
             # We always set stream=True because we use the iter_content function to read the content.
             # This means that response.content will not be valid and we will always use the iter_content. But it also means

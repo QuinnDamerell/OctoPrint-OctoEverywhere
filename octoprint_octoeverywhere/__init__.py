@@ -106,7 +106,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def on_startup(self, _, port):
         # Get the port the server is listening on, since for some configs it's not the default.
         self.OctoPrintLocalPort = port
-        self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort)) 
+        self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
 
         # Ensure they keys are created here, so make sure that they are always created before any of the UI queries for them.
         printerId = self.EnsureAndGetPrinterId()
