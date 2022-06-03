@@ -4,7 +4,7 @@ import threading
 import traceback
 
 #
-# This file respresents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
+# This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
 #
 
 from .WebStream import octowebstream
@@ -105,7 +105,7 @@ class OctoSession:
             # Accepted!
             # Parse and validate the RAS challenge.
             rasChallengeResponse = OctoStreamMsgBuilder.BytesToString(handshakeAck.RsaChallengeResult())
-            if self.ServerAuth.ValidateChallengResponse(rasChallengeResponse) is False:
+            if self.ServerAuth.ValidateChallengeResponse(rasChallengeResponse) is False:
                 raise Exception("Server RAS challenge failed!")
             # Parse out the response and report.
             connectedAccounts = None
@@ -170,7 +170,7 @@ class OctoSession:
 
                 # Check that we are still accepting streams
                 if self.IsAcceptingStreams is False:
-                    self.Logger.info("OctoSession got a webstream open request after we stopped accpeting streams. streamId:"+str(streamId))
+                    self.Logger.info("OctoSession got a webstream open request after we stopped accepting streams. streamId:"+str(streamId))
                     return
 
                 # Create the new stream object now.
@@ -280,7 +280,7 @@ class OctoSession:
                 self.HandleSummonRequest(msg)
                 return
 
-            # We don't know what this is, probally a new message we don't understand.
+            # We don't know what this is, probably a new message we don't understand.
             self.Logger.info("Unknown message type received, ignoring.")
             return
 

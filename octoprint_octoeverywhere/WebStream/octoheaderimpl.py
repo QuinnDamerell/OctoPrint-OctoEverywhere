@@ -34,11 +34,11 @@ class HeaderHelper:
                     # local host. We will do our own encoding when we send the data over the websocket.
                     continue
                 if lowerName == "transfer-encoding":
-                    # We don't want to send the transfter encoding since it' won't be accurate any longer.
+                    # We don't want to send the transfer encoding since it' won't be accurate any longer.
                     # If the request was compressed, it will be de-compressed by the server and then we use a different
                     # compression system over the wire.
                     # If the request was chunked, our system will read the entire message and send it on the wire
-                    # in multiable stream messages.
+                    # in multiple stream messages.
                     # Thus, we don't need to / shouldn't include this header.
                     continue
                 if lowerName == "upgrade-insecure-requests":
@@ -64,7 +64,7 @@ class HeaderHelper:
                 # Add the header. (use the original case)
                 sendHeaders[OctoStreamMsgBuilder.BytesToString(header.Key())] = value
 
-        # The `X-Forwarded-Host` tells the OctoPrint webserver we are talking to what it's actual
+        # The `X-Forwarded-Host` tells the OctoPrint web server we are talking to what it's actual
         # hostname and port are. This allows it to set outbound urls and references to be correct to the right host.
         # Note! This can do weird things with redirect! Because the redirect location header will actually reflect this
         # hostname. So when your doing local testing, this host name must be correct from the service or incorrect redirects
@@ -75,14 +75,14 @@ class HeaderHelper:
                 raise Exception("Http headers found no OctoHost in http initial context.")
             sendHeaders["X-Forwarded-Host"] = OctoStreamMsgBuilder.BytesToString(octoHostBytes)
 
-        # This tells the OctoPrint webserver the client is connected to the proxy via https.
+        # This tells the OctoPrint web server the client is connected to the proxy via https.
         # At the moment I don't think this matters, but it's the right thing to do.
         sendHeaders["X-Forwarded-Proto"] = "https"
 
         # We exclude this from being set above, but even more so, we want to define it as empty.
         # If we exclude it, the py request lib seems to add it by itself.
         # We don't want to mess with encoding, because doing to encoding over local host is a waste of time.
-        # Unless we can get the already encoded bytes out of the request client, then that might be intereting.
+        # Unless we can get the already encoded bytes out of the request client, then that might be interesting.
         # Setting this to empty also prevents the server from returning chunk-based transfers for the index and such.
         sendHeaders["Accept-Encoding"] = ""
 

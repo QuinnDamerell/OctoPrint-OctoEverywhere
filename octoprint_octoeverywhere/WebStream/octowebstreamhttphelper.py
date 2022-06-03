@@ -76,7 +76,7 @@ class OctoWebStreamHttpHelper:
         # in order as they were sent.
 
         # This http call might have data sent to us in multiple messages.
-        # If this messsage has data, put it into our buffer.
+        # If this message has data, put it into our buffer.
         if webStreamMsg.DataLength() > 0:
             # Copy this upload data from the message.
             self.copyUploadDataFromMsg(webStreamMsg)
@@ -141,7 +141,7 @@ class OctoWebStreamHttpHelper:
         self.checkForDelayIfNotHighPri()
 
         # If the service noted this as a snapshot request, use our special snapshot handler since it might do some extra
-        # magic to try to make the request. Note that not all snapshot requests will be flaged, this is only used for requests from
+        # magic to try to make the request. Note that not all snapshot requests will be flagged, this is only used for requests from
         # Oracle, that the service knows are snapshot requests.
         octoHttpResult = None
         isFromCache = False
@@ -161,7 +161,7 @@ class OctoWebStreamHttpHelper:
 
 
         # If None is returned, it failed.
-        # Since the request failed, we want to just close the stream, since it's not a protcol failure.
+        # Since the request failed, we want to just close the stream, since it's not a protocol failure.
         if octoHttpResult is None:
             path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
             self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None; url:"+str(path))
@@ -174,7 +174,7 @@ class OctoWebStreamHttpHelper:
         requestExecutionEnd = time.time()
 
         # If there's no response, it means we failed to connect to whatever the request was trying to connect to.
-        # Since the request failed, we want to just close the stream, since it's not a protcol failure.
+        # Since the request failed, we want to just close the stream, since it's not a protocol failure.
         if response is None:
             self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. There was no response.")
             self.WebStream.Close()
@@ -343,8 +343,8 @@ class OctoWebStreamHttpHelper:
             pass
 
         # Log about it.
-        resposneWriteDone = time.time()
-        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(resposneWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
+        responseWriteDone = time.time()
+        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
 
 
     def buildHeaderVector(self, builder, response):
@@ -416,7 +416,7 @@ class OctoWebStreamHttpHelper:
             # This is the only message with data, just use it's buffer.
             # I -believe- this doesn't copy the buffer and just makes a view of it.
             # That's the ideal case, because this message buffer will stay around since
-            # the http will excute on this same stack.
+            # the http will execute on this same stack.
             self.UploadBuffer = self.decompressBufferIfNeeded(webStreamMsg)
             self.UploadBytesReceivedSoFar = len(self.UploadBuffer)
             # Done!
@@ -525,7 +525,7 @@ class OctoWebStreamHttpHelper:
         return "Web Stream http ["+str(self.Id)+"] "
 
 
-    # Based on the content-type header, this determins if we would apply compression or not.
+    # Based on the content-type header, this determines if we would apply compression or not.
     # Returns true or false
     def shouldCompressBody(self, contentTypeLower, octoHttpResult, contentLengthOpt):
         # Compression isn't too expensive in terms of cpu cost but for text, it drastically
@@ -560,7 +560,7 @@ class OctoWebStreamHttpHelper:
 
     # Reads data from the response body, puts it in a data vector, and returns the offset.
     # If the body has been fully read, this should return ogLen == 0, len = 0, and offset == None
-    # The read style depends on the presense of the boundary string existing.
+    # The read style depends on the presence of the boundary string existing.
     def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult, response, boundaryStr_opt, shouldCompress):
         # This is the max size each body read will be. Since we are making local calls, most of the time
         # we will always get this full amount as long as theres more body to read.
@@ -568,7 +568,7 @@ class OctoWebStreamHttpHelper:
         # we found the transfer was most efficient if we sent larger message sizes, because it could saturate the tcp link better
         defaultBodyReadSizeBytes = 199 * 1024
         # If we are going to compress this read, use a much higher number. Since most of what we compress is text,
-        # and that text ususally compresses down to 25% of the og size, we will use a x4 multiplier.
+        # and that text usually compresses down to 25% of the og size, we will use a x4 multiplier.
         if shouldCompress:
             defaultBodyReadSizeBytes = defaultBodyReadSizeBytes * 4
 
@@ -610,7 +610,7 @@ class OctoWebStreamHttpHelper:
             originalBufferSize = octoHttpResult.BodyBufferPreCompressSize
         # Otherwise, check if we should compress
         elif shouldCompress:
-            # Some setups can't install brotli since it requires gcc and c++ to complie native code.
+            # Some setups can't install brotli since it requires gcc and c++ to compile native code.
             # zlib is part of PY so all plugins us it. Right now it's not worth the tradeoff from testing to enable brotli.
             #
             # After a good amount of testing, we found that a compression level of 3 is a good tradeoff for both.
@@ -700,7 +700,7 @@ class OctoWebStreamHttpHelper:
         # First, we need to see if we can find the content length header.
         # We will keep grabbing more and more data in loop until we find the header
         # If we can't find it after our max size, we declare it's not there (which is fine)
-        # and will use a differnet read method going forward.
+        # and will use a different read method going forward.
         c_maxHeaderSearchSizeBytes = 5 * 1024
         tempBufferFilledSize = 0
         try:
@@ -728,7 +728,7 @@ class OctoWebStreamHttpHelper:
                 # Validate the headers starts with what we expect.
                 # According the the RFC, the boundary should start with the boundary string or '--' + boundary string.
                 if headerStr.startswith("--"+boundaryStr) is False and headerStr.startswith(boundaryStr) is False:
-                    # Always report the first time we find this, otherwise, report only occassionally.
+                    # Always report the first time we find this, otherwise, report only occasionally.
                     if self.MissingBoundaryWarningCounter % 200 == 0:
                         self.Logger.warn("We read a web stream body frame, but it didn't start with the expected boundary header. expected:'"+boundaryStr+"' got:^^"+headerStr+"^^")
                     self.MissingBoundaryWarningCounter += 1
@@ -740,7 +740,7 @@ class OctoWebStreamHttpHelper:
                 # Try to find headers
                 # This logic checks for errors, and if found, don't stop the logic because of them
                 # This will cause us to loop again and read more. The reason for this is since we read random
-                # chunks, we could read a chunk that splits the contet-length header in half, which would cause errors.
+                # chunks, we could read a chunk that splits the content-length header in half, which would cause errors.
                 # So we just allow the system to keep reading until we hit the limit, because the next read would then have the full
                 # header we are looking for.
                 headerSize = headerStr.find(endOfAllHeadersMatch)
@@ -785,7 +785,7 @@ class OctoWebStreamHttpHelper:
             self.ChunkedBodyHasNoContentLengthHeaders = True
             return tempBufferFilledSize
 
-        # Read the reaminader of the chunk.
+        # Read the remainder of the chunk.
         if toRead > 0:
             data = self.doBodyRead(response, toRead)
 
@@ -808,7 +808,7 @@ class OctoWebStreamHttpHelper:
     def doBodyRead(self, response, readSize):
         try:
             # This won't always read the full size if it's not all here yet.
-            # But when running over localhost, this ususally always gets the full size asked for.
+            # But when running over localhost, this usually always gets the full size asked for.
             for data in response.iter_content(chunk_size=readSize):
                 # Skip keep alive
                 if data:

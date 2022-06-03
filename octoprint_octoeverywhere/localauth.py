@@ -7,7 +7,7 @@ from octoprint.access.permissions import Permissions
 #
 # To keep OctoEverywhere as secure as possible, we never store OctoPrint access data in our services.
 # This keeps multiple layers of security as a bad actor would have to gain remote access to the printer via OctoEverywhere
-# and then also gain OctoPrint credentail access.
+# and then also gain OctoPrint credential access.
 #
 # So the plugin will try to establish an app key for itself to use for API calls. The plugin has full access to these systems internally
 # but using the API calls makes the flow for the service to use the APIs easier. When a special http request message is sent from the server,
@@ -50,7 +50,7 @@ class LocalAuth:
         headers["X-Api-Key"] = self.ApiKey
 
     # Called by OctoPrint when a request is made with an API key.
-    # If the key is invlaid or we don't know, return None, otherwise we must return a user.
+    # If the key is invalid or we don't know, return None, otherwise we must return a user.
     # See for an example: https://github.com/OctoPrint/OctoPrint/blob/master/src/octoprint/plugins/appkeys/__init__.py
     def ValidateApiKey(self, api_key):
         # If the key doesn't match our auth key, we have nothing to do.

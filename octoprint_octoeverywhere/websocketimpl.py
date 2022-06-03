@@ -47,7 +47,7 @@ class Client:
         # safe socket... python. >.>
         # The client is responsible for sending keep alive pings the server will then pong respond to.
         # If that's not done, the connection will timeout.
-        # We will send a ping every 10 minutes, and expected a pong back within 5 mintues.
+        # We will send a ping every 10 minutes, and expected a pong back within 5 minutes.
         #
         # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
         # Since let's encrypt updated their CA root, we need to use certify's root or the connection will likely fail.
@@ -56,7 +56,7 @@ class Client:
             self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300, sslopt={"ca_certs":certifi.where()})
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
-            # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ingore that error,
+            # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,
             # But for others we will call OnError.
             #
             # If it is the error message we will just return indication that the socket is closed.

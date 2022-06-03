@@ -85,7 +85,7 @@ class SnapshotHelper:
             # This is the dev case
             return "http://192.168.86.57/webcam/?action=stream"
 
-    # Given a set of request headers, this determins if this is a special Oracle call indicating it's a snapshot.
+    # Given a set of request headers, this determine if this is a special Oracle call indicating it's a snapshot.
     def IsSnapshotOracleRequest(self, requestHeadersDict):
         # If this is a snapshot request from Oracle, this header will be set.
         # Otherwise this is a normal request or even a snapshot request, but not one we will help with from Oracle.
@@ -249,7 +249,7 @@ class SnapshotHelper:
 
             # If successful, we will use the already existing response object but update the values to match the fixed size body and content type.
             response.status_code = 200
-            # Clear all of the curenet
+            # Clear all of the current
             response.headers.clear()
             # Set the content type to the header we got from the stream chunk.
             response.headers["content-type"] = contentType

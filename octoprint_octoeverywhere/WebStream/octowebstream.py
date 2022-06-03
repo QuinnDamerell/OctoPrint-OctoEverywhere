@@ -13,7 +13,7 @@ from ..Proto import MessageContext
 from ..Proto import MessagePriority
 
 #
-# Respresents a web stream, which is how we send http request and web socket messages.
+# Represents a web stream, which is how we send http request and web socket messages.
 #
 class OctoWebStream(threading.Thread):
 
@@ -50,10 +50,10 @@ class OctoWebStream(threading.Thread):
             self.Logger.info("Web stream class "+str(self.Id)+" got a incoming message after it has been closed.")
             return
 
-        # If this is a close measage, we need to call close now
+        # If this is a close message, we need to call close now
         # since the main thread might be blocked waiting on a http call or something.
         if webStreamMsg.IsCloseMsg():
-            # Note right now we don't support getting close mesages with data.
+            # Note right now we don't support getting close messages with data.
             if webStreamMsg.IsControlFlagsOnly is False:
                 self.Logger.warn("Web stream "+str(self.Id)+" got a close message with data. The data will be ignored.")
             # Set this flag, because we don't need to send a close message if the server already did.
@@ -176,7 +176,7 @@ class OctoWebStream(threading.Thread):
             # When the http helper sends messages, it can indicate that the close flag has been set.
             # In such a case, self.HasSentCloseMessage will be true. We don't want to rely on the client
             # returning the correct returnValue, so if we see that we will call close to make sure things
-            # are going down. Since Close() is guarded against multiple entries, this is totall fine.
+            # are going down. Since Close() is guarded against multiple entries, this is totally fine.
             if self.HasSentCloseMessage is True and self.IsClosed is False:
                 self.Logger.warn("Web stream "+str(self.Id)+" processed a message and has sent a close message, but didn't call close on the web stream. Closing now.")
                 self.Close()
@@ -269,7 +269,7 @@ class OctoWebStream(threading.Thread):
 
     # Ensures the close message is always sent, but only once.
     # The only way the close message doesn't need to be sent is if
-    # the otherside started the close with a close message.
+    # the other side started the close with a close message.
     def ensureCloseMessageSent(self):
         # Since the send function does the checking to ensure only one close message
         # gets sent, we will always try to create and send a message.

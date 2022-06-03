@@ -67,7 +67,7 @@ class NotificationsHandler:
 
         # Build the progress completion reported list.
         # Add an entry for each progress we want to report, not including 0 and 100%.
-        # This list must be in order, from the loweset value to the highest.
+        # This list must be in order, from the lowest value to the highest.
         # See _getCurrentProgressFloat for usage.
         self.ProgressCompletionReported = []
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(10.0, False))
@@ -163,7 +163,7 @@ class NotificationsHandler:
         # or how the gcode is written to do zhops.
         #
         # Our current solution is to keep track of the lowest zvalue we have seen for this print.
-        # Everytime we don't see the zvalue be the lowest, we increment a counter. After n number of reports above the lowest value, we
+        # Every time we don't see the zvalue be the lowest, we increment a counter. After n number of reports above the lowest value, we
         # consider the first layer done because we haven't seen the printer return to the first layer height.
         #
         # Typically, the flow looks something like... 0.4 -> 0.2 -> 0.4 -> 0.2 -> 0.4 -> 0.5 -> 0.7 -> 0.5 -> 0.7...
@@ -194,7 +194,7 @@ class NotificationsHandler:
     # Fired when we get a M600 command from the printer to change the filament
     def OnFilamentChange(self):
         # This event might fire over and over or might be paired with a filament change event.
-        # In anycase, we only want to fire it every so often.
+        # In any case, we only want to fire it every so often.
         if self._shouldFireUserInteractionEvent() is False:
             return
 
@@ -205,7 +205,7 @@ class NotificationsHandler:
     # Fired when the printer needs user interaction to continue
     def OnUserInteractionNeeded(self):
         # This event might fire over and over or might be paired with a filament change event.
-        # In anycase, we only want to fire it every so often.
+        # In any case, we only want to fire it every so often.
         if self._shouldFireUserInteractionEvent() is False:
             return
 
@@ -215,7 +215,7 @@ class NotificationsHandler:
 
     def _shouldFireUserInteractionEvent(self):
         if self.LastUserInteractionNotificationTime > 0:
-            # Only send every 5 mintues at most.
+            # Only send every 5 minutes at most.
             deltaSec = time.time() - self.LastUserInteractionNotificationTime
             if deltaSec < (60.0 * 5.0):
                 return False
@@ -271,7 +271,7 @@ class NotificationsHandler:
         # We send a duration, but that duration is controlled by OctoPrint and can be changed.
         # Since we allow the user to pick "every x hours" to be notified, it's easier for the server to
         # keep track if we just send an int as well.
-        # Since this fires once an hour, everytime it fires just add one.
+        # Since this fires once an hour, every time it fires just add one.
         self.PingTimerHoursReported += 1
 
         self._sendEvent("timerprogress", { "HoursCount": str(self.PingTimerHoursReported) })
@@ -381,7 +381,7 @@ class NotificationsHandler:
         # the web UIs, we will also try to do the same.
         try:
             # Try to get the print time remaining, which will use smart ETA plugins if possible.
-            ptrSec = self.GetPrintTimeRemaningEstimateInSeconds()
+            ptrSec = self.GetPrintTimeRemainingEstimateInSeconds()
             # If we can't get the ETA, default to OctoPrint's value.
             if ptrSec == -1:
                 return float(self.OctoPrintReportedProgressInt)
@@ -446,8 +446,8 @@ class NotificationsHandler:
             args["FileName"] = str(self.CurrentFileName)
 
             # Always include the ETA, note this will be -1 if the time is unknown.
-            timeRemainEstStr =  str(self.GetPrintTimeRemaningEstimateInSeconds())
-            args["TimeRemaningSec"] = timeRemainEstStr
+            timeRemainEstStr =  str(self.GetPrintTimeRemainingEstimateInSeconds())
+            args["TimeRemainingSec"] = timeRemainEstStr
 
             # Always add the current progress
             # -> int to round -> to string for the API.
@@ -503,10 +503,10 @@ class NotificationsHandler:
 
         return False
 
-    # This function will get the estimated time remaning for the current print.
+    # This function will get the estimated time remaining for the current print.
     # It will first try to get a more accurate from plugins like PrintTimeGenius, otherwise it will fallback to the default OctoPrint total print time estimate.
     # Returns -1 if the estimate is unknown.
-    def GetPrintTimeRemaningEstimateInSeconds(self):
+    def GetPrintTimeRemainingEstimateInSeconds(self):
 
         # If the printer object isn't set, we can't get an estimate.
         if self.OctoPrintPrinterObject is None:
@@ -565,7 +565,7 @@ class NotificationsHandler:
         # Failed to find it.
         return -1
 
-    # Starts a ping timer which is used to fire "every x mintues events".
+    # Starts a ping timer which is used to fire "every x minutes events".
     def SetupPingTimer(self):
         # First, stop any timer that's currently running.
         self.StopPingTimer()

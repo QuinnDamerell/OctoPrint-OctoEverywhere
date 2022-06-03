@@ -49,7 +49,7 @@ ignore=CVS,Proto
 
 # Add files or directories matching the regex patterns to the ignore-list. The
 # regex matches against paths.
-ignore-paths=
+ignore-paths=octoprint_octoeverywhere/Proto
 
 # Files or directories matching the regex patterns are skipped. The regex
 # matches against base names, not paths.

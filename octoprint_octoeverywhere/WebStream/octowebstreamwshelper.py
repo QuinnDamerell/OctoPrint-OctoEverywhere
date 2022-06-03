@@ -79,7 +79,7 @@ class OctoWebStreamWsHelper:
         # If this is not the first attempt, make sure the websocket is closed (which it most likely is)
         if self.Ws is not None:
             try:
-                # Since the current websocket has callback handers attached, first grab a local copy and null
+                # Since the current websocket has callback handlers attached, first grab a local copy and null
                 # it out before calling close. This allows the callbacks to check if they are firing for the current
                 # websocket or an old one.
                 ws = self.Ws
@@ -189,7 +189,7 @@ class OctoWebStreamWsHelper:
             # Sleep for 5ms.
             time.sleep(0.005)
 
-        # If the websocket object is closed ingore this message. It will throw if the socket is closed
+        # If the websocket object is closed ignore this message. It will throw if the socket is closed
         # which will take down the entire OctoStream. But since it's closed the web stream is already cleaning up.
         # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
         # were already inbound messages on the way.
@@ -268,7 +268,7 @@ class OctoWebStreamWsHelper:
             if len(buffer) > 0:
                 dataOffset = builder.CreateByteVector(buffer)
 
-            # Setup the mesage to send.
+            # Setup the message to send.
             WebStreamMsg.Start(builder)
             WebStreamMsg.AddStreamId(builder, self.Id)
             WebStreamMsg.AddIsControlFlagsOnly(builder, False)

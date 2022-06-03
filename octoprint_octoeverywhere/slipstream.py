@@ -26,7 +26,7 @@ from .octostreammsgbuilder import OctoStreamMsgBuilder
 #
 class Slipstream:
     # A const that defines the common cache path for the index.
-    # This is a special case for the index, since we ingore query parameters and anchors for the cache lookup logic.
+    # This is a special case for the index, since we ignore query parameters and anchors for the cache lookup logic.
     IndexCachePath = "/"
 
 
@@ -113,7 +113,7 @@ class Slipstream:
 
         # Special case for the index.
         # If the path is only / OR the second char is a ?, this must be the index.
-        # For the index only we ingore query params.
+        # For the index only we ignore query params.
         posOfQuestionMark = path.find('?')
         if path == "/" or posOfQuestionMark == 1:
             # Set the path to our well known index cache key.
@@ -131,7 +131,7 @@ class Slipstream:
             # and redirect them, but it's not ideal and make the first login page load take longer.
             # For that reason, we will quickly check to see if there's any OctoPrint session cookie present. If not, we know the user  isn't logged in
             # and then we WONT use the cache so the redirect happens as normal.
-            # Note, this doesn't (and can't) validate if the session cookie respresents a signed in user, it just can detect if there is no cookie, like on the
+            # Note, this doesn't (and can't) validate if the session cookie represents a signed in user, it just can detect if there is no cookie, like on the
             # very first user visit to a printer subdomain.
             if self.HasOctoPrintSessionCookie(httpInitialContext) is False:
                 self.Logger.info("Slipstream got an index request but there's no OctoPrint session cookie found, so we aren't returning a cached index.")
@@ -303,7 +303,7 @@ class Slipstream:
                 return None
 
             # Since we are doing this in the background, we will take some time to compress it.
-            # This has two benfits:
+            # This has two benefits:
             #  1) We don't need to spend time and CPU cycles compressing on the fly.
             #  2) We can do a better compression to get less size that we don't have time for in realtime.
             # Note for now, we compress everything.

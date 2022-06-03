@@ -35,6 +35,8 @@ plugin_license = "AGPLv3"
 # Note! Some older version of OctoPrint seems to have a system dependency that locks websocket_client to exactly 0.56.0. When we tried to update to a newer version,
 # this broke that dependency and make all of OctoPrint unhappy. So don't update the version unless we really need to.
 # We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.
+#
+# Note! These need to stay in sync with .pre-commit-config.yaml AND .github/pylint.yml decencies.
 plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "octoflatbuffers==2.0.3", "pillow", "certifi", "rsa" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
