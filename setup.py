@@ -13,7 +13,7 @@ plugin_package = "octoprint_octoeverywhere"
 plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
-plugin_version = "1.7.1"
+plugin_version = "1.7.2"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -43,7 +43,7 @@ plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "octoflatbuff
 ### More advanced options that you usually shouldn't have to touch follow after this point
 ### --------------------------------------------------------------------------------------------------------------------
 
-# Additional package data to install for this plugin. The subfolders "templates", "static" and "translations" will
+# Additional package data to install for this plugin. The sub folders "templates", "static" and "translations" will
 # already be installed automatically if they exist. Note that if you add something here you'll also need to update
 # MANIFEST.in to match to ensure that python setup.py sdist produces a source distribution that contains all your
 # files. This is sadly due to how python's setup.py works, see also http://stackoverflow.com/a/14159430/2028598

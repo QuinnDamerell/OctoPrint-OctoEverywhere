@@ -9,7 +9,7 @@ class OctoStreamMsgBuilder:
 
     @staticmethod
     def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt,
-        webcamFlipH, webcamFlipV, webcamRotate90):
+        webcamFlipH, webcamFlipV, webcamRotate90, summonMethod):
         # Get the a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -30,6 +30,7 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddPrivateKey(builder, privateKeyOffset)
         HandshakeSyn.AddIsPrimaryConnection(builder, isPrimarySession)
         HandshakeSyn.AddPluginVersion(builder, pluginVersionOffset)
+        HandshakeSyn.AddSummonMethod(builder, summonMethod)
         if localIpOffset is not None:
             HandshakeSyn.AddLocalDeviceIp(builder, localIpOffset)
         HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)

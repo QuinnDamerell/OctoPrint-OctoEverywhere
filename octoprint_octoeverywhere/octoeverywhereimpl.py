@@ -2,6 +2,7 @@ import time
 import threading
 
 from .octoservercon import OctoServerCon
+from .Proto import SummonMethods
 
 #
 # This is the main running class that will connect and keep a connection to the service.
@@ -38,39 +39,39 @@ class OctoEverywhere:
             try:
                 # Create the primary connection.
                 # Allow this connection to use the lowest latency server if possible.
-                serverCon = self.createOctoServerCon(self.Endpoint, True, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec)
+                serverCon = self.createOctoServerCon(self.Endpoint, True, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec, SummonMethods.SummonMethods.Unknown)
                 serverCon.RunBlocking()
             except Exception as e:
                 self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. ex:" + str(e))
                 # Sleep for just a bit and try again.
                 time.sleep(5)
 
-    def OnSummonRequest(self, summonConnectUrl):
+    def OnSummonRequest(self, summonConnectUrl, summonMethod):
         # Grab the map lock.
         with self.SecondaryServerConsLock:
 
             # Check if we already have a secondary connection to this server.
             if summonConnectUrl in self.SecondaryServerCons :
-                self.Logger.warn("We got a summon request for a server that we already have a secondary connection to. "+str(summonConnectUrl))
+                self.Logger.warn("We got a summon request for a server that we already have a secondary connection to. "+str(summonConnectUrl)+", method "+str(summonMethod))
                 return
 
             # We don't have a connection, so make one now.
-            thread = threading.Thread(target=self.HandleSecondaryServerCon, args=(summonConnectUrl,))
+            thread = threading.Thread(target=self.HandleSecondaryServerCon, args=(summonConnectUrl, summonMethod,))
             thread.daemon = True
             thread.start()
             self.SecondaryServerCons[summonConnectUrl] = thread
 
-    def HandleSecondaryServerCon(self, summonConnectUrl):
+    def HandleSecondaryServerCon(self, summonConnectUrl, summonMethod):
         # Run the secondary connection for until the RunFor time limit. Note RunFor will account for user activity.
-        self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl))
+        self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl)+ " method "+str(summonMethod))
         try:
             # Never allow the lowest latency server to be used for secondary connection, since it won't connect to where it needs to be.
-            serverCon = self.createOctoServerCon(summonConnectUrl, False, False, None, self.SecondaryConnectionRunForTimeSec)
+            serverCon = self.createOctoServerCon(summonConnectUrl, False, False, None, self.SecondaryConnectionRunForTimeSec, summonMethod)
             serverCon.RunBlocking()
         except Exception as e:
             self.Logger.error("Exception in HandleSecondaryServerCon function. ex:" + str(e))
 
-        # Since this is a secondary connection, when RunBlocking returns we want to be done.
+        # Since this is a secondary connection, when RunBlocking() returns we want to be done.
         with self.SecondaryServerConsLock:
             try:
                 # Check if we already have a secondary connection to this server.
@@ -83,5 +84,5 @@ class OctoEverywhere:
 
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 
-    def createOctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, statusChangeHandler, runTime):
-        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime)
+    def createOctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, statusChangeHandler, runTime, summonMethod):
+        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod)

@@ -47,7 +47,7 @@ class OctoServerCon:
     # We always add a random second count to the reconnect sleep to add variance. This is the max value.
     WsConnectRandomMaxSec = 10
 
-    def __init__(self, host, endpoint, isPrimaryConnection, shouldUseLowestLatencyServer, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, runForSeconds):
+    def __init__(self, host, endpoint, isPrimaryConnection, shouldUseLowestLatencyServer, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, runForSeconds, summonMethod):
         self.ProtocolVersion = 1
         self.OctoSession = None
         self.IsDisconnecting = False
@@ -64,6 +64,7 @@ class OctoServerCon:
         self.PrivateKey = privateKey
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
+        self.SummonMethod = summonMethod
 
         self.DefaultEndpoint = endpoint
         self.CurrentEndpoint = self.DefaultEndpoint
@@ -136,7 +137,7 @@ class OctoServerCon:
 
         # Create a new session for this websocket connection.
         self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion)
-        self.OctoSession.StartHandshake()
+        self.OctoSession.StartHandshake(self.SummonMethod)
 
 
     def OnClosed(self, ws):
@@ -210,8 +211,8 @@ class OctoServerCon:
     # A summon request can be sent by the services if the user is connected to a different
     # server than we are connected to. In such a case we will multi connect a temp non-primary connection
     # to the request server as well, that will be to service the user.
-    def OnSummonRequest(self, sessionId, summonConnectUrl):
-        self.Host.OnSummonRequest(summonConnectUrl)
+    def OnSummonRequest(self, sessionId, summonConnectUrl, summonMethod):
+        self.Host.OnSummonRequest(summonConnectUrl, summonMethod)
 
 
     def Disconnect(self):

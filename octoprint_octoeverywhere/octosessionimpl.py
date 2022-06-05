@@ -57,11 +57,12 @@ class OctoSession:
             summonMsg = OctoSummon.OctoSummon()
             summonMsg.Init(msg.Context().Bytes, msg.Context().Pos)
             serverConnectUrl = OctoStreamMsgBuilder.BytesToString(summonMsg.ServerConnectUrl())
+            summonMethod = summonMsg.SummonMethod()
             if serverConnectUrl is None or len(serverConnectUrl) == 0:
                 self.Logger.error("Summon notification is missing a server url.")
                 return
             # Process it!
-            self.OctoStream.OnSummonRequest(self.SessionId, serverConnectUrl)
+            self.OctoStream.OnSummonRequest(self.SessionId, serverConnectUrl, summonMethod)
         except Exception as e:
             self.Logger.error("Failed to handle summon request " + str(e))
 
@@ -221,7 +222,7 @@ class OctoSession:
             self.Logger.error("Exception thrown while closing all web streams: " + str(ex))
 
 
-    def StartHandshake(self):
+    def StartHandshake(self, summonMethod):
         # Send the handshakesyn
         try:
             # Get our unique challenge
@@ -234,7 +235,8 @@ class OctoSession:
             buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
                 rasChallenge, rasChallengeKeyVerInt,
-                SnapshotHelper.Get().GetWebcamFlipH(), SnapshotHelper.Get().GetWebcamFlipV(), SnapshotHelper.Get().GetWebcamRotate90())
+                SnapshotHelper.Get().GetWebcamFlipH(), SnapshotHelper.Get().GetWebcamFlipV(), SnapshotHelper.Get().GetWebcamRotate90(),
+                summonMethod)
 
             # Send!
             self.OctoStream.SendMsg(buf)
