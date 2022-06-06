@@ -31,6 +31,7 @@ class OctoPingPong:
         self.PrinterId = printerId
         self.StatsFilePath = os.path.join(pluginDataFolderPath, "PingPongDataV2.json")
         self.PluginFirstRunLatencyCompleteCallback = None
+        self.IsDisablePrimaryOverride = False
 
         # Try to load past stats from the file.
         self.Stats = None
@@ -51,6 +52,12 @@ class OctoPingPong:
             self.Logger.error("Failed to start OctoPingPong Thread: "+str(e))
 
 
+    # Used for local debugging.
+    def DisablePrimaryOverride(self):
+        self.Logger.info("OctoPingPong disabled")
+        self.IsDisablePrimaryOverride = True
+
+
     # Returns a string to the lowest latency server is known, otherwise None.
     def GetLowestLatencyServerSub(self):
         # Do this in a thread safe way, if we fail, just return None.
@@ -62,6 +69,9 @@ class OctoPingPong:
                 return None
             lowestLatencyServerSub = stats[OctoPingPong.LowestLatencyServerSubKey]
             if lowestLatencyServerSub is None:
+                return None
+            if self.IsDisablePrimaryOverride:
+                self.Logger.info("OctoPingPong IsDisablePrimaryOverride - not returning lowest latency server sub: "+lowestLatencyServerSub)
                 return None
             return lowestLatencyServerSub
         except Exception as e:

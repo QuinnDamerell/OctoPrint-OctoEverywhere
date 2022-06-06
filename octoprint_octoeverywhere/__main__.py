@@ -102,6 +102,7 @@ if __name__ == '__main__':
 
     # Init the ping pong helper.
     OctoPingPong.Init(logger, "C:\\Users\\quinn", printerId)
+    #OctoPingPong.Get().Disable()
 
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)
