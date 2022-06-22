@@ -15,7 +15,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/better-stream-read.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/test-fix.zip
 
 ## Before checking in:
 - Run in py2 env

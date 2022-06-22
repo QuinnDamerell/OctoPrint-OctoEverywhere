@@ -815,11 +815,24 @@ class OctoWebStreamHttpHelper:
             # Thus in our case, we want to just read the response raw. This is what the chunk logic does under the hood anyways, so this path
             # is more direct and should be more efficient.
             data = response.raw.read(readSize)
-            # When the stream is done or the "file handle is closed" this will return a buffer of b"", which size will be 0.
-            # This is an indication that the stream is done, thus return None as the callers expect.
-            if data is None or len(data) == 0:
-                return None
-            return data
+
+            # If we got a data buffer return it.
+            if data is not None and len(data) > 0:
+                return data
+
+            # Data will return b"" (aka empty buffer) when...
+            #   1) The stream is closed and all of the data is consumed
+            #   2) OR there was an error and there's a body but it can't be streamed.
+            # Thus, when data returns empty, we need to check if there's content. If content != null we need to send it back.
+            content = response.content
+            if len(content) > 0:
+                if len(content) > readSize:
+                    self.Logger.warn("Http request has non-streamed content but it's larger than the requested readSize. Returning anyways.")
+                return content
+
+            # Otherwise we are done, return None to end the octostream.
+            return None
+
         except requests.exceptions.ChunkedEncodingError as _:
             # This shouldn't happen now that we don't use the iter_content read, but it doesn't hurt.
             return None
