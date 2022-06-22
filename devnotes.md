@@ -15,7 +15,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/low-latency-connect.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/better-stream-read.zip
 
 ## Before checking in:
 - Run in py2 env

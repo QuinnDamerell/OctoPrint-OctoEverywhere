@@ -180,171 +180,168 @@ class OctoWebStreamHttpHelper:
             self.WebStream.Close()
             return
 
-        # As a caching technique, if the request has the correct modified headers and the response has them as well, send back a 304,
-        # which indicates the body hasn't been modified and we can save the bandwidth by not sending it.
-        # We need to do this before we process the response headers.
-        # This function will check if we want to do a 304 return and update the request correctly.
-        self.checkForNotModifiedCacheAndUpdateResponseIfSo(sendHeaders, response)
+        # Now that we have a valid response, use a with block to ensure no matter what it gets closed when we leave.
+        # This is important since we use the stream flag, otherwise close() will not get called and the connection will remain open.
+        # Note that close() could throw in bad cases, but that's ok because this function is allowed to throw on errors and the octostream will be cleaned up.
+        with response:
 
-        # Look at the headers to see what kind of response we are dealing with.
-        # See if we find a content length, for http request that are streams, there is no content length.
-        contentLength = None
-        # We will also look for the content type, and look for a boundary string if there is one
-        # The boundary stream is used for webcam streams, and it's an ideal place to package and send each frame
-        boundaryStr = None
-        # Pull out the content type value, so we can use it to figure out if we want to compress this data or not
-        contentTypeLower =None
-        for name in response.headers:
-            nameLower = name.lower()
+            # As a caching technique, if the request has the correct modified headers and the response has them as well, send back a 304,
+            # which indicates the body hasn't been modified and we can save the bandwidth by not sending it.
+            # We need to do this before we process the response headers.
+            # This function will check if we want to do a 304 return and update the request correctly.
+            self.checkForNotModifiedCacheAndUpdateResponseIfSo(sendHeaders, response)
 
-            if nameLower == "content-length":
-                contentLength = int(response.headers[name])
+            # Look at the headers to see what kind of response we are dealing with.
+            # See if we find a content length, for http request that are streams, there is no content length.
+            contentLength = None
+            # We will also look for the content type, and look for a boundary string if there is one
+            # The boundary stream is used for webcam streams, and it's an ideal place to package and send each frame
+            boundaryStr = None
+            # Pull out the content type value, so we can use it to figure out if we want to compress this data or not
+            contentTypeLower =None
+            for name in response.headers:
+                nameLower = name.lower()
 
-            elif nameLower == "content-type":
-                contentTypeLower = response.headers[name].lower()
+                if nameLower == "content-length":
+                    contentLength = int(response.headers[name])
 
-                # Look for a boundary string, something like this: `multipart/x-mixed-replace;boundary=boundarydonotcross`
-                indexOfBoundaryStart = contentTypeLower.find('boundary=')
-                if indexOfBoundaryStart != -1:
-                    # Move past the string we found
-                    indexOfBoundaryStart += len('boundary=')
-                    # We should find a boundary, use the original case to parse it out.
-                    boundaryStr = response.headers[name][indexOfBoundaryStart:].strip()
-                    if len(boundaryStr) == 0:
-                        self.Logger.error("We found a boundary stream, but didn't find the boundary string. "+ contentTypeLower)
-                        continue
+                elif nameLower == "content-type":
+                    contentTypeLower = response.headers[name].lower()
 
-        # We also look at the content-type to determine if we should add compression to this request or not.
-        # general rule of thumb is that compression is quite cheap but really helps with text, so we should compress when we
-        # can.
-        compressBody = self.shouldCompressBody(contentTypeLower, octoHttpResult, contentLength)
+                    # Look for a boundary string, something like this: `multipart/x-mixed-replace;boundary=boundarydonotcross`
+                    indexOfBoundaryStart = contentTypeLower.find('boundary=')
+                    if indexOfBoundaryStart != -1:
+                        # Move past the string we found
+                        indexOfBoundaryStart += len('boundary=')
+                        # We should find a boundary, use the original case to parse it out.
+                        boundaryStr = response.headers[name][indexOfBoundaryStart:].strip()
+                        if len(boundaryStr) == 0:
+                            self.Logger.error("We found a boundary stream, but didn't find the boundary string. "+ contentTypeLower)
+                            continue
 
-        # Since streams with unknown content-lengths can run for a while, report now when we start one.
-        # If the status code is 304 or 204, we don't expect content.
-        if contentLength is None and response.status_code != 304 and response.status_code != 204:
-            self.Logger.info(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
+            # We also look at the content-type to determine if we should add compression to this request or not.
+            # general rule of thumb is that compression is quite cheap but really helps with text, so we should compress when we
+            # can.
+            compressBody = self.shouldCompressBody(contentTypeLower, octoHttpResult, contentLength)
 
-        # Setup a loop to read the stream and push it out in multiple messages.
-        contentReadBytes = 0
-        nonCompressedContentReadSizeBytes = 0
-        isFirstResponse = True
-        isLastMessage = False
-        messageCount = 0
-        # Continue as long as the stream isn't closed and we haven't sent the close message.
-        # We don't check th body read sizes here, because we don't want to duplicate that logic check.
-        while self.IsClosed is False and isLastMessage is False:
+            # Since streams with unknown content-lengths can run for a while, report now when we start one.
+            # If the status code is 304 or 204, we don't expect content.
+            if contentLength is None and response.status_code != 304 and response.status_code != 204:
+                self.Logger.info(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
 
-            # Before we process the response, make sure we shouldn't defer for a high pri request
-            self.checkForDelayIfNotHighPri()
+            # Setup a loop to read the stream and push it out in multiple messages.
+            contentReadBytes = 0
+            nonCompressedContentReadSizeBytes = 0
+            isFirstResponse = True
+            isLastMessage = False
+            messageCount = 0
+            # Continue as long as the stream isn't closed and we haven't sent the close message.
+            # We don't check th body read sizes here, because we don't want to duplicate that logic check.
+            while self.IsClosed is False and isLastMessage is False:
 
-            # Prepare a response.
-            # TODO - We should start the buffer at something that's likely to not need expanding for most requests.
-            builder = OctoStreamMsgBuilder.CreateBuffer(20000)
+                # Before we process the response, make sure we shouldn't defer for a high pri request
+                self.checkForDelayIfNotHighPri()
 
-            # Unless we are skipping the body read, do it now.
-            # If there's a 304, we might have a body, but we don't want to read it.
-            # If the response is 204, there will be no content, so don't bother.
-            if response.status_code == 304 or response.status_code == 204:
-                # Use zero read defaults.
-                nonCompressedBodyReadSize = 0
-                lastBodyReadLength = 0
-                dataOffset = None
-            else:
-                # Start by reading data from the response.
-                # This function will return a read length of 0 and a null data offset if there's nothing to read.
-                # Otherwise, it will return the length of the read data and the data offset in the buffer.
-                nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody)
-            contentReadBytes += lastBodyReadLength
-            nonCompressedContentReadSizeBytes += nonCompressedBodyReadSize
+                # Prepare a response.
+                # TODO - We should start the buffer at something that's likely to not need expanding for most requests.
+                builder = OctoStreamMsgBuilder.CreateBuffer(20000)
 
-            # Since this operation can take a while, check if we closed.
-            if self.IsClosed:
-                break
+                # Unless we are skipping the body read, do it now.
+                # If there's a 304, we might have a body, but we don't want to read it.
+                # If the response is 204, there will be no content, so don't bother.
+                if response.status_code == 304 or response.status_code == 204:
+                    # Use zero read defaults.
+                    nonCompressedBodyReadSize = 0
+                    lastBodyReadLength = 0
+                    dataOffset = None
+                else:
+                    # Start by reading data from the response.
+                    # This function will return a read length of 0 and a null data offset if there's nothing to read.
+                    # Otherwise, it will return the length of the read data and the data offset in the buffer.
+                    nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody)
+                contentReadBytes += lastBodyReadLength
+                nonCompressedContentReadSizeBytes += nonCompressedBodyReadSize
 
-            # Validate.
-            if contentLength is not None and nonCompressedContentReadSizeBytes > contentLength:
-                self.Logger.warn(self.getLogMsgPrefix()+" the http stream read more data than the content length indicated.")
-            if dataOffset is None and contentLength is not None and nonCompressedContentReadSizeBytes < contentLength:
-                # This might happen if the connection closes unexpectedly before the transfer is done.
-                self.Logger.warn(self.getLogMsgPrefix()+" we expected a fixed length response, but the body read completed before we read it all.")
+                # Since this operation can take a while, check if we closed.
+                if self.IsClosed:
+                    break
 
-            # Check if this is the last message.
-            # This is the last message if...
-            #  - The data offset is ever None, this means we have read the entire body as far as the request system is concerned.
-            #  - We have an expected length and we have hit it or gone over it.
-            isLastMessage = dataOffset is None or (contentLength is not None and nonCompressedContentReadSizeBytes >= contentLength)
+                # Validate.
+                if contentLength is not None and nonCompressedContentReadSizeBytes > contentLength:
+                    self.Logger.warn(self.getLogMsgPrefix()+" the http stream read more data than the content length indicated.")
+                if dataOffset is None and contentLength is not None and nonCompressedContentReadSizeBytes < contentLength:
+                    # This might happen if the connection closes unexpectedly before the transfer is done.
+                    self.Logger.warn(self.getLogMsgPrefix()+" we expected a fixed length response, but the body read completed before we read it all.")
 
-            # If this is the first response in the stream, we need to send the initial http context and status code.
-            httpInitialContextOffset = None
-            statusCode = None
-            if isFirstResponse is True:
-                # Set the status code, so it's sent.
-                statusCode = response.status_code
+                # Check if this is the last message.
+                # This is the last message if...
+                #  - The data offset is ever None, this means we have read the entire body as far as the request system is concerned.
+                #  - We have an expected length and we have hit it or gone over it.
+                isLastMessage = dataOffset is None or (contentLength is not None and nonCompressedContentReadSizeBytes >= contentLength)
 
-                # We use special logic for the calls that need the OctoEverywhere Auth.
-                # If the call fails, indicate that with a special error.
-                # This should only happen if this plugin is running on a version of OctoPrint that's older than 1.3.6, which doesn't support the key validation system.
-                if isOeAuthCall is True and statusCode >= 400:
-                    statusCode = OctoWebStreamHttpHelper.Error_NoOeAuthKey
+                # If this is the first response in the stream, we need to send the initial http context and status code.
+                httpInitialContextOffset = None
+                statusCode = None
+                if isFirstResponse is True:
+                    # Set the status code, so it's sent.
+                    statusCode = response.status_code
 
-                # Gather the headers, if there are any. This will return None if there are no headers to send.
-                headerVectorOffset = self.buildHeaderVector(builder, response)
+                    # We use special logic for the calls that need the OctoEverywhere Auth.
+                    # If the call fails, indicate that with a special error.
+                    # This should only happen if this plugin is running on a version of OctoPrint that's older than 1.3.6, which doesn't support the key validation system.
+                    if isOeAuthCall is True and statusCode >= 400:
+                        statusCode = OctoWebStreamHttpHelper.Error_NoOeAuthKey
 
-                # Build the initial context. We should always send a http initial context on the first response,
-                # even if there are no headers in t.
-                HttpInitialContext.Start(builder)
-                if headerVectorOffset is not None:
-                    HttpInitialContext.AddHeaders(builder, headerVectorOffset)
-                httpInitialContextOffset = HttpInitialContext.End(builder)
+                    # Gather the headers, if there are any. This will return None if there are no headers to send.
+                    headerVectorOffset = self.buildHeaderVector(builder, response)
 
-            # Now build the return message
-            WebStreamMsg.Start(builder)
-            WebStreamMsg.AddStreamId(builder, self.Id)
-            # Indicate this message has data, even if it's just the initial http context (because there's no data for this request)
-            WebStreamMsg.AddIsControlFlagsOnly(builder, False)
-            if statusCode is not None:
-                WebStreamMsg.AddStatusCode(builder, statusCode)
-            if dataOffset is not None:
-                WebStreamMsg.AddData(builder, dataOffset)
-            if httpInitialContextOffset is not None:
-                # This should always be not null for the first response.
-                WebStreamMsg.AddHttpInitialContext(builder, httpInitialContextOffset)
-            if isFirstResponse is True and contentLength is not None:
-                # Only on the first response, if we know the full size, set it.
-                WebStreamMsg.AddFullStreamDataSize(builder, contentLength)
-            if compressBody:
-                # If we are compressing, we need to add what we are using and what the original size was.
-                WebStreamMsg.AddDataCompression(builder, DataCompression.DataCompression.Zlib)
-                WebStreamMsg.AddOriginalDataSize(builder, nonCompressedBodyReadSize)
-            if isLastMessage:
-                # If this is the last message because we know the body is all
-                # sent, indicate that the data stream is done and send the close message.
-                WebStreamMsg.AddIsDataTransmissionDone(builder, True)
-                WebStreamMsg.AddIsCloseMsg(builder, True)
-            webStreamMsgOffset = WebStreamMsg.End(builder)
+                    # Build the initial context. We should always send a http initial context on the first response,
+                    # even if there are no headers in t.
+                    HttpInitialContext.Start(builder)
+                    if headerVectorOffset is not None:
+                        HttpInitialContext.AddHeaders(builder, headerVectorOffset)
+                    httpInitialContextOffset = HttpInitialContext.End(builder)
 
-            # Wrap in the OctoStreamMsg and finalize.
-            outputBuf = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
+                # Now build the return message
+                WebStreamMsg.Start(builder)
+                WebStreamMsg.AddStreamId(builder, self.Id)
+                # Indicate this message has data, even if it's just the initial http context (because there's no data for this request)
+                WebStreamMsg.AddIsControlFlagsOnly(builder, False)
+                if statusCode is not None:
+                    WebStreamMsg.AddStatusCode(builder, statusCode)
+                if dataOffset is not None:
+                    WebStreamMsg.AddData(builder, dataOffset)
+                if httpInitialContextOffset is not None:
+                    # This should always be not null for the first response.
+                    WebStreamMsg.AddHttpInitialContext(builder, httpInitialContextOffset)
+                if isFirstResponse is True and contentLength is not None:
+                    # Only on the first response, if we know the full size, set it.
+                    WebStreamMsg.AddFullStreamDataSize(builder, contentLength)
+                if compressBody:
+                    # If we are compressing, we need to add what we are using and what the original size was.
+                    WebStreamMsg.AddDataCompression(builder, DataCompression.DataCompression.Zlib)
+                    WebStreamMsg.AddOriginalDataSize(builder, nonCompressedBodyReadSize)
+                if isLastMessage:
+                    # If this is the last message because we know the body is all
+                    # sent, indicate that the data stream is done and send the close message.
+                    WebStreamMsg.AddIsDataTransmissionDone(builder, True)
+                    WebStreamMsg.AddIsCloseMsg(builder, True)
+                webStreamMsgOffset = WebStreamMsg.End(builder)
 
-            # Send the message.
-            # If this is the last, we need to make sure to set that we have set the closed flag.
-            self.WebStream.SendToOctoStream(outputBuf, isLastMessage, True)
+                # Wrap in the OctoStreamMsg and finalize.
+                outputBuf = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
 
-            # Clear this flag
-            isFirstResponse = False
-            messageCount += 1
+                # Send the message.
+                # If this is the last, we need to make sure to set that we have set the closed flag.
+                self.WebStream.SendToOctoStream(outputBuf, isLastMessage, True)
 
-        # Since this is a stream, ideally we close it as soon as possible to not waste resources.
-        # Otherwise this will be auto closed when the object is GCed, which happens really quickly after it
-        # goes out of scope. Thus it's not a big deal if we early return and don't close it.
-        try:
-            response.close()
-        except Exception:
-            pass
+                # Clear this flag
+                isFirstResponse = False
+                messageCount += 1
 
-        # Log about it.
-        responseWriteDone = time.time()
-        self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
+            # Log about it.
+            responseWriteDone = time.time()
+            self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
 
 
     def buildHeaderVector(self, builder, response):
@@ -727,10 +724,15 @@ class OctoWebStreamHttpHelper:
 
                 # Validate the headers starts with what we expect.
                 # According the the RFC, the boundary should start with the boundary string or '--' + boundary string.
+                # However, we have also seen \r\n--<str> and also no boundary string for the first frame as well. So this might fire once or twice, and that's fine.
                 if headerStr.startswith("--"+boundaryStr) is False and headerStr.startswith(boundaryStr) is False:
                     # Always report the first time we find this, otherwise, report only occasionally.
-                    if self.MissingBoundaryWarningCounter % 200 == 0:
-                        self.Logger.warn("We read a web stream body frame, but it didn't start with the expected boundary header. expected:'"+boundaryStr+"' got:^^"+headerStr+"^^")
+                    if self.MissingBoundaryWarningCounter % 120 == 0:
+                        # Trim the string to print it.
+                        outputStr = headerStr
+                        if len(outputStr) > 40:
+                            outputStr = outputStr[:40]
+                        self.Logger.warn("We read a web stream body frame, but it didn't start with the expected boundary header. expected:'"+boundaryStr+"' got:^^"+outputStr+"^^")
                     self.MissingBoundaryWarningCounter += 1
 
                 # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
@@ -804,21 +806,28 @@ class OctoWebStreamHttpHelper:
         # Finally, return how much we put into the temp buffer!
         return tempBufferFilledSize
 
-    # pylint: disable=inconsistent-return-statements
     def doBodyRead(self, response, readSize):
         try:
-            # This won't always read the full size if it's not all here yet.
-            # But when running over localhost, this usually always gets the full size asked for.
-            for data in response.iter_content(chunk_size=readSize):
-                # Skip keep alive
-                if data:
-                    return data
-            # In the case where the stream is complete but the response didn't know that last read, instead of throwing
-            # the function will just return without running the for loop. In this case the response is done and we return
-            # None to indicate that.
+            # In the past we used the iter_content and such streaming function calls, but the calls had a few issues.
+            #  1) They use a generator system where they yield data buffers. The generator has to remain referenced or the connection closes.
+            #  2) Since the generator could only be created once, the chunk size was set on the first creation and couldn't be used.
+            #
+            # Thus in our case, we want to just read the response raw. This is what the chunk logic does under the hood anyways, so this path
+            # is more direct and should be more efficient.
+            data = response.raw.read(readSize)
+            # When the stream is done or the "file handle is closed" this will return a buffer of b"", which size will be 0.
+            # This is an indication that the stream is done, thus return None as the callers expect.
+            if data is None or len(data) == 0:
+                return None
+            return data
+        except requests.exceptions.ChunkedEncodingError as _:
+            # This shouldn't happen now that we don't use the iter_content read, but it doesn't hurt.
             return None
         except requests.exceptions.StreamConsumedError as _:
             # When this exception is thrown, it means the entire body has been read.
+            return None
+        except Exception as e:
+            self.Logger.error(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read."+str(e))
             return None
 
     # To speed up page load, we will defer lower pri requests while higher priority requests
