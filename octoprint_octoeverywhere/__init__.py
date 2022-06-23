@@ -113,18 +113,16 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         #
         # A quick note about settings and creating / saving settings during startup!
         #
+        # Notes about _settings:
+        #    - The force=True MUST ALWAYS BE USED for the .set() function. This is because we don't offer any default settings in get_settings_defaults, and if we don't use the force flag
+        #      the setting doesn't match an existing path is ignored.
+        #    - We should only set() and save() the settings when things actually change to prevent race conditions with anything else in OctoPrint writing to or saving settings.
+        #    - Ideally anything that needs to be generated and written into the settings should happen IN SYNC during the on_startup or on_after_startup calls.
+        #
         # We had a bug where OctoEverywhere would put OctoPrint into Safe Mode on the next reboot. After hours of debugging
-        # we realized it was because when we updated and saved settings, we always used the (force=True) flag. There's no reason why we did,
-        # it's just something we picked up at the time. However, the OctoPrint safe mode can get triggered when the var `incompleteStartup` remains set to
-        # True in the OctoPrint config. This flag is set to true on startup and then set to false after `on_after_startup` is called on all plugins.
-        # The problem was our logic in on_after_startup raced the clearing logic of that flag and sometimes resulted in it not being unset.
-        #
-        # Thus, WE SHOULD NEVER USE THE FORCE FLAG, as most of the time when are vars are set they are the same anyways, so it's a waste.
-        # We SHOULD ALSO AVOID CALLING SAVE() IF THERE'S NO CHANGE. Even though the settings object has a concept of `dirty` and if we set the same value
-        # save() will do nothing, if our thread is racing another thread that did make a set() change and then wanted to call save() bad things might happen.
-        # To reduce the risk, we should avoid calling save() unless it's really needed.
-        #
-        # But also, any settings that might actually set or get generated on first load should be set synchronously in on_startup or on_after_startup.
+        # we realized it was because when we updated and saved settings. The OctoPrint safe mode can get triggered when the var `incompleteStartup` remains set to True in the OctoPrint config.
+        # This flag is set to true on startup and then set to false after `on_after_startup` is called on all plugins. The problem was our logic in on_after_startup raced the clearing logic of
+        # that flag and sometimes resulted in it not being unset.
         #
 
         # Ensure they keys are created here, so make sure that they are always created before any of the UI queries for them.
