@@ -38,6 +38,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.NotificationHandler = None
         # Init member vars
         self.octoKey = ""
+        # Indicates if OnStartup has been called yet.
+        self.HasOnStartupBeenCalledYet = False
 
      # Assets we use, just for the wizard right now.
     def get_assets(self):
@@ -108,6 +110,21 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.OctoPrintLocalPort = port
         self._logger.info("OctoPrint port " + str(self.OctoPrintLocalPort))
 
+        #
+        # A quick note about settings and creating / saving settings during startup!
+        #
+        # We had a bug where OctoEverywhere would put OctoPrint into Safe Mode on the next reboot. After hours of debugging
+        # we realized it was because when we updated and saved settings, we always used the (force=True) flag. There's no reason why we did,
+        # it's just something we picked up at the time. However, the OctoPrint safe mode can get triggered when the var `incompleteStartup` remains set to
+        # True in the OctoPrint config. This flag is set to true on startup and then set to false after `on_after_startup` is called on all plugins.
+        # The problem was our logic in on_after_startup raced the clearing logic of that flag and sometimes resulted in it not being unset.
+        #
+        # Thus, WE SHOULD NEVER USE THE FORCE FLAG, as most of the time when are vars are set they are the same anyways, so it's a waste. The settings object
+        # has a concept of `dirty`, so if we set the same value again, save() will do nothing.
+        #
+        # But also, any settings that might actually set or get generated on first load should be set synchronously in on_startup or on_after_startup.
+        #
+
         # Ensure they keys are created here, so make sure that they are always created before any of the UI queries for them.
         printerId = self.EnsureAndGetPrinterId()
         self.EnsureAndGetPrivateKey()
@@ -131,6 +148,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Spin off a thread to try to resolve hostnames for logging and debugging.
         resolverThread = threading.Thread(target=self.TryToPrintHostNameIps)
         resolverThread.start()
+
+        # Indicate this has been called and things have been inited.
+        self.HasOnStartupBeenCalledYet = True
 
 
     # Call when the system is ready and running
@@ -175,9 +195,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                 # Report
                 self._logger.info("SetFrontendLocalPort API called. Port:"+str(port)+" IsHttps:"+str(isHttps)+" URL:"+url)
                 # Save
-                self._settings.set(["HttpFrontendPort"], port, force=True)
-                self._settings.set(["HttpFrontendIsHttps"], isHttps, force=True)
-                self._settings.save(force=True)
+                self._settings.set(["HttpFrontendPort"], port)
+                self._settings.set(["HttpFrontendIsHttps"], isHttps)
+                self._settings.save()
                 # Update the running value.
                 OctoHttpRequest.SetLocalHttpProxyPort(port)
                 OctoHttpRequest.SetLocalHttpProxyIsHttps(isHttps)
@@ -264,7 +284,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions for the Event Handler Mixin
     #
+    # Note that on_event can actually fire before on_startup in some cases.
+    #
     def on_event(self, event, payload):
+        # This can be called before on_startup where things are inited.
+        # Never handle anything that's sent before then.
+        if self.HasOnStartupBeenCalledYet is False:
+            return
+
         # Ensure there's a payload
         if payload is None:
             payload = {}
@@ -433,8 +460,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Always update the settings, so they are always correct.
         self.SetAddPrinterUrl(self.c_OctoEverywhereAddPrinterUrl + currentId)
         # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
-        self._settings.set(["PrinterKey"], currentId, force=True)
-        self._settings.save(force=True)
+        self._settings.set(["PrinterKey"], currentId)
+        self._settings.save()
         return currentId
 
     # Ensures we have generated a private key and returns it.
@@ -457,15 +484,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             currentKey = self.GeneratePrivateKey()
 
         # Save and return.
-        self._settings.set(["Pid"], currentKey, force=True)
-        self._settings.save(force=True)
+        self._settings.set(["Pid"], currentKey)
+        self._settings.save()
         return currentKey
 
     # Ensures the plugin version is set into the settings for the frontend.
     def EnsurePluginVersionSet(self):
         # We save the current plugin version into the settings so the frontend JS can get it.
-        self._settings.set(["PluginVersion"], self._plugin_version, force=True)
-        self._settings.save(force=True)
+        self._settings.set(["PluginVersion"], self._plugin_version)
+        self._settings.save()
 
     # Returns the frontend http port OctoPrint's http proxy is running on.
     def GetFrontendHttpPort(self):
@@ -509,18 +536,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Always set the OctoKey as well.
         self.SetOctoKey(octoKey)
 
-        # Clear this old value.
-        self._settings.set(["ConnectedAccounts"], "", force=True)
-
-        # Save
-        self._settings.save(force=True)
-
     # Fired when the plugin needs to be updated before OctoEverywhere can be used again.
     # This should so a message to the user, so they know they need to update.
     def OnPluginUpdateRequired(self):
         self._logger.error("The OctoEverywhere service told us we must update before we can connect.")
         self.SetPluginUpdateRequired(True)
-        self._settings.save(force=True)
 
     # Our main worker
     def main(self):
@@ -588,19 +608,19 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         return self.GetBoolFromSettings("HasConnectedAccounts", False)
 
     def SetHasConnectedAccounts(self, hasConnectedAccounts):
-        self._settings.set(["HasConnectedAccounts"], hasConnectedAccounts is True, force=True)
+        self._settings.set(["HasConnectedAccounts"], hasConnectedAccounts is True)
 
     def GetPluginUpdateRequired(self):
         return self.GetBoolFromSettings("PluginUpdateRequired", False)
 
     def SetPluginUpdateRequired(self, pluginUpdateRequired):
-        self._settings.set(["PluginUpdateRequired"], pluginUpdateRequired is True, force=True)
+        self._settings.set(["PluginUpdateRequired"], pluginUpdateRequired is True)
 
     def GetNoAccountConnectedLastInformDateTime(self):
         return self.GetFromSettings("NoAccountConnectedLastInformDateTime", None)
 
     def SetNoAccountConnectedLastInformDateTime(self, dateTime):
-        self._settings.set(["NoAccountConnectedLastInformDateTime"], dateTime, force=True)
+        self._settings.set(["NoAccountConnectedLastInformDateTime"], dateTime)
 
     # Returns None if there is no url set.
     # Note the URL will always have a ?, so it's safe to append a &source=bar on it.
@@ -608,7 +628,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         return self.GetFromSettings("AddPrinterUrl", None)
 
     def SetAddPrinterUrl(self, url):
-        self._settings.set(["AddPrinterUrl"], url, force=True)
+        self._settings.set(["AddPrinterUrl"], url)
 
     # Gets the current setting or the default value.
     def GetBoolFromSettings(self, name, default):
