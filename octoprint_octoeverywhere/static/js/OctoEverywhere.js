@@ -15,6 +15,26 @@ $(function() {
         // Used for the settings page to get the URL
         self.printerURL = ko.observable()
 
+        function Log(text)
+        {
+            console.log("OctoEverywhere: "+text)
+        }
+
+        function LogError(text)
+        {
+            console.error("OctoEverywhere: "+text)
+        }
+
+        function IsConnectedViaOctoEverywhere()
+        {
+            // Start with a to lower case to remove complexity.
+            url = window.location.href.toLowerCase();
+
+            // Check if the URL contains our domain name.
+            // If so, we know we are loaded via our service.
+            return url.indexOf(".octoeverywhere.com") != -1 || url.indexOf(".octoeverywhere.dev") != -1;
+        }
+
         // Used by the wizard to get the printer id.
         self.onWizardDetails = function (response) {
             if (response.octoeverywhere.details.AddPrinterUrl){
@@ -37,21 +57,6 @@ $(function() {
                 'delay': 10000,
                 'mouseReset' : true
             });
-        }
-
-        function IsConnectedViaOctoEverywhere()
-        {
-            // Start with a to lower case to remove complexity.
-            url = window.location.href.toLowerCase();
-
-            // Check if the URL contains our domain name.
-            // If so, we know we are loaded via our service.
-            return url.indexOf(".octoeverywhere.com") != -1 || url.indexOf(".octoeverywhere.dev") != -1;
-        }
-
-        function OctoELog(text)
-        {
-            console.error("OctoEverywhere: "+text)
         }
 
         // ;)
@@ -88,7 +93,7 @@ $(function() {
             {
                 self.doLoginRedirect = function()
                 {
-                    OctoELog("Unauthed session detected. Redirecting to login.");
+                    Log("Unauthed session detected. Redirecting to login.");
                     window.location.href = "/login/?isFromOe=true"
                 };
 
@@ -101,7 +106,7 @@ $(function() {
                         // Validate
                         if(result === null || result.needs === undefined || result.needs.group === undefined)
                         {
-                            OctoELog("Returned passive login user doesn't have expected properties.");
+                            Log("Returned passive login user doesn't have expected properties.");
                             return;
                         }
 
@@ -121,7 +126,7 @@ $(function() {
                             }
 
                             // This shouldn't happen, but in-case it does, just do nothing.
-                            OctoELog("Returned passive doesn't have guests group role but also doesn't have a role array. "+result.needs.group);
+                            Log("Returned passive doesn't have guests group role but also doesn't have a role array. "+result.needs.group);
                             return;
                         }
 
@@ -149,13 +154,13 @@ $(function() {
                     {
                         // This fail will only occur if something is very wrong, like the network can't be reached.
                         // If no user is logged in, done() will still be called with an anonymous user.
-                        OctoELog("Passive login operation failed.");
+                        LogError("Passive login operation failed.");
                     });
                 }
         }
         catch(error)
         {
-            OctoELog("Failed to make passive login call." + error);
+            LogError("Failed to make passive login call." + error);
         }
 
         //
@@ -175,11 +180,11 @@ $(function() {
         // our backend.
         function ReportLocalFrontendPort(port, isHttps, fullUrl)
         {
-            OctoELog("Local frontend port found [port:"+port+" isHttps:"+isHttps+" url:"+fullUrl+"] reporting to backend.")
+            Log("Local frontend port found [port:"+port+" isHttps:"+isHttps+" url:"+fullUrl+"] reporting to backend.")
             const xhr = new XMLHttpRequest();
             xhr.onload = () => {
                 if (xhr.status > 299) {
-                    OctoELog("Failed to report frontend port to OctoEverywhere API. " + port)
+                    LogError("Failed to report frontend port to OctoEverywhere API. " + port)
                 }
             };
             const payload = {
@@ -204,7 +209,7 @@ $(function() {
             // IPV6 must be enclosed in []
             if(hostname.indexOf("[") != -1 && hostname.indexOf("]") != -1)
             {
-                OctoELog("Current hostname detected as IPV6. "+hostname);
+                Log("Current hostname detected as IPV6. "+hostname);
                 ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
             }
@@ -213,7 +218,7 @@ $(function() {
             // Check for the domain name suffix
             if(hostname.endsWith(".local"))
             {
-                OctoELog("Current hostname detected as a .local domain. "+hostname);
+                Log("Current hostname detected as a .local domain. "+hostname);
                 ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
             }
@@ -233,13 +238,13 @@ $(function() {
             }
             if(isIPv4)
             {
-                OctoELog("Current hostname detected as a IPv4. "+hostname);
+                Log("Current hostname detected as a IPv4. "+hostname);
                 ReportLocalFrontendPort(port, isHttps, fullUrl);
                 return;
             }
 
             // We don't think this address is local.
-            OctoELog("Current hostname isn't detected as a local URL "+hostname)
+            LogError("Current hostname isn't detected as a local URL "+hostname)
         }
 
         function FindAndReportLocalFrontendPort(url)
@@ -252,7 +257,7 @@ $(function() {
             var protocolEnd = url.indexOf(protocolEndStr)
             if(protocolEnd == -1)
             {
-                OctoELog("No protocol could be found in url "+ url)
+                LogError("No protocol could be found in url "+ url)
                 return;
             }
 
@@ -270,7 +275,7 @@ $(function() {
             // Validate
             if(hostnameEnd <= protocolEnd)
             {
-                OctoELog("Hostname parse failed. hostnameEnd "+ hostnameEnd + " protocolEnd "+protocolEnd+" url "+ url);
+                LogError("Hostname parse failed. hostnameEnd "+ hostnameEnd + " protocolEnd "+protocolEnd+" url "+ url);
                 return;
             }
 
@@ -312,7 +317,7 @@ $(function() {
             var port = parseInt(hostname.substring(hasPortDelimiter + 1))
             if(port == NaN)
             {
-                OctoELog("Failed to parse port from hostname. "+hostname)
+                LogError("Failed to parse port from hostname. "+hostname)
                 return;
             }
 
@@ -359,7 +364,7 @@ $(function() {
             // Only if we are connected via OctoEverywhere, inject the service connection helpers.
             if(IsConnectedViaOctoEverywhere())
             {
-                OctoELog("OctoEverywhere based loading detected.");
+                Log("OctoEverywhere based loading detected.");
                 InjectServiceHelpers();
             }
         }
@@ -393,7 +398,7 @@ $(function() {
                     {
                         if(response.Status !== 200)
                         {
-                            OctoELog("Failed to call api/plugin/checkin; "+response.Status);
+                            LogError("Failed to call api/plugin/checkin; "+response.Status);
                             return;
                         }
                         // If there's a notification, fire it.
@@ -444,11 +449,11 @@ $(function() {
                     }
                     catch (error)
                     {
-                        OctoELog("Exception in DoNotificationCheckIn; "+error)
+                        LogError("Exception in DoNotificationCheckIn; "+error)
                     }
                 },
                 failed: function(error){
-                    OctoELog("Failed to call plugin check in API "+error);
+                    LogError("Failed to call plugin check in API "+error);
                 }
             });
         }
@@ -460,7 +465,7 @@ $(function() {
             try {
                 DoNotificationCheckIn(octoEverywhereSettings.PrinterKey(), octoEverywhereSettings.PluginVersion(), IsConnectedViaOctoEverywhere())
             } catch (error) {
-                OctoELog("DoNotificationCheckIn failed." + error);
+                LogError("DoNotificationCheckIn failed." + error);
             }
         }
 
