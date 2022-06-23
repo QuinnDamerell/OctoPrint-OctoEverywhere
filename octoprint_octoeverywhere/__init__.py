@@ -119,8 +119,10 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # True in the OctoPrint config. This flag is set to true on startup and then set to false after `on_after_startup` is called on all plugins.
         # The problem was our logic in on_after_startup raced the clearing logic of that flag and sometimes resulted in it not being unset.
         #
-        # Thus, WE SHOULD NEVER USE THE FORCE FLAG, as most of the time when are vars are set they are the same anyways, so it's a waste. The settings object
-        # has a concept of `dirty`, so if we set the same value again, save() will do nothing.
+        # Thus, WE SHOULD NEVER USE THE FORCE FLAG, as most of the time when are vars are set they are the same anyways, so it's a waste.
+        # We SHOULD ALSO AVOID CALLING SAVE() IF THERE'S NO CHANGE. Even though the settings object has a concept of `dirty` and if we set the same value
+        # save() will do nothing, if our thread is racing another thread that did make a set() change and then wanted to call save() bad things might happen.
+        # To reduce the risk, we should avoid calling save() unless it's really needed.
         #
         # But also, any settings that might actually set or get generated on first load should be set synchronously in on_startup or on_after_startup.
         #
@@ -194,10 +196,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
                 # Report
                 self._logger.info("SetFrontendLocalPort API called. Port:"+str(port)+" IsHttps:"+str(isHttps)+" URL:"+url)
-                # Save
-                self._settings.set(["HttpFrontendPort"], port)
-                self._settings.set(["HttpFrontendIsHttps"], isHttps)
-                self._settings.save()
+
+                # Save into settings only if the value has changed.
+                curPort = self._settings.get(["HttpFrontendPort"])
+                curIsHttps = self._settings.get(["HttpFrontendIsHttps"])
+                if curPort is None or curIsHttps is None or curPort != port or curIsHttps != isHttps:
+                    self._settings.set(["HttpFrontendPort"], port)
+                    self._settings.set(["HttpFrontendIsHttps"], isHttps)
+                    self._settings.save()
+
                 # Update the running value.
                 OctoHttpRequest.SetLocalHttpProxyPort(port)
                 OctoHttpRequest.SetLocalHttpProxyIsHttps(isHttps)
@@ -457,11 +464,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             currentId = self.GeneratePrinterId()
             self._logger.info("New printer id is: "+currentId)
 
-        # Always update the settings, so they are always correct.
-        self.SetAddPrinterUrl(self.c_OctoEverywhereAddPrinterUrl + currentId)
-        # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
-        self._settings.set(["PrinterKey"], currentId)
-        self._settings.save()
+            # Update the printer URL whenever the id changes to ensure they always stay in sync.
+            self.SetAddPrinterUrl(self.c_OctoEverywhereAddPrinterUrl + currentId)
+
+            # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
+            self._settings.set(["PrinterKey"], currentId)
+            self._settings.save()
+
+        # Return
         return currentId
 
     # Ensures we have generated a private key and returns it.
@@ -483,16 +493,21 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Create and save the new value
             currentKey = self.GeneratePrivateKey()
 
-        # Save and return.
-        self._settings.set(["Pid"], currentKey)
-        self._settings.save()
+            # Save - it's important to only call then when the key is updated, since we race the `incompleteStartup` flag
+            # around the same time this is accessed. See the comment above with `incompleteStartup` for details.
+            self._settings.set(["Pid"], currentKey)
+            self._settings.save()
+
+        # Return
         return currentKey
 
     # Ensures the plugin version is set into the settings for the frontend.
     def EnsurePluginVersionSet(self):
         # We save the current plugin version into the settings so the frontend JS can get it.
-        self._settings.set(["PluginVersion"], self._plugin_version)
-        self._settings.save()
+        currentVersion = self._settings.get(["PluginVersion"])
+        if currentVersion is None or self._plugin_version != currentVersion:
+            self._settings.set(["PluginVersion"], self._plugin_version)
+            self._settings.save()
 
     # Returns the frontend http port OctoPrint's http proxy is running on.
     def GetFrontendHttpPort(self):
