@@ -244,7 +244,7 @@ $(function() {
             }
 
             // We don't think this address is local.
-            LogError("Current hostname isn't detected as a local URL "+hostname)
+            Log("Current hostname isn't detected as a local URL "+hostname)
         }
 
         function FindAndReportLocalFrontendPort(url)
