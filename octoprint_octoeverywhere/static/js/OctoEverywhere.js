@@ -51,7 +51,7 @@ $(function() {
 
         function OctoELog(text)
         {
-            console.log("OctoEverywhere: "+text)
+            console.error("OctoEverywhere: "+text)
         }
 
         // ;)
