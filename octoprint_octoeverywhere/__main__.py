@@ -92,7 +92,7 @@ if __name__ == '__main__':
     # Special - Dev Env Setup
     printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
     privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
-    OctoHttpRequest.SetLocalhostAddress("192.168.86.57")
+    OctoHttpRequest.SetLocalHostAddress("192.168.1.27")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
     #OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
 

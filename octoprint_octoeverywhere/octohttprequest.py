@@ -33,7 +33,7 @@ class OctoHttpRequest:
         return OctoHttpRequest.LocalOctoPrintPort
 
     @staticmethod
-    def SetLocalhostAddress(address):
+    def SetLocalHostAddress(address):
         OctoHttpRequest.LocalHostAddress = address
     @staticmethod
     def GetLocalhostAddress():
