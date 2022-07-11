@@ -35,7 +35,7 @@ class NotificationsHandler:
         # On init, set the key to empty.
         self.OctoKey = None
         self.PrinterId = None
-        self.ProtocolAndDomain = "https://octoeverywhere.com"
+        self.ProtocolAndDomain = "https://printer-events-v1-oeapi.octoeverywhere.com"
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.PingTimer = None
 
@@ -102,7 +102,7 @@ class NotificationsHandler:
     def OnStarted(self, fileName):
         self.ResetForNewPrint()
         self._updateCurrentFileName(fileName)
-        self.SetupPingTimer()
+        self.SetupPingTimer(True)
         self._sendEvent("started")
 
 
@@ -127,11 +127,17 @@ class NotificationsHandler:
         self._updateCurrentFileName(fileName)
         self._sendEvent("paused")
 
+        # Stop the ping timer, so we don't report progress while we are paused.
+        self.StopPingTimer()
+
 
     # Fired when a print is resumed
     def OnResume(self, fileName):
         self._updateCurrentFileName(fileName)
         self._sendEvent("resume")
+
+        # Start the ping timer, to ensure it's running now.
+        self.SetupPingTimer(False)
 
 
     # Fired when OctoPrint or the printer hits an error.
@@ -566,12 +572,13 @@ class NotificationsHandler:
         return -1
 
     # Starts a ping timer which is used to fire "every x minutes events".
-    def SetupPingTimer(self):
+    def SetupPingTimer(self, resetHoursReported):
         # First, stop any timer that's currently running.
         self.StopPingTimer()
 
         # Make sure the hours flag is cleared when we start a new timer.
-        self.PingTimerHoursReported = 0
+        if resetHoursReported:
+            self.PingTimerHoursReported = 0
 
         # Setup the new timer
         intervalSec = 60 * 60 # Fire every hour.
@@ -600,8 +607,8 @@ class NotificationsHandler:
         else:
             state = self.OctoPrintPrinterObject.get_state_id()
 
-        # Ensure the state is still printing or paused, if not we are done.
-        if state != "PRINTING" and state != "PAUSED":
+        # Ensure the state is still printing, if not we are done.
+        if state != "PRINTING":
             self.Logger.info("Notification ping timer state doesn't seem to be printing, stopping timer. State: "+str(state))
             self.StopPingTimer()
             return
