@@ -100,7 +100,7 @@ class OctoPingPong:
                 secondsSinceLastWork = time.time() - lastWorkTime
 
                 # Compute how long until we should do work, this will be negative if the time has passed.
-                timeUntilNextWorkSec = (oneHourOfSeconds * 18) - secondsSinceLastWork
+                timeUntilNextWorkSec = (oneHourOfSeconds * 30) - secondsSinceLastWork
 
                 # If lastWorkTime is 0, the file was just created, so this is the first time the plugin has ran.
                 if lastWorkTime == 0:
