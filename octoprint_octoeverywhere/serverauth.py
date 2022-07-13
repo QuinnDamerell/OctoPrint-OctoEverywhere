@@ -2,6 +2,8 @@ import random
 import string
 import rsa
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 # A helper class to handle server validation.
 #
 # The printer connection to OctoEverywhere is established over a secure websocket using the lastest TLS protocls and policies.
@@ -36,7 +38,7 @@ class ServerAuthHelper:
             publicKey = rsa.PublicKey.load_pkcs1(ServerAuthHelper.c_ServerPublicKey)
             return rsa.encrypt(self.Challenge.encode('utf8'), publicKey)
         except Exception as e:
-            self.Logger.error("GetEncryptedChallenge failed.  "+str(e))
+            Sentry.Exception("GetEncryptedChallenge failed.", e)
         return None
 
     # Validates the decrypted challenge the server returned is correct.

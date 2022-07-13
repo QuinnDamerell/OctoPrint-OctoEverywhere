@@ -3,6 +3,8 @@ import time
 import zlib
 import sys
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from .octohttprequest import OctoHttpRequest
 from .octohttprequest import PathTypes
 from .localauth import LocalAuth
@@ -153,7 +155,7 @@ class Slipstream:
             th = threading.Thread(target=self._UpdateCacheThread, args=(delayMs,))
             th.start()
         except Exception as e:
-            self.Logger.error("Slipstream failed to start index refresh thread. "+str(e))
+            Sentry.Exception("Slipstream failed to start index refresh thread. ", e)
 
 
     # Does the index update cache work.
@@ -176,7 +178,7 @@ class Slipstream:
             self._GetAndProcessIndex()
 
         except Exception as e:
-            self.Logger.error("Slipstream failed to update cache. "+str(e))
+            Sentry.Exception("Slipstream failed to update cache.", e)
         finally:
             with self.Lock:
                 # It's important we always clear this flag.

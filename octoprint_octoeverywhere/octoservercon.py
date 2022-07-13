@@ -2,6 +2,8 @@ import time
 import random
 from datetime import datetime
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from .websocketimpl import Client
 from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer
@@ -164,7 +166,7 @@ class OctoServerCon:
             try:
                 self.OctoSession.HandleMessage(msg)
             except Exception as e:
-                self.Logger.error("Exception in OctoSession.HandleMessage " + self.GetConnectionString() + " :" + str(e))
+                Sentry.Exception("Exception in OctoSession.HandleMessage " + self.GetConnectionString() + ".", e)
                 self.OnSessionError(localSessionId, 0)
 
 
@@ -265,7 +267,7 @@ class OctoServerCon:
                 self.Logger.info("Server con "+self.GetConnectionString()+" RunFor is complete and will be disconnected.")
                 self.Disconnect()
             except Exception as e:
-                self.Logger.error("Exception in OnRunForTimerCallback during disconnect. "+self.GetConnectionString()+" ex:" + str(e))
+                Sentry.Exception("Exception in OnRunForTimerCallback during disconnect. "+self.GetConnectionString()+".", e)
 
 
     # A callback fired only for the primary connection and only when the first latency data is ready after the plugin's first run.
@@ -277,7 +279,7 @@ class OctoServerCon:
             self.NoWaitReconnect = True
             self.Disconnect()
         except Exception as e:
-            self.Logger.error("Exception in OnFirstRunLatencyDataComplete during disconnect. "+self.GetConnectionString()+" ex:" + str(e))
+            Sentry.Exception("Exception in OnFirstRunLatencyDataComplete during disconnect. "+self.GetConnectionString()+".", e)
 
 
     def RunBlocking(self):
@@ -315,7 +317,7 @@ class OctoServerCon:
 
             except Exception as e:
                 self.TempDisableLowestLatencyEndpoint = True
-                self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. server con:"+self.GetConnectionString()+" ex:" + str(e))
+                Sentry.Exception("Exception in OctoEverywhere's main RunBlocking function. server con:"+self.GetConnectionString()+".", e)
                 time.sleep(20)
 
             # On each disconnect, check if the RunFor time is now done.

@@ -3,6 +3,8 @@ import io
 import threading
 
 import requests
+
+from octoprint_octoeverywhere.sentry import Sentry
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
     # Since most setups don't use this package, we will import it with a try catch and if it fails we
@@ -338,9 +340,9 @@ class NotificationsHandler:
                         snapshot = buffer.getvalue()
                         buffer.close()
                     else:
-                        self.Logger.warm("Can't flip image because the Image rotation lib failed to import.")
+                        self.Logger.warn("Can't flip image because the Image rotation lib failed to import.")
                 except Exception as ex:
-                    self.Logger.warm("Failed to flip image for notifications: "+str(ex))
+                    Sentry.ExceptionNoSend("Failed to flip image for notifications", ex)
 
             # Return the image
             return snapshot
@@ -370,7 +372,7 @@ class NotificationsHandler:
         try:
             self.CurrentPrintStartTime = time.time() - float(durationSecStr)
         except Exception as e:
-            self.Logger.error("_updateToKnownDuration exception "+str(e))
+            Sentry.ExceptionNoSend("_updateToKnownDuration exception", e)
 
 
     # Updates the current file name, if there is a new name to set.
@@ -411,7 +413,7 @@ class NotificationsHandler:
             return printProgressFloat
 
         except Exception as e:
-            self.Logger.error("_getCurrentProgressFloat failed to compute progress. Exception: "+str(e))
+            Sentry.ExceptionNoSend("_getCurrentProgressFloat failed to compute progress.", e)
 
         # On failure, default to what OctoPrint has reported.
         return float(self.OctoPrintReportedProgressInt)
@@ -505,7 +507,7 @@ class NotificationsHandler:
                 time.sleep(30)
 
         except Exception as e:
-            self.Logger.error("NotificationsHandler failed to send event code "+str(event)+". Exception: "+str(e))
+            Sentry.Exception("NotificationsHandler failed to send event code "+str(event), e)
 
         return False
 
@@ -529,7 +531,7 @@ class NotificationsHandler:
                         printTimeLeft = int(float(currentData["progress"]["printTimeLeft"]))
                         return printTimeLeft
         except Exception as e:
-            self.Logger.error("Failed to find progress object in printer current data. "+str(e))
+            Sentry.Exception("Failed to find progress object in printer current data.", e)
 
         # If that fails, try to use the default OctoPrint estimate.
         try:
@@ -549,7 +551,7 @@ class NotificationsHandler:
                     return 0
                 return printTimeEstSec - currentDurationSec
         except Exception as e:
-            self.Logger.error("Failed to find time estimate from OctoPrint. "+str(e))
+            Sentry.Exception("Failed to find time estimate from OctoPrint. ", e)
 
         # We failed.
         return -1
@@ -566,7 +568,7 @@ class NotificationsHandler:
                 currentZ = float(currentData["currentZ"])
                 return currentZ
         except Exception as e:
-            self.Logger.error("Failed to find current z offset. "+str(e))
+            Sentry.Exception("Failed to find current z offset.", e)
 
         # Failed to find it.
         return -1

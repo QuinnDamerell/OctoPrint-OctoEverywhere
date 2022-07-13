@@ -1,6 +1,8 @@
 import time
 import threading
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from .octoservercon import OctoServerCon
 from .Proto import SummonMethods
 
@@ -42,7 +44,7 @@ class OctoEverywhere:
                 serverCon = self.createOctoServerCon(self.Endpoint, True, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec, SummonMethods.SummonMethods.Unknown)
                 serverCon.RunBlocking()
             except Exception as e:
-                self.Logger.error("Exception in OctoEverywhere's main RunBlocking function. ex:" + str(e))
+                Sentry.Exception("Exception in OctoEverywhere's main RunBlocking function.", e)
                 # Sleep for just a bit and try again.
                 time.sleep(5)
 
@@ -69,7 +71,7 @@ class OctoEverywhere:
             serverCon = self.createOctoServerCon(summonConnectUrl, False, False, None, self.SecondaryConnectionRunForTimeSec, summonMethod)
             serverCon.RunBlocking()
         except Exception as e:
-            self.Logger.error("Exception in HandleSecondaryServerCon function. ex:" + str(e))
+            Sentry.Exception("Exception in HandleSecondaryServerCon function.", e)
 
         # Since this is a secondary connection, when RunBlocking() returns we want to be done.
         with self.SecondaryServerConsLock:
@@ -80,7 +82,7 @@ class OctoEverywhere:
                 else:
                     self.Logger.error("Secondary ended but there's not an ref of it in the map?")
             except Exception as _:
-                self.Logger.error("Exception when removing secondary connection from map. "+str(e))
+                Sentry.Exception("Exception when removing secondary connection from map.", e)
 
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 

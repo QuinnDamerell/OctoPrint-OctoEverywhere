@@ -4,6 +4,8 @@ import threading
 import time
 import requests
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 #
 # The point of this class is to simply ping the available OctoEverywhere server regions occasionally to track which region is has the best
 # latency to. This information is used by the plugin to ensure it's connected to the best possible server.
@@ -49,7 +51,7 @@ class OctoPingPong:
             th.setDaemon(True)
             th.start()
         except Exception as e:
-            self.Logger.error("Failed to start OctoPingPong Thread: "+str(e))
+            Sentry.Exception("Failed to start OctoPingPong Thread.", e)
 
 
     # Used for local debugging.
@@ -75,7 +77,7 @@ class OctoPingPong:
                 return None
             return lowestLatencyServerSub
         except Exception as e:
-            self.Logger.error("Exception in OctoPingPong GetLowestLatencyServerSub: "+str(e))
+            Sentry.Exception("Exception in OctoPingPong GetLowestLatencyServerSub.", e)
         return None
 
 
@@ -130,7 +132,7 @@ class OctoPingPong:
                         self.PluginFirstRunLatencyCompleteCallback()
 
             except Exception as e:
-                self.Logger.error("Exception in OctoPingPong thread: "+str(e))
+                Sentry.Exception("Exception in OctoPingPong thread.", e)
 
 
     def _UpdateStats(self):
@@ -287,7 +289,7 @@ class OctoPingPong:
                 self.Logger.warn("Failed to report ping latency "+response.status_code)
                 return
         except Exception as e:
-            self.Logger.warm("Failed to report ping latency " + str(e))
+            self.Logger.warn("Failed to report ping latency " + str(e))
 
 
     # Returns the ping latency in ms to the server and the list of servers.

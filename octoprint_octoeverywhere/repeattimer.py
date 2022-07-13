@@ -1,5 +1,7 @@
 import threading
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 class RepeatTimer(threading.Thread):
     def __init__(self, logger, intervalSec, func):
         threading.Thread.__init__(self)
@@ -19,7 +21,7 @@ class RepeatTimer(threading.Thread):
                     return
                 self.callback()
             except Exception as e:
-                self.logger.error("Exception in RepeatTimer thread. "+str(e))
+                Sentry.Exception("Exception in RepeatTimer thread.", e)
         self.logger.info("RepeatTimer thread exit")
 
     # Used to stop the timer.

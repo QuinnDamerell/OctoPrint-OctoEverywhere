@@ -6,6 +6,8 @@ import zlib
 
 import websocket
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..localip import LocalIpHelper
@@ -284,7 +286,7 @@ class OctoWebStreamWsHelper:
             # Send it!
             self.WebStream.SendToOctoStream(outputBuf)
         except Exception as e:
-            self.Logger.error(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service. "+str(e))
+            Sentry.Exception(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service.", e)
             self.WebStream.Close()
 
 

@@ -3,6 +3,8 @@ import struct
 import threading
 import traceback
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
 #
@@ -64,7 +66,7 @@ class OctoSession:
             # Process it!
             self.OctoStream.OnSummonRequest(self.SessionId, serverConnectUrl, summonMethod)
         except Exception as e:
-            self.Logger.error("Failed to handle summon request " + str(e))
+            Sentry.Exception("Failed to handle summon request ", e)
 
 
     def HandleClientNotification(self, msg):
@@ -94,7 +96,7 @@ class OctoSession:
             # Send it to the UI
             self.UiPopupInvoker.ShowUiPopup(title, text, typeStr, autoHide)
         except Exception as e:
-            self.Logger.error("Failed to handle octo notification message. " + str(e))
+            Sentry.Exception("Failed to handle octo notification message.", e)
 
 
     def HandleHandshakeAck(self, msg):
@@ -217,9 +219,9 @@ class OctoSession:
                 try:
                     webStream.Close()
                 except Exception as e:
-                    self.Logger.error("Exception thrown while closing web streamId - " + str(e))
+                    Sentry.Exception("Exception thrown while closing web streamId", e)
         except Exception as ex:
-            self.Logger.error("Exception thrown while closing all web streams: " + str(ex))
+            Sentry.Exception("Exception thrown while closing all web streams.", ex)
 
 
     def StartHandshake(self, summonMethod):
@@ -241,7 +243,7 @@ class OctoSession:
             # Send!
             self.OctoStream.SendMsg(buf)
         except Exception as e:
-            self.Logger.error("Failed to send handshake syn. " + str(e))
+            Sentry.Exception("Failed to send handshake syn.", e)
             self.OnSessionError(0)
             return
 
@@ -256,7 +258,7 @@ class OctoSession:
         try:
             msg = self.DecodeOctoStreamMessage(msgBytes)
         except Exception as e:
-            self.Logger.error("Failed to decode message local request. " + str(e))
+            Sentry.Exception("Failed to decode message local request.", e)
             self.OnSessionError(0)
             return
 
@@ -289,7 +291,7 @@ class OctoSession:
         except Exception as e:
             # If anything throws, we consider it a protocol failure.
             traceback.print_exc()
-            self.Logger.error("Failed to handle octo message. " + str(e))
+            Sentry.Exception("Failed to handle octo message.", e)
             self.OnSessionError(0)
             return
 

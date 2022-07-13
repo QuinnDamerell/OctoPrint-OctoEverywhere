@@ -5,6 +5,8 @@ import traceback
 import time
 import queue
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from .octowebstreamhttphelper import OctoWebStreamHttpHelper
 from .octowebstreamwshelper import OctoWebStreamWsHelper
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
@@ -112,14 +114,14 @@ class OctoWebStream(threading.Thread):
             if localWsHelper is not None:
                 localWsHelper.Close()
         except Exception as e:
-            self.Logger("Web stream "+str(self.Id)+" helper threw an exception during close "+str(e))
+            Sentry.Exception("Web stream "+str(self.Id)+" helper threw an exception during close", e)
 
     # This is our main thread, where we will process all incoming messages.
     def run(self):
         try:
             self.mainThread()
         except Exception as e:
-            self.Logger.error("Exception in web stream ["+str(self.Id)+"] connect loop: "+str(e))
+            Sentry.Exception("Exception in web stream ["+str(self.Id)+"] connect loop.", e)
             traceback.print_exc()
             self.OctoSession.OnSessionError(0)
 
@@ -255,7 +257,7 @@ class OctoWebStream(threading.Thread):
         try:
             self.OctoSession.Send(buffer)
         except Exception as e:
-            self.Logger.error("Web stream "+str(self.Id)+ " failed to send a message to the OctoStream. Error:"+str(e))
+            Sentry.Exception("Web stream "+str(self.Id)+ " failed to send a message to the OctoStream.", e)
 
             # If this was the close message, set the has set flag back to false so we send again.
             # (this mostly won't matter, since the entire connection will go down anyways)
@@ -283,9 +285,9 @@ class OctoWebStream(threading.Thread):
             outputBuf = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
             # Set the flag to silently fail, since the message might have already been sent by the helper.
             self.SendToOctoStream(outputBuf, True, True)
-        except Exception as _:
+        except Exception as e:
             # This is bad, log it and kill the stream.
-            self.Logger.error("Exception thrown while trying to send close message for web stream "+str(self.Id))
+            Sentry.Exception("Exception thrown while trying to send close message for web stream "+str(self.Id), e)
             self.OctoSession.OnSessionError(0)
 
     # Called by the OctoStreamHttpHelper if the request is normal pri.

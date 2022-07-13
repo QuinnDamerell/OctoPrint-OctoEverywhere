@@ -6,6 +6,8 @@ import sys
 
 import requests
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from ..localauth import LocalAuth
 from .octoheaderimpl import HeaderHelper
 from ..octohttprequest import OctoHttpRequest
@@ -764,7 +766,7 @@ class OctoWebStreamHttpHelper:
                             break
 
         except Exception as e:
-            self.Logger.error(self.getLogMsgPrefix()+ " exception thrown in http stream chunk reader "+str(e))
+            Sentry.Exception(self.getLogMsgPrefix()+ " exception thrown in http stream chunk reader", e)
             return 0
 
         # Check if we found a content length header
@@ -840,7 +842,7 @@ class OctoWebStreamHttpHelper:
             # When this exception is thrown, it means the entire body has been read.
             return None
         except Exception as e:
-            self.Logger.error(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read."+str(e))
+            Sentry.Exception(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read.", e)
             return None
 
     # To speed up page load, we will defer lower pri requests while higher priority requests

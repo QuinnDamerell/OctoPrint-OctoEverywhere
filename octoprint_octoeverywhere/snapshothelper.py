@@ -1,5 +1,7 @@
 import time
 
+from octoprint_octoeverywhere.sentry import Sentry
+
 from .octohttprequest import OctoHttpRequest
 
 #
@@ -259,6 +261,6 @@ class SnapshotHelper:
             return OctoHttpRequest.Result(response, url, True, imageBuffer)
 
         except Exception as e:
-            self.Logger.info("Failed to get fallback snapshot. " + str(e))
+            Sentry.Exception("Failed to get fallback snapshot.", e)
 
         return None

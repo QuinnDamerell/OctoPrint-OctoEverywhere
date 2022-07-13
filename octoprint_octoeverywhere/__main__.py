@@ -11,6 +11,7 @@ from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
+from .sentry import Sentry
 #from .notificationshandler import NotificationsHandler
 #from .threaddebug import ThreadDebug
 
@@ -72,6 +73,9 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+    # Init Sentry, but it won't report since we are in dev mode.
+    Sentry.Init(logger, "dev", True)
 
     # This is a tool to help track stuck or leaked threads.
     #threadDebugger = ThreadDebug()

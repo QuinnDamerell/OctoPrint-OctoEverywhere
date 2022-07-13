@@ -15,7 +15,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/host-fix.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/sentry.zip
 
 ## Before checking in:
 - Run in py2 env

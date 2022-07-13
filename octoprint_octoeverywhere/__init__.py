@@ -20,6 +20,7 @@ from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
+from .sentry import Sentry
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.SettingsPlugin,
@@ -125,6 +126,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Report the current setup.
         self._logger.info("OctoPrint host:" +str(self.OctoPrintLocalHost) + " port:" + str(self.OctoPrintLocalPort))
+
+        # Setup Sentry to capture issues.
+        Sentry.Init(self._logger, self._plugin_version, False)
 
         #
         # Due to settings bugs in OctoPrint, as much of the generated values saved into settings should be set here as possible.
@@ -277,7 +281,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Use LocalAuth to handle the request.
             return LocalAuth.Get().ValidateApiKey(api_key)
         except Exception as e:
-            self._logger.error("key_validator failed "+str(e))
+            Sentry.Exception("key_validator failed", e)
         return None
 
     #
@@ -427,7 +431,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self.ShowUiPopup(title, message, "notice", True)
 
         except Exception as e:
-            self._logger.error("CheckIfPrinterIsSetupAndShowMessageIfNot failed "+str(e))
+            Sentry.Exception("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
 
 
     # The length the printer ID should be.
@@ -579,7 +583,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version)
             oe.RunBlocking()
         except Exception as e:
-            self._logger.error("Exception thrown out of main runner. "+str(e))
+            Sentry.Exception("Exception thrown out of main runner.", e)
 
     # For logging and debugging purposes, print the IPs the hostname is resolving to.
     def TryToPrintHostNameIps(self):
