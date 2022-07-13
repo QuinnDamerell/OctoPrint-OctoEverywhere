@@ -1,4 +1,3 @@
-from inspect import trace
 import logging
 import traceback
 
