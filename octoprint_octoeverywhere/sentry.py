@@ -1,7 +1,10 @@
+from inspect import trace
 import logging
+import traceback
 
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.threading import ThreadingIntegration
 from sentry_sdk import capture_exception
 
 # A helper class to handle Sentry logic.
@@ -32,13 +35,45 @@ class Sentry:
                     dsn="https://a2eaa1b58ea447f08472545eedfc74fb@o1317704.ingest.sentry.io/6570908",
                     integrations=[
                         sentry_logging,
+                        ThreadingIntegration(propagate_hub=True),
                     ],
                     traces_sample_rate=1.0,
                     release=versionString,
+                    before_send=Sentry._beforeSendFilter
                 )
             except Exception as e:
                 logger.error("Failed to init Sentry: "+str(e))
 
+
+    @staticmethod
+    def _beforeSendFilter(event, hint):
+        # Since all OctoPrint plugins run in the same process, sentry will pick-up unhandled exceptions
+        # from all kinds of sources. To prevent that from spamming us, if we can pull out a callstack, we will only
+        # send things that have some origin in our code. This can be any file in the stack or any module with our name in it.
+        # Otherwise, we will ignore it.
+        send = True
+        exc_info = hint.get("exc_info")
+        if exc_info and len(exc_info) > 1 and hasattr(exc_info[2], "tb_frame"):
+            # If we have stack info, default to false
+            send = False
+            try:
+                stack = traceback.extract_stack((exc_info[2]).tb_frame)
+                for s in stack:
+                    # Check for any "octoeverywhere". The main source should be our package folder, which is
+                    # "octoprint_octoeverywhere".
+                    filenameLower = s.filename.lower()
+                    if "octoeverywhere" in filenameLower:
+                        send = True
+                        break
+            except Exception as e:
+                Sentry.logger.error("Failed to extract exception stack in sentry before send. "+str(e))
+        else:
+            Sentry.logger.warn("Sentry event had no exe_info or not tb_frame")
+
+        if send:
+            return event
+        else:
+            return None
 
     # Logs and reports an exception.
     @staticmethod

@@ -83,4 +83,13 @@ class Client:
 
     def SendWithOptCode(self, msgBytes, opcode):
         if self.Ws:
-            self.Ws.send(msgBytes, opcode)
+            try:
+                self.Ws.send(msgBytes, opcode)
+            # When we try to send something on a socket that's closed we might get an exception.
+            # This can happen in some race conditions where we either closed the socket or it closed
+            # from under us. In either case, we will handle the close because we either did it or the logic
+            # will respond to the callback that the socket is now closed. Thus, in this case, just consume
+            # the exception.
+            except websocket.WebSocketConnectionClosedException as _:
+                pass
+
