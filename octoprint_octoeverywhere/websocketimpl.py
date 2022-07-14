@@ -1,3 +1,4 @@
+import ssl
 import threading
 import certifi
 
@@ -92,4 +93,6 @@ class Client:
             # the exception.
             except websocket.WebSocketConnectionClosedException as _:
                 pass
-
+            # Similar as above, this means the socket is now closed.
+            except ssl.SSLZeroReturnError as _:
+                pass

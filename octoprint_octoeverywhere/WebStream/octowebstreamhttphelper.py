@@ -5,6 +5,7 @@ import zlib
 import sys
 
 import requests
+import urllib3
 
 from octoprint_octoeverywhere.sentry import Sentry
 
@@ -840,6 +841,10 @@ class OctoWebStreamHttpHelper:
             return None
         except requests.exceptions.StreamConsumedError as _:
             # When this exception is thrown, it means the entire body has been read.
+            return None
+        except urllib3.exceptions.ReadTimeoutError as _:
+            # Fired then the read times out, this should just close the stream.
+            # TODO - this will leave this stream with an incomplete body size, we should indicate that to the server.
             return None
         except Exception as e:
             Sentry.Exception(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read.", e)

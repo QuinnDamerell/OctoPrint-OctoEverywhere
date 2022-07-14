@@ -47,7 +47,7 @@ class Sentry:
     @staticmethod
     def _beforeSendFilter(event, hint):
         # Since all OctoPrint plugins run in the same process, sentry will pick-up unhandled exceptions
-        # from all kinds of sources. To prevent that from spamming us, if we can pull out a callstack, we will only
+        # from all kinds of sources. To prevent that from spamming us, if we can pull out a call stack, we will only
         # send things that have some origin in our code. This can be any file in the stack or any module with our name in it.
         # Otherwise, we will ignore it.
         send = True

@@ -183,7 +183,7 @@ class OctoHttpRequest:
             if pathLower.startswith(webcamUrlIndicator):
                 # We need to remove the /webcam* since we are trying to talk directly to mjpg-streamer
                 # We do want to keep the second / though.
-                secondSlash = pathOrUrl.index("/", 1)
+                secondSlash = pathOrUrl.find("/", 1)
                 if secondSlash != -1:
                     webcamPath = pathOrUrl[secondSlash:]
                     fallbackWebcamUrl = "http://" + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
