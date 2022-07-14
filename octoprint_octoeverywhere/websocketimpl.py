@@ -1,5 +1,3 @@
-from concurrent.futures import thread
-import ssl
 import threading
 import certifi
 
@@ -147,4 +145,3 @@ class Client:
                 # If any exception happens during sending, we want to report the error
                 # and shutdown the entire websocket.
                 self.handleWsError(e)
-
