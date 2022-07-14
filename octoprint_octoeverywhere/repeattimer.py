@@ -29,6 +29,10 @@ class RepeatTimer(threading.Thread):
     def SetInterval(self, intervalSec):
         self.intervalSec = intervalSec
 
+    # Returns the current interval time in seconds
+    def GetInterval(self):
+        return self.intervalSec
+
     # Used to stop the timer.
     def Stop(self):
         self.running = False

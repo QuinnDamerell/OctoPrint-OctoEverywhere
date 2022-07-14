@@ -61,11 +61,22 @@ class Gadget:
             timer.SetInterval(newIntervalSec)
 
 
+    def _getTimerInterval(self):
+        timer = self.Timer
+        if timer is not None:
+            return timer.GetInterval()
+        else:
+            return Gadget.c_defaultIntervalSec
+
+
     def _timerCallback(self):
         try:
+
+
             # Before we do anything, update the timer interval to the default, incase there's some error
             # and we don't update it properly. In all cases either an error should update this or the response
             # from the inspect call.
+            lastIntervalSec = self._getTimerInterval()
             self._updateTimerInterval(Gadget.c_defaultIntervalSec)
 
             # Check to ensure we should still be running. If the state is anything other than printing, we shouldn't be running
@@ -87,6 +98,9 @@ class Gadget:
             # Break out the args
             args = requestData[0]
             files = requestData[1]
+
+            # Add the last interval, so the server knows
+            args["LastIntervalSec"] = lastIntervalSec
 
             # Next, check if there's a valid snapshot image.
             if len(files) == 0:
