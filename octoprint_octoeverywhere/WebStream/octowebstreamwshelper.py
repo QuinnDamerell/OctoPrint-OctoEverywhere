@@ -166,10 +166,18 @@ class OctoWebStreamWsHelper:
             # We will close now, so set the flag.
             self.IsClosed = True
 
-        # Since the ws is created in the constructor, we know it must exist and must be running
-        # (or at least connecting). So all we have to do here is call close.
         self.Logger.info(self.getLogMsgPrefix()+"websocket closed after" +str(time.time() - self.OpenedTime) + " seconds")
-        self.Ws.Close()
+
+        # The initial connection is created (or at least started) in the constructor, but there's re-attempt logic
+        # that can cause the websocket to be destroyed and re-created. For that reason we need to grab a local ref
+        # and make sure it's not null. If the close fails, just ignore it, since we are shutting down already.
+        ws = self.Ws
+        self.Ws = None
+        if ws is not None:
+            try:
+                ws.Close()
+            except Exception as _ :
+                pass
 
 
     # Called when a new message has arrived for this stream from the server.

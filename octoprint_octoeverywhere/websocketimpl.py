@@ -1,9 +1,12 @@
+from concurrent.futures import thread
 import ssl
 import threading
 import certifi
 
 import websocket
 from websocket import WebSocketApp
+
+from octoprint_octoeverywhere.sentry import Sentry
 
 #
 # This class gives a bit of an abstraction over the normal ws
@@ -13,6 +16,16 @@ class Client:
 
     def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers = None):
 
+        # Since we also fire onWsError if there is a send error, we need to capture
+        # the callback and have some vars to ensure it only gets fired once.
+        self.clientWsErrorCallback = onWsError
+        self.wsErrorCallbackLock = threading.Lock()
+        self.hasFiredWsErrorCallback = False
+
+        # Used to indicate if the client has started to close this WS. If so, we won't fire
+        # any errors.
+        self.hasClientRequestedClose = False
+
         def OnOpen(ws):
             if onWsOpen:
                 onWsOpen(self)
@@ -21,27 +34,67 @@ class Client:
             if onWsMsg:
                 onWsMsg(self, msg)
 
-        def onClosed(ws):
+        def OnClosed(ws):
             if onWsClose:
                 onWsClose(self)
-
-        def OnError(ws, msg):
-            if onWsError:
-                onWsError(self, msg)
 
         def OnData(ws, buffer, msgType, continueFlag):
             if onWsData:
                 onWsData(self, buffer, msgType)
 
+        def OnError(ws, exception):
+            # For this special case, call our function.
+            self.handleWsError(exception)
+
+        # Create it!
         self.Ws = WebSocketApp(url,
+                                  on_open = OnOpen,
                                   on_message = OnMsg,
-                                  on_close = onClosed,
+                                  on_close = OnClosed,
                                   on_error = OnError,
                                   on_data = OnData,
                                   header = headers
         )
-        self.Ws.on_open = OnOpen
-        self.onWsError = onWsError
+
+
+    # This can be called from our logic internally in this class or from
+    # The websocket class itself
+    def handleWsError(self, exception):
+        # If the client is trying to close this websocket and has made the close call to do so,
+        # we won't fire any more errors out of it. This can happen if a send is trying to send data
+        # at the same time as the socket is closing for example.
+        if self.hasClientRequestedClose:
+            return
+
+        # Since this callback can be fired from many sources, we want to ensure it only
+        # gets fired once.
+        with self.wsErrorCallbackLock:
+            if self.hasFiredWsErrorCallback:
+                return
+            self.hasFiredWsErrorCallback = True
+
+        # To prevent locking issues or other issues, spin off a thread to fire the callback.
+        # This prevents the case where send() fires the callback, we don't want to overlap the
+        # send path callback.
+        callbackThread = threading.Thread(target=self.fireWsErrorCallbackThread, args=(exception, ))
+        callbackThread.start()
+
+
+    def fireWsErrorCallbackThread(self, exception):
+        try:
+            # Fire the error callback.
+            if self.clientWsErrorCallback:
+                self.clientWsErrorCallback(self, exception)
+
+            # Now ensure the websocket is closing. Since it most likely already is,
+            # ignore any exceptions.
+            try:
+                self.Ws.close()
+            except Exception as _ :
+                pass
+        except Exception as e :
+            Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
+
 
     def RunUntilClosed(self):
         # Note we must set the ping_interval and ping_timeout or we won't get a multithread
@@ -63,18 +116,21 @@ class Client:
             # If it is the error message we will just return indication that the socket is closed.
             msg = str(e)
             if "'Thread' object has no attribute 'isAlive'" not in msg:
-                if self.onWsError:
-                    self.onWsError(self, "run_forever threw and exception: "+msg)
+                self.handleWsError(e)
+
 
     def RunAsync(self):
         t = threading.Thread(target=self.RunUntilClosed, args=())
         t.daemon = True
         t.start()
 
+
     def Close(self):
+        self.hasClientRequestedClose = True
         if self.Ws:
             self.Ws.close()
             self.Ws = None
+
 
     def Send(self, msgBytes, isData):
         if isData:
@@ -82,17 +138,13 @@ class Client:
         else:
             self.SendWithOptCode(msgBytes, websocket.ABNF.OPCODE_TEXT)
 
+
     def SendWithOptCode(self, msgBytes, opcode):
         if self.Ws:
             try:
                 self.Ws.send(msgBytes, opcode)
-            # When we try to send something on a socket that's closed we might get an exception.
-            # This can happen in some race conditions where we either closed the socket or it closed
-            # from under us. In either case, we will handle the close because we either did it or the logic
-            # will respond to the callback that the socket is now closed. Thus, in this case, just consume
-            # the exception.
-            except websocket.WebSocketConnectionClosedException as _:
-                pass
-            # Similar as above, this means the socket is now closed.
-            except ssl.SSLZeroReturnError as _:
-                pass
+            except Exception as e:
+                # If any exception happens during sending, we want to report the error
+                # and shutdown the entire websocket.
+                self.handleWsError(e)
+

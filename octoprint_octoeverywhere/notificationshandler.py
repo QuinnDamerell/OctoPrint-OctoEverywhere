@@ -484,14 +484,19 @@ class NotificationsHandler:
                 attempts += 1
 
                 # Make the request.
-                # Since we are sending the snapshot, we must send a multipart form.
-                # Thus we must use the data and files fields, the json field will not work.
-                r = requests.post(eventApiUrl, data=args, files=files)
+                try:
+                    # Since we are sending the snapshot, we must send a multipart form.
+                    # Thus we must use the data and files fields, the json field will not work.
+                    r = requests.post(eventApiUrl, data=args, files=files)
 
-                # Check for success.
-                if r.status_code == 200:
-                    self.Logger.info("NotificationsHandler successfully sent '"+event+"'; ETA: "+str(timeRemainEstStr))
-                    return True
+                    # Check for success.
+                    if r.status_code == 200:
+                        self.Logger.info("NotificationsHandler successfully sent '"+event+"'; ETA: "+str(timeRemainEstStr))
+                        return True
+
+                except Exception as e:
+                    # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors.
+                    self.Logger.warn("Failed to send notification due to a connection error, trying again. "+str(e))
 
                 # On failure, log the issue.
                 self.Logger.error("NotificationsHandler failed to send event "+str(event)+". Code:"+str(r.status_code) + "; Body:"+r.content.decode())
