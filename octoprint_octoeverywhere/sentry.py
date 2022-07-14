@@ -36,7 +36,6 @@ class Sentry:
                         sentry_logging,
                         ThreadingIntegration(propagate_hub=True),
                     ],
-                    traces_sample_rate=1.0,
                     release=versionString,
                     before_send=Sentry._beforeSendFilter
                 )
