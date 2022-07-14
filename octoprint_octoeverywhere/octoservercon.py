@@ -89,6 +89,7 @@ class OctoServerCon:
         self.RunForSeconds = runForSeconds
         self.CreationTime = datetime.now()
         self.LastUserActivityTime = self.CreationTime
+
         # Start the RunFor time checker.
         self.RunForTimeChecker = RepeatTimer(self.Logger, self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
         self.RunForTimeChecker.start()
@@ -136,6 +137,11 @@ class OctoServerCon:
         # And we note that we have connected.
         self.IsWsConnecting = False
         self.TempDisableLowestLatencyEndpoint = False
+
+        # Also after the open call has been successful, ensure the disconnecting flag is cleared.
+        # This ensures any races between the disconnect function and a new connection won't result in the
+        # flag getting stuck to being set.
+        self.IsDisconnecting = False
 
         # Create a new session for this websocket connection.
         self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion)
@@ -227,15 +233,17 @@ class OctoServerCon:
         self.IsDisconnecting = True
 
         # Try to close all of the sockets before we disconnect, so we send the messages.
-        if self.OctoSession:
-            self.OctoSession.CloseAllWebStreamsAndDisable()
-
-        self.Logger.info("OctoServerCon websocket close start")
+        # It's important to try catch this logic to ensure we always end up calling close on the current websocket.
+        try:
+            if self.OctoSession:
+                self.OctoSession.CloseAllWebStreamsAndDisable()
+        except Exception as e:
+            Sentry.Exception("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
 
         # Close the websocket, which will cause the run loop to spin and reconnect.
+        self.Logger.info("OctoServerCon websocket close start")
         if self.Ws:
             self.Ws.Close()
-
         self.Logger.info("OctoServerCon disconnect complete.")
 
 
