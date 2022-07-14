@@ -39,7 +39,7 @@ class SnapshotHelper:
             return snapshotUrl
         else:
             # This is the dev case
-            return "http://192.168.86.57/webcam/?action=snapshot"
+            return "http://192.168.1.27/webcam/?action=snapshot"
 
     # Returns if flip H is set in the settings.
     def GetWebcamFlipH(self):

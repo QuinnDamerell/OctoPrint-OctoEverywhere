@@ -3,7 +3,7 @@ import io
 import threading
 
 import requests
-
+from octoprint_octoeverywhere.gadget import Gadget
 from octoprint_octoeverywhere.sentry import Sentry
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -40,6 +40,7 @@ class NotificationsHandler:
         self.ProtocolAndDomain = "https://printer-events-v1-oeapi.octoeverywhere.com"
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.PingTimer = None
+        self.Gadget = Gadget(logger, self)
 
         # Define all the vars
         self.CurrentFileName = ""
@@ -93,6 +94,10 @@ class NotificationsHandler:
     def SetServerProtocolAndDomain(self, protocolAndDomain):
         self.Logger.info("NotificationsHandler default domain and protocol set to: "+protocolAndDomain)
         self.ProtocolAndDomain = protocolAndDomain
+
+
+    def SetGadgetServerProtocolAndDomain(self, protocolAndDomain):
+        self.Gadget.SetServerProtocolAndDomain(protocolAndDomain)
 
 
     # Sends the test notification.
@@ -422,11 +427,6 @@ class NotificationsHandler:
     # Sends the event
     # Returns True on success, otherwise False
     def _sendEvent(self, event, args = None, progressOverwriteFloat = None):
-        # Ensure we are ready.
-        if self.PrinterId is None or self.OctoKey is None:
-            self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
-            return False
-
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
         thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, ))
         thread.start()
@@ -438,43 +438,20 @@ class NotificationsHandler:
     # Returns True on success, otherwise False
     def _sendEventThreadWorker(self, event, args=None, progressOverwriteFloat=None):
         try:
-            # Setup the event.
+            # Build the common even args.
+            requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat)
+
+            # Handle the result indicating we don't have the proper var to send yet.
+            if requestArgs is None:
+                self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
+                return False
+
+            # Break out the response
+            args = requestArgs[0]
+            files = requestArgs[1]
+
+            # Setup the url
             eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
-
-            # Setup the post body
-            if args is None:
-                args = {}
-
-            # Add the required vars
-            args["PrinterId"] = self.PrinterId
-            args["OctoKey"] = self.OctoKey
-            args["Event"] = event
-
-            # Always add the file name
-            args["FileName"] = str(self.CurrentFileName)
-
-            # Always include the ETA, note this will be -1 if the time is unknown.
-            timeRemainEstStr =  str(self.GetPrintTimeRemainingEstimateInSeconds())
-            args["TimeRemainingSec"] = timeRemainEstStr
-
-            # Always add the current progress
-            # -> int to round -> to string for the API.
-            # Allow the caller to overwrite the progress we report. This allows the progress update to snap the progress to a hole 10s value.
-            progressFloat = 0.0
-            if progressOverwriteFloat is not None:
-                progressFloat = progressOverwriteFloat
-            else:
-                progressFloat = self._getCurrentProgressFloat()
-            args["ProgressPercentage"] = str(int(progressFloat))
-
-            # Always add the current duration
-            args["DurationSec"] = str(self._getCurrentDurationSecFloat())
-
-            # Also always include a snapshot if we can get one.
-            files = {}
-            snapshot = self.getSnapshot()
-            if snapshot is not None:
-                files['attachment'] = ("snapshot.jpg", snapshot)
 
             # Attempt to send the notification twice. If the first time fails,
             # we will wait a bit and try again. It's really unlikely for a notification to fail, the biggest reason
@@ -491,7 +468,7 @@ class NotificationsHandler:
 
                     # Check for success.
                     if r.status_code == 200:
-                        self.Logger.info("NotificationsHandler successfully sent '"+event+"'; ETA: "+str(timeRemainEstStr))
+                        self.Logger.info("NotificationsHandler successfully sent '"+event+"'")
                         return True
 
                 except Exception as e:
@@ -515,6 +492,54 @@ class NotificationsHandler:
             Sentry.Exception("NotificationsHandler failed to send event code "+str(event), e)
 
         return False
+
+
+    # Used by notifications and gadget to build a common event args.
+    # Returns an array of [args, files] which are ready to be used in the request.
+    # Returns None if the system isn't ready yet.
+    def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None):
+
+        # Ensure we have the required var set already. If not, get out of here.
+        if self.PrinterId is None or self.OctoKey is None:
+            return None
+
+        # Default args
+        if args is None:
+            args = {}
+
+        # Add the required vars
+        args["PrinterId"] = self.PrinterId
+        args["OctoKey"] = self.OctoKey
+        args["Event"] = event
+
+        # Always add the file name
+        args["FileName"] = str(self.CurrentFileName)
+
+        # Always include the ETA, note this will be -1 if the time is unknown.
+        timeRemainEstStr =  str(self.GetPrintTimeRemainingEstimateInSeconds())
+        args["TimeRemainingSec"] = timeRemainEstStr
+
+        # Always add the current progress
+        # -> int to round -> to string for the API.
+        # Allow the caller to overwrite the progress we report. This allows the progress update to snap the progress to a hole 10s value.
+        progressFloat = 0.0
+        if progressOverwriteFloat is not None:
+            progressFloat = progressOverwriteFloat
+        else:
+            progressFloat = self._getCurrentProgressFloat()
+        args["ProgressPercentage"] = str(int(progressFloat))
+
+        # Always add the current duration
+        args["DurationSec"] = str(self._getCurrentDurationSecFloat())
+
+        # Also always include a snapshot if we can get one.
+        files = {}
+        snapshot = self.getSnapshot()
+        if snapshot is not None:
+            files['attachment'] = ("snapshot.jpg", snapshot)
+
+        return [args, files]
+
 
     # This function will get the estimated time remaining for the current print.
     # It will first try to get a more accurate from plugins like PrintTimeGenius, otherwise it will fallback to the default OctoPrint total print time estimate.
@@ -578,6 +603,24 @@ class NotificationsHandler:
         # Failed to find it.
         return -1
 
+
+    # Returns True if the printing timers (notifications and gadget) should be running.
+    # False if the printer state is anything else, which means they should stop.
+    def ShouldPrintingTimersBeRunning(self):
+        # Get the current state
+        # States can be found here:
+        # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
+        state = "UNKNOWN"
+        if self.OctoPrintPrinterObject is None:
+            self.Logger.warn("Notification ping timer doesn't have a OctoPrint printer object.")
+            state = "PRINTING"
+        else:
+            state = self.OctoPrintPrinterObject.get_state_id()
+
+        # Return if the state is printing or not.
+        return state == "PRINTING"
+
+
     # Starts a ping timer which is used to fire "every x minutes events".
     def SetupPingTimer(self, resetHoursReported):
         # First, stop any timer that's currently running.
@@ -593,6 +636,9 @@ class NotificationsHandler:
         timer.start()
         self.PingTimer = timer
 
+        # Start Gadget From Watching
+        self.Gadget.StartWatching()
+
 
     # Stops any running ping timer.
     def StopPingTimer(self):
@@ -602,21 +648,17 @@ class NotificationsHandler:
         if pingTimer is not None:
             pingTimer.Stop()
 
+        # Stop Gadget From Watching
+        self.Gadget.StopWatching()
+
+
     # Fired when the ping timer fires.
     def PingTimerCallback(self):
-        # Get the current state
-        # States can be found here:
-        # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
-        state = "UNKNOWN"
-        if self.OctoPrintPrinterObject is None:
-            self.Logger.warn("Notification ping timer doesn't have a OctoPrint printer object.")
-            state = "PRINTING"
-        else:
-            state = self.OctoPrintPrinterObject.get_state_id()
 
-        # Ensure the state is still printing, if not we are done.
-        if state != "PRINTING":
-            self.Logger.info("Notification ping timer state doesn't seem to be printing, stopping timer. State: "+str(state))
+        # Double check the state is still printing before we send the notification.
+        # Even if the state is paused, we want to stop, since the resume command will restart the timers
+        if self.ShouldPrintingTimersBeRunning() is False:
+            self.Logger.info("Notification ping timer state doesn't seem to be printing, stopping timer.")
             self.StopPingTimer()
             return
 

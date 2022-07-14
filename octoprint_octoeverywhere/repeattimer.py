@@ -24,6 +24,11 @@ class RepeatTimer(threading.Thread):
                 Sentry.Exception("Exception in RepeatTimer thread.", e)
         self.logger.info("RepeatTimer thread exit")
 
+    # Used to update the repeat interval. This can be called while the timer is running
+    # or even while in the callback.
+    def SetInterval(self, intervalSec):
+        self.intervalSec = intervalSec
+
     # Used to stop the timer.
     def Stop(self):
         self.running = False
