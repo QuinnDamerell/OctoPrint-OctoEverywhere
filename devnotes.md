@@ -1,3 +1,7 @@
+## Setup The Pre-Commit Hooks
+- `pip install pre-commit`
+- `pre-commit install`
+
 ## For PY 3
 - Use `python3 -m venv py3venv` to create an environment in the current dir
 - Use `source py3venv/bin/activate` to activate
