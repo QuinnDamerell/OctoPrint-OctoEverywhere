@@ -1,15 +1,19 @@
+import math
 import time
 import io
 import threading
 
 import requests
 from octoprint_octoeverywhere.gadget import Gadget
+from octoprint_octoeverywhere.requestsutils import RequestsUtils
 from octoprint_octoeverywhere.sentry import Sentry
+from octoprint_octoeverywhere.snapshotresizeparams import SnapshotResizeParams
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
     # Since most setups don't use this package, we will import it with a try catch and if it fails we
     # wont use it.
     from PIL import Image
+    from PIL import ImageFile
 except Exception as _:
     pass
 
@@ -31,6 +35,9 @@ class ProgressCompletionReportItem:
         self.reported = reported
 
 class NotificationsHandler:
+
+    # This is the max snapshot file size we will allow to be sent.
+    MaxSnapshotFileSizeBytes = 2 * 1024 * 1024
 
     def __init__(self, logger, octoPrintPrinterObject = None):
         self.Logger = logger
@@ -291,8 +298,10 @@ class NotificationsHandler:
 
 
     # If possible, gets a snapshot from the snapshot URL configured in OctoPrint.
+    # SnapshotResizeParams can be passed BUT MIGHT BE IGNORED if the PIL lib can't be loaded.
+    # SnapshotResizeParams will also be ignored if the current image is smaller than the requested size.
     # If this fails for any reason, None is returned.
-    def getSnapshot(self):
+    def getSnapshot(self, snapshotResizeParams = None):
         try:
 
             # Use the snapshot helper to get the snapshot. This will handle advance logic like relative and absolute URLs
@@ -310,44 +319,130 @@ class NotificationsHandler:
             if octoHttpResponse.FullBodyBuffer is not None:
                 snapshot = octoHttpResponse.FullBodyBuffer
             else:
-                snapshot = octoHttpResponse.Result.content
+                # Since we use Stream=True, we have to wait for the full body to download before getting it
+                snapshot = RequestsUtils.ReadAllContentFromStreamResponse(octoHttpResponse.Result)
             if snapshot is None:
                 self.Logger.error("Notification snapshot failed, snapshot is None")
                 return None
 
-            # Ensure the snapshot is a reasonable size.
-            # Right now we will limit to < 2mb
-            if len(snapshot) > 2 * 1024 * 1204:
-                self.Logger.error("Snapshot size if too large to send. Size: "+len(snapshot))
-                return None
+            # Ensure the snapshot is a reasonable size. If it's not, try to resize it if there's not another resize planned.
+            # If this fails, the size will be checked again later and the image will be thrown out.
+            if len(snapshot) > NotificationsHandler.MaxSnapshotFileSizeBytes:
+                if snapshotResizeParams is None:
+                    # Try to limit the size to be 1080 tall.
+                    snapshotResizeParams = SnapshotResizeParams(1080, True, False, False)
 
-            # Correct the image if needed.
+            # Manipulate the image if needed.
             flipH = SnapshotHelper.Get().GetWebcamFlipH()
             flipV = SnapshotHelper.Get().GetWebcamFlipV()
             rotate90 = SnapshotHelper.Get().GetWebcamRotate90()
-            if rotate90 or flipH or flipV:
+            if rotate90 or flipH or flipV or snapshotResizeParams is not None:
                 try:
                     if Image is not None:
+
+                        # We noticed that on some under powered or otherwise bad systems the image returned
+                        # by mjpeg is truncated. We aren't sure why this happens, but setting this flag allows us to sill
+                        # manipulate the image even though we didn't get the whole thing. Otherwise, we would use the raw snapshot
+                        # buffer, which is still an incomplete image.
+                        # Use a try catch incase the import of ImageFile failed
+                        try:
+                            ImageFile.LOAD_TRUNCATED_IMAGES = True
+                        except Exception as _:
+                            pass
+
                         # Update the image
                         # Note the order of the flips and the rotates are important!
                         # If they are reordered, when multiple are applied the result will not be correct.
+                        didWork = False
                         pilImage = Image.open(io.BytesIO(snapshot))
                         if flipH:
                             pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
+                            didWork = True
                         if flipV:
                             pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
+                            didWork = True
                         if rotate90:
                             pilImage = pilImage.rotate(90)
+                            didWork = True
 
-                        # Write back to bytes.
-                        buffer = io.BytesIO()
-                        pilImage.save(buffer, format="JPEG")
-                        snapshot = buffer.getvalue()
-                        buffer.close()
+                        #
+                        # Now apply any resize operations needed.
+                        #
+
+                        # First, if we want to scale and crop to center, we will use the resize operation to get the image
+                        # scale (preserving the aspect ratio). We will use the smallest side to scale to the desired outcome.
+                        if snapshotResizeParams.CropSquareCenterNoPadding:
+                            # We will only do the crop resize if the source image is smaller than or equal to the desired size.
+                            if pilImage.height >= snapshotResizeParams.Size and pilImage.width >= snapshotResizeParams.Size:
+                                if pilImage.height < pilImage.width:
+                                    snapshotResizeParams.ResizeToHeight = True
+                                    snapshotResizeParams.ResizeToWidth = False
+                                else:
+                                    snapshotResizeParams.ResizeToHeight = False
+                                    snapshotResizeParams.ResizeToWidth = True
+
+                        # Do any resizing required.
+                        resizeHeight = None
+                        resizeWidth = None
+                        if snapshotResizeParams.ResizeToHeight:
+                            if pilImage.height > snapshotResizeParams.Size:
+                                resizeHeight = snapshotResizeParams.Size
+                                resizeWidth = int((float(snapshotResizeParams.Size) / float(pilImage.height)) * float(pilImage.width))
+                        if snapshotResizeParams.ResizeToWidth:
+                            if pilImage.width > snapshotResizeParams.Size:
+                                resizeHeight = int((float(snapshotResizeParams.Size) / float(pilImage.width)) * float(pilImage.height))
+                                resizeWidth = snapshotResizeParams.Size
+                        # If we have things to resize, do it.
+                        if resizeHeight is not None and resizeWidth is not None:
+                            pilImage = pilImage.resize((resizeWidth, resizeHeight))
+                            didWork = True
+
+                        # Now if we want to crop square, use the resized image to crop the remaining side.
+                        if snapshotResizeParams.CropSquareCenterNoPadding:
+                            left = 0
+                            upper = 0
+                            right = 0
+                            lower = 0
+                            if snapshotResizeParams.ResizeToHeight:
+                                # Crop the width - use floor to ensure if there's a remainder we float left.
+                                centerX = math.floor(float(pilImage.width) / 2.0)
+                                halfWidth = math.floor(float(snapshotResizeParams.Size) / 2.0)
+                                upper = 0
+                                lower = snapshotResizeParams.Size
+                                left = centerX - halfWidth
+                                right = (snapshotResizeParams.Size - halfWidth) + centerX
+                            else:
+                                # Crop the height - use floor to ensure if there's a remainder we float left.
+                                centerY = math.floor(float(pilImage.height) / 2.0)
+                                halfHeight = math.floor(float(snapshotResizeParams.Size) / 2.0)
+                                upper = centerY - halfHeight
+                                lower = (snapshotResizeParams.Size - halfHeight) + centerY
+                                left = 0
+                                right = snapshotResizeParams.Size
+
+                            # Sanity check bounds
+                            if left < 0 or left > right or right > pilImage.width or upper > 0 or upper > lower or lower > pilImage.height:
+                                self.Logger.error("Failed to crop image. height: "+str(pilImage.height)+", width: "+str(pilImage.width)+", size: "+str(snapshotResizeParams.Size))
+                            else:
+                                pilImage = pilImage.crop((left, upper, right, lower))
+                                didWork = True
+
+                        # If we did some operation, save the image buffer back to a jpeg and overwrite the
+                        # current snapshot buffer. If we didn't do work, keep the original, to preserve quality.
+                        if didWork:
+                            buffer = io.BytesIO()
+                            pilImage.save(buffer, format="JPEG", quality=95)
+                            snapshot = buffer.getvalue()
+                            buffer.close()
                     else:
-                        self.Logger.warn("Can't flip image because the Image rotation lib failed to import.")
+                        self.Logger.warn("Can't manipulate image because the Image rotation lib failed to import.")
                 except Exception as ex:
-                    Sentry.ExceptionNoSend("Failed to flip image for notifications", ex)
+                    Sentry.ExceptionNoSend("Failed to manipulate image for notifications", ex)
+
+            # Ensure in the end, the snapshot is a reasonable size.
+            if len(snapshot) > NotificationsHandler.MaxSnapshotFileSizeBytes:
+                self.Logger.error("Snapshot size if too large to send. Size: "+len(snapshot))
+                return None
 
             # Return the image
             return snapshot
@@ -438,8 +533,13 @@ class NotificationsHandler:
     # Returns True on success, otherwise False
     def _sendEventThreadWorker(self, event, args=None, progressOverwriteFloat=None):
         try:
+            # For notifications, if possible, we try to resize any image to be less than 720p.
+            # This scale will preserve the aspect ratio and won't happen if the image is already less than 720p.
+            # The scale might also fail if the image lib can't be loaded correctly.
+            snapshotResizeParams = SnapshotResizeParams(1080, True, False, False)
+
             # Build the common even args.
-            requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat)
+            requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat, snapshotResizeParams)
 
             # Handle the result indicating we don't have the proper var to send yet.
             if requestArgs is None:
@@ -497,7 +597,7 @@ class NotificationsHandler:
     # Used by notifications and gadget to build a common event args.
     # Returns an array of [args, files] which are ready to be used in the request.
     # Returns None if the system isn't ready yet.
-    def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None):
+    def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None, snapshotResizeParams = None):
 
         # Ensure we have the required var set already. If not, get out of here.
         if self.PrinterId is None or self.OctoKey is None:
@@ -534,7 +634,7 @@ class NotificationsHandler:
 
         # Also always include a snapshot if we can get one.
         files = {}
-        snapshot = self.getSnapshot()
+        snapshot = self.getSnapshot(snapshotResizeParams)
         if snapshot is not None:
             files['attachment'] = ("snapshot.jpg", snapshot)
 

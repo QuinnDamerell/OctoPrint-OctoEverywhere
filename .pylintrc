@@ -22,6 +22,7 @@ disable=
     R0915, # Too many statements
     R1702, # Too many nested blocks
     R0801, # duplicate-code
+    R0916, # Too many booleans in one if statment.
 
 
 # A comma-separated list of package or module names from where C extensions may

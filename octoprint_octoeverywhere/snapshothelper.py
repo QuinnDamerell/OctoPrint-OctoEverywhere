@@ -106,7 +106,8 @@ class SnapshotHelper:
     #
     # On failure, this returns None
     # On success, this will return a valid OctoHttpRequest that's fully filled out. It most likely will also set the FullBodyBuffer
-    # variable in the OctoHttpRequest class.
+    # variable in the OctoHttpRequest class. Note that if a requests result is returned, Stream=True was used and the body must be read
+    # using: RequestsUtils.ReadAllContentFromStreamResponse()
     def GetSnapshot(self):
         # First, try to get the snapshot using the string defined in settings.
         snapshotUrl = self.GetSnapshotUrl()

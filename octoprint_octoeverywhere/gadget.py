@@ -3,6 +3,7 @@ import threading
 import requests
 
 from octoprint_octoeverywhere.sentry import Sentry
+from octoprint_octoeverywhere.snapshotresizeparams import SnapshotResizeParams
 from .repeattimer import RepeatTimer
 
 class Gadget:
@@ -24,6 +25,12 @@ class Gadget:
         self.Timer = None
         self.ProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
         self.FailedConnectionAttempts = 0
+
+        # Optional - Image resizing params the server can set.
+        # When set, we should make a best effort at respecting them.
+        # If set to 0, they are disabled.
+        self.ImageScaleCenterCropSize = 0
+        self.ImageScaleMaxHeight = 0
 
 
     def SetServerProtocolAndDomain(self, protocolAndDomain):
@@ -86,8 +93,20 @@ class Gadget:
                 self.StopWatching()
                 return
 
+            # If we have any resize args set by the server, apply them now.
+            # Remember these are best effort, so they might not be applied to the output image.
+            # These values must be greater than 1 or the SnapshotResizeParams can't take them.
+            snapshotResizeParams = None
+            if self.ImageScaleCenterCropSize > 1:
+                # If this is set, it takes priority over any other options.
+                # Request a center crop square of the image scaled to the desired factor.
+                snapshotResizeParams = SnapshotResizeParams(self.ImageScaleCenterCropSize, False, False, True)
+            elif self.ImageScaleMaxHeight > 1:
+                # Request a max height of the desired size. If the image is smaller than this it will be ignored.
+                snapshotResizeParams = SnapshotResizeParams(self.ImageScaleMaxHeight, True, False, False)
+
             # Now, get the common event args, which will include the snapshot.
-            requestData = self.NotificationHandler.BuildCommonEventArgs("inspect", None, None)
+            requestData = self.NotificationHandler.BuildCommonEventArgs("inspect", None, None, snapshotResizeParams)
 
             # Handle the result indicating we don't have the proper var to send yet.
             if requestData is None:
@@ -152,7 +171,29 @@ class Gadget:
 
             # Update the next interval time according to what gadget is requesting.
             nextIntervalSec = int(resultObj["NextInspectIntervalSec"])
+            if nextIntervalSec != self._getTimerInterval():
+                self.Logger.info("Gadget watch interval updated to: "+str(nextIntervalSec))
             self._updateTimerInterval(nextIntervalSec)
+
+            # Parse the optional image resizing params. If these fail to parse, just default them.
+            if "IS_CCSize" in resultObj:
+                try:
+                    newValue = int(resultObj["IS_CCSize"])
+                    if newValue != self.ImageScaleCenterCropSize:
+                        self.Logger.info("Gadget ImageScaleCenterCropSize set to: "+str(newValue))
+                        self.ImageScaleCenterCropSize = newValue
+                except Exception as e:
+                    self.Logger.warn("Gadget failed to parse IS_CCSize from response. "+str(e))
+                    self.ImageScaleCenterCropSize = 0
+            if "IS_MH" in resultObj:
+                try:
+                    newValue = int(resultObj["IS_MH"])
+                    if newValue != self.ImageScaleMaxHeight:
+                        self.Logger.info("Gadget ImageScaleMaxHeight set to: "+str(newValue))
+                        self.ImageScaleMaxHeight = newValue
+                except Exception as e:
+                    self.Logger.warn("Gadget failed to parse IS_MH from response."+str(e))
+                    self.ImageScaleMaxHeight = 0
 
             # Reset the failed attempts counter
             self.FailedConnectionAttempts = 0
