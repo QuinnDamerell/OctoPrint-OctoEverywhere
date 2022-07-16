@@ -32,7 +32,10 @@ class Client:
             if onWsMsg:
                 onWsMsg(self, msg)
 
-        def OnClosed(ws):
+        # Note that the API says this only takes one arg, but after looking into the code
+        # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
+        # sometimes it tried to send 3 when we only accepted 1.
+        def OnClosed(ws, _, __):
             if onWsClose:
                 onWsClose(self)
 
