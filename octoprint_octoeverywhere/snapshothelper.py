@@ -260,7 +260,13 @@ class SnapshotHelper:
             response.headers["content-length"] = str(len(imageBuffer))
             # Return a result. Return the full image buffer which will be used as the response body.
             return OctoHttpRequest.Result(response, url, True, imageBuffer)
-
+        except ConnectionError as e:
+            # We have a lot of telemetry indicating a read timeout can happen while trying to read from the stream
+            # in that case we should just get out of here.
+            if "Read timed out" in str(e):
+                return None
+            else:
+                Sentry.Exception("Failed to get fallback snapshot due to ConnectionError", e)
         except Exception as e:
             Sentry.Exception("Failed to get fallback snapshot.", e)
 

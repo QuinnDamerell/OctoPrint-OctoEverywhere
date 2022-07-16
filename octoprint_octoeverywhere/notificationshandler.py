@@ -693,8 +693,10 @@ class NotificationsHandler:
 
         # Try to get the current value from the data.
         try:
+            # We have seen in client logs sometimes this value doesn't exist,
+            # and sometime it does, but it's just None.
             currentData = self.OctoPrintPrinterObject.get_current_data()
-            if "currentZ" in currentData:
+            if "currentZ" in currentData and currentData["currentZ"] is not None:
                 currentZ = float(currentData["currentZ"])
                 return currentZ
         except Exception as e:

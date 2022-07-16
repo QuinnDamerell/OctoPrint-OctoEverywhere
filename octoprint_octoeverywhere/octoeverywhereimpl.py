@@ -2,6 +2,7 @@ import time
 import threading
 
 from octoprint_octoeverywhere.sentry import Sentry
+from octoprint_octoeverywhere.threaddebug import ThreadDebug
 
 from .octoservercon import OctoServerCon
 from .Proto import SummonMethods
@@ -43,6 +44,15 @@ class OctoEverywhere:
                 # Allow this connection to use the lowest latency server if possible.
                 serverCon = self.createOctoServerCon(self.Endpoint, True, True, self.StatusChangeHandler, self.PrimaryConnectionRunForTimeSec, SummonMethods.SummonMethods.Unknown)
                 serverCon.RunBlocking()
+            except RuntimeError as e:
+                # From telemetry, we have seen that this error can fire very often for some users when there are too many threads running.
+                # To try to fix this, we will dump the thread info to the log and then fire the exception, so the log message will show up.
+                #msg = str(e)
+                #if "can't start new thread" in msg:
+                ThreadDebug.DoThreadDumpLogout(self.Logger)
+                Sentry.Exception("RuntimeError in OctoEverywhere's main RunBlocking function.", e)
+                # Sleep for a long time, since this can't be recovered from easily.
+                time.sleep(60 * 60 * 2)
             except Exception as e:
                 Sentry.Exception("Exception in OctoEverywhere's main RunBlocking function.", e)
                 # Sleep for just a bit and try again.
