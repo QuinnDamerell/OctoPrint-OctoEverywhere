@@ -100,9 +100,14 @@ class Client:
     def RunUntilClosed(self):
         # Note we must set the ping_interval and ping_timeout or we won't get a multithread
         # safe socket... python. >.>
+        # Update on ^ - After some release they now default the multi_threading to True, but this is still a problem
+        # on older versions of the lib.
+        #
         # The client is responsible for sending keep alive pings the server will then pong respond to.
         # If that's not done, the connection will timeout.
         # We will send a ping every 10 minutes, and expected a pong back within 5 minutes.
+        #
+        # skip_utf8_validation=True is important, because otherwise we waste a lot of time doing slow, py based validation code.
         #
         # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
         # Since let's encrypt updated their CA root, we need to use certify's root or the connection will likely fail.
