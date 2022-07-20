@@ -561,6 +561,7 @@ class NotificationsHandler:
                 attempts += 1
 
                 # Make the request.
+                r = None
                 try:
                     # Since we are sending the snapshot, we must send a multipart form.
                     # Thus we must use the data and files fields, the json field will not work.

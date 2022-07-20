@@ -1,4 +1,5 @@
 import logging
+import time
 import traceback
 
 import sentry_sdk
@@ -10,6 +11,8 @@ from sentry_sdk import capture_exception
 class Sentry:
     logger = None
     isDevMode = False
+    lastErrorReport = time.time()
+    lastErrorCount = 0
 
 # Sets up Sentry
     @staticmethod
@@ -45,6 +48,20 @@ class Sentry:
 
     @staticmethod
     def _beforeSendFilter(event, hint):
+        # To prevent spamming, don't allow clients to send errors too quickly.
+        # We will simply only allows up to 5 errors reported every 24h.
+        timeSinceErrorSec = time.time() - Sentry.lastErrorReport
+        if timeSinceErrorSec < 60 * 60 * 24:
+            if Sentry.lastErrorCount > 5:
+                return None
+        else:
+            # A new time window has been entered.
+            Sentry.lastErrorReport = time.time()
+            Sentry.lastErrorCount = 0
+
+        # Increment the report counter
+        Sentry.lastErrorCount += 1
+
         # Since all OctoPrint plugins run in the same process, sentry will pick-up unhandled exceptions
         # from all kinds of sources. To prevent that from spamming us, if we can pull out a call stack, we will only
         # send things that have some origin in our code. This can be any file in the stack or any module with our name in it.
@@ -72,6 +89,7 @@ class Sentry:
             return event
         else:
             return None
+
 
     # Logs and reports an exception.
     @staticmethod
