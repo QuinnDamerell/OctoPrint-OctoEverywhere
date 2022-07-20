@@ -66,29 +66,25 @@ class Sentry:
         # from all kinds of sources. To prevent that from spamming us, if we can pull out a call stack, we will only
         # send things that have some origin in our code. This can be any file in the stack or any module with our name in it.
         # Otherwise, we will ignore it.
-        send = True
         exc_info = hint.get("exc_info")
-        if exc_info and len(exc_info) > 1 and hasattr(exc_info[2], "tb_frame"):
-            # If we have stack info, default to false
-            send = False
-            try:
-                stack = traceback.extract_stack((exc_info[2]).tb_frame)
-                for s in stack:
-                    # Check for any "octoeverywhere". The main source should be our package folder, which is
-                    # "octoprint_octoeverywhere".
-                    filenameLower = s.filename.lower()
-                    if "octoeverywhere" in filenameLower:
-                        send = True
-                        break
-            except Exception as e:
-                Sentry.logger.error("Failed to extract exception stack in sentry before send. "+str(e))
-        else:
-            Sentry.logger.warn("Sentry event had no exe_info or not tb_frame")
-
-        if send:
-            return event
-        else:
+        if exc_info is None or len(exc_info) < 2 or hasattr(exc_info[2], "tb_frame") is False:
             return None
+
+        # Check the stack
+        try:
+            stack = traceback.extract_stack((exc_info[2]).tb_frame)
+            for s in stack:
+                # Check for any "octoeverywhere". The main source should be our package folder, which is
+                # "octoprint_octoeverywhere".
+                filenameLower = s.filename.lower()
+                if "octoeverywhere" in filenameLower:
+                    # If found, return the event so it's reported.
+                    return event
+        except Exception as e:
+            Sentry.logger.error("Failed to extract exception stack in sentry before send. "+str(e))
+
+        # Return none to prevent sending.
+        return None
 
 
     # Logs and reports an exception.
