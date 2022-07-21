@@ -108,15 +108,20 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     # Called when the system is starting up.
     def on_startup(self, host, port):
-
+        # Set the local host address to be the one passed to us from OctoPrint. Most cases the IP will be 127.0.0.1 or 0.0.0.0, which then
+        # we can access OctoPrint on localhost. But in some setups OctoPrint might be bound to only one adapter, in which case we need to use it.
         # Host should always be a string, but if not, ignore it.
         if isinstance(host, str):
             # Check the host to see if it's all adapters ("0.0.0.0"). If so, change it to be localhost, since it will work.
             if "0.0.0.0" in host:
                 host = host.replace("0.0.0.0", "127.0.0.1")
-            # Set the local host address to be the one passed to us from OctoPrint. Most cases the IP will be 127.0.0.1 or 0.0.0.0, which then
-            # we can access OctoPrint on localhost. But in some setups OctoPrint might be bound to only one adapter, in which case we need to use it.
-            self.OctoPrintLocalHost = host
+            # Some setups seem to send "::" as the host string, which makes an invalid address. So we will check to make sure the string
+            # is at least as long as 0.0.0.0, which should be about the min valid string length. (considering 'localhost', ipv4, and ipv6 addresses)
+            if len(host) < len("0.0.0.0"):
+                # In this case the default value of OctoPrintLocalHost will be used.
+                self._logger.warn("The host string from OctoPrint was too short, so it was ignored. Value: "+str(host))
+            else:
+                self.OctoPrintLocalHost = host
         else:
             # This the `isinstance` check will also fail on PY2, but that's ok.
             self._logger.warn("Host passed from OctoPrint wasn't a string? (or this is a PY2 setup)")
