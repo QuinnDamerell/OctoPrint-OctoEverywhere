@@ -1,3 +1,4 @@
+import random
 import threading
 
 import requests
@@ -9,13 +10,13 @@ from .repeattimer import RepeatTimer
 class Gadget:
 
     # The default amount of time we will use for the first interval callback.
-    c_defaultIntervalSec = 20
+    c_defaultIntervalSec = 60
 
     # The default amount of time we will use if we can't get a snapshot.
     c_defaultIntervalSec_NoSnapshot = 120
 
     # The default amount of time we will use if there was a connection error.
-    c_defaultIntervalSec_ConnectionError = 120
+    c_defaultIntervalSec_ConnectionErrorBackoffBase = 30
 
 
     def __init__(self, logger, notificationHandler):
@@ -78,8 +79,6 @@ class Gadget:
 
     def _timerCallback(self):
         try:
-
-
             # Before we do anything, update the timer interval to the default, incase there's some error
             # and we don't update it properly. In all cases either an error should update this or the response
             # from the inspect call.
@@ -154,7 +153,11 @@ class Gadget:
                 self.FailedConnectionAttempts += 1
 
                 # Update our timer interval for the failure and return.
-                self._updateTimerInterval(Gadget.c_defaultIntervalSec_ConnectionError)
+                # We back off the retry time so we can make a few faster attempts, but then fall back to longer term attempts.
+                # Also add some random-ness to the retry, to prevent all clients coming back at once.
+                nextIntervalSec = max(1, min(self.FailedConnectionAttempts, 10)) * Gadget.c_defaultIntervalSec_ConnectionErrorBackoffBase
+                nextIntervalSec += random.randint(10, 30)
+                self._updateTimerInterval(nextIntervalSec)
                 return
 
             # Handle the json response. We should find an int telling us how long we should wait before sending the next
