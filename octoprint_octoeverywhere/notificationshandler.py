@@ -2,8 +2,10 @@ import math
 import time
 import io
 import threading
+from random import randint
 
 import requests
+
 from octoprint_octoeverywhere.gadget import Gadget
 from octoprint_octoeverywhere.requestsutils import RequestsUtils
 from octoprint_octoeverywhere.sentry import Sentry
@@ -59,6 +61,7 @@ class NotificationsHandler:
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
         self.ProgressCompletionReported = []
+        self.PrintId = 0
 
         # Since all of the commands don't send things we need, we will also track them.
         self.ResetForNewPrint()
@@ -74,6 +77,10 @@ class NotificationsHandler:
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
+
+        # Each time a print starts, we generate a fixed length random id to identify it.
+        # This just helps the server keep track of events that are related.
+        self.PrintId = randint(100000000, 999999999 )
 
         # Build the progress completion reported list.
         # Add an entry for each progress we want to report, not including 0 and 100%.
@@ -610,6 +617,7 @@ class NotificationsHandler:
 
         # Add the required vars
         args["PrinterId"] = self.PrinterId
+        args["PrintId"] = self.PrintId
         args["OctoKey"] = self.OctoKey
         args["Event"] = event
 
