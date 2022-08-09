@@ -1,5 +1,6 @@
 import random
 import threading
+import json
 
 import requests
 
@@ -174,8 +175,6 @@ class Gadget:
 
             # Update the next interval time according to what gadget is requesting.
             nextIntervalSec = int(resultObj["NextInspectIntervalSec"])
-            if nextIntervalSec != self._getTimerInterval():
-                self.Logger.info("Gadget watch interval updated to: "+str(nextIntervalSec))
             self._updateTimerInterval(nextIntervalSec)
 
             # Parse the optional image resizing params. If these fail to parse, just default them.
@@ -197,6 +196,15 @@ class Gadget:
                 except Exception as e:
                     self.Logger.warn("Gadget failed to parse IS_MH from response."+str(e))
                     self.ImageScaleMaxHeight = 0
+
+            # Check if we have a log object in response. If so, the server wants us to log information into the local log file.
+            if "Log" in resultObj:
+                try:
+                    # Stringify the object sent back from the server.
+                    logStr = json.dumps(resultObj["Log"])
+                    self.Logger.info("Gadget Server Log: "+str(self.NotificationHandler.GetPrintId())+" - "+logStr)
+                except Exception as e:
+                    self.Logger.warn("Gadget failed to parse Log from response."+str(e))
 
             # Reset the failed attempts counter
             self.FailedConnectionAttempts = 0

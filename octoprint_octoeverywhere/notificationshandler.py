@@ -114,6 +114,9 @@ class NotificationsHandler:
         self.Gadget.SetServerProtocolAndDomain(protocolAndDomain)
 
 
+    def GetPrintId(self):
+        return self.PrintId
+
     # Sends the test notification.
     def OnTest(self):
         self._sendEvent("test")
@@ -125,6 +128,7 @@ class NotificationsHandler:
         self._updateCurrentFileName(fileName)
         self.SetupPingTimer(True)
         self._sendEvent("started")
+        self.Logger.info("New print started; PrintId: "+str(self.PrintId))
 
 
     # Fired when a print fails
