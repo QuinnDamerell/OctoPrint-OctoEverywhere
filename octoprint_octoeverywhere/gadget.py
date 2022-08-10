@@ -198,11 +198,11 @@ class Gadget:
                     self.ImageScaleMaxHeight = 0
 
             # Check if we have a log object in response. If so, the server wants us to log information into the local log file.
-            if "Log" in resultObj:
+            if "Log" in resultObj and resultObj["Log"] is not None:
                 try:
                     # Stringify the object sent back from the server.
                     logStr = json.dumps(resultObj["Log"])
-                    self.Logger.info("Gadget Server Log: "+str(self.NotificationHandler.GetPrintId())+" - "+logStr)
+                    self.Logger.info("Gadget Server Log: "+str(self.NotificationHandler.GetPrintId())+" "+str(nextIntervalSec)+" - "+logStr)
                 except Exception as e:
                     self.Logger.warn("Gadget failed to parse Log from response."+str(e))
 
