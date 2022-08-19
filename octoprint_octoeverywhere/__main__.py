@@ -96,9 +96,9 @@ if __name__ == '__main__':
     # Special - Dev Env Setup
     printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
     privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
-    OctoHttpRequest.SetLocalHostAddress("192.168.1.27")
+    OctoHttpRequest.SetLocalHostAddress("192.168.86.57")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
-    #OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
+    OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
 
     # Setup the local auth helper
     LocalAuth.Init(logger, None)
@@ -106,7 +106,9 @@ if __name__ == '__main__':
 
     # Init the ping pong helper.
     OctoPingPong.Init(logger, "C:\\Users\\quinn", printerId)
-    #OctoPingPong.Get().Disable()
+    # If we are using a local dev connection, disable this or it will overwrite.
+    if OctoEverywhereWsUri.startswith("ws://"):
+        OctoPingPong.Get().DisablePrimaryOverride()
 
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)

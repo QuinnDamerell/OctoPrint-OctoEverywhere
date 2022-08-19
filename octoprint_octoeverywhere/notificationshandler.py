@@ -117,9 +117,20 @@ class NotificationsHandler:
     def GetPrintId(self):
         return self.PrintId
 
-    # Sends the test notification.
+
+    # Only used for testing.
     def OnTest(self):
         self._sendEvent("test")
+
+
+    # Only used for testing.
+    def OnGadgetWarn(self):
+        self._sendEvent("gadget-warning")
+
+
+    # Only used for testing.
+    def OnGadgetPaused(self):
+        self._sendEvent("gadget-paused")
 
 
     # Fired when a print starts.
