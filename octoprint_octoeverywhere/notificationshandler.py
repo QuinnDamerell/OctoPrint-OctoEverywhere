@@ -390,67 +390,69 @@ class NotificationsHandler:
                         #
                         # Now apply any resize operations needed.
                         #
+                        if snapshotResizeParams is not None:
+                            # First, if we want to scale and crop to center, we will use the resize operation to get the image
+                            # scale (preserving the aspect ratio). We will use the smallest side to scale to the desired outcome.
+                            if snapshotResizeParams.CropSquareCenterNoPadding:
+                                # We will only do the crop resize if the source image is smaller than or equal to the desired size.
+                                if pilImage.height >= snapshotResizeParams.Size and pilImage.width >= snapshotResizeParams.Size:
+                                    if pilImage.height < pilImage.width:
+                                        snapshotResizeParams.ResizeToHeight = True
+                                        snapshotResizeParams.ResizeToWidth = False
+                                    else:
+                                        snapshotResizeParams.ResizeToHeight = False
+                                        snapshotResizeParams.ResizeToWidth = True
 
-                        # First, if we want to scale and crop to center, we will use the resize operation to get the image
-                        # scale (preserving the aspect ratio). We will use the smallest side to scale to the desired outcome.
-                        if snapshotResizeParams.CropSquareCenterNoPadding:
-                            # We will only do the crop resize if the source image is smaller than or equal to the desired size.
-                            if pilImage.height >= snapshotResizeParams.Size and pilImage.width >= snapshotResizeParams.Size:
-                                if pilImage.height < pilImage.width:
-                                    snapshotResizeParams.ResizeToHeight = True
-                                    snapshotResizeParams.ResizeToWidth = False
-                                else:
-                                    snapshotResizeParams.ResizeToHeight = False
-                                    snapshotResizeParams.ResizeToWidth = True
-
-                        # Do any resizing required.
-                        resizeHeight = None
-                        resizeWidth = None
-                        if snapshotResizeParams.ResizeToHeight:
-                            if pilImage.height > snapshotResizeParams.Size:
-                                resizeHeight = snapshotResizeParams.Size
-                                resizeWidth = int((float(snapshotResizeParams.Size) / float(pilImage.height)) * float(pilImage.width))
-                        if snapshotResizeParams.ResizeToWidth:
-                            if pilImage.width > snapshotResizeParams.Size:
-                                resizeHeight = int((float(snapshotResizeParams.Size) / float(pilImage.width)) * float(pilImage.height))
-                                resizeWidth = snapshotResizeParams.Size
-                        # If we have things to resize, do it.
-                        if resizeHeight is not None and resizeWidth is not None:
-                            pilImage = pilImage.resize((resizeWidth, resizeHeight))
-                            didWork = True
-
-                        # Now if we want to crop square, use the resized image to crop the remaining side.
-                        if snapshotResizeParams.CropSquareCenterNoPadding:
-                            left = 0
-                            upper = 0
-                            right = 0
-                            lower = 0
+                            # Do any resizing required.
+                            resizeHeight = None
+                            resizeWidth = None
                             if snapshotResizeParams.ResizeToHeight:
-                                # Crop the width - use floor to ensure if there's a remainder we float left.
-                                centerX = math.floor(float(pilImage.width) / 2.0)
-                                halfWidth = math.floor(float(snapshotResizeParams.Size) / 2.0)
-                                upper = 0
-                                lower = snapshotResizeParams.Size
-                                left = centerX - halfWidth
-                                right = (snapshotResizeParams.Size - halfWidth) + centerX
-                            else:
-                                # Crop the height - use floor to ensure if there's a remainder we float left.
-                                centerY = math.floor(float(pilImage.height) / 2.0)
-                                halfHeight = math.floor(float(snapshotResizeParams.Size) / 2.0)
-                                upper = centerY - halfHeight
-                                lower = (snapshotResizeParams.Size - halfHeight) + centerY
-                                left = 0
-                                right = snapshotResizeParams.Size
-
-                            # Sanity check bounds
-                            if left < 0 or left > right or right > pilImage.width or upper > 0 or upper > lower or lower > pilImage.height:
-                                self.Logger.error("Failed to crop image. height: "+str(pilImage.height)+", width: "+str(pilImage.width)+", size: "+str(snapshotResizeParams.Size))
-                            else:
-                                pilImage = pilImage.crop((left, upper, right, lower))
+                                if pilImage.height > snapshotResizeParams.Size:
+                                    resizeHeight = snapshotResizeParams.Size
+                                    resizeWidth = int((float(snapshotResizeParams.Size) / float(pilImage.height)) * float(pilImage.width))
+                            if snapshotResizeParams.ResizeToWidth:
+                                if pilImage.width > snapshotResizeParams.Size:
+                                    resizeHeight = int((float(snapshotResizeParams.Size) / float(pilImage.width)) * float(pilImage.height))
+                                    resizeWidth = snapshotResizeParams.Size
+                            # If we have things to resize, do it.
+                            if resizeHeight is not None and resizeWidth is not None:
+                                pilImage = pilImage.resize((resizeWidth, resizeHeight))
                                 didWork = True
 
+                            # Now if we want to crop square, use the resized image to crop the remaining side.
+                            if snapshotResizeParams.CropSquareCenterNoPadding:
+                                left = 0
+                                upper = 0
+                                right = 0
+                                lower = 0
+                                if snapshotResizeParams.ResizeToHeight:
+                                    # Crop the width - use floor to ensure if there's a remainder we float left.
+                                    centerX = math.floor(float(pilImage.width) / 2.0)
+                                    halfWidth = math.floor(float(snapshotResizeParams.Size) / 2.0)
+                                    upper = 0
+                                    lower = snapshotResizeParams.Size
+                                    left = centerX - halfWidth
+                                    right = (snapshotResizeParams.Size - halfWidth) + centerX
+                                else:
+                                    # Crop the height - use floor to ensure if there's a remainder we float left.
+                                    centerY = math.floor(float(pilImage.height) / 2.0)
+                                    halfHeight = math.floor(float(snapshotResizeParams.Size) / 2.0)
+                                    upper = centerY - halfHeight
+                                    lower = (snapshotResizeParams.Size - halfHeight) + centerY
+                                    left = 0
+                                    right = snapshotResizeParams.Size
+
+                                # Sanity check bounds
+                                if left < 0 or left > right or right > pilImage.width or upper > 0 or upper > lower or lower > pilImage.height:
+                                    self.Logger.error("Failed to crop image. height: "+str(pilImage.height)+", width: "+str(pilImage.width)+", size: "+str(snapshotResizeParams.Size))
+                                else:
+                                    pilImage = pilImage.crop((left, upper, right, lower))
+                                    didWork = True
+
+                        #
                         # If we did some operation, save the image buffer back to a jpeg and overwrite the
                         # current snapshot buffer. If we didn't do work, keep the original, to preserve quality.
+                        #
                         if didWork:
                             buffer = io.BytesIO()
                             pilImage.save(buffer, format="JPEG", quality=95)
@@ -459,6 +461,7 @@ class NotificationsHandler:
                     else:
                         self.Logger.warn("Can't manipulate image because the Image rotation lib failed to import.")
                 except Exception as ex:
+                    # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
                     Sentry.ExceptionNoSend("Failed to manipulate image for notifications", ex)
 
             # Ensure in the end, the snapshot is a reasonable size.
