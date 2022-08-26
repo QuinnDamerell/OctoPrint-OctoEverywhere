@@ -284,7 +284,7 @@ class OctoPingPong:
                     "SelectedLatencyMs": str(selectedLatencyMs)
                 }
             }
-            response = requests.post('https://octoeverywhere.com/api/stats/telemetryaccumulator', json=data)
+            response = requests.post('https://octoeverywhere.com/api/stats/telemetryaccumulator', json=data, timeout=1*60)
             if response.status_code != 200:
                 self.Logger.warn("Failed to report ping latency "+response.status_code)
                 return

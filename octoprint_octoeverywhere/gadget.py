@@ -1,5 +1,6 @@
 import random
 import threading
+import time
 import json
 
 import requests
@@ -28,6 +29,13 @@ class Gadget:
         self.ProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
         self.FailedConnectionAttempts = 0
 
+        # The most recent Gadget score sent back and the time it was received.
+        self.MostRecentGadgetScore = 0.0
+        self.MostRecentGadgetScoreUpdateTimeSec = 0
+        self.MostRecentGadgetScores = []
+        self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
+        self._resetPerPrintStats()
+
         # Optional - Image resizing params the server can set.
         # When set, we should make a best effort at respecting them.
         # If set to 0, they are disabled.
@@ -45,6 +53,9 @@ class Gadget:
             # Stop any running timer.
             self._stopTimerUnderLock()
 
+            # Reset any per print stats, so they aren't stale
+            self._resetPerPrintStats()
+
             self.Logger.info("Gadget is now watching!")
 
             # Start a new timer.
@@ -55,6 +66,33 @@ class Gadget:
     def StopWatching(self):
         with self.Lock:
             self._stopTimerUnderLock()
+
+
+    # Returns the last score Gadget sent us back.
+    # Defaults to 0.0
+    def GetLastGadgetScoreFloat(self):
+        # * 1.0 to ensure it's a float.
+        return self.MostRecentGadgetScore * 1.0
+
+
+    # Returns the seconds since the last Gadget score update.
+    # The default time is very large, since it's the time since 0.
+    def GetLastTimeSinceScoreUpdateSecFloat(self):
+        return time.time() - self.MostRecentGadgetScoreUpdateTimeSec
+
+
+    # Returns the current interval Gadget has told us.
+    def GetCurrentIntervalSecFloat(self):
+        # Note we can't use _getTimerInterval because the timer interval is set to the default
+        # at the start of each call for error handling.
+        # * 1.0 to ensure it's a float.
+        return self.MostRecentIntervalSec * 1.0
+
+
+    # Can only be called when the timer isn't running to prevent race conditions.
+    def _resetPerPrintStats(self):
+        self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
+        self.MostRecentGadgetScores = []
 
 
     def _stopTimerUnderLock(self):
@@ -134,7 +172,8 @@ class Gadget:
 
                 # Since we are sending the snapshot, we must send a multipart form.
                 # Thus we must use the data and files fields, the json field will not work.
-                r = requests.post(gadgetApiUrl, data=args, files=files)
+                # Set a timeout, but make it long, so the server has time to process.
+                r = requests.post(gadgetApiUrl, data=args, files=files, timeout=10*60)
 
                 # Check for success. Anything but a 200 we will consider a connection failure.
                 if r.status_code != 200:
@@ -176,6 +215,12 @@ class Gadget:
             # Update the next interval time according to what gadget is requesting.
             nextIntervalSec = int(resultObj["NextInspectIntervalSec"])
             self._updateTimerInterval(nextIntervalSec)
+            self.MostRecentIntervalSec = nextIntervalSec
+
+            # On a successful prediction, a score will be returned.
+            # Parse the score and set the last time we updated it.
+            if "Score" in resultObj and resultObj["Score"] is not None:
+                self.UpdateGadgetScore(float(resultObj["Score"]))
 
             # Parse the optional image resizing params. If these fail to parse, just default them.
             if "IS_CCSize" in resultObj:
@@ -202,7 +247,7 @@ class Gadget:
                 try:
                     # Stringify the object sent back from the server.
                     logStr = json.dumps(resultObj["Log"])
-                    self.Logger.info("Gadget Server Log: "+str(self.NotificationHandler.GetPrintId())+" "+str(nextIntervalSec)+" - "+logStr)
+                    self.Logger.info("Gadget Server Log - id:"+str(self.NotificationHandler.GetPrintId())+" int:"+str(nextIntervalSec)+" s:"+str(self.MostRecentGadgetScore)+" - "+logStr)
                 except Exception as e:
                     self.Logger.warn("Gadget failed to parse Log from response."+str(e))
 
@@ -211,3 +256,25 @@ class Gadget:
 
         except Exception as e:
             Sentry.Exception("Exception in gadget timer", e)
+
+
+    def UpdateGadgetScore(self, newScore):
+
+        # To remove large jumps in the score, average out the scores just a little.
+        self.MostRecentGadgetScores.append(newScore)
+        while len(self.MostRecentGadgetScores) > 2:
+            self.MostRecentGadgetScores.pop()
+
+        # Compute the average
+        total = 0.0
+        count = 0.0
+        for s in self.MostRecentGadgetScores:
+            total += s
+            count += 1.0
+
+        # Set the new score and time.
+        if count == 0:
+            self.MostRecentGadgetScore = 0.0
+        else:
+            self.MostRecentGadgetScore = total / count
+        self.MostRecentGadgetScoreUpdateTimeSec = time.time()

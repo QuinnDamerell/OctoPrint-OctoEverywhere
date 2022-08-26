@@ -62,6 +62,7 @@ class NotificationsHandler:
         self.zOffsetNotAtLowestCount = 0
         self.ProgressCompletionReported = []
         self.PrintId = 0
+        self.PrintStartTimeSec = 0
 
         # Since all of the commands don't send things we need, we will also track them.
         self.ResetForNewPrint()
@@ -80,7 +81,10 @@ class NotificationsHandler:
 
         # Each time a print starts, we generate a fixed length random id to identify it.
         # This just helps the server keep track of events that are related.
-        self.PrintId = randint(100000000, 999999999 )
+        self.PrintId = randint(100000000, 999999999)
+
+        # Note the time this print started
+        self.PrintStartTimeSec = time.time()
 
         # Build the progress completion reported list.
         # Add an entry for each progress we want to report, not including 0 and 100%.
@@ -116,6 +120,14 @@ class NotificationsHandler:
 
     def GetPrintId(self):
         return self.PrintId
+
+
+    def GetPrintStartTimeSec(self):
+        return self.PrintStartTimeSec
+
+
+    def GetGadget(self):
+        return self.Gadget
 
 
     # Only used for testing.
@@ -590,7 +602,7 @@ class NotificationsHandler:
                 try:
                     # Since we are sending the snapshot, we must send a multipart form.
                     # Thus we must use the data and files fields, the json field will not work.
-                    r = requests.post(eventApiUrl, data=args, files=files)
+                    r = requests.post(eventApiUrl, data=args, files=files, timeout=5*60)
 
                     # Check for success.
                     if r.status_code == 200:

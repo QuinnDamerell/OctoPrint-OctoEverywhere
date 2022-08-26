@@ -4,6 +4,7 @@
         "ABNF",
         "accesscontrol",
         "Analysing",
+        "apicommandhandler",
         "appi",
         "authed",
         "backoff",

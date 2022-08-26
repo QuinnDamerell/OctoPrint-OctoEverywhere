@@ -12,12 +12,14 @@ from .octohttprequest import OctoHttpRequest
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
 from .sentry import Sentry
-#from .notificationshandler import NotificationsHandler
+from .notificationshandler import NotificationsHandler
 #from .threaddebug import ThreadDebug
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
 #
+
+NotificationHandlerInstance = None
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub():
@@ -36,12 +38,14 @@ class StatusChangeHandlerStub():
     def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
         self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts) + " - OctoKey:"+str(octoKey))
 
+        # Setup the notification handler
+        NotificationHandlerInstance.SetOctoKey(octoKey)
+        NotificationHandlerInstance.SetPrinterId(self.PrinterId)
+
         # Send a test notifications if desired.
-        # handler = NotificationsHandler(self.Logger)
-        # handler.SetOctoKey(octoKey)
-        # handler.SetPrinterId(self.PrinterId)
-        #handler.SetServerProtocolAndDomain("http://127.0.0.1")
-        #handler.OnStarted("test.gcode")
+        #NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
+        #NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
+        #NotificationHandlerInstance.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
         #handler.OnDone("filename.gcode", "304458605")
         #handler.OnPaused("filename.gcode")
@@ -109,6 +113,14 @@ if __name__ == '__main__':
     # If we are using a local dev connection, disable this or it will overwrite.
     if OctoEverywhereWsUri.startswith("ws://"):
         OctoPingPong.Get().DisablePrimaryOverride()
+
+    # Setup the notification handler.
+    NotificationHandlerInstance = NotificationsHandler(logger)
+
+    # Setup the api command handler if needed for testing.
+    # apiCommandHandler = ApiCommandHandler(logger, NotificationHandlerInstance, None)
+    # Note this will throw an exception because we don't have a flask context setup.
+    # result = apiCommandHandler.HandleApiCommand("status", None)
 
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)
