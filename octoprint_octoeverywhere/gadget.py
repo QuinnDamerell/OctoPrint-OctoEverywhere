@@ -131,6 +131,14 @@ class Gadget:
                 self.StopWatching()
                 return
 
+            # If we should be running, then the print status is "PRINTING".
+            # Next check to see if the printer is warming up. If we are warming up, we don't want to let Gadget predict.
+            # We do this because during warm-up the printer can ooze some filament out of the hot end, that we don't want to predict on.
+            if self.NotificationHandler.IsPrintWarmingUp():
+                self.Logger.info("Waiting to predict with Gadget because the printer is warming up.")
+                self._updateTimerInterval(Gadget.c_defaultIntervalSec)
+                return
+
             # If we have any resize args set by the server, apply them now.
             # Remember these are best effort, so they might not be applied to the output image.
             # These values must be greater than 1 or the SnapshotResizeParams can't take them.

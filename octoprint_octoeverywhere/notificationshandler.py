@@ -753,13 +753,34 @@ class NotificationsHandler:
         # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
         state = "UNKNOWN"
         if self.OctoPrintPrinterObject is None:
-            self.Logger.warn("Notification ping timer doesn't have a OctoPrint printer object.")
+            self.Logger.warn("ShouldPrintingTimersBeRunning doesn't have a OctoPrint printer object.")
             state = "PRINTING"
         else:
             state = self.OctoPrintPrinterObject.get_state_id()
 
         # Return if the state is printing or not.
         return state == "PRINTING"
+
+
+    # If called while the print state is "Printing", returns True if the print is currently in the warm-up phase. Otherwise False
+    def IsPrintWarmingUp(self):
+        # Using the current state, if the print time is None or 0, the print hasn't started because the system is warming up..
+        # Using the get_current_data in this way is the same way the /api/job uses it.
+        if self.OctoPrintPrinterObject is None:
+            self.Logger.warn("IsPrintWarmingUp doesn't have a OctoPrint printer object.")
+            return False
+
+        # Get the current data.
+        currentData = self.OctoPrintPrinterObject.get_current_data()
+        if currentData is not None:
+            progress = currentData["progress"]
+            if progress is not None:
+                printTime = progress["printTime"]
+                if printTime is None or int(printTime) == 0:
+                    return True
+
+        # We aren't warming up.
+        return False
 
 
     # Starts a ping timer which is used to fire "every x minutes events".
