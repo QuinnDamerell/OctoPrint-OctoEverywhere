@@ -1,7 +1,8 @@
 import flask
 
-from .sentry import Sentry
+from octoprint.access.permissions import Permissions
 
+from .sentry import Sentry
 
 # A simple class that handles some the API commands we use for various things.
 class ApiCommandHandler:
@@ -40,9 +41,12 @@ class ApiCommandHandler:
         #       flask.jsonify(result="some json result")
         #
         # Finally, all commands handled here must be added to the dict returned by GetApiCommands
-        #
-        # REMEMBER! - We don't enforce any auth on these APIs, so any user can call them. Thus we shouldn't reveal anything that's sensitive.
-        #
+
+        # Right now, to access any of these commands we assert the user at least has SETTINGS_READ permissions, which is required to load the
+        # OctoPrint UI, and thus
+        if not Permissions.SETTINGS_READ.can():
+            return flask.abort(403)
+
         if command == "status":
             return self.GetStatus()
         else:
