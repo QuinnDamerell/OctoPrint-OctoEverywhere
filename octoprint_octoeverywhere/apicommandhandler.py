@@ -1,6 +1,7 @@
 import flask
 
 from octoprint.access.permissions import Permissions
+from octoprint import __version__
 
 from .sentry import Sentry
 
@@ -75,6 +76,17 @@ class ApiCommandHandler:
         except Exception as e:
             Sentry.ExceptionNoSend("API command GetStatus failed to get job status", e)
 
+        # Try to get the temp info from the printer elements.
+        tempsObject = None
+        try:
+            # In debug, we will not have this object.
+            if self.OctoPrintPrinterObject is not None:
+                # Just dump the temp object into this object, and we will send whatever is in it.
+                # This is great because then we can just adapt to new OctoPrint changes as they come.
+                tempsObject = self.OctoPrintPrinterObject.get_current_temperatures()
+        except Exception as e:
+            Sentry.ExceptionNoSend("API command GetStatus failed to get temps", e)
+
         # Gather info that's specific to us.
         octoeverywhereStatus = None
         try:
@@ -107,10 +119,19 @@ class ApiCommandHandler:
         except Exception as e:
             Sentry.ExceptionNoSend("API command GetStatus failed to get OctoEverywhere info", e)
 
+        # Try to get the OctoPrint version. This is helpful since we pull OctoPrint dicts directly
+        versionStr = None
+        try:
+            versionStr = str(__version__)
+        except Exception as e:
+            Sentry.ExceptionNoSend("API command GetStatus failed to get OctoPrint version", e)
+
         # Build the final response
         responseObj = {
             "OctoPrintJobStatus" : octoPrintJobStatus,
-            "OctoEverywhereStatus" : octoeverywhereStatus
+            "OctoEverywhereStatus" : octoeverywhereStatus,
+            "OctoPrintTemps" : tempsObject,
+            "OctoPrintVersion" : versionStr
         }
 
         # The double ** dumps this dict into a new dict

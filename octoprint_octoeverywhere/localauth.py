@@ -22,13 +22,16 @@ class LocalAuth:
     # We use the same key length as OctoPrint, because why not.
     _ApiGeneratedKeyLength = 32
 
+
     @staticmethod
     def Init(logger, userManager):
         LocalAuth._Instance = LocalAuth(logger, userManager)
 
+
     @staticmethod
     def Get():
         return LocalAuth._Instance
+
 
     def __init__(self, logger, userManager):
         self.Logger = logger
@@ -38,16 +41,19 @@ class LocalAuth:
         # Create a new random API key each time OctoPrint is started so we don't have to write it to disk and it changes over time.
         self.ApiKey = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(LocalAuth._ApiGeneratedKeyLength))
 
+
     # Used only for testing without actual OctoPrint, this can set the API key
     # that's actually created in a real OctoPrint instance.
     def SetApiKeyForTesting(self, apiKey):
         self.Logger.warn("LocalAuth is using a dev API key: "+str(apiKey))
         self.ApiKey = apiKey
 
+
     # Adds the auth header with the auth key.
     def AddAuthHeader(self, headers):
         # This will overwrite any existing keys.
         headers["X-Api-Key"] = self.ApiKey
+
 
     # Called by OctoPrint when a request is made with an API key.
     # If the key is invalid or we don't know, return None, otherwise we must return a user.
