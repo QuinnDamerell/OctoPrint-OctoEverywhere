@@ -32,7 +32,6 @@ class Gadget:
         # The most recent Gadget score sent back and the time it was received.
         self.MostRecentGadgetScore = 0.0
         self.MostRecentGadgetScoreUpdateTimeSec = 0
-        self.MostRecentGadgetScores = []
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         self._resetPerPrintStats()
 
@@ -92,7 +91,7 @@ class Gadget:
     # Can only be called when the timer isn't running to prevent race conditions.
     def _resetPerPrintStats(self):
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
-        self.MostRecentGadgetScores = []
+        self.MostRecentGadgetScore = 0.0
 
 
     def _stopTimerUnderLock(self):
@@ -268,21 +267,10 @@ class Gadget:
 
     def UpdateGadgetScore(self, newScore):
 
-        # To remove large jumps in the score, average out the scores just a little.
-        self.MostRecentGadgetScores.append(newScore)
-        while len(self.MostRecentGadgetScores) > 2:
-            self.MostRecentGadgetScores.pop()
+        # To smooth out outliers, use the new score and a sample of the old score.
+        # But we also want the most recent score to stay responsive, due to interval delays.
+        newScoreWeight = 0.9
+        self.MostRecentGadgetScore = (float(newScore) * newScoreWeight) + (self.MostRecentGadgetScore * (1.0 - newScoreWeight))
 
-        # Compute the average
-        total = 0.0
-        count = 0.0
-        for s in self.MostRecentGadgetScores:
-            total += s
-            count += 1.0
-
-        # Set the new score and time.
-        if count == 0:
-            self.MostRecentGadgetScore = 0.0
-        else:
-            self.MostRecentGadgetScore = total / count
+        # Update the time this score was gotten.
         self.MostRecentGadgetScoreUpdateTimeSec = time.time()
