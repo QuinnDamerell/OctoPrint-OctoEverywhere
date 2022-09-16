@@ -130,5 +130,5 @@ if __name__ == '__main__':
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, printerId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, logger, uiPopInvoker, statusHandler, "1.6.5")
+    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, logger, uiPopInvoker, statusHandler, "1.9.16")
     oe.RunBlocking()
