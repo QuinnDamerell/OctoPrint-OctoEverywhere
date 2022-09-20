@@ -86,17 +86,22 @@ $(function() {
         // To work around that, we will make our own passive login call which does two things:
         //    1) It ensures the cookie set in the browser is refreshed and not stale (if we made an normal API call we race the internal passive login call and can have a stale cookie.)
         //    2) It returns us the exact permissions the user has, and thus we can tell if they are logged in and/or can access the settings.
-        try
+        //
+        // Important! When OctoPrint updated from 1.8.2 -> 1.8.3 there was an issue. For some reason the passive login check failed which caused an error, but the default wasn't to hit the login
+        // page. That caused the index to fail to load, and got the user stuck.
+        // THUS IT'S IMPORTANT TO ASSUME ALL ERRORS MEAN LOGIN IS NEEDED!
+        // This might catch cases where login isn't needed, but that's better than not catching cases where we need to login but don't.
+        //
+        // Only do this is being used via OctoEverywhere, since that's the only time this index cache will be a problem.
+        self.doLoginRedirect = function()
         {
-            // Only do this is being used via OctoEverywhere, since that's the only time this index cache will be a problem.
-            if(IsConnectedViaOctoEverywhere())
+            Log("Unauthed session detected. Redirecting to login.");
+            window.location.href = "/login/?isFromOe=true"
+        };
+        if(IsConnectedViaOctoEverywhere())
+        {
+            try
             {
-                self.doLoginRedirect = function()
-                {
-                    Log("Unauthed session detected. Redirecting to login.");
-                    window.location.href = "/login/?isFromOe=true"
-                };
-
                 // Using the OctoPrint JS lib (which is already loaded into this page)
                 // make the passive login call.
                 OctoPrint.browser
@@ -107,6 +112,8 @@ $(function() {
                         if(result === null || result.needs === undefined || result.needs.group === undefined)
                         {
                             Log("Returned passive login user doesn't have expected properties.");
+                            // On all errors redirect to login to be safe. (see comment in title block)
+                            self.doLoginRedirect();
                             return;
                         }
 
@@ -125,8 +132,10 @@ $(function() {
                                 }
                             }
 
-                            // This shouldn't happen, but in-case it does, just do nothing.
+                            // This shouldn't happen.
                             Log("Returned passive doesn't have guests group role but also doesn't have a role array. "+result.needs.group);
+                            // On all errors redirect to login to be safe. (see comment in title block)
+                            self.doLoginRedirect();
                             return;
                         }
 
@@ -155,12 +164,16 @@ $(function() {
                         // This fail will only occur if something is very wrong, like the network can't be reached.
                         // If no user is logged in, done() will still be called with an anonymous user.
                         LogError("Passive login operation failed.");
+                        // On all errors redirect to login to be safe. (see comment in title block)
+                        self.doLoginRedirect();
                     });
                 }
-        }
-        catch(error)
-        {
-            LogError("Failed to make passive login call." + error);
+            catch(error)
+            {
+                LogError("Failed to make passive login call." + error);
+                // On all errors redirect to login to be safe. (see comment in title block)
+                self.doLoginRedirect();
+            }
         }
 
         //
