@@ -43,9 +43,9 @@ class StatusChangeHandlerStub():
         NotificationHandlerInstance.SetPrinterId(self.PrinterId)
 
         # Send a test notifications if desired.
-        #NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
-        #NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
-        #NotificationHandlerInstance.OnStarted("test.gcode")
+        NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
+        NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
+        NotificationHandlerInstance.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
         #handler.OnDone("filename.gcode", "304458605")
         #handler.OnPaused("filename.gcode")

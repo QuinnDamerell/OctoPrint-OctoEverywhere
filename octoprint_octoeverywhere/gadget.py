@@ -12,12 +12,13 @@ from .repeattimer import RepeatTimer
 class Gadget:
 
     # The default amount of time we will use for the first interval callback.
-    c_defaultIntervalSec = 60
+    c_defaultIntervalSec = 30
 
     # The default amount of time we will use if we can't get a snapshot.
     c_defaultIntervalSec_NoSnapshot = 120
 
     # The default amount of time we will use if there was a connection error.
+    # Note this time is scaled on each failure.
     c_defaultIntervalSec_ConnectionErrorBackoffBase = 30
 
 
@@ -26,8 +27,14 @@ class Gadget:
         self.NotificationHandler = notificationHandler
         self.Lock = threading.Lock()
         self.Timer = None
-        self.ProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
+        self.DefaultProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
         self.FailedConnectionAttempts = 0
+
+        # If there is a current host lock, this is the hostname.
+        # This is cleared on error and as the start of each print.
+        self.HostLockHostname = None
+        # Dev param, can be set to disable host lock.
+        self.DisableHostLock = False
 
         # The most recent Gadget score sent back and the time it was received.
         self.MostRecentGadgetScore = 0.0
@@ -37,7 +44,7 @@ class Gadget:
         self.MostRecentWarningTimeSec = None
         self.MostRecentPauseTimeSec = None
         self.IsSuppressed = False
-        self._resetPerPrintStats()
+        self._resetPerPrintState()
 
         # Optional - Image resizing params the server can set.
         # When set, we should make a best effort at respecting them.
@@ -47,8 +54,10 @@ class Gadget:
 
 
     def SetServerProtocolAndDomain(self, protocolAndDomain):
-        self.Logger.info("Gadget default domain and protocol set to: "+protocolAndDomain)
-        self.ProtocolAndDomain = protocolAndDomain
+        # If a custom domain is set, disable host lock, so we don't jump off it.
+        self.Logger.info("Gadget default protocol and hostname set to: "+protocolAndDomain + " Host Lock Is DISABLED")
+        self.DefaultProtocolAndDomain = protocolAndDomain
+        self.DisableHostLock = True
 
 
     def StartWatching(self):
@@ -57,7 +66,7 @@ class Gadget:
             self._stopTimerUnderLock()
 
             # Reset any per print stats, so they aren't stale
-            self._resetPerPrintStats()
+            self._resetPerPrintState()
 
             self.Logger.info("Gadget is now watching!")
 
@@ -114,9 +123,14 @@ class Gadget:
 
 
     # Can only be called when the timer isn't running to prevent race conditions.
-    def _resetPerPrintStats(self):
+    def _resetPerPrintState(self):
+        # Reset the basic stats
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         self.MostRecentGadgetScore = 0.0
+
+        # At the start of each print, clear the host lock settings.
+        self._clearHostLockHostname()
+
         # These default to None, to indicate they haven't been done.
         self.MostRecentWarningTimeSec = None
         self.MostRecentPauseTimeSec = None
@@ -204,7 +218,7 @@ class Gadget:
             jsonResponse = None
             try:
                 # Setup the url.
-                gadgetApiUrl = self.ProtocolAndDomain + "/api/gadget/inspect"
+                gadgetApiUrl = self._getProtocolAndHostname() + "/api/gadget/inspect"
 
                 # Since we are sending the snapshot, we must send a multipart form.
                 # Thus we must use the data and files fields, the json field will not work.
@@ -228,10 +242,14 @@ class Gadget:
                     self.Logger.info("Failed to send gadget inspection due to a connection error. "+str(e))
                 self.FailedConnectionAttempts += 1
 
+                # On any error, clear the HostLock hostname, so we hit the root domain again. This is the recovery system
+                # for if a host goes down or is having some issue.
+                self._clearHostLockHostname()
+
                 # Update our timer interval for the failure and return.
                 # We back off the retry time so we can make a few faster attempts, but then fall back to longer term attempts.
                 # Also add some random-ness to the retry, to prevent all clients coming back at once.
-                nextIntervalSec = max(1, min(self.FailedConnectionAttempts, 10)) * Gadget.c_defaultIntervalSec_ConnectionErrorBackoffBase
+                nextIntervalSec = max(1, min(self.FailedConnectionAttempts, 5)) * Gadget.c_defaultIntervalSec_ConnectionErrorBackoffBase
                 nextIntervalSec += random.randint(10, 30)
                 self._updateTimerInterval(nextIntervalSec)
                 return
@@ -241,11 +259,15 @@ class Gadget:
             if "Result" not in jsonResponse:
                 self.Logger.warn("Gadget inspection result had no Result object")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
+                # On any error, clear the HostLock hostname, so we hit the root domain again.
+                self._clearHostLockHostname()
                 return
             resultObj = jsonResponse["Result"]
             if "NextInspectIntervalSec" not in resultObj:
                 self.Logger.warn("Gadget inspection result had no NextInspectIntervalSec field")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
+                # On any error, clear the HostLock hostname, so we hit the root domain again.
+                self._clearHostLockHostname()
                 return
 
             # Update the next interval time according to what gadget is requesting.
@@ -256,7 +278,7 @@ class Gadget:
             # On a successful prediction, a score will be returned.
             # Parse the score and set the last time we updated it.
             if "Score" in resultObj and resultObj["Score"] is not None:
-                self.UpdateGadgetScore(float(resultObj["Score"]))
+                self._updateGadgetScore(float(resultObj["Score"]))
 
             # Parse an optional that could be returned.
             if "DidWarning" in resultObj and resultObj["DidWarning"]:
@@ -265,6 +287,10 @@ class Gadget:
                 self.MostRecentPauseTimeSec = time.time()
             if "IsSuppressed" in resultObj and resultObj["IsSuppressed"]:
                 self.IsSuppressed = resultObj["IsSuppressed"]
+
+            # If the server returned a host lock hostname, set it if needed.
+            if "HostLock" in resultObj and resultObj["HostLock"]:
+                self._setHostLockHostnameIfNeeded(resultObj["HostLock"])
 
             # Parse the optional image resizing params. If these fail to parse, just default them.
             if "IS_CCSize" in resultObj:
@@ -300,9 +326,11 @@ class Gadget:
 
         except Exception as e:
             Sentry.Exception("Exception in gadget timer", e)
+            # On any error, clear the HostLock hostname, so we hit the root domain again.
+            self._clearHostLockHostname()
 
 
-    def UpdateGadgetScore(self, newScore):
+    def _updateGadgetScore(self, newScore):
 
         # To smooth out outliers, use the new score and a sample of the old score.
         # But we also want the most recent score to stay responsive, due to interval delays.
@@ -312,3 +340,37 @@ class Gadget:
 
         # Update the time this score was gotten.
         self.MostRecentGadgetScoreUpdateTimeSec = time.time()
+
+
+    def _getProtocolAndHostname(self):
+        # The idea of host lock is some light load balancing, while also keeping prints stick to the same
+        # host of Gadget ideally. The Gadget hosting system can support inspections on any host, but it's more efficient and ideal
+        # for the client and system if the same client talks to the same host for the entire print.
+
+        # Check if we have a current host lock or if it's disabled.
+        currentHostname = self.HostLockHostname
+        if currentHostname is None or self.DisableHostLock:
+            return self.DefaultProtocolAndDomain
+
+        # Otherwise, return the host lock hostname. Note that the value will only be the hostname, it doesn't include
+        # the protocol for security reasons, so https can't be disabled.
+        return "https://"+currentHostname
+
+
+    def _clearHostLockHostname(self):
+        # Clear the hostname, but don't clear the dev force disable flag.
+        # This will disable the current host lock (if there is one)
+        if self.HostLockHostname is None:
+            return
+        self.Logger.info("Gadget HostLock cleared")
+        self.HostLockHostname = None
+
+
+    def _setHostLockHostnameIfNeeded(self, hostname):
+        # If we are already host locked, don't set new values.
+        # There will almost always be a value returned and it will always be the current server
+        # with the lowest load. But the entire point of host lock is to try to stay stick on a single host.
+        if self.HostLockHostname is not None:
+            return
+        self.Logger.info("Gadget HostLock set to: "+hostname)
+        self.HostLockHostname = hostname
