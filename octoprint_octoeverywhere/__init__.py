@@ -410,6 +410,10 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Set the flag so when the user hits the portal next, they see the popup.
         self.HasPendingSmartPauseMessage = True
 
+        # Try to show it now as well, so it will popup if the user has the portal open.
+        # If it's not open right now, then the deferred logic will handle showing it when the user opens it next.
+        self.ShowSmartPausePopup()
+
 
     def ShowSmartPausePopupIfNeeded(self):
         if self.HasPendingSmartPauseMessage is False:
@@ -422,6 +426,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if self._printer.is_paused() is False:
             return
 
+        # Show it now.
+        self.ShowSmartPausePopup()
+
+
+    def ShowSmartPausePopup(self):
         # Show the notification, but don't auto hide it, to ensure the user sees it.
         title = "Smart Pause"
         message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause turned off your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
