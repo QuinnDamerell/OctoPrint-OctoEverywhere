@@ -46,6 +46,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.octoKey = ""
         # Indicates if OnStartup has been called yet.
         self.HasOnStartupBeenCalledYet = False
+        # Indicates if there's a pending smart print notification that should be shown when the user sees the dashboard next.
+        self.HasPendingSmartPauseMessage = False
 
      # Assets we use, just for the wizard right now.
     def get_assets(self):
@@ -393,12 +395,37 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # finish setup message. This helps users setup the plugin if the miss the wizard or something.
         self.ShowLinkAccountMessageIfNeeded()
 
+        # When the user sees the portal, check if we want to show the smart pause message.
+        self.ShowSmartPausePopupIfNeeded()
+
         # Check if an update is required, if so, tell the user every time they login.
         pluginUpdateRequired = self.GetPluginUpdateRequired()
         if pluginUpdateRequired is True:
             title = "OctoEverywhere Disabled"
             message = '<br/><strong>You need to update your OctoEverywhere plugin before you can continue using OctoEverywhere.</strong><br/><br/>We are always improving OctoEverywhere to make things faster and add features. Sometimes, that means we have to break things. If you need info about how to update your plugin, <a target="_blank" href="https://octoeverywhere.com/pluginupdate">check this out.</i></a>'
             self.ShowUiPopup(title, message, "notice", True)
+
+
+    def ShowSmartPausePopUpOnPortalLoad(self):
+        # Set the flag so when the user hits the portal next, they see the popup.
+        self.HasPendingSmartPauseMessage = True
+
+
+    def ShowSmartPausePopupIfNeeded(self):
+        if self.HasPendingSmartPauseMessage is False:
+            return
+
+        # Clear the flag
+        self.HasPendingSmartPauseMessage = False
+
+        # Ensure the system is still paused.
+        if self._printer.is_paused() is False:
+            return
+
+        # Show the notification, but don't auto hide it, to ensure the user sees it.
+        title = "Smart Pause"
+        message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause turned off your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
+        self.ShowUiPopup(title, message, "notice", False)
 
 
     def ShowLinkAccountMessageIfNeeded(self):
