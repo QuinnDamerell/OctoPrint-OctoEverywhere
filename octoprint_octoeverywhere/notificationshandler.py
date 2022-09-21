@@ -768,6 +768,7 @@ class NotificationsHandler:
         # Get the current state
         # States can be found here:
         # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
+        # Note! The docs seem to be missing some states at the moment, like STATE_RESUMING, which can be found in comm.py
         state = "UNKNOWN"
         if self.OctoPrintPrinterObject is None:
             self.Logger.warn("ShouldPrintingTimersBeRunning doesn't have a OctoPrint printer object.")
@@ -776,7 +777,11 @@ class NotificationsHandler:
             state = self.OctoPrintPrinterObject.get_state_id()
 
         # Return if the state is printing or not.
-        return state == "PRINTING"
+        if state == "PRINTING" or state == "RESUMING" or state == "FINISHING":
+            return True
+
+        self.Logger.warn("ShouldPrintingTimersBeRunning is not in a printing state: "+str(state))
+        return False
 
 
     # If called while the print state is "Printing", returns True if the print is currently in the warm-up phase. Otherwise False
