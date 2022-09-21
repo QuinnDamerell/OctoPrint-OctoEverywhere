@@ -9,10 +9,11 @@ from .smartpause import SmartPause
 # A simple class that handles some the API commands we use for various things.
 class ApiCommandHandler:
 
-    def __init__(self, logger, notificationHandler, octoPrintPrinterObject):
+    def __init__(self, logger, notificationHandler, octoPrintPrinterObject, mainPluginImpl):
         self.Logger = logger
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.NotificationHandler = notificationHandler
+        self.MainPluginImpl = mainPluginImpl
 
 
     # Called by octoprint to get what static commands we expose. We must expose all commands here and any required POST data that's required.
@@ -162,6 +163,7 @@ class ApiCommandHandler:
         zLiftMm = 0.0
         retractFilamentMm = 0.0
         suppressNotificationBool = False
+        showSmartPausePopup = True
 
         # Parse
         try:
@@ -176,6 +178,8 @@ class ApiCommandHandler:
                 retractFilamentMm = postDataDict["RetractFilamentMm"]
             if "SuppressNotification" in postDataDict:
                 suppressNotificationBool = postDataDict["SuppressNotification"]
+            if "ShowSmartPausePopup" in postDataDict:
+                showSmartPausePopup = postDataDict["ShowSmartPausePopup"]
         except Exception as e:
             Sentry.Exception("Failed to ExecuteSmartPause, bad args.", e)
             return flask.abort(400)
@@ -192,6 +196,13 @@ class ApiCommandHandler:
         except Exception as e:
             Sentry.Exception("Failed to ExecuteSmartPause, SmartPause error.", e)
             return flask.abort(500)
+
+        # On success, if we did a smart pause, send a notification to tell the user.
+        if self.MainPluginImpl is not None and showSmartPausePopup and (disableBedBool or disableHotendBool or zLiftMm > 0 or retractFilamentMm > 0):
+            # Show the notification, but don't auto hide it, to ensure the user sees it.
+            title = "OctoEverywhere Smart Pause"
+            message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause cooled down your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
+            self.MainPluginImpl.ShowUiPopup(title, message, "notice", False)
 
         # Success!
         return flask.jsonify(result="success")

@@ -165,7 +165,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.NotificationHandler.SetPrinterId(printerId)
 
         # Create the API command handler now that we have the logger
-        self.ApiCommandHandler = ApiCommandHandler(self._logger, self.NotificationHandler, self._printer)
+        self.ApiCommandHandler = ApiCommandHandler(self._logger, self.NotificationHandler, self._printer, self)
 
         # Create the smart pause handler
         SmartPause.Init(self._logger, self._printer, self._printer_profile_manager.get_current_or_default())
