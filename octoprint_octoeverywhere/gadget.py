@@ -33,6 +33,10 @@ class Gadget:
         self.MostRecentGadgetScore = 0.0
         self.MostRecentGadgetScoreUpdateTimeSec = 0
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
+        # These default to None, to indicate they haven't been done.
+        self.MostRecentWarningTimeSec = None
+        self.MostRecentPauseTimeSec = None
+        self.IsSuppressed = False
         self._resetPerPrintStats()
 
         # Optional - Image resizing params the server can set.
@@ -88,10 +92,35 @@ class Gadget:
         return self.MostRecentIntervalSec * 1.0
 
 
+    # Returns None if there has been no pause, otherwise, the amount of time since in seconds.
+    def GetTimeOrNoneSinceLastPauseIntSec(self):
+        timeSec = self.MostRecentPauseTimeSec
+        if timeSec is None:
+            return None
+        return int(time.time() - timeSec)
+
+
+    # Returns None if there has been no warning, otherwise, the amount of time since in seconds.
+    def GetTimeOrNoneSinceLastWarningIntSec(self):
+        timeSec = self.MostRecentWarningTimeSec
+        if timeSec is None:
+            return None
+        return int(time.time() - timeSec)
+
+
+    # Returns a bool if the current print is suppressed or not.
+    def IsPrintSuppressed(self):
+        return self.IsSuppressed
+
+
     # Can only be called when the timer isn't running to prevent race conditions.
     def _resetPerPrintStats(self):
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         self.MostRecentGadgetScore = 0.0
+        # These default to None, to indicate they haven't been done.
+        self.MostRecentWarningTimeSec = None
+        self.MostRecentPauseTimeSec = None
+        self.IsSuppressed = False
 
 
     def _stopTimerUnderLock(self):
@@ -229,6 +258,14 @@ class Gadget:
             if "Score" in resultObj and resultObj["Score"] is not None:
                 self.UpdateGadgetScore(float(resultObj["Score"]))
 
+            # Parse an optional that could be returned.
+            if "DidWarning" in resultObj and resultObj["DidWarning"]:
+                self.MostRecentWarningTimeSec = time.time()
+            if "DidPause" in resultObj and resultObj["DidPause"]:
+                self.MostRecentPauseTimeSec = time.time()
+            if "IsSuppressed" in resultObj and resultObj["IsSuppressed"]:
+                self.IsSuppressed = resultObj["IsSuppressed"]
+
             # Parse the optional image resizing params. If these fail to parse, just default them.
             if "IS_CCSize" in resultObj:
                 try:
@@ -269,7 +306,8 @@ class Gadget:
 
         # To smooth out outliers, use the new score and a sample of the old score.
         # But we also want the most recent score to stay responsive, due to interval delays.
-        newScoreWeight = 0.9
+        # After some testing, 0.7 feels about right, so the UI is updated, but isn't too responsive to random peaks or valleys.
+        newScoreWeight = 0.7
         self.MostRecentGadgetScore = (float(newScore) * newScoreWeight) + (self.MostRecentGadgetScore * (1.0 - newScoreWeight))
 
         # Update the time this score was gotten.

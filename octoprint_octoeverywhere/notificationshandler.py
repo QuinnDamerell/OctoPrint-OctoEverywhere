@@ -9,6 +9,7 @@ import requests
 from octoprint_octoeverywhere.gadget import Gadget
 from octoprint_octoeverywhere.requestsutils import RequestsUtils
 from octoprint_octoeverywhere.sentry import Sentry
+from octoprint_octoeverywhere.smartpause import SmartPause
 from octoprint_octoeverywhere.snapshotresizeparams import SnapshotResizeParams
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -172,8 +173,17 @@ class NotificationsHandler:
 
     # Fired when a print is paused
     def OnPaused(self, fileName):
+        # Always update the file name.
         self._updateCurrentFileName(fileName)
-        self._sendEvent("paused")
+
+        # See if there is a pause notification suppression set. If this is not null and it was recent enough
+        # suppress the notification from firing.
+        # If there is no suppression, or the suppression was older than 30 seconds, fire the notification.
+        lastSuppressTimeSec = SmartPause.Get().GetAndResetLastPauseNotificationSuppressionTimeSec()
+        if lastSuppressTimeSec is None or time.time() - lastSuppressTimeSec > 20.0:
+            self._sendEvent("paused")
+        else:
+            self.Logger.info("Not firing the pause notification due to a Smart Pause suppression.")
 
         # Stop the ping timer, so we don't report progress while we are paused.
         self.StopPingTimer()

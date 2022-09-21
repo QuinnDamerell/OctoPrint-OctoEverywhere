@@ -4,6 +4,7 @@ from octoprint.access.permissions import Permissions
 from octoprint import __version__
 
 from .sentry import Sentry
+from .smartpause import SmartPause
 
 # A simple class that handles some the API commands we use for various things.
 class ApiCommandHandler:
@@ -26,6 +27,9 @@ class ApiCommandHandler:
             # This API is used by the service to get the status of the printer. It can include many default OctoPrint API
             # status information calls as well as our own. No required parameters
             status=[],
+            # This API is used to send a print pause, but one that's smarter than the default and is able to move the head back
+            # so the print doesn't get messed up.
+            smartpause=[]
         )
 
 
@@ -50,6 +54,8 @@ class ApiCommandHandler:
 
         if command == "status":
             return self.GetStatus()
+        if command == "smartpause":
+            return self.ExecuteSmartPause(data)
         else:
             # Default
             self.Logger.info("Unknown API command. "+command)
@@ -113,7 +119,15 @@ class ApiCommandHandler:
                         "TimeSinceLastScoreSec" : gadget.GetLastTimeSinceScoreUpdateSecFloat(),
                         # <float> The last time interval Gadget returned to check. This value remains between prints.
                         # Defaults to Gadget's default interval time.
-                        "IntervalSec" : gadget.GetCurrentIntervalSecFloat()
+                        "IntervalSec" : gadget.GetCurrentIntervalSecFloat(),
+                        # Indicates if the current print is suppressed from Gadget watching.
+                        "IsSuppressed" : gadget.IsPrintSuppressed(),
+                        # None if there has been no warning for this print, otherwise the time in seconds since the last
+                        # warning action was sent. (int)
+                        "TimeSinceLastWarnSec" : gadget.GetTimeOrNoneSinceLastWarningIntSec(),
+                        # None if there has been no pause for this print, otherwise the time in seconds since the last
+                        # pause action was done. (int)
+                        "TimeSinceLastPauseSec" : gadget.GetTimeOrNoneSinceLastPauseIntSec(),
                     },
                 }
         except Exception as e:
@@ -137,3 +151,47 @@ class ApiCommandHandler:
         # The double ** dumps this dict into a new dict
         # I'm not 100% sure why this is needed, but other example code (from those who know more than I) use it :)
         return flask.jsonify(**responseObj)
+
+
+    # Note if there is no print running, this will do nothing and will return success.
+    def ExecuteSmartPause(self, postDataDict):
+
+        # Defaults.
+        disableHotendBool = True
+        disableBedBool = False
+        zLiftMm = 0.0
+        retractFilamentMm = 0.0
+        suppressNotificationBool = False
+
+        # Parse
+        try:
+            # Get values
+            if "DisableHotend" in postDataDict:
+                disableHotendBool = postDataDict["DisableHotend"]
+            if "DisableBed" in postDataDict:
+                disableBedBool = postDataDict["DisableBed"]
+            if "ZLiftMm" in postDataDict:
+                zLiftMm = postDataDict["ZLiftMm"]
+            if "RetractFilamentMm" in postDataDict:
+                retractFilamentMm = postDataDict["RetractFilamentMm"]
+            if "SuppressNotification" in postDataDict:
+                suppressNotificationBool = postDataDict["SuppressNotification"]
+        except Exception as e:
+            Sentry.Exception("Failed to ExecuteSmartPause, bad args.", e)
+            return flask.abort(400)
+
+        # Ensure we are printing, if not, we want to respond with a 409, like the OctoPrint pause command would.
+        if self.OctoPrintPrinterObject.is_printing() is False:
+            self.Logger.info("ExecuteSmartPause is retuning a 409 because there is no print in progress.")
+            return flask.abort(409)
+
+        # Do it!
+        try:
+            # If this doesn't throw it's successful
+            SmartPause.Get().DoSmartPause(disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, suppressNotificationBool)
+        except Exception as e:
+            Sentry.Exception("Failed to ExecuteSmartPause, SmartPause error.", e)
+            return flask.abort(500)
+
+        # Success!
+        return flask.jsonify(result="success")

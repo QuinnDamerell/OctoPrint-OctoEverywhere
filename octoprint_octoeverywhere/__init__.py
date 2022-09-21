@@ -22,6 +22,8 @@ from .notificationshandler import NotificationsHandler
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
 from .sentry import Sentry
+from .smartpause import SmartPause
+
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.SettingsPlugin,
@@ -165,6 +167,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Create the API command handler now that we have the logger
         self.ApiCommandHandler = ApiCommandHandler(self._logger, self.NotificationHandler, self._printer)
 
+        # Create the smart pause handler
+        SmartPause.Init(self._logger, self._printer, self._printer_profile_manager.get_current_or_default())
+
         # Spin off a thread to try to resolve hostnames for logging and debugging.
         resolverThread = threading.Thread(target=self.TryToPrintHostNameIps)
         resolverThread.start()
@@ -238,6 +243,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             PrinterId=self.EnsureAndGetPrinterId()
         )
 
+
     #
     # Functions are for the gcode receive plugin hook
     #
@@ -267,9 +273,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # We must return line the line won't make it to OctoPrint!
         return line
 
-    #
-    # Functions are for the gcode sent plugin hook
-    #
     def sent_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, *args, **kwargs):
         # Blocking will block the printer commands from being handled so we can't block here!
 
@@ -282,6 +285,24 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # No need to use a thread since all events are handled on a new thread.
             self.NotificationHandler.OnFilamentChange()
 
+    def queuing_gcode(self, comm_instance, phase, cmd, cmd_type, gcode, subcode=None, tags=None, *args, **kwargs):
+        # Make sure smart pause is setup, since this can be called really early on startup.
+        smartPause = SmartPause.Get()
+        if smartPause is None:
+            return
+        # Smart pause needs to keep track of the positioning mode, so it can properly resume it after a pause.
+        smartPause.OnGcodeQueuing(cmd)
+
+    def script_hook(self, comm, script_type, script_name, *args, **kwargs):
+        # Make sure smart pause is setup, since this can be called really early on startup.
+        smartPause = SmartPause.Get()
+        if smartPause is None:
+            return None
+        # When we get any script hooks, allow the smart pause system to handle them, since it might
+        # inject scripts for some hook types.
+        return smartPause.OnScriptHook(script_type, script_name)
+
+
     #
     # Functions for the key validator hook.
     #
@@ -292,6 +313,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         except Exception as e:
             Sentry.Exception("key_validator failed", e)
         return None
+
 
     #
     # Functions are for the Process Plugin
@@ -703,4 +725,8 @@ def __plugin_load__():
         "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
         "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode,
         "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode,
+        "octoprint.comm.protocol.gcode.queuing": __plugin_implementation__.queuing_gcode,
+        # We supply a int here to set our order, so we can be one of the first plugins to execute, to prevent issues.
+        # The default order value is 1000
+        "octoprint.comm.protocol.scripts": (__plugin_implementation__.script_hook, 1337),
     }

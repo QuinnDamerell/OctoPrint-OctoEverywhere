@@ -19,7 +19,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/updates.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/smart-pause.zip
 
 ## Before checking in:
 - Run in py2 env
