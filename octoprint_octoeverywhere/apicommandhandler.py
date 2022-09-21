@@ -200,8 +200,8 @@ class ApiCommandHandler:
         # On success, if we did a smart pause, send a notification to tell the user.
         if self.MainPluginImpl is not None and showSmartPausePopup and (disableBedBool or disableHotendBool or zLiftMm > 0 or retractFilamentMm > 0):
             # Show the notification, but don't auto hide it, to ensure the user sees it.
-            title = "OctoEverywhere Smart Pause"
-            message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause cooled down your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
+            title = "Smart Pause"
+            message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause turned off your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
             self.MainPluginImpl.ShowUiPopup(title, message, "notice", False)
 
         # Success!

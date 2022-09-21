@@ -216,6 +216,13 @@ class NotificationsHandler:
         if self.HasSendFirstLayerDoneMessage:
             return
 
+        # Ensure we are in state where we should fire this (printing)
+        # Otherwise we will set the flag to disable the message, which will be reset on the
+        # next print start.
+        if self.ShouldPrintingTimersBeRunning() is False:
+            self.HasSendFirstLayerDoneMessage = True
+            return
+
         # Get the current zoffset value.
         currentZOffsetMM = self.GetCurrentZOffset()
 
