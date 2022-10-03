@@ -20,6 +20,7 @@ from .notificationshandler import NotificationsHandler
 #
 
 NotificationHandlerInstance = None
+UseLocalServer = False
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub():
@@ -43,8 +44,9 @@ class StatusChangeHandlerStub():
         NotificationHandlerInstance.SetPrinterId(self.PrinterId)
 
         # Send a test notifications if desired.
-        NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
-        NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
+        if UseLocalServer:
+            NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
+            NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
         NotificationHandlerInstance.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
         #handler.OnDone("filename.gcode", "304458605")
@@ -102,7 +104,11 @@ if __name__ == '__main__':
     privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
     OctoHttpRequest.SetLocalHostAddress("192.168.86.57")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
-    OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
+    UseLocalServer = False
+
+    # Set local server if needed
+    if UseLocalServer:
+        OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
 
     # Setup the local auth helper
     LocalAuth.Init(logger, None)

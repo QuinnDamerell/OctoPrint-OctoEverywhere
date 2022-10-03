@@ -115,6 +115,10 @@ class ApiCommandHandler:
                         # Note this score is the average of the most recent 2 scores, to even things out a bit.
                         # Defaults to 0.0
                         "LastScore" : gadget.GetLastGadgetScoreFloat(),
+                        # <float>[] The a score history, capped at a limit of a value in Gadget.
+                        # The most recent is in the front of the list.
+                        # Defaults to empty list.
+                        "ScoreHistory": gadget.GetScoreHistoryFloats(),
                         # <float> The last time LastGadgetScore was updated.
                         # Defaults to a large number since it's (currentTime - 0)
                         "TimeSinceLastScoreSec" : gadget.GetLastTimeSinceScoreUpdateSecFloat(),

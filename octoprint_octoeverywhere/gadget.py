@@ -21,6 +21,9 @@ class Gadget:
     # Note this time is scaled on each failure.
     c_defaultIntervalSec_ConnectionErrorBackoffBase = 30
 
+    # We keep track of the score history, up to a point.
+    # Assuming 20 second checks, 100 is about 30 minutes of data.
+    c_maxScoreHistoryItems = 100
 
     def __init__(self, logger, notificationHandler):
         self.Logger = logger
@@ -39,6 +42,7 @@ class Gadget:
         # The most recent Gadget score sent back and the time it was received.
         self.MostRecentGadgetScore = 0.0
         self.MostRecentGadgetScoreUpdateTimeSec = 0
+        self.ScoreHistory = []
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         # These default to None, to indicate they haven't been done.
         self.MostRecentWarningTimeSec = None
@@ -87,6 +91,12 @@ class Gadget:
         return self.MostRecentGadgetScore * 1.0
 
 
+    # Returns the history of scores for this print.
+    # Defaults to an empty list.
+    def GetScoreHistoryFloats(self):
+        return self.ScoreHistory
+
+
     # Returns the seconds since the last Gadget score update.
     # The default time is very large, since it's the time since 0.
     def GetLastTimeSinceScoreUpdateSecFloat(self):
@@ -127,6 +137,7 @@ class Gadget:
         # Reset the basic stats
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         self.MostRecentGadgetScore = 0.0
+        self.ScoreHistory = []
 
         # At the start of each print, clear the host lock settings.
         self._clearHostLockHostname()
@@ -208,6 +219,9 @@ class Gadget:
 
             # Add the last interval, so the server knows
             args["LastIntervalSec"] = lastIntervalSec
+
+            # Also add the score history, for the server.
+            args["ScoreHistory"] = self.GetScoreHistoryFloats()
 
             # Next, check if there's a valid snapshot image.
             if len(files) == 0:
@@ -331,6 +345,11 @@ class Gadget:
 
 
     def _updateGadgetScore(self, newScore):
+        # We keep track of all scores, for stats.
+        # Round the scores to 4 decimals, so 0.9583 is 95.8%
+        self.ScoreHistory.insert(0, round(newScore, 3))
+        while len(self.ScoreHistory) > Gadget.c_maxScoreHistoryItems:
+            self.ScoreHistory.pop()
 
         # To smooth out outliers, use the new score and a sample of the old score.
         # But we also want the most recent score to stay responsive, due to interval delays.
