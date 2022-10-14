@@ -19,9 +19,15 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/smart-pause.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/pip.zip
 
 ## Before checking in:
 - Run in py2 env
 - Run in py3 env
 - Make sure http works, ws works (printer console), webcam works (stream and snapshot)
+
+## OctoPi Useful Commands
+- tail -f ./.octoprint/logs/octoprint.log
+- source ./oprint/bin/activate
+
+## For notes about shared dependencies with OctoPrint, see setup.py

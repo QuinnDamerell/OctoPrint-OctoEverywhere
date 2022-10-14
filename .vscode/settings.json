@@ -65,6 +65,7 @@
         "octowebstreamhttphelperimpl",
         "octowebstreamimpl",
         "octowebstreamwshelper",
+        "oprint",
         "printerevent",
         "printernotifications",
         "printerprofiles",

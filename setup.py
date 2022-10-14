@@ -13,7 +13,7 @@ plugin_package = "octoprint_octoeverywhere"
 plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
-plugin_version = "1.10.7"
+plugin_version = "1.10.8"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -34,10 +34,16 @@ plugin_license = "AGPLv3"
 # Any additional requirements besides OctoPrint should be listed here
 # Note! Some older version of OctoPrint seems to have a system dependency that locks websocket_client to exactly 0.56.0. When we tried to update to a newer version,
 # this broke that dependency and make all of OctoPrint unhappy. So don't update the version unless we really need to.
+#
+# UPDATE on ^ - As of October 14th 2022 - OctoPrint uses websocket-client as >=1.0.0,<2.0.0, so it installs whatever version is latests and that's 1.x. (I think the logic above applies to PY2 versions of OctoPrint?)
+# BUT in websocket-client 1.4.0, there seems to be a bug where some ssl ws connections fail due to a bug: https://github.com/websocket-client/websocket-client/issues/857
+# To work around this, we pin websocket client < 1.4.0. This bug mostly seems to be effecting octo4a users, maybe because their installs always pull the latest of packages?
+# TODO - In the future, we should remove the lock to <1.4.0, but make sure we avoid version that have problems.
+#
 # We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.
 #
 # Note! These need to stay in sync with .github/pylint.yml decencies.
-plugin_requires = ["websocket_client>=0.56.0", "requests>=2.24.0", "octoflatbuffers==2.0.3", "pillow", "certifi", "rsa", "sentry-sdk" ]
+plugin_requires = ["websocket_client>=0.56.0,<1.4.0", "requests>=2.24.0", "octoflatbuffers==2.0.3", "pillow", "certifi", "rsa", "sentry-sdk" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point
