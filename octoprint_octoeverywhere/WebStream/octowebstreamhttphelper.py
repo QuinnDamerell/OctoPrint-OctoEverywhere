@@ -164,6 +164,7 @@ class OctoWebStreamHttpHelper:
         if octoHttpResult is None:
             path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
             self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None; url:"+str(path))
+            self.WebStream.SetClosedDueToFailedRequestConnection()
             self.WebStream.Close()
             return
 

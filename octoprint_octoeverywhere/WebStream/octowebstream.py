@@ -34,6 +34,7 @@ class OctoWebStream(threading.Thread):
         self.WsHelper = None
         self.IsHelperClosed = False
         self.OpenedTime = time.time()
+        self.ClosedDueToRequestConnectionError = False
 
         # Vars for high pri streams
         self.IsHighPriStream = False
@@ -115,6 +116,11 @@ class OctoWebStream(threading.Thread):
                 localWsHelper.Close()
         except Exception as e:
             Sentry.Exception("Web stream "+str(self.Id)+" helper threw an exception during close", e)
+
+
+    def SetClosedDueToFailedRequestConnection(self):
+        self.ClosedDueToRequestConnectionError = True
+
 
     # This is our main thread, where we will process all incoming messages.
     def run(self):
@@ -281,6 +287,7 @@ class OctoWebStream(threading.Thread):
             WebStreamMsg.AddStreamId(builder, self.Id)
             WebStreamMsg.AddIsControlFlagsOnly(builder, True)
             WebStreamMsg.AddIsCloseMsg(builder, True)
+            WebStreamMsg.AddCloseDueToRequestConnectionFailure(builder, self.ClosedDueToRequestConnectionError)
             webStreamMsgOffset = WebStreamMsg.End(builder)
             outputBuf = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
             # Set the flag to silently fail, since the message might have already been sent by the helper.

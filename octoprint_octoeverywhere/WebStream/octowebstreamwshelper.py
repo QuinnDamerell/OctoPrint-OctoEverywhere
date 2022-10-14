@@ -330,6 +330,9 @@ class OctoWebStreamWsHelper:
                     # If AttemptConnection returns true, a new connection is being attempted.
                     # We should not close the webstream, but instead just close to give this connection a chance.
                     return
+                else:
+                    # If we never successfully connected, set the flag on the close message to indicate such.
+                    self.WebStream.SetClosedDueToFailedRequestConnection()
 
             # Since the webstream still thinks it's open, report this error since it will be the one shutting the web stream down.
             self.Logger.error(self.getLogMsgPrefix()+" got an error from the websocket: "+str(error))

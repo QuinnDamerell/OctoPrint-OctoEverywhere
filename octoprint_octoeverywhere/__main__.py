@@ -47,7 +47,7 @@ class StatusChangeHandlerStub():
         if UseLocalServer:
             NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
             NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
-        NotificationHandlerInstance.OnStarted("test.gcode")
+        #NotificationHandlerInstance.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
         #handler.OnDone("filename.gcode", "304458605")
         #handler.OnPaused("filename.gcode")
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
     OctoHttpRequest.SetLocalHostAddress("192.168.86.57")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
-    UseLocalServer = False
+    UseLocalServer = True
 
     # Set local server if needed
     if UseLocalServer:
