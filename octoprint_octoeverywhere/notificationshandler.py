@@ -58,12 +58,14 @@ class NotificationsHandler:
         self.OctoPrintReportedProgressInt = 0
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
-        self.LastUserInteractionNotificationTime = 0
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
         self.ProgressCompletionReported = []
         self.PrintId = 0
         self.PrintStartTimeSec = 0
+
+        self.SpammyEventTimeDict = {}
+        self.SpammyEventLock = threading.Lock()
 
         # Since all of the commands don't send things we need, we will also track them.
         self.ResetForNewPrint()
@@ -75,7 +77,6 @@ class NotificationsHandler:
         self.OctoPrintReportedProgressInt = 0
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
-        self.LastUserInteractionNotificationTime = 0
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
@@ -86,6 +87,9 @@ class NotificationsHandler:
 
         # Note the time this print started
         self.PrintStartTimeSec = time.time()
+
+        # Reset our anti spam times.
+        self.SpammyEventTimeDict = {}
 
         # Build the progress completion reported list.
         # Add an entry for each progress we want to report, not including 0 and 100%.
@@ -201,6 +205,11 @@ class NotificationsHandler:
     # Fired when OctoPrint or the printer hits an error.
     def OnError(self, error):
         self.StopPingTimer()
+
+        # This might be spammy from OctoPrint, so limit how often we bug the user with them.
+        if self._shouldSendSpammyEvent("on-error") is False:
+            return
+
         self._sendEvent("error", {"Error": error })
 
 
@@ -266,7 +275,8 @@ class NotificationsHandler:
     def OnFilamentChange(self):
         # This event might fire over and over or might be paired with a filament change event.
         # In any case, we only want to fire it every so often.
-        if self._shouldFireUserInteractionEvent() is False:
+        # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
+        if self._shouldSendSpammyEvent("user-interaction-needed") is False:
             return
 
         # Otherwise, send it.
@@ -277,23 +287,12 @@ class NotificationsHandler:
     def OnUserInteractionNeeded(self):
         # This event might fire over and over or might be paired with a filament change event.
         # In any case, we only want to fire it every so often.
-        if self._shouldFireUserInteractionEvent() is False:
+        # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
+        if self._shouldSendSpammyEvent("user-interaction-needed") is False:
             return
 
         # Otherwise, send it.
         self._sendEvent("userinteractionneeded")
-
-
-    def _shouldFireUserInteractionEvent(self):
-        if self.LastUserInteractionNotificationTime > 0:
-            # Only send every 5 minutes at most.
-            deltaSec = time.time() - self.LastUserInteractionNotificationTime
-            if deltaSec < (60.0 * 5.0):
-                return False
-
-        # Update the time we sent the notification.
-        self.LastUserInteractionNotificationTime = time.time()
-        return True
 
 
     # Fired when a print is making progress.
@@ -848,3 +847,25 @@ class NotificationsHandler:
 
         # Fire the event.
         self.OnPrintTimerProgress()
+
+
+    # Only allows possibly spammy events to be sent every 5 minutes.
+    # Returns true if the event can be sent, otherwise false.
+    def _shouldSendSpammyEvent(self, eventName):
+        with self.SpammyEventLock:
+
+            # Check if the event has been added to the dict yet.
+            if eventName not in self.SpammyEventTimeDict:
+                # No event added yet, so add it now.
+                self.SpammyEventTimeDict[eventName] = time.time()
+                return True
+
+            # Check how long it's been since the last notification was sent.
+            # If it's less than 5 minutes, don't allow the event to send.
+            deltaSec = time.time() - self.SpammyEventTimeDict[eventName]
+            if deltaSec < (60.0 * 5.0):
+                return False
+
+            # Allow the event to send and update the time we are allowing it.
+            self.SpammyEventTimeDict[eventName] = time.time()
+            return True
