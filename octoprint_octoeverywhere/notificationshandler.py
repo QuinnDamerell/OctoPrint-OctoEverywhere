@@ -207,7 +207,7 @@ class NotificationsHandler:
         self.StopPingTimer()
 
         # This might be spammy from OctoPrint, so limit how often we bug the user with them.
-        if self._shouldSendSpammyEvent("on-error") is False:
+        if self._shouldSendSpammyEvent("on-error"+str(error), 30.0) is False:
             return
 
         self._sendEvent("error", {"Error": error })
@@ -276,7 +276,7 @@ class NotificationsHandler:
         # This event might fire over and over or might be paired with a filament change event.
         # In any case, we only want to fire it every so often.
         # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
-        if self._shouldSendSpammyEvent("user-interaction-needed") is False:
+        if self._shouldSendSpammyEvent("user-interaction-needed", 5.0) is False:
             return
 
         # Otherwise, send it.
@@ -288,7 +288,7 @@ class NotificationsHandler:
         # This event might fire over and over or might be paired with a filament change event.
         # In any case, we only want to fire it every so often.
         # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
-        if self._shouldSendSpammyEvent("user-interaction-needed") is False:
+        if self._shouldSendSpammyEvent("user-interaction-needed", 5.0) is False:
             return
 
         # Otherwise, send it.
@@ -849,9 +849,9 @@ class NotificationsHandler:
         self.OnPrintTimerProgress()
 
 
-    # Only allows possibly spammy events to be sent every 5 minutes.
+    # Only allows possibly spammy events to be sent every x minutes.
     # Returns true if the event can be sent, otherwise false.
-    def _shouldSendSpammyEvent(self, eventName):
+    def _shouldSendSpammyEvent(self, eventName, minTimeBetweenMinutesFloat):
         with self.SpammyEventLock:
 
             # Check if the event has been added to the dict yet.
@@ -863,7 +863,7 @@ class NotificationsHandler:
             # Check how long it's been since the last notification was sent.
             # If it's less than 5 minutes, don't allow the event to send.
             deltaSec = time.time() - self.SpammyEventTimeDict[eventName]
-            if deltaSec < (60.0 * 5.0):
+            if deltaSec < (60.0 * minTimeBetweenMinutesFloat):
                 return False
 
             # Allow the event to send and update the time we are allowing it.

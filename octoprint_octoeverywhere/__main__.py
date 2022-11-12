@@ -52,7 +52,9 @@ class StatusChangeHandlerStub():
         #handler.OnDone("filename.gcode", "304458605")
         #handler.OnPaused("filename.gcode")
         #handler.OnResume("filename.gcode")
-        #handler.OnError("test error string")
+        # NotificationHandlerInstance.OnError("test error string")
+        # NotificationHandlerInstance.OnError("test error string")
+        # NotificationHandlerInstance.OnError("test error string")
         #handler.OnZChange()
         #handler.OnZChange()
         #handler.OnFilamentChange()
@@ -104,7 +106,7 @@ if __name__ == '__main__':
     privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
     OctoHttpRequest.SetLocalHostAddress("192.168.86.57")
     OctoHttpRequest.SetLocalOctoPrintPort(80)
-    UseLocalServer = True
+    UseLocalServer = False
 
     # Set local server if needed
     if UseLocalServer:
