@@ -9,7 +9,7 @@ class RequestsUtils:
         buffer = None
         # We can't simply use response.content, since streaming was enabled.
         # We need to use iter_content, since it will keep returning data until all is read.
-        # We use a high chunk count, so most of the time we will read all of the content in one go.
+        # We use a high chunk count, so most of the time it will read all of the content in one go.
         for chunk in response.iter_content(10000000):
             if buffer is None:
                 buffer = chunk
