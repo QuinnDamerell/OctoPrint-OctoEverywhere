@@ -7,7 +7,7 @@ from octoprint_octoeverywhere.sentry import Sentry
 # A helper class to handle server validation.
 #
 # The printer connection to OctoEverywhere is established over a secure websocket using the lastest TLS protocls and policies.
-# However, since OctoEverywhere handles very senstive access to phyical 3d printers, we want to make sure the connection is very secure.
+# However, since OctoEverywhere handles very senstive access to phyical 3D printers, we want to make sure the connection is incredibly secure.
 # No bad actor should ever be able to generate a valid SSL cert for OctoEverywhere. But it would be possible to add a bad root cert to the
 # device and then generate certs based on it.
 #
