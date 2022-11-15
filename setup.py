@@ -33,10 +33,10 @@ plugin_license = "AGPLv3"
 
 # Any additional requirements besides OctoPrint should be listed here
 # Note! Some older version of OctoPrint seems to have a system dependency that locks websocket_client to exactly 0.56.0. When we tried to update to a newer version,
-# this broke that dependency and make all of OctoPrint unhappy. So don't update the version unless we really need to.
+# this broke that dependency and made all of OctoPrint unhappy. So don't update the version unless we really need to.
 #
 # UPDATE on ^ - As of October 14th 2022 - OctoPrint uses websocket-client as >=1.0.0,<2.0.0, so it installs whatever version is latests and that's 1.x. (I think the logic above applies to PY2 versions of OctoPrint?)
-# BUT in websocket-client 1.4.0, there seems to be a bug where some ssl ws connections fail due to a bug: https://github.com/websocket-client/websocket-client/issues/857
+# BUT in websocket-client 1.4.0, there seems to be a bug where some ssl ws connections fail due to said bug: https://github.com/websocket-client/websocket-client/issues/857
 # To work around this, we pin websocket client < 1.4.0. This bug mostly seems to be effecting octo4a users, maybe because their installs always pull the latest of packages?
 # TODO - In the future, we should remove the lock to <1.4.0, but make sure we avoid version that have problems.
 #
