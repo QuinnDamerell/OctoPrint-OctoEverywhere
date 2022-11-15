@@ -17,10 +17,10 @@ class OctoEverywhere:
     # Note the RunFor system does account for user activity, and won't disconnect while the connection is active.
     PrimaryConnectionRunForTimeSec = 60 * 60 * 47 # 47 hours.
 
-    # How long secondary connections will stay connected for.
+    # How long a secondary connection will stay connected for.
     # Currently set to 15 minutes.
     # The RunFor system will keep the connection alive if there's user activity on it. If the connection does
-    # die but then tries to get used quickly, we will just be summoned again.
+    # die but then a user tries to use it quickly, we will just summon the connection again.
     SecondaryConnectionRunForTimeSec = 60 * 15 # 15 minutes.
 
     def __init__(self, endpoint, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion):
@@ -36,8 +36,8 @@ class OctoEverywhere:
 
     def RunBlocking(self):
         # This is the main thread for the entire plugin, and it hosts the primary connection.
-        # This connection should always be active, so we run it in a while loop that never exits and
-        # catch any exceptions that occur.
+        # This connection should always be active, so we run it in a while loop that will never end and
+        # will catch any exceptions that occur.
         while 1:
             try:
                 # Create the primary connection.
@@ -67,7 +67,7 @@ class OctoEverywhere:
                 self.Logger.warn("We got a summon request for a server that we already have a secondary connection to. "+str(summonConnectUrl)+", method "+str(summonMethod))
                 return
 
-            # We don't have a connection, so make one now.
+            # We don't have a connection, so make a new connection now.
             thread = threading.Thread(target=self.HandleSecondaryServerCon, args=(summonConnectUrl, summonMethod,))
             thread.daemon = True
             thread.start()
