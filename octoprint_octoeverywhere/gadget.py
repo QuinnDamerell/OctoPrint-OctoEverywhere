@@ -103,7 +103,7 @@ class Gadget:
         return time.time() - self.MostRecentGadgetScoreUpdateTimeSec
 
 
-    # Returns the current interval Gadget has told us.
+    # Returns the current interval Gadget has set for us.
     def GetCurrentIntervalSecFloat(self):
         # Note we can't use _getTimerInterval because the timer interval is set to the default
         # at the start of each call for error handling.
