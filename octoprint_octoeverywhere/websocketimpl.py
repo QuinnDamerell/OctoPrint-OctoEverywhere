@@ -6,10 +6,7 @@ from websocket import WebSocketApp
 
 from octoprint_octoeverywhere.sentry import Sentry
 
-#
 # This class gives a bit of an abstraction over the normal ws
-#
-
 class Client:
 
     def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers = None):
