@@ -4,11 +4,9 @@ from octoprint_octoeverywhere.sentry import Sentry
 
 from .octohttprequest import OctoHttpRequest
 
-#
 # The point of this class is to abstract the logic that needs to be done to reliably get a snapshot from many types of
 # OctoPrint setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
 # setup. This includes USB based cameras, external IP based cameras, and OctoPrint instances that don't have a snapshot URL defined.
-#
 class SnapshotHelper:
 
     # Logic for a static singleton
