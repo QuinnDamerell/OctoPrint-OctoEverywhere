@@ -6,7 +6,7 @@ from octoprint import __version__
 from .sentry import Sentry
 from .smartpause import SmartPause
 
-# A simple class that handles some the API commands we use for various things.
+# A simple class that handles some of the API commands we use for various things.
 class ApiCommandHandler:
 
     def __init__(self, logger, notificationHandler, octoPrintPrinterObject, mainPluginImpl):
@@ -16,7 +16,7 @@ class ApiCommandHandler:
         self.MainPluginImpl = mainPluginImpl
 
 
-    # Called by octoprint to get what static commands we expose. We must expose all commands here and any required POST data that's required.
+    # Called by OctoPrint to get what static commands we expose. We must expose all commands here and any required POST data that's required.
     @staticmethod
     def GetApiCommands():
         return dict(
@@ -38,8 +38,8 @@ class ApiCommandHandler:
     # Can return None or a flask response.
     def HandleApiCommand(self, command, data):
         # This is called by the OctoPrint plugin on_api_command API.
-        # Note that all calls to the commands must be POSTs. There is a way to also handle GET commands, but it's honestly just easier
-        # always use posts even if there is no post data sent in the response.
+        # Note that all calls to the commands must be POSTs. There is a way to also handle GET commands, but it's honestly just easier to
+        # always use posts even if there is no POST data sent in the response.
         #
         # This function must return None, where OctoPrint will then return a 204 (no content), or it must return a flask response object.
         #   Ex:
@@ -65,7 +65,7 @@ class ApiCommandHandler:
 
     # Must return a flask response object or None
     def GetStatus(self):
-        # We want to mock the octoprint /api/job API since it has good stuff in it.
+        # We want to mock the OctoPrint /api/job API since it has good stuff in it.
         # So we will return a similar result. We use similar code to what the actual API returns.
         # If we fail to get this object, we will still return a result without it.
         octoPrintJobStatus = None
@@ -115,7 +115,7 @@ class ApiCommandHandler:
                         # Note this score is the average of the most recent 2 scores, to even things out a bit.
                         # Defaults to 0.0
                         "LastScore" : gadget.GetLastGadgetScoreFloat(),
-                        # <float>[] The a score history, capped at a limit of a value in Gadget.
+                        # <float>[] The score history, capped at a limit of a value in Gadget.
                         # The most recent is in the front of the list.
                         # Defaults to empty list.
                         "ScoreHistory": gadget.GetScoreHistoryFloats(),
@@ -158,7 +158,7 @@ class ApiCommandHandler:
         return flask.jsonify(**responseObj)
 
 
-    # Note if there is no print running, this will do nothing and will return success.
+    # Note: if there is no print running, then this will do nothing and returns success.
     def ExecuteSmartPause(self, postDataDict):
 
         # Defaults.
