@@ -14,7 +14,7 @@ from octoprint_octoeverywhere.snapshotresizeparams import SnapshotResizeParams
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
     # Since most setups don't use this package, we will import it with a try catch and if it fails we
-    # wont use it.
+    # won't use it.
     from PIL import Image
     from PIL import ImageFile
 except Exception as _:
@@ -251,7 +251,7 @@ class NotificationsHandler:
 
         # Since this is a float, avoid ==
         if currentZOffsetMM > self.zOffsetLowestSeenMM - 0.01 and currentZOffsetMM < self.zOffsetLowestSeenMM + 0.01:
-            # The zOffset is the same as the lowest we have seen.
+            # The zOffset is the same as the previously seen.
             self.zOffsetNotAtLowestCount = 0
         elif currentZOffsetMM < self.zOffsetLowestSeenMM:
             # We found a new low, record it.
@@ -305,7 +305,7 @@ class NotificationsHandler:
         computedProgressFloat = self._getCurrentProgressFloat()
 
         # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
-        # It's possible we get duplicate ints or even progresses that go back in time.
+        # It's possible we get duplicate ints or even progresses that goes back in time.
         # To account for this, we will make sure we only send the update for each progress update once.
         # We will also collapse many progress updates down to one event. For example, if the progress went from 5% -> 45%, we wil only report once for 10, 20, 30, and 40%.
         # We keep track of the highest progress that hasn't been reported yet.
@@ -317,7 +317,7 @@ class NotificationsHandler:
                 break
 
             # If we are over this value and it's not reported, we need to report.
-            # Since these items are in order, the largest progress will always overwrite.
+            # Since these items are in order, the largest progress will always be overwritten.
             if item.Reported() is False:
                 progressToSendFloat = item.Value()
 
