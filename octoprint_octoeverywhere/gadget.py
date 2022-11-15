@@ -22,7 +22,7 @@ class Gadget:
     c_defaultIntervalSec_ConnectionErrorBackoffBase = 30
 
     # We keep track of the score history, up to a point.
-    # Assuming 20 second checks, 100 is about 30 minutes of data.
+    # Assuming 20 second checks, 100 checks is about 30 minutes of data.
     c_maxScoreHistoryItems = 100
 
     def __init__(self, logger, notificationHandler):
@@ -39,7 +39,7 @@ class Gadget:
         # Dev param, can be set to disable host lock.
         self.DisableHostLock = False
 
-        # The most recent Gadget score sent back and the time it was received.
+        # The most recent Gadget score sent back and the time it was received at.
         self.MostRecentGadgetScore = 0.0
         self.MostRecentGadgetScoreUpdateTimeSec = 0
         self.ScoreHistory = []
