@@ -10,7 +10,7 @@ class OctoStreamMsgBuilder:
     @staticmethod
     def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt,
         webcamFlipH, webcamFlipV, webcamRotate90, summonMethod):
-        # Get the a buffer
+        # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
         # Setup strings
@@ -62,7 +62,7 @@ class OctoStreamMsgBuilder:
     @staticmethod
     def BytesToString(buf):
         # The default value for optional strings is None
-        # So handle it.
+        # So, we handle it.
         if buf is None:
             return None
         return buf.decode("utf-8")
