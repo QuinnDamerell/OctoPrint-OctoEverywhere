@@ -11,8 +11,7 @@ from .localauth import LocalAuth
 from .WebStream.octoheaderimpl import HeaderHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 
-#
-# From our telemetry, we can see that the initial index request is a big factor in the portal load time.
+# From our telemetry, we can see that the initial index request is a big factor in the portal's load time.
 # Since the index has dynamic plugin content, it can't be cached on the client. Until the client can load the index, it's the single
 # bottleneck of the load time. It takes OctoPrint 500ms to fulfill the index http request on a good day, but averages more around 1.5-2.0s!!
 # To solve this, we will try to make an early call to get the index and cache it in memory. The on the next request for the index we will return
@@ -25,12 +24,10 @@ from .octostreammsgbuilder import OctoStreamMsgBuilder
 # We also pre-compress the response, so we can use a better compression quality and we don't have to compress it in realtime.
 #
 # This class has also been expanded to cache static resources required by the index that are large.
-#
 class Slipstream:
     # A const that defines the common cache path for the index.
     # This is a special case for the index, since we ignore query parameters and anchors for the cache lookup logic.
     IndexCachePath = "/"
-
 
     # This list contains partial paths to anything we want to search for in the index
     # and cache if we can find it. The search will find the query parameter used in the index,
@@ -94,9 +91,7 @@ class Slipstream:
     # If available for the given URL, this will returned the cached and ready to go OctoHttpResult.
     # Otherwise returns None
     def GetCachedOctoHttpResult(self, httpInitialContext):
-        #
         # Note that all of our URL caching logic is case sensitive! (because URLs are)
-        #
 
         # Get the path.
         # If the path is empty, it's a protocol error. The upstream will handle it.
