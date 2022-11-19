@@ -1,0 +1,40 @@
+/* Css for the settings page */
+.oe-appBox {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    border: 2px solid #374B72;
+    background: #374B72;
+    border-radius: 5px;
+    padding: 10px;
+    margin-right: 20px;
+    margin-top: 0px;
+}
+.oe-appIcon {
+    border-radius:5px;
+    height:90px;
+    width:90px;
+}
+.oe-appTitle {
+    font-size:16px;
+    padding-top:10px;
+    text-align: center;
+    font-weight:bold;
+    color:white;
+}
+.oe-appTitle a {
+    color:white;
+}
+.oe-appAndroid {
+    text-align:center;
+}
+.oe-appiOS {
+    text-align: center;
+}
+    .oe-appiOS a {
+        text-align: center;
+        color: #DAEDF4;
+    }
+.oe-appAndroid a {
+    color: #3DDC84;
+}
