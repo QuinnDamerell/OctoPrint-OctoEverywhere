@@ -3,9 +3,6 @@
 # namespace: Proto
 
 import octoflatbuffers
-from octoflatbuffers.compat import import_numpy
-np = import_numpy()
-
 class OctoStreamMessage(object):
     __slots__ = ['_tab']
 
