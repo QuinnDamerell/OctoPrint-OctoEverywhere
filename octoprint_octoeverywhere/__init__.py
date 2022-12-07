@@ -124,8 +124,10 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Some setups seem to send "::" as the host string, which makes an invalid address. So we will check to make sure the string
             # is at least as long as 0.0.0.0, which should be about the min valid string length. (considering 'localhost', ipv4, and ipv6 addresses)
             if len(host) < len("0.0.0.0"):
-                # In this case the default value of OctoPrintLocalHost will be used.
-                self._logger.warn("The host string from OctoPrint was too short, so it was ignored. Value: "+str(host))
+                # Ignore this bind all string, don't worry about it.
+                if host != "::":
+                    # In this case the default value of OctoPrintLocalHost will be used.
+                    self._logger.warn("The host string from OctoPrint was too short, so it was ignored. Value: "+str(host))
             else:
                 self.OctoPrintLocalHost = host
         else:
