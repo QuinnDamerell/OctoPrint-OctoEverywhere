@@ -37,7 +37,7 @@ class SnapshotHelper:
             return snapshotUrl
         else:
             # This is the dev case
-            return "http://192.168.86.57/webcam/?action=snapshot"
+            return "http://"+self.GetDevAddress()+"/webcam/?action=snapshot"
 
     # Returns if flip H is set in the settings.
     def GetWebcamFlipH(self):
@@ -83,7 +83,7 @@ class SnapshotHelper:
             return streamUrl
         else:
             # This is the dev case
-            return "http://192.168.86.57/webcam/?action=stream"
+            return "http://"+self.GetDevAddress()+"/webcam/?action=stream"
 
     # Given a set of request headers, this determine if this is a special Oracle call indicating it's a snapshot.
     def IsSnapshotOracleRequest(self, requestHeadersDict):
@@ -269,3 +269,6 @@ class SnapshotHelper:
             Sentry.Exception("Failed to get fallback snapshot.", e)
 
         return None
+
+    def GetDevAddress(self):
+        return OctoHttpRequest.GetLocalhostAddress()+":"+str(OctoHttpRequest.GetLocalOctoPrintPort())

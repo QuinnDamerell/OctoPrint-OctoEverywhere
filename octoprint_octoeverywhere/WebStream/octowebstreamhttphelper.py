@@ -51,6 +51,14 @@ class OctoWebStreamHttpHelper:
         self.UploadBytesReceivedSoFar = 0
         self.UploadBuffer = None
 
+        # Micro body read stuff.
+        self.IsDoingMicroBodyReads = False
+        self.IsFirstMicroBodyRead = True
+
+        # Perf stats
+        self.BodyReadTimeSec = 0.0
+        self.ServiceUploadTimeSec = 0.0
+
         # In the open message, this value might exist, which would indicate
         # we know the full data size of the data that's being uploaded.
         # If it doesn't exist, either there is no upload payload or we don't
@@ -258,7 +266,7 @@ class OctoWebStreamHttpHelper:
                     # Start by reading data from the response.
                     # This function will return a read length of 0 and a null data offset if there's nothing to read.
                     # Otherwise, it will return the length of the read data and the data offset in the buffer.
-                    nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody)
+                    nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody, contentTypeLower, contentLength)
                 contentReadBytes += lastBodyReadLength
                 nonCompressedContentReadSizeBytes += nonCompressedBodyReadSize
 
@@ -327,7 +335,9 @@ class OctoWebStreamHttpHelper:
 
                 # Send the message.
                 # If this is the last, we need to make sure to set that we have set the closed flag.
+                serviceSendStartSec = time.time()
                 self.WebStream.SendToOctoStream(outputBuf, isLastMessage, True)
+                self.ServiceUploadTimeSec += time.time() - serviceSendStartSec
 
                 # Clear this flag
                 isFirstResponse = False
@@ -335,7 +345,7 @@ class OctoWebStreamHttpHelper:
 
             # Log about it.
             responseWriteDone = time.time()
-            self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
+            self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s; body_read:"+str(format(self.BodyReadTimeSec, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s; octo_stream_upload:"+str(format(self.ServiceUploadTimeSec, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" microreads:"+str(self.IsDoingMicroBodyReads)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
 
 
     def buildHeaderVector(self, builder, response):
@@ -552,7 +562,7 @@ class OctoWebStreamHttpHelper:
     # Reads data from the response body, puts it in a data vector, and returns the offset.
     # If the body has been fully read, this should return ogLen == 0, len = 0, and offset == None
     # The read style depends on the presence of the boundary string existing.
-    def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult, response, boundaryStr_opt, shouldCompress):
+    def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult, response, boundaryStr_opt, shouldCompress, contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown):
         # This is the max size each body read will be. Since we are making local calls, most of the time
         # we will always get this full amount as long as theres more body to read.
         # Note that this amount is larger than a single read of the websocket on the server. After some testing
@@ -568,6 +578,7 @@ class OctoWebStreamHttpHelper:
         # Note it's the creator of the FullBodyBuffer's responsibly to make sure the buffer matches the content length,
         # otherwise this octoHttpResult.Result read loop will do bad things.
         finalDataBuffer = None
+        bodyReadStartSec = time.time()
         if octoHttpResult.FullBodyBuffer is not None:
             finalDataBuffer = octoHttpResult.FullBodyBuffer
         else:
@@ -582,9 +593,21 @@ class OctoWebStreamHttpHelper:
                 if readLength != 0:
                     finalDataBuffer = self.BodyReadTempBuffer[0:readLength]
             else:
-                # If there is no boundary string, we will just read as much as possible up to our limit
-                # If this returns None, we are done.
-                finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
+                if self.shouldDoUnknownBodySizeRead(contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown):
+                    # If we don't know the content length AND there is no boundary string, this request is probably a event stream of some sort.
+                    # We have to use this special read function, because doBodyRead will block until the full buffer is filled, which might take a long time
+                    # for a number of streamed messages to fill it up. This special function does micro reads on the socket until a time limit is hit, and then
+                    # returns what was received.
+                    self.IsDoingMicroBodyReads = True
+                    finalDataBuffer = self.doUnknownBodySizeRead(response)
+                else:
+                    # If there is no boundary string, but we know the content length, it's safe to just read.
+                    # This will block until either the full defaultBodyReadSizeBytes is read or the full request has been received.
+                    # If this returns None, we hit a read timeout or the stream is done, so we are done.
+                    finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
+
+        # Keep track of read times.
+        self.BodyReadTimeSec += time.time() - bodyReadStartSec
 
         # If the final data buffer has been set to None, it means the body is not empty
         if finalDataBuffer is None:
@@ -840,6 +863,101 @@ class OctoWebStreamHttpHelper:
         except Exception as e:
             Sentry.Exception(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read.", e)
             return None
+
+    # This is similar to doBodyRead, but it allows us to send chunks of the body over time.
+    # The problem is for requests where the content length isn't known AND there's no boundary string, response.raw.read(size) will block
+    # until the full amount of data requested is read. That doesn't work for things like event streams, because there's no boundary string and the full length is unknown,
+    # but we want to stream the data as it arrives to us. To make doBodyRead efficient, we request a large read buffer, so if the event stream contains many small messages,
+    # doBodyRead will block until it accumulates enough messages to fill the full buffer and send it.
+    #
+    # For normal requests with known content lengths, response.raw.read will read full buffers until the full content is known to be done, and then will return the final subset buffer,
+    # so they can't get blocked like streaming event can. So if the event stream isn't sending data often, this can get stuck while waiting for the final bytes of a message.
+    #
+    # Event streams are an important fallback for OctoPrint, and is also what OctoFarm uses to stream instead of websockets.
+    #
+    # Thus, this function does many small reads (which isn't as efficient) but builds them into a larger buffer that's time limited. In this way, we ensure we are still streaming
+    # messages every x amount of time, but we also don't stream super small data packets.
+    #
+    # Note this logic will always have a "one message" latency due to the way we get blocked on the socket. Even though we read small amounts, there's no way to know the full message
+    # length, and thus there's no way to ask for only the remainder of the message. Thus, the end of the message will usually always get put into a pending read, but that read will block
+    # until the buffer is filled the rest of the way with the n+1 message. Unfortunately that means we are always a message or so behind in the stream. Without being able to do a non-blocking request read,
+    # there's no way to work around this.
+    #
+    # Ideally if we could just peak at the pending data length without blocking, we could do this much more efficiently.
+    def doUnknownBodySizeRead(self, response):
+
+        # How much we will micro read, this needs to be quite small, to prevent getting "stuck" between messages.
+        microReadSizeBytes = 300
+
+        # How long we will build one big buffer before returning, in seconds.
+        # Note the first read will get double this time.
+        maxBufferBuildTimeSec = 0.050 #(50ms)
+
+        # Vars
+        buildReads = 0
+        buffer = bytearray(2 * 1024)
+        bufferSize = 0
+        try:
+            startSec = time.time()
+            while True:
+                # Do a small read, which will block until the full (small) size is read.
+                # If nothing shows up to be read, this will wait until the http request read timeout expires, and then will return None.
+                currentReadBuffer = self.doBodyRead(response, microReadSizeBytes)
+
+                # If None is returned, we are done. Return the current buffer or None.
+                if currentReadBuffer is None:
+                    break
+
+                # Copy into the existing buffer.
+                buffer[bufferSize:bufferSize+len(currentReadBuffer)] = currentReadBuffer
+                bufferSize += len(currentReadBuffer)
+                buildReads += 1
+
+                # We have noticed for some systems (like OctoFarm) the first read takes a while for the event stream to get
+                # going, and then it gets data. The problem here is we unblock with the first chunk of data and then we are at our time
+                # limit and return. Instead, it's more ideal to allow one more time limit so we can read the full message and then return it.
+                if self.IsFirstMicroBodyRead:
+                    self.IsFirstMicroBodyRead = False
+                    startSec = time.time()
+
+                # Check if it's time to be done.
+                if time.time() - startSec > maxBufferBuildTimeSec:
+                    break
+
+            self.Logger.info("Buffer reads "+str(buildReads))
+            # If we broke out, it's time to return what we have.
+            # If we didn't read anything, we want to return none, to indicate we are done or there was a read timeout.
+            if bufferSize == 0:
+                return None
+
+            # Return the subset of the buffer we filled.
+            return buffer[0:bufferSize]
+
+        except Exception as e:
+            Sentry.Exception(self.getLogMsgPrefix()+ " exception thrown in doUnknownBodySizeRead. Ending body read.", e)
+            return None
+
+
+    # Based on the content length and the content type, determine if we should do a doUnknownBodySizeRead read.
+    # Read doUnknownBodySizeRead about why we need to use it, but since it's not efficient, we only want to use it when we know we should.
+    def shouldDoUnknownBodySizeRead(self, contentTypeLower_CanBeNone, contentLengthLower_CanBeNone):
+        # If there's a known content length, there's no need to do this, because the normal read will fill the requested buffer size
+        # but return the remainder subset immediately when the full buffer is read.
+        if contentLengthLower_CanBeNone is not None:
+            return False
+
+        # If we didn't get a content type, default to true since we don't know what this is.
+        if contentTypeLower_CanBeNone is None:
+            return True
+
+        # mjpegstreamer doesn't return a content type for snapshots (which is annoying) so if we know the content is a single image, don't stream it, allow the full
+        # buffer read to read it in one bit.
+        if contentTypeLower_CanBeNone == "image/jpeg":
+            return False
+
+        # Otherwise, default to true
+        return True
+
 
     # To speed up page load, we will defer lower pri requests while higher priority requests
     # are executing.

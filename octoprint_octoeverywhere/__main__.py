@@ -18,9 +18,23 @@ from .notificationshandler import NotificationsHandler
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
 #
+# Use the following vars to configure the OctoEverywhere server address and the local OctoPrint address
+# Use None if you don't want to overwrite the defaults.
+#
 
-NotificationHandlerInstance = None
-UseLocalServer = False
+# For local setups, use these vars to configure things.
+LocalServerAddress = None
+#LocalServerAddress = "127.0.0.1"
+
+OctoPrintIp = None
+OctoPrintIp = "192.168.1.12"
+
+OctoPrintPort = None
+OctoPrintPort = 80
+
+# Define a printer id and private key
+PrinterId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
+PrivateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub():
@@ -31,6 +45,7 @@ class UiPopupInvokerStub():
         self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; AutoHide:"+str(autoHide))
 
 # A mock of the popup UI interface.
+NotificationHandlerInstance = None
 class StatusChangeHandlerStub():
     def __init__(self, logger, printerId):
         self.Logger = logger
@@ -44,9 +59,9 @@ class StatusChangeHandlerStub():
         NotificationHandlerInstance.SetPrinterId(self.PrinterId)
 
         # Send a test notifications if desired.
-        if UseLocalServer:
-            NotificationHandlerInstance.SetServerProtocolAndDomain("http://127.0.0.1")
-            NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://127.0.0.1")
+        if LocalServerAddress is not None:
+            NotificationHandlerInstance.SetServerProtocolAndDomain("http://"+LocalServerAddress)
+            NotificationHandlerInstance.SetGadgetServerProtocolAndDomain("http://"+LocalServerAddress)
         #NotificationHandlerInstance.OnStarted("test.gcode")
         #handler.OnFailed("file name thats very long and too long for things.gcode", 20.2, "error")
         #handler.OnDone("filename.gcode", "304458605")
@@ -101,23 +116,20 @@ if __name__ == '__main__':
     OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
     OctoHttpRequest.SetLocalOctoPrintPort(5000)
 
-    # Special - Dev Env Setup
-    printerId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
-    privateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
-    OctoHttpRequest.SetLocalHostAddress("192.168.86.57")
-    OctoHttpRequest.SetLocalOctoPrintPort(80)
-    UseLocalServer = False
-
-    # Set local server if needed
-    if UseLocalServer:
-        OctoEverywhereWsUri = "ws://192.168.86.74:80/octoclientws"
+    # Overwrite local dev props
+    if OctoPrintIp is not None:
+        OctoHttpRequest.SetLocalHostAddress(OctoPrintIp)
+    if OctoPrintPort is not None:
+        OctoHttpRequest.SetLocalOctoPrintPort(OctoPrintPort)
+    if LocalServerAddress is not None:
+        OctoEverywhereWsUri = "ws://"+LocalServerAddress+"/octoclientws"
 
     # Setup the local auth helper
     LocalAuth.Init(logger, None)
     LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
 
     # Init the ping pong helper.
-    OctoPingPong.Init(logger, "C:\\Users\\quinn", printerId)
+    OctoPingPong.Init(logger, "C:\\Users\\quinn", PrinterId)
     # If we are using a local dev connection, disable this or it will overwrite.
     if OctoEverywhereWsUri.startswith("ws://"):
         OctoPingPong.Get().DisablePrimaryOverride()
@@ -137,6 +149,6 @@ if __name__ == '__main__':
     Slipstream.Init(logger)
 
     uiPopInvoker = UiPopupInvokerStub(logger)
-    statusHandler = StatusChangeHandlerStub(logger, printerId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, logger, uiPopInvoker, statusHandler, "1.9.16")
+    statusHandler = StatusChangeHandlerStub(logger, PrinterId)
+    oe = OctoEverywhere(OctoEverywhereWsUri, PrinterId, PrivateKey, logger, uiPopInvoker, statusHandler, "1.10.20")
     oe.RunBlocking()
