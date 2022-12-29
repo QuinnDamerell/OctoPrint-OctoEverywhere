@@ -3,6 +3,7 @@ import requests
 
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
+from .mdns import MDns
 from .Proto.PathTypes import PathTypes
 
 class OctoHttpRequest:
@@ -189,9 +190,21 @@ class OctoHttpRequest:
                     fallbackWebcamUrl = "http://" + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
 
         elif pathOrUrlType == PathTypes.Absolute:
-            # For absolute URLs, only use the main URL and set it be exactly what
-            # was requested.
+            # For absolute URLs, only use the main URL and set it be exactly what was requested.
             url = pathOrUrl
+
+            # The only exception to this is for mdns local domains. So here's the hard part. On most systems, mdns works for the
+            # requests lib and everything will work. However, on some systems mDNS isn't support and the call will fail. On top of that, mDNS
+            # is super flakey, and it will randomly stop working often. For both of those reasons, we will check if we find a local address, and try
+            # to resolve it manually. Our logic has a cache and local disk backup, so if mDNS is being flakey, our logic will recover it.
+            localResolvedUrl = MDns.Get().TryToResolveIfLocalHostnameFound(url)
+            if localResolvedUrl is not None:
+                # The function will only return back the full URL if a local hostname was found and it was able to resolve to an IP.
+                # In this case, use our local IP result first, and then set the requested as the fallback.
+                # This should be better, because it will use our already resolved IP url first, and if for some reason it fails, we still try the
+                # OG URL.
+                fallbackUrl = url
+                url = localResolvedUrl
         else:
             raise Exception("Http request got a message with an unknown path type. "+str(pathOrUrlType))
 

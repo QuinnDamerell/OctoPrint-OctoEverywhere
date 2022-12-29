@@ -9,6 +9,7 @@ import websocket
 from octoprint_octoeverywhere.sentry import Sentry
 
 from ..octohttprequest import OctoHttpRequest
+from ..mdns import MDns
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..localip import LocalIpHelper
 from ..websocketimpl import Client
@@ -38,6 +39,7 @@ class OctoWebStreamWsHelper:
         self.OpenedTime = openedTime
         self.Ws = None
         self.FirstWsMessageSentToLocal = False
+        self.ResolvedLocalHostnameUrl = None
 
         # These vars indicate if the actual websocket is opened or closed.
         # This is different from IsClosed, which is tracking if the webstream closed status.
@@ -128,14 +130,41 @@ class OctoWebStreamWsHelper:
                 self.Logger.info(self.getLogMsgPrefix()+" failed to connect to relative path and has nothing else to try.")
                 return False
         elif pathType is PathTypes.PathTypes.Absolute:
-            # If the path is absolute, we only have this one path to try.
-            if self.ConnectionAttempt != 0:
-                # Report the issue and return False to indicate we aren't trying to connect.
-                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to absolute path and has nothing else to try.")
-                return False
+            # If this is an absolute path, there are two options:
+            #   1) If the path is a local hostname, we will try to manually resolve the hostname and then try that connection directly.
+            #      This is to mitigate mDNS problems, which are described in octohttprequest, in the PathTypes.Absolute handling logic.
+            #      Basically, mDNS is flakey and it's not supported on some OSes, so doing it ourselves fixes some of that.
+            #        - If this is the case, we will try our manually resolved url first, and the OG second.
+            #   2) If the url isn't a local hostname or it fails to resolve manually, we just use the absolute URL directly.
 
-            # Make an absolute path
-            uri = path
+            # Try to see if this is a local hostname, if we don't already have a result.
+            if self.ResolvedLocalHostnameUrl is None:
+                # This returns None if the URL doesn't contain a local hostname or it fails to resolve.
+                self.ResolvedLocalHostnameUrl = MDns.Get().TryToResolveIfLocalHostnameFound(path)
+
+            if self.ResolvedLocalHostnameUrl is None:
+                # If self.ResolvedLocalHostnameUrl is None, there's no local hostname or it failed to resolve.
+                # Thus we will just try the absolute URL and nothing else.
+                if self.ConnectionAttempt != 0:
+                    # Report the issue and return False to indicate we aren't trying to connect.
+                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect to absolute path and has nothing else to try.")
+                    return False
+
+                # Use the raw absolute path.
+                uri = path
+            else:
+                # We have a local hostname url resolved in our string.
+                if self.ConnectionAttempt == 0:
+                    # For the first attempt, try using our manually resolved URL. Since it's already resolved and might be from a cache, it's going to be faster.
+                    uri = self.ResolvedLocalHostnameUrl
+                elif self.ConnectionAttempt == 1:
+                    # For the second attempt, it means the manually resolved URL failed, so we just try the original path with no modification.
+                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect with the locally resoled hostname ("+self.ResolvedLocalHostnameUrl+"), trying the raw URL. " + path)
+                    uri = path
+                else:
+                    # We tired both, neither worked. Give up.
+                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect to manually resolved local hostname and the absolute path.")
+                    return False
         else:
             raise Exception("Web stream ws helper got a open message with an unknown path type "+str(pathType))
 

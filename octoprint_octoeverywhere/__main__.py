@@ -12,6 +12,7 @@ from .octohttprequest import OctoHttpRequest
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
 from .sentry import Sentry
+from .mdns import MDns
 from .notificationshandler import NotificationsHandler
 #from .threaddebug import ThreadDebug
 
@@ -35,6 +36,9 @@ OctoPrintPort = 80
 # Define a printer id and private key
 PrinterId = "0QVGBOO92TENVOVN9XW5T3KT6LV1XV8ODFUEQYWQ"
 PrivateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdxzwmeajqqmjftnhoonusnjatqcryxfvrzgibouexjflbrmurkhltmsd"
+
+# Defines a place we can write files
+PluginFilePathRoot = "C:\\Users\\quinn"
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub():
@@ -100,6 +104,10 @@ if __name__ == '__main__':
     # Init Sentry, but it won't report since we are in dev mode.
     Sentry.Init(logger, "dev", True)
 
+    # Init the mdns client
+    MDns.Init(logger, PluginFilePathRoot)
+    #MDns.Get().Test()
+
     # This is a tool to help track stuck or leaked threads.
     #threadDebugger = ThreadDebug()
     #threadDebugger.Start(logger, 30)
@@ -129,7 +137,7 @@ if __name__ == '__main__':
     LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
 
     # Init the ping pong helper.
-    OctoPingPong.Init(logger, "C:\\Users\\quinn", PrinterId)
+    OctoPingPong.Init(logger, PluginFilePathRoot, PrinterId)
     # If we are using a local dev connection, disable this or it will overwrite.
     if OctoEverywhereWsUri.startswith("ws://"):
         OctoPingPong.Get().DisablePrimaryOverride()

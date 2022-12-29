@@ -23,6 +23,7 @@ jobs:
         pip install octoflatbuffers
         pip install pillow
         pip install certifi
+        pip install dnspython
         pip install rsa
         pip install sentry-sdk
         pip install octoprint
