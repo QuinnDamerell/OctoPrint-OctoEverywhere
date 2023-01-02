@@ -23,7 +23,7 @@ class MDns:
     MaxCacheTimeSec = 24 * 60.0 * 60.0
 
     _Instance = None
-    _Debug = True # Disable eventually to remove a ton of logging.
+    _Debug = False
 
     @staticmethod
     def Init(logger, pluginDataFolderPath):
