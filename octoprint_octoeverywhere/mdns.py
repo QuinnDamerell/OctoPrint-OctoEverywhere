@@ -2,6 +2,7 @@ import threading
 import time
 import os
 import json
+import sys
 import dns.resolver
 
 from octoprint_octoeverywhere.localip import LocalIpHelper
@@ -139,6 +140,12 @@ class MDns:
 
     # Returns a string with the local IP if the IP can be found, otherwise, it returns None.
     def _TryToResolve(self, domain):
+
+        # TODO - Right now the DNS lib we use doesn't support PY2 the same way this PY3 logic is written. There might be a way to write a
+        # version of this logic that would support PY2, but for now, we just don't support it. Upgrade to PY3 people!
+        if sys.version_info[0] < 3:
+            return None
+
         # We have seen that occasionally a first resolve won't work, but future resolves will.
         # For this reason, we do shorter lifetime resolves, but try a few times.
         attempt = 0
