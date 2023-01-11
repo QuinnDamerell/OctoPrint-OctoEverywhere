@@ -21,6 +21,7 @@ from .octohttprequest import OctoHttpRequest
 from .notificationshandler import NotificationsHandler
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
+from .telemetry import Telemetry
 from .sentry import Sentry
 from .mdns import MDns
 from .smartpause import SmartPause
@@ -143,6 +144,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Setup Sentry to capture issues.
         Sentry.Init(self._logger, self._plugin_version, False)
+
+        # Setup our telemetry class.
+        Telemetry.Init(self._logger)
 
         #
         # Due to settings bugs in OctoPrint, as much of the generated values saved into settings should be set here as possible.

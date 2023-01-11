@@ -5,6 +5,7 @@ import time
 import requests
 
 from octoprint_octoeverywhere.sentry import Sentry
+from octoprint_octoeverywhere.telemetry import Telemetry
 
 #
 # The point of this class is to simply ping the available OctoEverywhere server regions occasionally to track which region is has the best
@@ -267,30 +268,17 @@ class OctoPingPong:
 
 
     def _ReportTelemetry(self, defaultServerName, defaultServerLatencyMs, lowestLatencyName, lowestLatencyMs, selectedLatencyMs):
-        try:
-            # Make the first telemetry post
-            isDefaultLowest = defaultServerName == lowestLatencyName
-            lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
-            data = {
-                "Key":"PluginLatencyV3",
-                "Value": float(defaultServerLatencyMs),
-                "Properties":{
-                    "PrinterId": str(self.PrinterId),
-                    "IsDefaultLowest": str(isDefaultLowest),
-                    "DefaultSub" : defaultServerName,
-                    "LowestLatSub": lowestLatencyName,
-                    "LowestLatDelta": str(lowestLatencyDelta),
-                    "LowestLatMs": str(lowestLatencyMs),
-                    "SelectedLatencyMs": str(selectedLatencyMs)
-                }
-            }
-            response = requests.post('https://octoeverywhere.com/api/stats/telemetryaccumulator', json=data, timeout=1*60)
-            if response.status_code != 200:
-                self.Logger.warn("Failed to report ping latency "+response.status_code)
-                return
-        except Exception as e:
-            self.Logger.warn("Failed to report ping latency " + str(e))
-
+        isDefaultLowest = defaultServerName == lowestLatencyName
+        lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
+        Telemetry.Write("PluginLatencyV4", int(defaultServerLatencyMs),
+        {
+            "IsDefaultLowest": isDefaultLowest,
+            "DefaultSub" : defaultServerName,
+            "LowestLatSub": lowestLatencyName,
+            "LowestLatDelta": lowestLatencyDelta,
+            "LowestLatMs": lowestLatencyMs,
+            "SelectedLatencyMs": selectedLatencyMs
+        }, None)
 
     # Returns the ping latency in ms to the server and the list of servers.
     # If subdomain is given it will be used, otherwise the default subdomain will be used.

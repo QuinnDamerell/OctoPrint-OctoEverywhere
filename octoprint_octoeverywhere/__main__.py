@@ -11,6 +11,7 @@ from .octoeverywhereimpl import OctoEverywhere
 from .octohttprequest import OctoHttpRequest
 from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
+from .telemetry import Telemetry
 from .sentry import Sentry
 from .mdns import MDns
 from .notificationshandler import NotificationsHandler
@@ -103,6 +104,9 @@ if __name__ == '__main__':
 
     # Init Sentry, but it won't report since we are in dev mode.
     Sentry.Init(logger, "dev", True)
+    Telemetry.Init(logger)
+    if LocalServerAddress is not None:
+        Telemetry.SetServerProtocolAndDomain("http://"+LocalServerAddress)
 
     # Init the mdns client
     MDns.Init(logger, PluginFilePathRoot)

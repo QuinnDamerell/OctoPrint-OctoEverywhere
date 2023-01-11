@@ -924,7 +924,6 @@ class OctoWebStreamHttpHelper:
                 if time.time() - startSec > maxBufferBuildTimeSec:
                     break
 
-            self.Logger.info("Buffer reads "+str(buildReads))
             # If we broke out, it's time to return what we have.
             # If we didn't read anything, we want to return none, to indicate we are done or there was a read timeout.
             if bufferSize == 0:
