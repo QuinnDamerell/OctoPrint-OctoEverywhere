@@ -15,6 +15,7 @@ from .config import Config
 from .logger import LoggerInit
 from .uipopupinvoker import UiPopupInvoker
 from .updatemanager import UpdateManager
+from .version import Version
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -46,6 +47,10 @@ class MoonrakerHost:
             self.Logger.info("##################################")
             self.Logger.info("#### OctoEverywhere Starting #####")
             self.Logger.info("##################################")
+
+            # Find the version of the plugin, this is required and it will throw if it fails.
+            pluginVersionStr = Version.GetPluginVersion(self.Logger, repoRoot)
+            self.Logger.info("Plugin Version: %s", pluginVersionStr)
 
             # Before we do this first time setup, make sure our config files are in place. This is important
             # because if this fails it will throw. We don't want to let the user complete the install setup if things
@@ -81,7 +86,7 @@ class MoonrakerHost:
             # Setup the snapshot helper
             SnapshotHelper.Init(self.Logger, None)
 
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, "1.10.20")
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("!! Exception thrown out of main host run function.", e)

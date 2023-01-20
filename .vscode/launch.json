@@ -9,7 +9,18 @@
             "type": "python",
             "request": "launch",
             "module": "moonraker_octoeverywhere",
-            "justMyCode": true
+            "justMyCode": true,
+            "args": [
+                // The module requires these aregs to be passed. These are examples of a typical default setup.
+                // This is obviously linux depdent, and is expected to be ran out of an installed repo with moonraker running.
+                //""                                // The exe name - This is actually passed correctly
+                "/home/pi/printer_data/config",     // Moonraker config dir
+                "/home/pi/printer_data/logs",       // Moonraker logs dir
+                "/home/pi/octoeverywhere-storage",  // OE local storage dir
+                "octoeverywhere",                   // The service name
+                "/home/pi/octoeverywhere-env",      // The root of our py virt env
+                "/home/pi/octoeverywhere"           // The repo root
+            ]
         },
         {
             "name": "OctoPrint Dev Module",
