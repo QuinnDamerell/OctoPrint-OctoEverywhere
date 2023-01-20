@@ -8,6 +8,7 @@ import requests
 import urllib3
 
 from .octoheaderimpl import HeaderHelper
+from .octoheaderimpl import BaseProtocol
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..snapshothelper import SnapshotHelper
@@ -128,7 +129,7 @@ class OctoWebStreamHttpHelper:
             raise Exception("Http request open message had no initial context")
 
         # Setup the headers
-        sendHeaders = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext)
+        sendHeaders = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext, BaseProtocol.Http)
 
         # Figure out if this is a special OctoEverywhere Auth call.
         isOeAuthCall = httpInitialContext.UseOctoeverywhereAuth() == OeAuthAllowed.OeAuthAllowed.Allow
@@ -225,6 +226,11 @@ class OctoWebStreamHttpHelper:
                         if len(boundaryStr) == 0:
                             self.Logger.error("We found a boundary stream, but didn't find the boundary string. "+ contentTypeLower)
                             continue
+
+                elif nameLower == "location":
+                    # We have noticed that some proxy servers aren't setup correctly to forward the x-forwarded-for and such headers.
+                    # So when the webserver responds back with a 301 or 302, the location header might not have the correct hostname, instead an ip like 127.0.0.1.
+                    response.headers[name] = HeaderHelper.CorrectLocationResponseHeaderIfNeeded(self.Logger, response.headers[name], sendHeaders)
 
             # We also look at the content-type to determine if we should add compression to this request or not.
             # general rule of thumb is that compression is quite cheap but really helps with text, so we should compress when we

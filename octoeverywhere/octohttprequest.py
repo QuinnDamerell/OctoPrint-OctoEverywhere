@@ -160,6 +160,13 @@ class OctoHttpRequest:
             # Note!
             # These URLs are very closely related to the logic in the OctoWebStreamWsHelper class and should stay in sync!
 
+            # Fluidd seems to have a bug where the default webcam streaming value is .../webcam?action...
+            # but crowsnest will send a redirect to .../webcam/?action...
+            # To prevent that redirect hop every time the camera is loaded, we will try to correct it.
+            # We should remove this eventually when the bug has been fixed for long enough.
+            if pathOrUrl.startswith("/webcam?action"):
+                pathOrUrl = pathOrUrl.replace("/webcam?action", "/webcam/?action")
+
             # The main URL is directly to this OctoPrint instance
             # This URL will only every be http, it can't be https.
             url = "http://" + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl

@@ -8,6 +8,7 @@ from octoeverywhere.compat import Compat
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.octohttprequest import PathTypes
 from octoeverywhere.WebStream.octoheaderimpl import HeaderHelper
+from octoeverywhere.WebStream.octoheaderimpl import BaseProtocol
 from octoeverywhere.octostreammsgbuilder import OctoStreamMsgBuilder
 
 from .localauth import LocalAuth
@@ -251,7 +252,7 @@ class Slipstream:
             # Notice that we don't give this function the information to set the x-forwarded-for-host header, and thus
             # any hardcoded domains in these cached files will be wrong. However, all of the files we cache don't use the
             # x-forwarded-for-host header, so it doesn't matter. Only the APIs use them to generate the correct links.
-            headers = HeaderHelper.GatherRequestHeaders(self.Logger, None)
+            headers = HeaderHelper.GatherRequestHeaders(self.Logger, None, BaseProtocol.Http)
 
             # We need to use the local auth helper to add a auth header to the call so it doesn't fail due to unauthed.
             LocalAuth.Get().AddAuthHeader(headers)

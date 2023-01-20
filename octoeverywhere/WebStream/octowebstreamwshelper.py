@@ -53,7 +53,7 @@ class OctoWebStreamWsHelper:
 
         # Get the headers
         # TODO - enable this. The headers we generate right now don't work for websockets.
-        #headers = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext)
+        #headers = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext, BaseProtocol.WebSocket)
 
         # It might take multiple attempts depending on the network setup of the client.
         # This value keeps track of them.
