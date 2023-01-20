@@ -1,9 +1,8 @@
 import time
 import threading
 
-from octoprint_octoeverywhere.sentry import Sentry
-from octoprint_octoeverywhere.threaddebug import ThreadDebug
-
+from .sentry import Sentry
+from .threaddebug import ThreadDebug
 from .octoservercon import OctoServerCon
 from .Proto import SummonMethods
 

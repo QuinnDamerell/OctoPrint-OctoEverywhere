@@ -3,7 +3,6 @@ import struct
 import threading
 import traceback
 
-from octoprint_octoeverywhere.sentry import Sentry
 
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
@@ -15,6 +14,7 @@ from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
 from .snapshothelper import SnapshotHelper
+from .sentry import Sentry
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck

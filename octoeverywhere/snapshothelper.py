@@ -1,7 +1,6 @@
 import time
 
-from octoprint_octoeverywhere.sentry import Sentry
-
+from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
 
 # The point of this class is to abstract the logic that needs to be done to reliably get a snapshot from many types of

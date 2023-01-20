@@ -110,7 +110,8 @@ class Sentry:
         if Sentry.logger is None:
             return
 
-        Sentry.logger.error(msg + "; Exception: " + str(exception))
+        tb = traceback.format_exc()
+        Sentry.logger.error(msg + "; Exception: " + str(exception) + "; "+str(tb))
 
         # Sentry is disabled for now.
         # Never send in dev mode, as Sentry will not be setup.

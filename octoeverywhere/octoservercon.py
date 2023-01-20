@@ -2,8 +2,7 @@ import time
 import random
 from datetime import datetime
 
-from octoprint_octoeverywhere.sentry import Sentry
-
+from .sentry import Sentry
 from .websocketimpl import Client
 from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer

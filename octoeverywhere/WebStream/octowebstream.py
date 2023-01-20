@@ -5,11 +5,10 @@ import traceback
 import time
 import queue
 
-from octoprint_octoeverywhere.sentry import Sentry
-
+from ..sentry import Sentry
+from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from .octowebstreamhttphelper import OctoWebStreamHttpHelper
 from .octowebstreamwshelper import OctoWebStreamWsHelper
-from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
 from ..Proto import MessagePriority

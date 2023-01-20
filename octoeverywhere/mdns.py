@@ -3,9 +3,10 @@ import time
 import os
 import json
 import sys
+
 import dns.resolver
 
-from octoprint_octoeverywhere.localip import LocalIpHelper
+from .localip import LocalIpHelper
 
 # A helper class to resolve mdns domain names to IP addresses, since the request lib doesn't support
 # the mdns lookup.

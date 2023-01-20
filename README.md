@@ -6,6 +6,7 @@ An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, a
 ## Features
 
 - 🚀 Free & full remote access to your OctoPrint portal from everywhere
+- 🤖 **Free & unlimited AI failure detection** that will automatically stop failed prints to save you time and money
 - 📷 Full resolution and frame-rate webcam streaming
 - 📱 Empowers your favorite OctoPrint iOS and Android apps with [remote access](https://octoeverywhere.com/appsetup?source=github_readme)
 - 📺 Live stream your prints to your friends or the entire world with [Live Links](https://octoeverywhere.com/live?source=github_readme)
@@ -20,8 +21,9 @@ An [OctoPrint](https://octoprint.org/) plugin that gives you **complete, free, a
 With a rating of **[4.9/5 stars](https://www.trustpilot.com/review/octoeverywhere.com)** and over **63k** makers are already using OctoEverywhere, what are you waiting for?
 <br/>
 <br/>
-**[Try it now - it's free and takes less than 30 seconds to setup!](https://octoeverywhere.com/getstarted?source=github_plugin_repo)**
-
+**[Try OctoEverywhere Now! - It's free and takes less than 30 seconds to setup](https://octoeverywhere.com/getstarted?source=github_plugin_repo)**
+<br/>
+<br/>
 
 ## Bugs & Feedback
 

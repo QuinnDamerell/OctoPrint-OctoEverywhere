@@ -1,6 +1,6 @@
 import threading
 
-from octoprint_octoeverywhere.sentry import Sentry
+from .sentry import Sentry
 
 class RepeatTimer(threading.Thread):
     def __init__(self, logger, intervalSec, func):

@@ -13,7 +13,7 @@ plugin_package = "octoprint_octoeverywhere"
 plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
-plugin_version = "1.11.5"
+plugin_version = "2.0.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -43,6 +43,7 @@ plugin_license = "AGPLv3"
 # We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.
 #
 # Note! These need to stay in sync with .github/pylint.yml decencies.
+# Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = ["websocket_client>=0.56.0,<1.4.0", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi", "rsa", "sentry-sdk", "dnspython" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
@@ -56,7 +57,8 @@ plugin_requires = ["websocket_client>=0.56.0,<1.4.0", "requests>=2.24.0", "octof
 plugin_additional_data = []
 
 # Any additional python packages you need to install with your plugin that are not contained in <plugin_package>.*
-plugin_additional_packages = []
+# For OctoEverywhere, we need to include or common packages shared between hosts, so OctoPrint copies them into the package folder as well.
+plugin_additional_packages = [ "octoeverywhere", "octoeverywhere.Proto", "octoeverywhere.WebStream" ]
 
 # Any python packages within <plugin_package>.* you do NOT want to install with your plugin
 plugin_ignored_packages = []

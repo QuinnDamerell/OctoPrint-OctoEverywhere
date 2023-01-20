@@ -4,8 +4,8 @@ import threading
 import time
 import requests
 
-from octoprint_octoeverywhere.sentry import Sentry
-from octoprint_octoeverywhere.telemetry import Telemetry
+from .sentry import Sentry
+from .telemetry import Telemetry
 
 #
 # The point of this class is to simply ping the available OctoEverywhere server regions occasionally to track which region is has the best

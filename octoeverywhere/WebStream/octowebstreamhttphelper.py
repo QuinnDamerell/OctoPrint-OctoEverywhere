@@ -7,14 +7,12 @@ import sys
 import requests
 import urllib3
 
-from octoprint_octoeverywhere.sentry import Sentry
-
-from ..localauth import LocalAuth
 from .octoheaderimpl import HeaderHelper
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..snapshothelper import SnapshotHelper
-from ..slipstream import Slipstream
+from ..sentry import Sentry
+from ..compat import Compat
 from ..Proto import HttpHeader
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
@@ -134,9 +132,9 @@ class OctoWebStreamHttpHelper:
 
         # Figure out if this is a special OctoEverywhere Auth call.
         isOeAuthCall = httpInitialContext.UseOctoeverywhereAuth() == OeAuthAllowed.OeAuthAllowed.Allow
-        if isOeAuthCall:
-            # If so, add the auth header.
-            LocalAuth.Get().AddAuthHeader(sendHeaders)
+        if isOeAuthCall and Compat.HasLocalAuth():
+            # If so and this platform supports local auth, add the auth header.
+            Compat.GetLocalAuth().AddAuthHeader(sendHeaders)
 
         # Find the method
         method = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Method())
@@ -157,7 +155,8 @@ class OctoWebStreamHttpHelper:
         else:
             # For all web requests, check our in memory read-to-go cache.
             # If available, this will return the object. On a miss it will return None
-            octoHttpResult = Slipstream.Get().GetCachedOctoHttpResult(httpInitialContext)
+            if Compat.HasSlipstream():
+                octoHttpResult = Compat.GetSlipstream().GetCachedOctoHttpResult(httpInitialContext)
 
             # Check if we got a cache hit.
             if octoHttpResult is not None:

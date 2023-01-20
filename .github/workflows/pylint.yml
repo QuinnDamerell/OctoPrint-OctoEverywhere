@@ -29,4 +29,6 @@ jobs:
         pip install octoprint
     - name: Analysing the code with pylint
       run: |
+        pylint ./octoeverywhere/
         pylint ./octoprint_octoeverywhere/
+        pylint ./moonraker_octoeverywhere/

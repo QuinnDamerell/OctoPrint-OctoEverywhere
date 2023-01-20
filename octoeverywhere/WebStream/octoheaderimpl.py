@@ -1,4 +1,4 @@
-from octoprint_octoeverywhere.octostreammsgbuilder import OctoStreamMsgBuilder
+from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..octohttprequest import OctoHttpRequest
 
 class HeaderHelper:

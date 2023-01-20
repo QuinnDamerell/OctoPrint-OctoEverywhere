@@ -1,10 +1,9 @@
 import threading
 import certifi
-
 import websocket
 from websocket import WebSocketApp
 
-from octoprint_octoeverywhere.sentry import Sentry
+from .sentry import Sentry
 
 # This class gives a bit of an abstraction over the normal ws
 class Client:

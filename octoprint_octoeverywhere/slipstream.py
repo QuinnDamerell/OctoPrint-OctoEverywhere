@@ -3,13 +3,14 @@ import time
 import zlib
 import sys
 
-from octoprint_octoeverywhere.sentry import Sentry
+from octoeverywhere.sentry import Sentry
+from octoeverywhere.compat import Compat
+from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.octohttprequest import PathTypes
+from octoeverywhere.WebStream.octoheaderimpl import HeaderHelper
+from octoeverywhere.octostreammsgbuilder import OctoStreamMsgBuilder
 
-from .octohttprequest import OctoHttpRequest
-from .octohttprequest import PathTypes
 from .localauth import LocalAuth
-from .WebStream.octoheaderimpl import HeaderHelper
-from .octostreammsgbuilder import OctoStreamMsgBuilder
 
 # From our telemetry, we can see that the initial index request is a big factor in the portal's load time.
 # Since the index has dynamic plugin content, it can't be cached on the client. Until the client can load the index, it's the single
@@ -69,6 +70,8 @@ class Slipstream:
     @staticmethod
     def Init(logger):
         Slipstream._Instance = Slipstream(logger)
+        # Since OctoPrint supports this, add it to our compat layer
+        Compat.SetSlipstream(Slipstream._Instance)
 
 
     @staticmethod

@@ -3,7 +3,8 @@ import flask
 from octoprint.access.permissions import Permissions
 from octoprint import __version__
 
-from .sentry import Sentry
+from octoeverywhere.sentry import Sentry
+
 from .smartpause import SmartPause
 
 # A simple class that handles some of the API commands we use for various things.

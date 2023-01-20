@@ -1,5 +1,7 @@
 import time
 
+from octoeverywhere.compat import Compat
+
 #
 # The point of this class is to allow pause commands (from Gadget and else where) that are less likely to cause harm to the current print.
 # This is done by moving the hotend back from the print and even cooling it down. This protects the print from heat harm and also prevents the filament
@@ -13,6 +15,7 @@ class SmartPause:
     @staticmethod
     def Init(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj):
         SmartPause._Instance = SmartPause(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj)
+        Compat.SetSmartPause(SmartPause._Instance)
 
 
     @staticmethod

@@ -2,6 +2,7 @@ import random
 import string
 
 from octoprint.access.permissions import Permissions
+from octoeverywhere.compat import Compat
 
 # A class that manages the local auth rights of OctoEverywhere.
 #
@@ -26,6 +27,8 @@ class LocalAuth:
     @staticmethod
     def Init(logger, userManager):
         LocalAuth._Instance = LocalAuth(logger, userManager)
+        # Since this platform supports this object, set it in our compat layer.
+        Compat.SetLocalAuth(LocalAuth._Instance)
 
 
     @staticmethod

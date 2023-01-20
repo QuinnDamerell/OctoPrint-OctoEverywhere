@@ -5,20 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "Moonraker Dev Module",
+            "type": "python",
+            "request": "launch",
+            "module": "moonraker_octoeverywhere",
+            "justMyCode": true
+        },
+        {
+            "name": "OctoPrint Dev Module",
             "type": "python",
             "request": "launch",
             "module": "octoprint_octoeverywhere",
-            "cwd": "${workspaceFolder}",
-            "justMyCode": false
+            "justMyCode": true
         },
-        {
-            "name": "Dev Runner",
-            "type": "python",
-            "request": "launch",
-            "program": "devrunner.py",
-            "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/octoprint_octoeverywhere"
-        }
     ]
 }

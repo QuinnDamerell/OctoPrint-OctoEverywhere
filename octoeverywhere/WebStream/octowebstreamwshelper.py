@@ -6,8 +6,7 @@ import zlib
 
 import websocket
 
-from octoprint_octoeverywhere.sentry import Sentry
-
+from ..sentry import Sentry
 from ..octohttprequest import OctoHttpRequest
 from ..mdns import MDns
 from ..octostreammsgbuilder import OctoStreamMsgBuilder

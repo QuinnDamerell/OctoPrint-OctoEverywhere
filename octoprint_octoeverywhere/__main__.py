@@ -4,18 +4,21 @@ import sys
 import random
 import string
 
-from octoprint_octoeverywhere.localauth import LocalAuth
-from octoprint_octoeverywhere.snapshothelper import SnapshotHelper
-
-from .octoeverywhereimpl import OctoEverywhere
-from .octohttprequest import OctoHttpRequest
-from .octopingpong import OctoPingPong
-from .slipstream import Slipstream
-from .telemetry import Telemetry
-from .sentry import Sentry
-from .mdns import MDns
-from .notificationshandler import NotificationsHandler
+from octoeverywhere.snapshothelper import SnapshotHelper
+from octoeverywhere.octoeverywhereimpl import OctoEverywhere
+from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.sentry import Sentry
+from octoeverywhere.mdns import MDns
+from octoeverywhere.notificationshandler import NotificationsHandler
 #from .threaddebug import ThreadDebug
+
+from .localauth import LocalAuth
+from .slipstream import Slipstream
+from .smartpause import SmartPause
+
+
 
 #
 # This file is used for development purposes. It can run the system outside of teh OctoPrint env.
@@ -24,12 +27,14 @@ from .notificationshandler import NotificationsHandler
 # Use None if you don't want to overwrite the defaults.
 #
 
+
+
 # For local setups, use these vars to configure things.
 LocalServerAddress = None
 #LocalServerAddress = "127.0.0.1"
 
 OctoPrintIp = None
-OctoPrintIp = "192.168.1.12"
+OctoPrintIp = "192.168.1.36"
 
 OctoPrintPort = None
 OctoPrintPort = 80
@@ -120,7 +125,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, SignalHandler)
 
     # Dev props
-    printerId = GeneratePrinterId()
     OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
 
     # Setup the http requester
@@ -135,10 +139,6 @@ if __name__ == '__main__':
         OctoHttpRequest.SetLocalOctoPrintPort(OctoPrintPort)
     if LocalServerAddress is not None:
         OctoEverywhereWsUri = "ws://"+LocalServerAddress+"/octoclientws"
-
-    # Setup the local auth helper
-    LocalAuth.Init(logger, None)
-    LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
 
     # Init the ping pong helper.
     OctoPingPong.Init(logger, PluginFilePathRoot, PrinterId)
@@ -157,8 +157,12 @@ if __name__ == '__main__':
     # Setup the snapshot helper
     SnapshotHelper.Init(logger, None)
 
-    # Init slipstream - This must be inited after localauth
+    # These 3 classes are OctoPrint specific!
+    # The order matters, LocalAuth needs to be init before Slipstream.
+    LocalAuth.Init(logger, None)
+    LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
     Slipstream.Init(logger)
+    SmartPause.Init(logger, None, None)
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, PrinterId)

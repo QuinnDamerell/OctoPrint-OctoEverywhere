@@ -5,8 +5,8 @@ import json
 
 import requests
 
-from octoprint_octoeverywhere.sentry import Sentry
-from octoprint_octoeverywhere.snapshotresizeparams import SnapshotResizeParams
+from .sentry import Sentry
+from .snapshotresizeparams import SnapshotResizeParams
 from .repeattimer import RepeatTimer
 
 class Gadget:

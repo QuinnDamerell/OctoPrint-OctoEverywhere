@@ -2,7 +2,7 @@ import random
 import string
 import rsa
 
-from octoprint_octoeverywhere.sentry import Sentry
+from .sentry import Sentry
 
 # A helper class to handle server validation.
 #

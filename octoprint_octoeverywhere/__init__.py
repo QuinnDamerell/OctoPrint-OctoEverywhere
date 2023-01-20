@@ -1,31 +1,27 @@
 # coding=utf-8
 from __future__ import absolute_import
-import logging
 import threading
-import random
-import string
 import socket
-import json
 from datetime import datetime
 
 import flask
 import requests
-
 import octoprint.plugin
+
+from octoeverywhere.snapshothelper import SnapshotHelper
+from octoeverywhere.octoeverywhereimpl import OctoEverywhere
+from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.notificationshandler import NotificationsHandler
+from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.sentry import Sentry
+from octoeverywhere.mdns import MDns
+from octoeverywhere.hostcommon import HostCommon
 
 from .apicommandhandler import ApiCommandHandler
 from .localauth import LocalAuth
-from .snapshothelper import SnapshotHelper
-from .octoeverywhereimpl import OctoEverywhere
-from .octohttprequest import OctoHttpRequest
-from .notificationshandler import NotificationsHandler
-from .octopingpong import OctoPingPong
 from .slipstream import Slipstream
-from .telemetry import Telemetry
-from .sentry import Sentry
-from .mdns import MDns
 from .smartpause import SmartPause
-
 
 class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                             octoprint.plugin.SettingsPlugin,
@@ -511,24 +507,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             Sentry.Exception("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
 
 
-    # The length the printer ID should be.
-    # Note that the max length for a subdomain part (strings between . ) is 63 chars!
-    # Making this a max of 60 chars allows for the service to use 3 chars prefixes for inter-service calls.
-    c_OctoEverywherePrinterIdIdealLength = 60
-    c_OctoEverywherePrinterIdMinLength = 40
-    c_OctoEverywherePrivateKeyLength = 80
-
-    # The url for the add printer process. Note this must have at least one ? and arg because users of it might append &source=blah
-    c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/getstarted?isFromOctoPrint=true&printerid="
-
-    # Returns a new printer Id. This needs to be crypo-random to make sure it's not predictable.
-    def GeneratePrinterId(self):
-        return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(self.c_OctoEverywherePrinterIdIdealLength))
-
-    # Returns a new private key. This needs to be crypo-random to make sure it's not predictable.
-    def GeneratePrivateKey(self):
-        return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(self.c_OctoEverywherePrivateKeyLength))
-
     # Ensures we have generated a printer id and returns it.
     def EnsureAndGetPrinterId(self):
         # Try to get the current.
@@ -536,17 +514,18 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         currentId = self.GetFromSettings("PrinterKey", None)
 
         # Make sure the current ID is valid.
-        if currentId is None or len(currentId) < self.c_OctoEverywherePrinterIdMinLength:
+        if HostCommon.IsPrinterIdValid(currentId) is False:
             if currentId is None:
                 self._logger.info("No printer id found, regenerating.")
             else:
                 self._logger.info("Old printer id of length " + str(len(currentId)) + " is invalid, regenerating.")
+
             # Create and save the new value
-            currentId = self.GeneratePrinterId()
+            currentId = HostCommon.GeneratePrinterId()
             self._logger.info("New printer id is: "+currentId)
 
             # Update the printer URL whenever the id changes to ensure they always stay in sync.
-            self.SetAddPrinterUrl(self.c_OctoEverywhereAddPrinterUrl + currentId)
+            self.SetAddPrinterUrl(HostCommon.GetAddPrinterUrl(currentId, True))
 
             # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
             self.SaveToSettingsIfUpdated("PrinterKey", currentId)
@@ -564,14 +543,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         currentKey = self.GetFromSettings("Pid", None)
 
         # Make sure the current ID is valid.
-        if currentKey is None:
+        if HostCommon.IsPrivateKeyValid(currentKey) is False:
             if currentKey is None:
                 self._logger.info("No private key found, regenerating.")
             else:
                 self._logger.info("Old private key of length " + str(len(currentKey)) + " is invalid, regenerating.")
 
             # Create and save the new value
-            currentKey = self.GeneratePrivateKey()
+            currentKey = HostCommon.GeneratePrivateKey()
 
             # Save - it's important to only call then when the key is updated, since we race the `incompleteStartup` flag
             # around the same time this is accessed. See the comment above with `incompleteStartup` for details.
@@ -656,8 +635,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             OctoHttpRequest.SetLocalHttpProxyIsHttps(frontendIsHttps)
 
             # Run!
-            OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version)
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("Exception thrown out of main runner.", e)

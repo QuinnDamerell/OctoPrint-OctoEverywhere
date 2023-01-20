@@ -6,11 +6,14 @@ from random import randint
 
 import requests
 
-from octoprint_octoeverywhere.gadget import Gadget
-from octoprint_octoeverywhere.requestsutils import RequestsUtils
-from octoprint_octoeverywhere.sentry import Sentry
-from octoprint_octoeverywhere.smartpause import SmartPause
-from octoprint_octoeverywhere.snapshotresizeparams import SnapshotResizeParams
+from .gadget import Gadget
+from .requestsutils import RequestsUtils
+from .sentry import Sentry
+from .compat import Compat
+from .snapshotresizeparams import SnapshotResizeParams
+from .repeattimer import RepeatTimer
+from .snapshothelper import SnapshotHelper
+
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
     # Since most setups don't use this package, we will import it with a try catch and if it fails we
@@ -19,9 +22,6 @@ try:
     from PIL import ImageFile
 except Exception as _:
     pass
-
-from .repeattimer import RepeatTimer
-from .snapshothelper import SnapshotHelper
 
 class ProgressCompletionReportItem:
     def __init__(self, value, reported):
@@ -183,11 +183,12 @@ class NotificationsHandler:
         # See if there is a pause notification suppression set. If this is not null and it was recent enough
         # suppress the notification from firing.
         # If there is no suppression, or the suppression was older than 30 seconds, fire the notification.
-        lastSuppressTimeSec = SmartPause.Get().GetAndResetLastPauseNotificationSuppressionTimeSec()
-        if lastSuppressTimeSec is None or time.time() - lastSuppressTimeSec > 20.0:
-            self._sendEvent("paused")
-        else:
-            self.Logger.info("Not firing the pause notification due to a Smart Pause suppression.")
+        if Compat.HasSmartPause():
+            lastSuppressTimeSec = Compat.GetSmartPause().GetAndResetLastPauseNotificationSuppressionTimeSec()
+            if lastSuppressTimeSec is None or time.time() - lastSuppressTimeSec > 20.0:
+                self._sendEvent("paused")
+            else:
+                self.Logger.info("Not firing the pause notification due to a Smart Pause suppression.")
 
         # Stop the ping timer, so we don't report progress while we are paused.
         self.StopPingTimer()
