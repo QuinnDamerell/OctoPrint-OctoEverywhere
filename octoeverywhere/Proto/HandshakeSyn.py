@@ -139,7 +139,14 @@ class HandshakeSyn(object):
             return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
         return 1
 
-def Start(builder): builder.StartObject(13)
+    # HandshakeSyn
+    def ServerHost(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(30))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
+        return 0
+
+def Start(builder): builder.StartObject(14)
 def HandshakeSynStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -199,6 +206,10 @@ def AddSummonMethod(builder, summonMethod): builder.PrependInt8Slot(12, summonMe
 def HandshakeSynAddSummonMethod(builder, summonMethod):
     """This method is deprecated. Please switch to AddSummonMethod."""
     return AddSummonMethod(builder, summonMethod)
+def AddServerHost(builder, serverHost): builder.PrependInt8Slot(13, serverHost, 0)
+def HandshakeSynAddServerHost(builder, serverHost):
+    """This method is deprecated. Please switch to AddServerHost."""
+    return AddServerHost(builder, serverHost)
 def End(builder): return builder.EndObject()
 def HandshakeSynEnd(builder):
     """This method is deprecated. Please switch to End."""

@@ -17,6 +17,7 @@ from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
+from octoeverywhere.Proto.ServerHost import ServerHost
 
 from .apicommandhandler import ApiCommandHandler
 from .localauth import LocalAuth
@@ -635,7 +636,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             OctoHttpRequest.SetLocalHttpProxyIsHttps(frontendIsHttps)
 
             # Run!
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version)
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version, ServerHost.OctoPrint)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("Exception thrown out of main runner.", e)

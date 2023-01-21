@@ -26,7 +26,7 @@ from .Proto import OctoSummon
 
 class OctoSession:
 
-    def __init__(self, octoStream, logger, printerId, privateKey, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion):
+    def __init__(self, octoStream, logger, printerId, privateKey, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion, serverHostType):
         self.ActiveWebStreams = {}
         self.ActiveWebStreamsLock = threading.Lock()
         self.IsAcceptingStreams = True
@@ -39,6 +39,7 @@ class OctoSession:
         self.isPrimarySession = isPrimarySession
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
+        self.ServerHostType = serverHostType
 
         # Create our server auth helper.
         self.ServerAuth = ServerAuthHelper(self.Logger)
@@ -238,7 +239,7 @@ class OctoSession:
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
                 rasChallenge, rasChallengeKeyVerInt,
                 SnapshotHelper.Get().GetWebcamFlipH(), SnapshotHelper.Get().GetWebcamFlipV(), SnapshotHelper.Get().GetWebcamRotate90(),
-                summonMethod)
+                summonMethod, self.ServerHostType)
 
             # Send!
             self.OctoStream.SendMsg(buf)

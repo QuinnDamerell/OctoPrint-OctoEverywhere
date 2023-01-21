@@ -9,7 +9,7 @@ from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.snapshothelper import SnapshotHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
-
+from octoeverywhere.Proto.ServerHost import ServerHost
 
 from .config import Config
 from .logger import LoggerInit
@@ -86,7 +86,7 @@ class MoonrakerHost:
             # Setup the snapshot helper
             SnapshotHelper.Init(self.Logger, None)
 
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr)
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("!! Exception thrown out of main host run function.", e)

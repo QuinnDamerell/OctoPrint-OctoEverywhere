@@ -12,6 +12,7 @@ from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.notificationshandler import NotificationsHandler
+from octoeverywhere.Proto.ServerHost import ServerHost
 #from .threaddebug import ThreadDebug
 
 from .localauth import LocalAuth
@@ -166,5 +167,5 @@ if __name__ == '__main__':
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, PrinterId)
-    oe = OctoEverywhere(OctoEverywhereWsUri, PrinterId, PrivateKey, logger, uiPopInvoker, statusHandler, "1.10.20")
+    oe = OctoEverywhere(OctoEverywhereWsUri, PrinterId, PrivateKey, logger, uiPopInvoker, statusHandler, "1.10.20", ServerHost.OctoPrint)
     oe.RunBlocking()

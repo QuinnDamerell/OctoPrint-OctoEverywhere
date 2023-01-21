@@ -67,18 +67,13 @@ managed_services:
             logger.info("Failed to find moonraker allowed services file.")
             return
 
-        # Figure out our service name
-        # For one instance setups where moonraker is on the default port, the service name is octoeverywhere.
-        # If there is more than one instance, the name is octoeverywhere-<port>
-        # Doing this, allows us to make the text look nicer in the UI.
-        serviceName = serviceName.replace("octoeverywhere", "OctoEverywhere")
-
         # Check if we are already in the file.
         with open(allowedServiceFile, "r", encoding="utf-8") as file:
             lines = file.readlines()
             for l in lines:
                 # Use in, because the lines will have new lines and such.
-                if serviceName.lower() in l.lower():
+                # Match case, because the entry in the file must match the service name case.
+                if serviceName in l:
                     logger.info("We found our name existing in the moonraker allowed service file, so there's nothing to do.")
                     return
 
