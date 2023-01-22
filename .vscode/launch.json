@@ -16,7 +16,7 @@
                 //""                                // The exe name - This is actually passed correctly
                 "/home/pi/printer_data/config",     // Moonraker config dir
                 "/home/pi/printer_data/logs",       // Moonraker logs dir
-                "/home/pi/octoeverywhere-storage",  // OE local storage dir
+                "/home/pi/printer_data/octoeverywhere-store",  // OE local storage dir
                 "octoeverywhere",                   // The service name
                 "/home/pi/octoeverywhere-env",      // The root of our py virt env
                 "/home/pi/octoeverywhere"           // The repo root

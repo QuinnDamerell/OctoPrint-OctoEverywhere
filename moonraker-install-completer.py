@@ -243,24 +243,36 @@ class MoonrakerInstaller:
         self.ServiceName = "octoeverywhere"+portSuffixStr
         self.ServiceFilePath = os.path.join(MoonrakerInstaller.SystemdServiceFilePath, self.ServiceName+".service")
 
-        # We need a folder to write our local settings into.
-        self.LocalFileStoragePath = os.path.join(self.UserHomePath, "octoeverywhere-storage"+portSuffixStr)
+        # According to the mainsail developers, the moonraker folder layout is like:
+        #   <name>_data
+        #       - config
+        #           - Config files
+        #       - logs
+        #       - ...
+        # But, this layout is only for newish installs. There was an older layout from the past.
+        # Also, this folder structure is bound to one instance of moonraker, so everything in here is unique per instance.
 
-        # We assume the klipper config folder is the folder the moonraker config is in.
+        # Find the base config folder.
         self.KlipperConfigFolder = os.path.abspath(os.path.join(self.MOONRAKER_CONFIG, os.pardir))
+
+        # Find the root folder for this moonraker instance.
+        klipperBaseFolder = os.path.abspath(os.path.join(self.KlipperConfigFolder, os.pardir))
+
+        # Since the moonraker config folder is unique to the moonraker instance, we will put our storage in it.
+        # This also prevents the user from messing with it accidentally.
+        self.LocalFileStoragePath = os.path.join(klipperBaseFolder, "octoeverywhere-store")
 
         # There's not a great way to find the log path from the config file, since the only place it's located is in the systemd file.
         self.KlipperLogFolder = None
 
         # First, we will see if we can find a named folder relative to this folder.
-        configParentPath = os.path.abspath(os.path.join(self.KlipperConfigFolder, os.pardir))
-        self.KlipperLogFolder = os.path.join(configParentPath, "logs")
+        self.KlipperLogFolder = os.path.join(klipperBaseFolder, "logs")
         if os.path.exists(self.KlipperLogFolder) is False:
             # Try an older path
-            self.KlipperLogFolder = os.path.join(configParentPath, "klipper_logs")
+            self.KlipperLogFolder = os.path.join(klipperBaseFolder, "klipper_logs")
             if os.path.exists(self.KlipperLogFolder) is False:
                 # Failed, make a folder in the user's home.
-                self.KlipperLogFolder = os.path.join(self.UserHomePath, "octoeverywhere-logs"+portSuffixStr)
+                self.KlipperLogFolder = os.path.join(klipperBaseFolder, "octoeverywhere-logs"+portSuffixStr)
                 # Create the folder and force the permissions so our service can write to it.
                 self.EnsureDirExists(self.KlipperLogFolder, True)
 
@@ -374,7 +386,7 @@ class MoonrakerInstaller:
         # Look for these sections, but don't throw if they aren't there. The service first creates the file and then
         # adds these, so it might be the case that the service just hasn't created them yet.
         section = "server"
-        key = "printerid"
+        key = "printer_id"
         if config.has_section(section) is False:
             Info("Server section not found in OE config.")
             return None

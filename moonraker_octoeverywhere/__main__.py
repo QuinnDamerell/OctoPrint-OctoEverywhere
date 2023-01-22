@@ -3,16 +3,6 @@ import sys
 
 from .moonrakerhost import MoonrakerHost
 
-# sys.argv = [
-#     "", # Program Name
-#     "/home/pi/printer_data/config", # Moonraker config dir
-#     "/home/pi/printer_data/logs",   # Moonraker logs dir
-#     "/home/pi/octoeverywhere-storage", # OE local storage dir
-#     "octoeverywhere",               # The service name
-#     "/home/pi/octoeverywhere-env",  # The root of our py virt env
-#     "/home/pi/octoeverywhere"       # The repo root
-# ]
-
 if __name__ == '__main__':
     # The config and settings path is passed as the first arg when the service runs.
     # This allows us to run multiple services instances, each pointing at it's own config.

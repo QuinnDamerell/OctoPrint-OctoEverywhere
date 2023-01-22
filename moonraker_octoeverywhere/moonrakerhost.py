@@ -105,7 +105,7 @@ class MoonrakerHost:
     def DoFirstTimeSetupIfNeeded(self, klipperConfigDir, serviceName):
         # Try to get the printer id from the config.
         isFirstRun = False
-        printerId = self.Config.Get(Config.ServerSection, Config.PrinterIdKey, None)
+        printerId = self.GetPrinterId()
         if HostCommon.IsPrinterIdValid(printerId) is False:
             if printerId is None:
                 self.Logger.info("No printer id was found, generating one now!")
@@ -118,10 +118,10 @@ class MoonrakerHost:
             printerId = HostCommon.GeneratePrinterId()
 
             # Save it
-            self.Config.Set(Config.ServerSection, Config.PrinterIdKey, printerId)
+            self.Config.SetStr(Config.ServerSection, Config.PrinterIdKey, printerId)
             self.Logger.info("New printer id created: %s", printerId)
 
-        privateKey = self.Config.Get(Config.ServerSection, Config.PrivateKeyKey, None)
+        privateKey = self.GetPrivateKey()
         if HostCommon.IsPrivateKeyValid(privateKey) is False:
             if privateKey is None:
                 self.Logger.info("No private key was found, generating one now!")
@@ -132,7 +132,7 @@ class MoonrakerHost:
             privateKey = HostCommon.GeneratePrivateKey()
 
             # Save it
-            self.Config.Set(Config.ServerSection, Config.PrivateKeyKey, privateKey)
+            self.Config.SetStr(Config.ServerSection, Config.PrivateKeyKey, privateKey)
             self.Logger.info("New private key created.")
 
         # If this is the first run, do other stuff as well.
@@ -141,11 +141,11 @@ class MoonrakerHost:
 
 
     def GetPrinterId(self):
-        return self.Config.Get(Config.ServerSection, Config.PrinterIdKey, None)
+        return self.Config.GetStr(Config.ServerSection, Config.PrinterIdKey, None)
 
 
     def GetPrivateKey(self):
-        return self.Config.Get(Config.ServerSection, Config.PrivateKeyKey, None)
+        return self.Config.GetStr(Config.ServerSection, Config.PrivateKeyKey, None)
 
 
     #

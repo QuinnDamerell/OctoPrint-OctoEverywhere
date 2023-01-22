@@ -3,6 +3,8 @@ import sys
 import logging
 import logging.handlers
 
+from .config import Config
+
 class LoggerInit:
 
     # Sets up and returns the main logger object
@@ -12,13 +14,13 @@ class LoggerInit:
 
         # From the possible logging values, read the current value from the config.
         # If there is no value or it doesn't map, use the default.
-        logLevelMap = {
-                'DEBUG': logging.DEBUG,
-                'INFO' : logging.INFO,
-                'WARNING': logging.WARNING,
-                'ERROR': logging.ERROR,
-        }
-        logLevel = logLevelMap.get(config.Get("log", "level", "INFO").upper(), logging.INFO)
+        possibleValueList = [
+            "DEBUG",
+            "INFO",
+            "WARNING",
+            "ERROR",
+        ]
+        logLevel = config.GetStrIfInAcceptableList(Config.LoggingSection, Config.LogLevelKey, "INFO", possibleValueList)
         logger.setLevel(logLevel)
 
         # Define our format
@@ -30,7 +32,11 @@ class LoggerInit:
         logger.addHandler(std)
 
         # Setup the file logger
-        file = logging.handlers.RotatingFileHandler(os.path.join(klipperLogDir, "octoeverywhere.log"), maxBytes=20000000, backupCount=5)
+        maxFileSizeBytes = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxSizeMbKey, 5, 1, 5000) * 1024 * 1024
+        maxFileCount = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxCountKey, 3, 1, 50)
+        file = logging.handlers.RotatingFileHandler(
+            os.path.join(klipperLogDir, "octoeverywhere.log"),
+            maxBytes=maxFileSizeBytes, backupCount=maxFileCount)
         file.setFormatter(formatter)
         logger.addHandler(file)
 
