@@ -9,7 +9,6 @@ disable=
     W0601, # OctoPrint global funciton issues
     R0901, # Too many ancestors
     R0904, # too-many-public-methods
-    R0201, # Method could be a function (no-self-use)
     R0903, # too-few-public-methods
     R0902, # Too many instance attributes
     R1716, # Simplify chained comparison between the operands (chained-comparison)
