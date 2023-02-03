@@ -55,6 +55,42 @@ class UiPopupInvokerStub():
     def ShowUiPopup(self, title, text, msgType, autoHide):
         self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; AutoHide:"+str(autoHide))
 
+
+
+# Implements a common interface shared by OctoPrint and Moonraker.
+class MockPrinterStateObject:
+
+    def __init__(self, logger):
+        self.Logger = logger
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # This function will get the estimated time remaining for the current print.
+    # Returns -1 if the estimate is unknown.
+    def GetPrintTimeRemainingEstimateInSeconds(self):
+        # We failed.
+        return -1
+
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # Returns the current zoffset if known, otherwise -1.
+    def GetCurrentZOffset(self):
+        # Failed to find it.
+        return -1
+
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # Returns True if the printing timers (notifications and gadget) should be running, which is only the printing state. (not even paused)
+    # False if the printer state is anything else, which means they should stop.
+    def ShouldPrintingTimersBeRunning(self):
+        return False
+
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # If called while the print state is "Printing", returns True if the print is currently in the warm-up phase. Otherwise False
+    def IsPrintWarmingUp(self):
+        return False
+
+
 # A mock of the popup UI interface.
 NotificationHandlerInstance = None
 class StatusChangeHandlerStub():
@@ -148,7 +184,7 @@ if __name__ == '__main__':
         OctoPingPong.Get().DisablePrimaryOverride()
 
     # Setup the notification handler.
-    NotificationHandlerInstance = NotificationsHandler(logger)
+    NotificationHandlerInstance = NotificationsHandler(logger, MockPrinterStateObject(logger))
 
     # Setup the api command handler if needed for testing.
     # apiCommandHandler = ApiCommandHandler(logger, NotificationHandlerInstance, None)
