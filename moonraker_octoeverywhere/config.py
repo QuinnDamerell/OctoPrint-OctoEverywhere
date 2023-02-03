@@ -15,9 +15,13 @@ class Config:
 
     # Other config items.
     LoggingSection = "logging"
+    RelaySection = "relay"
+
     LogLevelKey = "log_level"
     LogFileMaxSizeMbKey = "max_file_size_mb"
     LogFileMaxCountKey = "max_file_count"
+
+    RelayFrontEndPortKey = "frontend_port"
 
     def __init__(self, klipperConfigPath) -> None:
         # Define our config path

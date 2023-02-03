@@ -16,6 +16,7 @@ from .logger import LoggerInit
 from .uipopupinvoker import UiPopupInvoker
 from .updatemanager import UpdateManager
 from .version import Version
+from .moonrakerclient import MoonrakerClient
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -41,7 +42,7 @@ class MoonrakerHost:
             raise
 
 
-    def RunBlocking(self, klipperConfigDir, klipperLogDir, localStorageDir, serviceName, pyVirtEnvRoot, repoRoot):
+    def RunBlocking(self, klipperConfigDir, moonrakerConfigFilePath, localStorageDir, serviceName, pyVirtEnvRoot, repoRoot):
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("##################################")
@@ -70,10 +71,13 @@ class MoonrakerHost:
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
 
-            # Setup the http requester
-            OctoHttpRequest.SetLocalHttpProxyPort(80)
+            # Setup the http requester. We default to port 80 and assume the frontend can be found there.
+            # TODO - parse nginx to see what front ends exist and make them switchable
+            # TODO - detect HTTPS port if 80 is not bound.
+            frontendPort = self.Config.GetInt(Config.RelaySection, Config.RelayFrontEndPortKey, 80)
+            OctoHttpRequest.SetLocalHttpProxyPort(frontendPort)
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
-            OctoHttpRequest.SetLocalOctoPrintPort(80)
+            OctoHttpRequest.SetLocalOctoPrintPort(frontendPort)
 
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
@@ -86,6 +90,12 @@ class MoonrakerHost:
             # Setup the snapshot helper
             SnapshotHelper.Init(self.Logger, None)
 
+            # When everything is setup, start the moonraker client object.
+            # This also creates the Notifications Handler and Gadget objects.
+            # This doesn't start the moon raker connection, we don't do that until OE connects.
+            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId)
+
+            # Now start the main runner!
             oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker)
             oe.RunBlocking()
         except Exception as e:
@@ -152,7 +162,10 @@ class MoonrakerHost:
     # StatusChangeHandler Interface
     #
     def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
-        self.Logger.info("OnPrimaryConnectionEstablished")
+        self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
+        # Now that we are connected, start the moonraker client.
+        # We do this after the connection incase it needs to send any notifications or messages when starting.
+        MoonrakerClient.Get().StartRunningIfNotAlready(octoKey)
 
 
     #

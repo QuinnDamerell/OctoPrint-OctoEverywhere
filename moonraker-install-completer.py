@@ -5,6 +5,7 @@ import json
 import subprocess
 import time
 import traceback
+import base64
 # pylint: disable=import-error # This package only exists on Linux, but this script only runs on Linux.
 import pwd
 
@@ -301,14 +302,26 @@ class MoonrakerInstaller:
             Info("Service file already exists, recreating.")
 
         # Create the service file.
+
+        # First, we create a json object that we use as arguments. Using a json object makes parsing and such more flexible.
+        # We base64 encode the json string to prevent any arg passing issues with things like quotes, spaces, or other chars.
+        argsJson = json.dumps({
+            'KlipperConfigFolder': self.KlipperConfigFolder,
+            'MoonrakerConfigFile': self.MOONRAKER_CONFIG,
+            'KlipperLogFolder': self.KlipperLogFolder,
+            'LocalFileStoragePath': self.LocalFileStoragePath,
+            'ServiceName': self.ServiceName,
+            'VirtualEnvPath': self.VirtualEnvPath,
+            'RepoRootFolder': self.RepoRootFolder,
+        })
+        # We have to convert to bytes -> encode -> back to string.
+        argsJsonBase64 = base64.urlsafe_b64encode(bytes(argsJson, "utf-8")).decode("utf-8")
+
         d = {
             'RepoRootFolder': self.RepoRootFolder,
             'UserName': self.UserName,
             'VirtualEnvPath': self.VirtualEnvPath,
-            'LocalFileStoragePath': self.LocalFileStoragePath,
-            'KlipperConfigFolder': self.KlipperConfigFolder,
-            'KlipperLogFolder': self.KlipperLogFolder,
-            'ServiceName': self.ServiceName,
+            'ServiceBase64JsonArgs': argsJsonBase64
         }
         s = '''\
     # OctoEverywhere For Moonraker Service
@@ -325,7 +338,7 @@ class MoonrakerInstaller:
     Type=simple
     User={UserName}
     WorkingDirectory={RepoRootFolder}
-    ExecStart={VirtualEnvPath}/bin/python3 -m moonraker_octoeverywhere {KlipperConfigFolder} {KlipperLogFolder} {LocalFileStoragePath} {ServiceName} {VirtualEnvPath} {RepoRootFolder}
+    ExecStart={VirtualEnvPath}/bin/python3 -m moonraker_octoeverywhere "{ServiceBase64JsonArgs}"
     Restart=always
     # Since we will only restart on a fatal error, set the restart time to be a bit higher, so we don't spin and spam.
     RestartSec=10

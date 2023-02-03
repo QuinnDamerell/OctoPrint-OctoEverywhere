@@ -19,6 +19,7 @@ from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.Proto.ServerHost import ServerHost
 
+from .printerstateobject import PrinterStateObject
 from .apicommandhandler import ApiCommandHandler
 from .localauth import LocalAuth
 from .slipstream import Slipstream
@@ -169,9 +170,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Init the mdns helper
         MDns.Init(self._logger, self.get_plugin_data_folder())
 
+        # Setup our printer state object, that implements the interface.
+        printerStateObject = PrinterStateObject(self._logger, self._printer)
+
         # Create the notification object now that we have the logger.
-        self.NotificationHandler = NotificationsHandler(self._logger, self._printer)
+        self.NotificationHandler = NotificationsHandler(self._logger, printerStateObject)
         self.NotificationHandler.SetPrinterId(printerId)
+        printerStateObject.SetNotificationHandler(self.NotificationHandler)
 
         # Create the API command handler now that we have the logger
         self.ApiCommandHandler = ApiCommandHandler(self._logger, self.NotificationHandler, self._printer, self)
@@ -330,7 +335,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # pylint: disable=arguments-renamed
     def on_print_progress(self, storage, path, progressInt):
         if self.NotificationHandler is not None:
-            self.NotificationHandler.OnPrintProgress(progressInt)
+            self.NotificationHandler.OnPrintProgress(progressInt, None)
 
     #
     # Functions for the Event Handler Mixin

@@ -25,9 +25,10 @@ class Gadget:
     # Assuming 20 second checks, 100 checks is about 30 minutes of data.
     c_maxScoreHistoryItems = 100
 
-    def __init__(self, logger, notificationHandler):
+    def __init__(self, logger, notificationHandler, printerStateInterface):
         self.Logger = logger
         self.NotificationHandler = notificationHandler
+        self.PrinterStateInterface = printerStateInterface
         self.Lock = threading.Lock()
         self.Timer = None
         self.DefaultProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
@@ -179,7 +180,7 @@ class Gadget:
 
             # Check to ensure we should still be running. If the state is anything other than printing, we shouldn't be running
             # We will be restarted on a new print starting or when resume is called.
-            if self.NotificationHandler.ShouldPrintingTimersBeRunning() is False:
+            if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
                 self.Logger.warn("Gadget timer is running but the print state is not printing, so the timer is topping.")
                 self.StopWatching()
                 return
@@ -187,7 +188,7 @@ class Gadget:
             # If we should be running, then the print status is "PRINTING".
             # Next check to see if the printer is warming up. If we are warming up, we don't want to let Gadget predict.
             # We do this because during warm-up the printer can ooze some filament out of the hot end, that we don't want to predict on.
-            if self.NotificationHandler.IsPrintWarmingUp():
+            if self.PrinterStateInterface.IsPrintWarmingUp():
                 self.Logger.info("Waiting to predict with Gadget because the printer is warming up.")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
                 return

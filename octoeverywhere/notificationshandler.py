@@ -42,20 +42,21 @@ class NotificationsHandler:
     # This is the max snapshot file size we will allow to be sent.
     MaxSnapshotFileSizeBytes = 2 * 1024 * 1024
 
-    def __init__(self, logger, octoPrintPrinterObject = None):
+    def __init__(self, logger, printerStateInterface):
         self.Logger = logger
         # On init, set the key to empty.
         self.OctoKey = None
         self.PrinterId = None
         self.ProtocolAndDomain = "https://printer-events-v1-oeapi.octoeverywhere.com"
-        self.OctoPrintPrinterObject = octoPrintPrinterObject
+        self.PrinterStateInterface = printerStateInterface
         self.PingTimer = None
-        self.Gadget = Gadget(logger, self)
+        self.Gadget = Gadget(logger, self, self.PrinterStateInterface)
 
         # Define all the vars
         self.CurrentFileName = ""
         self.CurrentPrintStartTime = time.time()
-        self.OctoPrintReportedProgressInt = 0
+        self.FallbackProgressInt = 0
+        self.MoonrakerReportedProgressFloat_CanBeNone = None
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
         self.zOffsetLowestSeenMM = 1337.0
@@ -68,18 +69,23 @@ class NotificationsHandler:
         self.SpammyEventLock = threading.Lock()
 
         # Since all of the commands don't send things we need, we will also track them.
-        self.ResetForNewPrint()
+        self.ResetForNewPrint(None)
 
 
-    def ResetForNewPrint(self):
+    def ResetForNewPrint(self, restoreDurationOffsetSec_OrNone):
         self.CurrentFileName = ""
         self.CurrentPrintStartTime = time.time()
-        self.OctoPrintReportedProgressInt = 0
+        self.FallbackProgressInt = 0
+        self.MoonrakerReportedProgressFloat_CanBeNone = None
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
+
+        # If we have a restore time offset, back up the start time to make it reflect when the print started.
+        if restoreDurationOffsetSec_OrNone is not None:
+            self.CurrentPrintStartTime -= restoreDurationOffsetSec_OrNone
 
         # Each time a print starts, we generate a fixed length random id to identify it.
         # This just helps the server keep track of events that are related.
@@ -105,6 +111,7 @@ class NotificationsHandler:
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(70.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(80.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(90.0, False))
+
 
     def SetPrinterId(self, printerId):
         self.PrinterId = printerId
@@ -135,6 +142,66 @@ class NotificationsHandler:
         return self.Gadget
 
 
+    # A special case used by moonraker to restore the state of an ongoing print that we don't know of.
+    # What we want to do is check moonraker's current state and our current state, to see if there's anything that needs to be synced.
+    # Remember that we might be syncing because our service restarted during a print, or moonraker restarted, so we might already have
+    # the correct context.
+    #
+    # Most importantly, we want to make sure the ping timer and thus Gadget get restored to the correct states.
+    #
+    def OnRestorePrintIfNeeded(self, moonrakerPrintStatsState, fileName_CanBeNone, totalDurationFloatSec_CanBeNone):
+        if moonrakerPrintStatsState == "printing":
+            # There is an active print. Check our state.
+            if self._IsPingTimerRunning():
+                self.Logger.info("Moonraker client detected an active print and our timers are already running, there's nothing to do.")
+                return
+            else:
+                self.Logger.info("Moonraker client detected an active print but we aren't tracking it, so we will restore now.")
+                # We need to do the restore of a active print.
+        elif moonrakerPrintStatsState == "paused":
+            # There is a print currently paused, check to see if we have a filename, which indicates if we know of a print or not.
+            if self._HasCurrentPrintFileName():
+                self.Logger.info("Moonraker client detected a paused print, but we are already tracking a print, so there's nothing to do.")
+                return
+            else:
+                self.Logger.info("Moonraker client detected a paused print, but we aren't tracking any prints, so we will restore now")
+        else:
+            # There's no print running.
+            if self._IsPingTimerRunning():
+                self.Logger.info("Moonraker client detected no active print but our ping timers ARE RUNNING. Stopping them now.")
+                self.StopPingTimer()
+                return
+            else:
+                self.Logger.info("Moonraker client detected no active print and no ping timers are running, so there's nothing to do.")
+                return
+
+        # If we are here, we need to restore a print.
+        # The print can be in an active or paused state.
+
+        # Always restart for a new print.
+        # If totalDurationFloatSec_CanBeNone is not None, it will update the print start time to offset it correctly.
+        # This is important so our time elapsed number is correct.
+        self.ResetForNewPrint(totalDurationFloatSec_CanBeNone)
+
+        # Always set the file name, if not None
+        if fileName_CanBeNone is not None:
+            self._updateCurrentFileName(fileName_CanBeNone)
+
+        # Make sure the timers are set correctly
+        if moonrakerPrintStatsState == "printing":
+            # If we have a total duration, use it to offset the "hours reported" so our time based notifications
+            # are correct.
+            hoursReportedInt = 0
+            if totalDurationFloatSec_CanBeNone is not None:
+                # Convert seconds to hours, floor the value, make it an int.
+                hoursReportedInt = int(math.floor(totalDurationFloatSec_CanBeNone / 60.0 / 60.0))
+            # Setup the timers, with hours reported, to make sure that the ping timer and Gadget are running.
+            self.SetupPingTimer(False, hoursReportedInt)
+        else:
+            # On paused, make sure they are stopped.
+            self.StopPingTimer()
+
+
     # Only used for testing.
     def OnTest(self):
         self._sendEvent("test")
@@ -152,9 +219,9 @@ class NotificationsHandler:
 
     # Fired when a print starts.
     def OnStarted(self, fileName):
-        self.ResetForNewPrint()
+        self.ResetForNewPrint(None)
         self._updateCurrentFileName(fileName)
-        self.SetupPingTimer(True)
+        self.SetupPingTimer(True, None)
         self._sendEvent("started")
         self.Logger.info("New print started; PrintId: "+str(self.PrintId))
 
@@ -189,6 +256,8 @@ class NotificationsHandler:
                 self._sendEvent("paused")
             else:
                 self.Logger.info("Not firing the pause notification due to a Smart Pause suppression.")
+        else:
+            self._sendEvent("paused")
 
         # Stop the ping timer, so we don't report progress while we are paused.
         self.StopPingTimer()
@@ -200,7 +269,7 @@ class NotificationsHandler:
         self._sendEvent("resume")
 
         # Start the ping timer, to ensure it's running now.
-        self.SetupPingTimer(False)
+        self.SetupPingTimer(False, None)
 
 
     # Fired when OctoPrint or the printer hits an error.
@@ -229,12 +298,12 @@ class NotificationsHandler:
         # Ensure we are in state where we should fire this (printing)
         # Otherwise we will set the flag to disable the message, which will be reset on the
         # next print start.
-        if self.ShouldPrintingTimersBeRunning() is False:
+        if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
             self.HasSendFirstLayerDoneMessage = True
             return
 
         # Get the current zoffset value.
-        currentZOffsetMM = self.GetCurrentZOffset()
+        currentZOffsetMM = self.PrinterStateInterface.GetCurrentZOffset()
 
         # Make sure we know it.
         if currentZOffsetMM == -1:
@@ -297,10 +366,21 @@ class NotificationsHandler:
 
 
     # Fired when a print is making progress.
-    def OnPrintProgress(self, progressInt):
+    def OnPrintProgress(self, octoPrintProgressInt, moonrakerProgressFloat):
 
-        # Update the local reported value.
-        self.OctoPrintReportedProgressInt = progressInt
+        # Always set the fallback progress, which will be used if something better can be found.
+        # For moonraker, make sure to set the reported float. See _getCurrentProgressFloat about why.
+        #
+        # Note that in moonraker this is called very frequently, so this logic must be fast!
+        #
+        if octoPrintProgressInt is not None:
+            self.FallbackProgressInt = octoPrintProgressInt
+        elif moonrakerProgressFloat is not None:
+            self.FallbackProgressInt = int(moonrakerProgressFloat)
+            self.MoonrakerReportedProgressFloat_CanBeNone = moonrakerProgressFloat
+        else:
+            self.Logger.error("OnPrintProgress called with no args!")
+            return
 
         # Get the computed print progress value. (see _getCurrentProgressFloat about why)
         computedProgressFloat = self._getCurrentProgressFloat()
@@ -512,7 +592,7 @@ class NotificationsHandler:
 
 
     # Assuming the current time is set at the start of the printer correctly
-    def _getCurrentDurationSecFloat(self):
+    def GetCurrentDurationSecFloat(self):
         return float(time.time() - self.CurrentPrintStartTime)
 
 
@@ -531,30 +611,41 @@ class NotificationsHandler:
 
     # Updates the current file name, if there is a new name to set.
     def _updateCurrentFileName(self, fileNameStr):
-        if len(fileNameStr) == 0:
+        if fileNameStr is None or len(fileNameStr) == 0:
             return
         self.CurrentFileName = fileNameStr
 
 
     # Returns the current print progress as a float.
     def _getCurrentProgressFloat(self):
+        # Special platform logic here!
+        # Since this function is used to get the progress for all platforms, we need to do things a bit differently.
+
+        # For moonraker, the progress is reported via websocket messages super frequently. There's no better way to compute the
+        # progress (unlike OctoPrint) so we just want to use it, if we have it.
+        #
+        # We also don't want to constantly call GetPrintTimeRemainingEstimateInSeconds on moonraker, since it will result in a lot of RPC calls.
+        if self.MoonrakerReportedProgressFloat_CanBeNone is not None:
+            return self.MoonrakerReportedProgressFloat_CanBeNone
+
+        # Then for OctoPrint, we will do the following logic to get a better progress.
         # OctoPrint updates us with a progress int, but it turns out that's not the same progress as shown in the web UI.
         # The web UI computes the progress % based on the total print time and ETA. Thus for our notifications to have accurate %s that match
         # the web UIs, we will also try to do the same.
         try:
             # Try to get the print time remaining, which will use smart ETA plugins if possible.
-            ptrSec = self.GetPrintTimeRemainingEstimateInSeconds()
+            ptrSec = self.PrinterStateInterface.GetPrintTimeRemainingEstimateInSeconds()
             # If we can't get the ETA, default to OctoPrint's value.
             if ptrSec == -1:
-                return float(self.OctoPrintReportedProgressInt)
+                return float(self.FallbackProgressInt)
 
             # Compute the total print time (estimated) and the time thus far
-            currentDurationSecFloat = self._getCurrentDurationSecFloat()
+            currentDurationSecFloat = self.GetCurrentDurationSecFloat()
             totalPrintTimeSec = currentDurationSecFloat + ptrSec
 
             # Sanity check for / 0
             if totalPrintTimeSec == 0:
-                return float(self.OctoPrintReportedProgressInt)
+                return float(self.FallbackProgressInt)
 
             # Compute the progress
             printProgressFloat = float(currentDurationSecFloat) / float(totalPrintTimeSec) * float(100.0)
@@ -570,7 +661,7 @@ class NotificationsHandler:
             Sentry.ExceptionNoSend("_getCurrentProgressFloat failed to compute progress.", e)
 
         # On failure, default to what OctoPrint has reported.
-        return float(self.OctoPrintReportedProgressInt)
+        return float(self.FallbackProgressInt)
 
 
     # Sends the event
@@ -672,7 +763,7 @@ class NotificationsHandler:
         args["FileName"] = str(self.CurrentFileName)
 
         # Always include the ETA, note this will be -1 if the time is unknown.
-        timeRemainEstStr =  str(self.GetPrintTimeRemainingEstimateInSeconds())
+        timeRemainEstStr =  str(self.PrinterStateInterface.GetPrintTimeRemainingEstimateInSeconds())
         args["TimeRemainingSec"] = timeRemainEstStr
 
         # Always add the current progress
@@ -686,7 +777,7 @@ class NotificationsHandler:
         args["ProgressPercentage"] = str(int(progressFloat))
 
         # Always add the current duration
-        args["DurationSec"] = str(self._getCurrentDurationSecFloat())
+        args["DurationSec"] = str(self.GetCurrentDurationSecFloat())
 
         # Also always include a snapshot if we can get one.
         files = {}
@@ -697,122 +788,18 @@ class NotificationsHandler:
         return [args, files]
 
 
-    # This function will get the estimated time remaining for the current print.
-    # It will first try to get a more accurate from plugins like PrintTimeGenius, otherwise it will fallback to the default OctoPrint total print time estimate.
-    # Returns -1 if the estimate is unknown.
-    def GetPrintTimeRemainingEstimateInSeconds(self):
-
-        # If the printer object isn't set, we can't get an estimate.
-        if self.OctoPrintPrinterObject is None:
-            return -1
-
-        # Try to get the progress object from the current data. This is at least set by things like PrintTimeGenius and is more accurate.
-        try:
-            currentData = self.OctoPrintPrinterObject.get_current_data()
-            if "progress" in currentData:
-                if "printTimeLeft" in currentData["progress"]:
-                    # When the print is just starting, the printTimeLeft will be None.
-                    printTimeLeftSec = currentData["progress"]["printTimeLeft"]
-                    if printTimeLeftSec is not None:
-                        printTimeLeft = int(float(currentData["progress"]["printTimeLeft"]))
-                        return printTimeLeft
-        except Exception as e:
-            Sentry.Exception("Failed to find progress object in printer current data.", e)
-
-        # If that fails, try to use the default OctoPrint estimate.
-        try:
-            jobData = self.OctoPrintPrinterObject.get_current_job()
-            if "estimatedPrintTime" in jobData:
-
-                # When the print is first starting and there is no known time, this can be none.
-                # In that case, return -1, unknown.
-                if jobData["estimatedPrintTime"] is None:
-                    return -1
-
-                printTimeEstSec = int(jobData["estimatedPrintTime"])
-                # Compute how long this print has been running and subtract
-                # Sanity check the duration isn't longer than the ETA.
-                currentDurationSec = int(self._getCurrentDurationSecFloat())
-                if currentDurationSec > printTimeEstSec:
-                    return 0
-                return printTimeEstSec - currentDurationSec
-        except Exception as e:
-            Sentry.Exception("Failed to find time estimate from OctoPrint. ", e)
-
-        # We failed.
-        return -1
-
-    # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self):
-        if self.OctoPrintPrinterObject is None:
-            return -1
-
-        # Try to get the current value from the data.
-        try:
-            # We have seen in client logs sometimes this value doesn't exist,
-            # and sometime it does, but it's just None.
-            currentData = self.OctoPrintPrinterObject.get_current_data()
-            if "currentZ" in currentData and currentData["currentZ"] is not None:
-                currentZ = float(currentData["currentZ"])
-                return currentZ
-        except Exception as e:
-            Sentry.Exception("Failed to find current z offset.", e)
-
-        # Failed to find it.
-        return -1
-
-
-    # Returns True if the printing timers (notifications and gadget) should be running.
-    # False if the printer state is anything else, which means they should stop.
-    def ShouldPrintingTimersBeRunning(self):
-        # Get the current state
-        # States can be found here:
-        # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
-        # Note! The docs seem to be missing some states at the moment, like STATE_RESUMING, which can be found in comm.py
-        state = "UNKNOWN"
-        if self.OctoPrintPrinterObject is None:
-            self.Logger.warn("ShouldPrintingTimersBeRunning doesn't have a OctoPrint printer object.")
-            state = "PRINTING"
-        else:
-            state = self.OctoPrintPrinterObject.get_state_id()
-
-        # Return if the state is printing or not.
-        if state == "PRINTING" or state == "RESUMING" or state == "FINISHING":
-            return True
-
-        self.Logger.warn("ShouldPrintingTimersBeRunning is not in a printing state: "+str(state))
-        return False
-
-
-    # If called while the print state is "Printing", returns True if the print is currently in the warm-up phase. Otherwise False
-    def IsPrintWarmingUp(self):
-        # Using the current state, if the print time is None or 0, the print hasn't started because the system is warming up..
-        # Using the get_current_data in this way is the same way the /api/job uses it.
-        if self.OctoPrintPrinterObject is None:
-            self.Logger.warn("IsPrintWarmingUp doesn't have a OctoPrint printer object.")
-            return False
-
-        # Get the current data.
-        currentData = self.OctoPrintPrinterObject.get_current_data()
-        if currentData is not None:
-            progress = currentData["progress"]
-            if progress is not None:
-                printTime = progress["printTime"]
-                if printTime is None or int(printTime) == 0:
-                    return True
-
-        # We aren't warming up.
-        return False
-
-
     # Starts a ping timer which is used to fire "every x minutes events".
-    def SetupPingTimer(self, resetHoursReported):
+    def SetupPingTimer(self, resetHoursReported, restoreActionSetHoursReportedInt_OrNone):
         # First, stop any timer that's currently running.
         self.StopPingTimer()
 
         # Make sure the hours flag is cleared when we start a new timer.
         if resetHoursReported:
             self.PingTimerHoursReported = 0
+
+        # If this is a restore, set the value
+        if restoreActionSetHoursReportedInt_OrNone is not None:
+            self.PingTimerHoursReported = int(restoreActionSetHoursReportedInt_OrNone)
 
         # Setup the new timer
         intervalSec = 60 * 60 # Fire every hour.
@@ -836,12 +823,22 @@ class NotificationsHandler:
         self.Gadget.StopWatching()
 
 
+    # Let's the caller know if the ping timer is running, and thus we are tracking a print.
+    def _IsPingTimerRunning(self):
+        return self.PingTimer is not None
+
+
+    # Returns if we have a current print file name, indication if we are setup to track a print at all, even a paused one.
+    def _HasCurrentPrintFileName(self):
+        return self.CurrentFileName is not None and len(self.CurrentFileName) > 0
+
+
     # Fired when the ping timer fires.
     def PingTimerCallback(self):
 
         # Double check the state is still printing before we send the notification.
         # Even if the state is paused, we want to stop, since the resume command will restart the timers
-        if self.ShouldPrintingTimersBeRunning() is False:
+        if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
             self.Logger.info("Notification ping timer state doesn't seem to be printing, stopping timer.")
             self.StopPingTimer()
             return
