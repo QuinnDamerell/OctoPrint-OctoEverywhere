@@ -10,7 +10,8 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
 
-# The response from a json rpc request.
+# The response object for a json rpc request.
+# Contains information on the state, and if successful, the result.
 class JsonRpcResponse:
 
     # Our specific errors
@@ -18,14 +19,14 @@ class JsonRpcResponse:
     OE_ERROR_TIMEOUT = 99990002
     OE_ERROR_EXCEPTION = 99990003
 
-    def __init__(self, ResultObj, ErrorCode = 0, ErrorStr = None) -> None:
-        self.Result = ResultObj
-        self.ErrorCode = ErrorCode
-        self.ErrorStr = ErrorStr
-        if ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
-            ErrorStr = "Timeout waiting for RPC response."
-        if ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
-            ErrorStr = "No active websocket connected."
+    def __init__(self, resultObj, errorCode = 0, errorStr = None) -> None:
+        self.Result = resultObj
+        self.ErrorCode = errorCode
+        self.ErrorStr = errorStr
+        if self.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
+            self.ErrorStr = "Timeout waiting for RPC response."
+        if self.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+            self.ErrorStr = "No active websocket connected."
 
     def HasError(self) -> bool:
         return self.ErrorCode != 0
@@ -44,8 +45,7 @@ class JsonRpcResponse:
 
 
 # This class is our main interface to interact with moonraker. This includes the logic to make
-# http requests with moonraker, as well as logic to maintain a websocket connection for requests
-# and notifications.
+# requests with moonraker and logic to maintain a websocket connection.
 class MoonrakerClient:
 
     # The max amount of time we will wait for a request before we timeout.
@@ -105,6 +105,7 @@ class MoonrakerClient:
         # Only start the WS thread if it's not already running
         if self.WsThreadRunning is False:
             self.WsThreadRunning = True
+            self.Logger.info("Starting Moonraker connection client.")
             self.WsThread.start()
 
 
@@ -281,8 +282,7 @@ class MoonrakerClient:
         # These objects can come in all shapes and sizes. So we only look for exactly what we need, if we don't find it
         # We ignore the object, someone else might match it.
 
-        # When a print starts, we get a "notify_status_update" - "state": "printing" which is ambiguous with resume.
-        # But we also get "notify_history_changed" - "action": "added" with the file name, so we use that.
+        # Used to watch for print starts, ends, and failures.
         if method == "notify_history_changed":
             actionContainerObj = self._GetWsMsgParam(msg, "action")
             if actionContainerObj is not None:
@@ -295,6 +295,24 @@ class MoonrakerClient:
                             fileName = jobObj["filename"]
                             self.MoonrakerCompat.OnPrintStart(fileName)
                             return
+                elif action == "finished":
+                    # This can be a finish canceled or failed.
+                    # Oddly, this doesn't fire for print complete.
+                    #
+                    # We need to be able to find filename, total_duration, and status.
+                    jobContainerObj = self._GetWsMsgParam(msg, "job")
+                    if jobContainerObj is not None:
+                        jobObj = jobContainerObj["job"]
+                        if "filename" in jobObj:
+                            fileName = jobObj["filename"]
+                            if "total_duration" in jobObj:
+                                totalDurationSecFloat = jobObj["total_duration"]
+                                if "status" in jobObj:
+                                    status = jobObj["status"]
+                                    # We have everything we need
+                                    if status == "cancelled":
+                                        self.MoonrakerCompat.OnFailedOrCancelled(fileName, totalDurationSecFloat)
+                                        return
 
         if method == "notify_status_update":
             # This is shared by a few things, so get it once.
@@ -312,10 +330,15 @@ class MoonrakerClient:
                         return
                     # Resume is hard, because it's hard to tell the difference between printing we get from the starting message
                     # and printing we get from a resume. So the way we do it is by looking at the progress, to see if it's just starting or not.
+                    # 0.01 == 1%, so if the print is resumed before then, this won't fire. For small prints, we need to have a high threshold,
+                    # so they don't trigger something too much lower too easily.
                     elif state == "printing":
-                        if progressFloat_CanBeNone is None or progressFloat_CanBeNone > 0.0001:
+                        if progressFloat_CanBeNone is None or progressFloat_CanBeNone > 0.01:
                             self.MoonrakerCompat.OnPrintResumed()
                             return
+                    elif state == "complete":
+                        self.MoonrakerCompat.OnDone()
+                        return
 
             # Report progress. Do this after the others so they will report before a potential progress update.
             # Progress updates super frequently (like once a second) so there's plenty of chances.
@@ -494,6 +517,7 @@ class MoonrakerClient:
             if "method" in msgObj and msgObj["method"] == "notify_klippy_disconnected":
                 self.Logger.info("Moonraker client received notify_klippy_disconnected notification, so we will restart our client connection.")
                 self._RestartWebsocket()
+                self.MoonrakerCompat.KlippyDisconnected()
                 return
 
             # We use a queue to handle all non reply messages to prevent this thread from getting blocked.
@@ -560,6 +584,10 @@ class MoonrakerCompat:
     def __init__(self, logger, printerId) -> None:
         self.Logger = logger
 
+        # This indicates if we are ready to process notifications, so we don't
+        # fire any notifications before we run the print state sync logic.
+        self.IsReadyToProcessNotifications = False
+
         # This class owns the notification handler.
         # We pass our self as the Printer State Interface
         self.NotificationHandler = NotificationsHandler(self.Logger, self)
@@ -575,6 +603,26 @@ class MoonrakerCompat:
     #
 
 
+    # TODO - Notification Type Status!
+    #  OnStarted - Partial
+    #     Everything works except the estimated print time, because our current api can't compute it from the initial data.
+    #  OnFailed - Partial
+    #     But right now we don't differentiate between failed due to error and failed due to user cancel.
+    #  OnDone - Done
+    #  OnPaused - Done
+    #  OnResume - Done
+    #  OnError - Partial
+    #     We report if klippy disconnects from moonraker
+    #  OnWaiting - Missing
+    #     Unsure if we get this from moonraker
+    #  OnZChange - Done
+    #  OnFilamentChange - Missing
+    #     Unsure if we get this from moonraker
+    #  OnUserInteractionNeeded - Missing
+    #     Unsure if we get this from moonraker
+    #  OnPrintProgress - Done
+
+
     # Called when a new websocket is established to moonraker.
     def OnMoonrakerClientConnected(self):
         # Before we restore state, setup the webcams paths if needed. We do this before since the state setup
@@ -586,14 +634,47 @@ class MoonrakerCompat:
         # notification system having their progress threads running correctly.
         self._InitPrintStateForFreshConnect()
 
+        # We are ready to process notifications!
+        self.IsReadyToProcessNotifications = True
+
 
     # Called when a new print is starting.
     def OnPrintStart(self, fileName):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
         self.NotificationHandler.OnStarted(fileName)
+
+
+    def OnDone(self):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
+        # For moonraker we don't know the file name and duration, so we pass None to use
+        # past collected values.
+        self.NotificationHandler.OnDone(None, None)
+
+
+    # Called when a print ends due to a failure or was cancelled
+    def OnFailedOrCancelled(self, fileName, totalDurationSecFloat):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
+        # The API expects the duration as a float of seconds, as a string.
+        # The API expects either cancelled or error for the reason. This is the only two strings OctoPrint produces.
+        # We can't differentiate between printer errors and user canceling the print right now, so we always use cancelled.
+        self.NotificationHandler.OnFailed(fileName, str(totalDurationSecFloat), "cancelled")
 
 
     # Called the the print is paused.
     def OnPrintPaused(self):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
         # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
         stats = self._GetCurrentPrintStats()
         fileName = None
@@ -604,6 +685,10 @@ class MoonrakerCompat:
 
     # Called the the print is resumed.
     def OnPrintResumed(self):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
         # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
         stats = self._GetCurrentPrintStats()
         fileName = None
@@ -614,8 +699,26 @@ class MoonrakerCompat:
 
     # Called when there's a print percentage progress update.
     def OnPrintProgress(self, progressFloat):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
         # Moonraker uses from 0->1 to progress while we assume 100->0
         self.NotificationHandler.OnPrintProgress(None, progressFloat*100.0)
+
+        # For moonraker, we also fire the OnZChange on progress updates.
+        # This basically gives us a constant timer to fire it on. It doesn't do any work if it already fired the
+        # first layer complete notification.
+        self.NotificationHandler.OnZChange()
+
+
+    # Called when moonraker's connection to klippy disconnects.
+    def KlippyDisconnected(self):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
+        self.NotificationHandler.OnError("Klipper Disconnected")
 
 
     #
@@ -658,7 +761,21 @@ class MoonrakerCompat:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # Returns the current zoffset if known, otherwise -1.
     def GetCurrentZOffset(self):
-        # TODO
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
+        {
+            "objects": {
+                "toolhead": None
+            }
+        })
+        if result.HasError():
+            self.Logger.error("GetCurrentZOffset failed to query toolhead objects: "+result.GetLoggingErrorStr())
+            return False
+        try:
+            res = result.GetResult()["status"]
+            zAxisPositionFloat = res["toolhead"]["position"][2]
+            return zAxisPositionFloat
+        except Exception as e:
+            Sentry.Exception("GetCurrentZOffset exception. ", e)
         return -1
 
 

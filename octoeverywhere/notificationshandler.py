@@ -64,6 +64,7 @@ class NotificationsHandler:
         self.ProgressCompletionReported = []
         self.PrintId = 0
         self.PrintStartTimeSec = 0
+        self.RestorePrintProgressPercentage = False
 
         self.SpammyEventTimeDict = {}
         self.SpammyEventLock = threading.Lock()
@@ -82,6 +83,7 @@ class NotificationsHandler:
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
+        self.RestorePrintProgressPercentage = False
 
         # If we have a restore time offset, back up the start time to make it reflect when the print started.
         if restoreDurationOffsetSec_OrNone is not None:
@@ -153,26 +155,26 @@ class NotificationsHandler:
         if moonrakerPrintStatsState == "printing":
             # There is an active print. Check our state.
             if self._IsPingTimerRunning():
-                self.Logger.info("Moonraker client detected an active print and our timers are already running, there's nothing to do.")
+                self.Logger.info("Moonraker client sync state: Detected an active print and our timers are already running, there's nothing to do.")
                 return
             else:
-                self.Logger.info("Moonraker client detected an active print but we aren't tracking it, so we will restore now.")
+                self.Logger.info("Moonraker client sync state: Detected an active print but we aren't tracking it, so we will restore now.")
                 # We need to do the restore of a active print.
         elif moonrakerPrintStatsState == "paused":
             # There is a print currently paused, check to see if we have a filename, which indicates if we know of a print or not.
             if self._HasCurrentPrintFileName():
-                self.Logger.info("Moonraker client detected a paused print, but we are already tracking a print, so there's nothing to do.")
+                self.Logger.info("Moonraker client sync state: Detected a paused print, but we are already tracking a print, so there's nothing to do.")
                 return
             else:
-                self.Logger.info("Moonraker client detected a paused print, but we aren't tracking any prints, so we will restore now")
+                self.Logger.info("Moonraker client sync state: Detected a paused print, but we aren't tracking any prints, so we will restore now")
         else:
             # There's no print running.
             if self._IsPingTimerRunning():
-                self.Logger.info("Moonraker client detected no active print but our ping timers ARE RUNNING. Stopping them now.")
+                self.Logger.info("Moonraker client sync state: Detected no active print but our ping timers ARE RUNNING. Stopping them now.")
                 self.StopPingTimer()
                 return
             else:
-                self.Logger.info("Moonraker client detected no active print and no ping timers are running, so there's nothing to do.")
+                self.Logger.info("Moonraker client sync state: Detected no active print and no ping timers are running, so there's nothing to do.")
                 return
 
         # If we are here, we need to restore a print.
@@ -187,6 +189,13 @@ class NotificationsHandler:
         if fileName_CanBeNone is not None:
             self._updateCurrentFileName(fileName_CanBeNone)
 
+        # Disable the first layer complete logic, since we don't know what the base z-axis was
+        self.HasSendFirstLayerDoneMessage = True
+
+        # Set this flag so the first progress update will restore the progress to the current progress without
+        # firing all of the progress points we missed.
+        self.RestorePrintProgressPercentage = True
+
         # Make sure the timers are set correctly
         if moonrakerPrintStatsState == "printing":
             # If we have a total duration, use it to offset the "hours reported" so our time based notifications
@@ -195,7 +204,9 @@ class NotificationsHandler:
             if totalDurationFloatSec_CanBeNone is not None:
                 # Convert seconds to hours, floor the value, make it an int.
                 hoursReportedInt = int(math.floor(totalDurationFloatSec_CanBeNone / 60.0 / 60.0))
+
             # Setup the timers, with hours reported, to make sure that the ping timer and Gadget are running.
+            self.Logger.info("Moonraker client sync state: Restoring printing timer with existing duration of "+str(totalDurationFloatSec_CanBeNone))
             self.SetupPingTimer(False, hoursReportedInt)
         else:
             # On paused, make sure they are stopped.
@@ -235,9 +246,10 @@ class NotificationsHandler:
 
 
     # Fired when a print done
-    def OnDone(self, fileName, durationSecStr):
-        self._updateCurrentFileName(fileName)
-        self._updateToKnownDuration(durationSecStr)
+    # For moonraker, these vars aren't known, so they are None
+    def OnDone(self, fileName_CanBeNone, durationSecStr_CanBeNone):
+        self._updateCurrentFileName(fileName_CanBeNone)
+        self._updateToKnownDuration(durationSecStr_CanBeNone)
         self.StopPingTimer()
         self._sendEvent("done")
 
@@ -289,7 +301,8 @@ class NotificationsHandler:
         self.OnPaused(self.CurrentFileName)
 
 
-    # Fired WHENEVER the z axis changes.
+    # For OctoPrint this fires - EVERY TIME the z-axis changes.
+    # For Moonraker, this fires on every progress update.
     def OnZChange(self):
         # If we have already sent the first layer done message there's nothing to do.
         if self.HasSendFirstLayerDoneMessage:
@@ -331,9 +344,9 @@ class NotificationsHandler:
             # The zOffset is higher than the lowest we have seen.
             self.zOffsetNotAtLowestCount += 1
 
-        # After zOffsetNotAtLowestCount >= 2, we consider the first layer to be done.
+        # After zOffsetNotAtLowestCount >= 3, we consider the first layer to be done.
         # This means we won't fire the event until we see two zmoves that are above the known min.
-        if self.zOffsetNotAtLowestCount < 2:
+        if self.zOffsetNotAtLowestCount < 3:
             return
 
         # Send the message.
@@ -404,6 +417,14 @@ class NotificationsHandler:
 
             # Make sure this is marked reported.
             item.SetReported(True)
+
+        # The first progress update after a restore won't fire any notifications. We use this update
+        # to clear out all progress points under the current progress, so we don't fire them.
+        # Do this before we check if we had something to send, so we always do this on the first tick
+        # after a restore.
+        if self.RestorePrintProgressPercentage:
+            self.RestorePrintProgressPercentage = False
+            return
 
         # Return if there is nothing to do.
         if progressToSendFloat < 0.1:
@@ -598,8 +619,9 @@ class NotificationsHandler:
 
     # When OctoPrint tells us the duration, make sure we are in sync.
     def _updateToKnownDuration(self, durationSecStr):
-        # If the string is empty return.
-        if len(durationSecStr) == 0:
+        # If the string is empty or None, return.
+        # This is important for Moonraker
+        if durationSecStr is None or len(durationSecStr) == 0:
             return
 
         # If we fail this logic don't kill the event.
@@ -611,6 +633,7 @@ class NotificationsHandler:
 
     # Updates the current file name, if there is a new name to set.
     def _updateCurrentFileName(self, fileNameStr):
+        # The None check is important for Moonraker
         if fileNameStr is None or len(fileNameStr) == 0:
             return
         self.CurrentFileName = fileNameStr

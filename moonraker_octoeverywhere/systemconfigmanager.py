@@ -1,11 +1,12 @@
 import os
 
-class UpdateManager:
+class SystemConfigManager:
 
     # This can't change or it will break old installs.
-    c_updateConfigFileName = "octoeverywhere-update.cfg"
+    c_updateConfigFileName = "octoeverywhere-system.cfg"
 
     # We use config files to integrate into moonraker's update manager, which allows our plugin repo to stay updated.
+    # This also write a block that's used to allow the announcement system to show updates from our repo.
     # This function ensures they exist and are up to date. If not, they are fixed.
     @staticmethod
     def EnsureUpdateManagerFilesSetup(logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot):
@@ -28,13 +29,18 @@ requirements: requirements.txt
 install_script: install.sh
 managed_services:
   {ServiceName}
-    '''.format(**d)
+
+# This allows users of OctoEverywhere to get announcements from the system.
+[announcements]
+subscriptions:
+    octoeverywhere
+'''.format(**d)
 
         # Create the expected file path of our update config.
-        oeUpdateConfigFile = os.path.join(klipperConfigDir, UpdateManager.c_updateConfigFileName)
+        oeUpdateConfigFile = os.path.join(klipperConfigDir, SystemConfigManager.c_updateConfigFileName)
 
         # Ensure that the main moonraker config file has the include for our sub config file
-        UpdateManager._ensureMoonrakerConfigHasUpdateConfigInclude(klipperConfigDir, logger)
+        SystemConfigManager._ensureMoonrakerConfigHasUpdateConfigInclude(klipperConfigDir, logger)
 
         # See if there's an existing file, and if the file contents match this exactly.
         # If so, there's no need to update it.
@@ -93,7 +99,7 @@ managed_services:
             raise Exception("Failed to find the "+moonrakerConfigFileName+" file in dir. Expected: "+moonrakerConfigFilePath)
 
         # Look for our include in the main moonraker config file.
-        includeText = "[include "+UpdateManager.c_updateConfigFileName+"]"
+        includeText = "[include "+SystemConfigManager.c_updateConfigFileName+"]"
         with open(moonrakerConfigFilePath, "r", encoding="utf-8") as file:
             lines = file.readlines()
             for l in lines:

@@ -14,7 +14,7 @@ from octoeverywhere.Proto.ServerHost import ServerHost
 from .config import Config
 from .logger import LoggerInit
 from .uipopupinvoker import UiPopupInvoker
-from .updatemanager import UpdateManager
+from .systemconfigmanager import SystemConfigManager
 from .version import Version
 from .moonrakerclient import MoonrakerClient
 
@@ -56,7 +56,7 @@ class MoonrakerHost:
             # Before we do this first time setup, make sure our config files are in place. This is important
             # because if this fails it will throw. We don't want to let the user complete the install setup if things
             # with the update aren't working.
-            UpdateManager.EnsureUpdateManagerFilesSetup(self.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot)
+            SystemConfigManager.EnsureUpdateManagerFilesSetup(self.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot)
 
             # Now, detect if this is a new instance and we need to init our global vars. If so, the setup script will be waiting on this.
             self.DoFirstTimeSetupIfNeeded(klipperConfigDir, serviceName)
@@ -75,6 +75,7 @@ class MoonrakerHost:
             # TODO - parse nginx to see what front ends exist and make them switchable
             # TODO - detect HTTPS port if 80 is not bound.
             frontendPort = self.Config.GetInt(Config.RelaySection, Config.RelayFrontEndPortKey, 80)
+            self.Logger.info("Setting up relay with frontend port %s", str(frontendPort))
             OctoHttpRequest.SetLocalHttpProxyPort(frontendPort)
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
             OctoHttpRequest.SetLocalOctoPrintPort(frontendPort)
@@ -147,7 +148,7 @@ class MoonrakerHost:
 
         # If this is the first run, do other stuff as well.
         if isFirstRun:
-            UpdateManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
+            SystemConfigManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
 
 
     def GetPrinterId(self):
