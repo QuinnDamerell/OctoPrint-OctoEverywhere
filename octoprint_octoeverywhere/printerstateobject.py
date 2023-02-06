@@ -84,7 +84,7 @@ class PrinterStateObject:
         state = self.OctoPrintPrinterObject.get_state_id()
 
         # Return if the state is printing or not.
-        if state == "PRINTING" or state == "RESUMING" or state == "FINISHING":
+        if state == "PRINTING" or state == "RESUMING" or state == "FINISHING" or state == "STARTING":
             return True
 
         self.Logger.warn("ShouldPrintingTimersBeRunning is not in a printing state: "+str(state))
@@ -96,11 +96,6 @@ class PrinterStateObject:
     def IsPrintWarmingUp(self):
         # Using the current state, if the print time is None or 0, the print hasn't started because the system is warming up..
         # Using the get_current_data in this way is the same way the /api/job uses it.
-        if self.OctoPrintPrinterObject is None:
-            self.Logger.warn("IsPrintWarmingUp doesn't have a OctoPrint printer object.")
-            return False
-
-        # Get the current data.
         currentData = self.OctoPrintPrinterObject.get_current_data()
         if currentData is not None:
             progress = currentData["progress"]

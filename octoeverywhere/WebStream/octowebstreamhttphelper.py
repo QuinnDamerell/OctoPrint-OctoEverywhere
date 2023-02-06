@@ -12,6 +12,7 @@ from .octoheaderimpl import BaseProtocol
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..snapshothelper import SnapshotHelper
+from ..commandhandler import CommandHandler
 from ..sentry import Sentry
 from ..compat import Compat
 from ..Proto import HttpHeader
@@ -153,6 +154,10 @@ class OctoWebStreamHttpHelper:
         isFromCache = False
         if SnapshotHelper.Get().IsSnapshotOracleRequest(sendHeaders):
             octoHttpResult = SnapshotHelper.Get().MakeHttpCall(httpInitialContext, method, sendHeaders, self.UploadBuffer)
+        # If this is a special command for OctoEverywhere, we handle it differently.
+        elif CommandHandler.Get().IsCommandRequest(httpInitialContext):
+            # This HandleCommand wil return a mock  OctoHttpResult, including a full mock response object.
+            octoHttpResult = CommandHandler.Get().HandleCommand(httpInitialContext, self.UploadBuffer)
         else:
             # For all web requests, check our in memory read-to-go cache.
             # If available, this will return the object. On a miss it will return None
@@ -229,7 +234,7 @@ class OctoWebStreamHttpHelper:
 
                 elif nameLower == "location":
                     # We have noticed that some proxy servers aren't setup correctly to forward the x-forwarded-for and such headers.
-                    # So when the webserver responds back with a 301 or 302, the location header might not have the correct hostname, instead an ip like 127.0.0.1.
+                    # So when the web server responds back with a 301 or 302, the location header might not have the correct hostname, instead an ip like 127.0.0.1.
                     response.headers[name] = HeaderHelper.CorrectLocationResponseHeaderIfNeeded(self.Logger, response.headers[name], sendHeaders)
 
             # We also look at the content-type to determine if we should add compression to this request or not.

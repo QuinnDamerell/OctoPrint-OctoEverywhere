@@ -15,7 +15,7 @@ class SmartPause:
     @staticmethod
     def Init(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj):
         SmartPause._Instance = SmartPause(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj)
-        Compat.SetSmartPause(SmartPause._Instance)
+        Compat.SetSmartPauseInterface(SmartPause._Instance)
 
 
     @staticmethod
@@ -44,11 +44,18 @@ class SmartPause:
         self._ResetScripts()
 
 
-    # Returns None if there is no current suppression or the time of the last time it was requested.
+    # !! Interface Function !! - See compat.py GetSmartPauseInterface for the details.
+    # Returns None if there is no current suppression or the time of the last time it was requested
     def GetAndResetLastPauseNotificationSuppressionTimeSec(self):
         local = self.LastPauseNotificationSuppressionTimeSec
         self.LastPauseNotificationSuppressionTimeSec = None
         return local
+
+
+    # Sets the suppress time to now.
+    def SetLastPauseNotificationSuppressionTimeNow(self):
+        self.Logger.info("Setting pause time to suppress the pause notification.")
+        self.LastPauseNotificationSuppressionTimeSec = time.time()
 
 
     # Set up the scripts and executes a pause!
@@ -151,8 +158,7 @@ class SmartPause:
         # If we are suppressing the notification, set the current time, so we know when we last suppressed.
         # We need to do this before the pause command, so the notification system can get the value on the pause action.
         if suppressNotificationBool is True:
-            self.Logger.info("Setting smart pause time to suppress the pause notification.")
-            self.LastPauseNotificationSuppressionTimeSec = time.time()
+            self.SetLastPauseNotificationSuppressionTimeNow()
 
         # Now call pause on OctoPrint! This pause command will make the OnScriptHook fire, which will consume these scripts we made.
         self.Logger.info("Smart Print scripts created, calling pause on OctoPrint.")

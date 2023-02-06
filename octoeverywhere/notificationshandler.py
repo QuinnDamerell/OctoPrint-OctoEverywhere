@@ -262,8 +262,8 @@ class NotificationsHandler:
         # See if there is a pause notification suppression set. If this is not null and it was recent enough
         # suppress the notification from firing.
         # If there is no suppression, or the suppression was older than 30 seconds, fire the notification.
-        if Compat.HasSmartPause():
-            lastSuppressTimeSec = Compat.GetSmartPause().GetAndResetLastPauseNotificationSuppressionTimeSec()
+        if Compat.HasSmartPauseInterface():
+            lastSuppressTimeSec = Compat.GetSmartPauseInterface().GetAndResetLastPauseNotificationSuppressionTimeSec()
             if lastSuppressTimeSec is None or time.time() - lastSuppressTimeSec > 20.0:
                 self._sendEvent("paused")
             else:
@@ -322,6 +322,12 @@ class NotificationsHandler:
         if currentZOffsetMM == -1:
             return
 
+        # If the value is 0.0, the printer is still warming up or getting ready. We can't print at 0.0, because that's the nozzle touching the plate.
+        # Ignore this value, so we don't lock to it as the "lowest we have seen."
+        # I'm not sure if OctoPrint does this, but moonraker will report the value of 0.0
+        if currentZOffsetMM < 0.0001:
+            return
+
         # The trick here is how we do figure out when the first layer is done with out knowing the print layer height
         # or how the gcode is written to do zhops.
         #
@@ -344,9 +350,13 @@ class NotificationsHandler:
             # The zOffset is higher than the lowest we have seen.
             self.zOffsetNotAtLowestCount += 1
 
-        # After zOffsetNotAtLowestCount >= 3, we consider the first layer to be done.
-        # This means we won't fire the event until we see two zmoves that are above the known min.
-        if self.zOffsetNotAtLowestCount < 3:
+        # After zOffsetNotAtLowestCount >= 10, we consider the first layer to be done.
+        # This means we won't fire the event until we see ten zmoves that are above the known min.
+        # This is a hard metric to get right, but we have to account for z-hops.
+        # The idea is to keep it high, which will delay the first layer notification some, but it will give us more time
+        # to be sure we have moved past the first layer, and the head isn't just z-hoping.
+        # After the head goes back down to the lowest layer, this will reset to 0.
+        if self.zOffsetNotAtLowestCount < 10:
             return
 
         # Send the message.

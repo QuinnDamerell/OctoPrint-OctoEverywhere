@@ -27,14 +27,17 @@ class Compat:
     def HasSlipstream():
         return Compat._SlipstreamObj is not None
 
-
-    _SmartPauseObj = None
+    # Must implement the smart puase interface.
+    #
+    # GetAndResetLastPauseNotificationSuppressionTimeSec - Returns None if there is no current suppression or the time of the last time it was requested
+    #
+    _SmartPauseInterfaceObj = None
     @staticmethod
-    def GetSmartPause():
-        return Compat._SmartPauseObj
+    def GetSmartPauseInterface():
+        return Compat._SmartPauseInterfaceObj
     @staticmethod
-    def SetSmartPause(obj):
-        Compat._SmartPauseObj = obj
+    def SetSmartPauseInterface(obj):
+        Compat._SmartPauseInterfaceObj = obj
     @staticmethod
-    def HasSmartPause():
-        return Compat._SmartPauseObj is not None
+    def HasSmartPauseInterface():
+        return Compat._SmartPauseInterfaceObj is not None

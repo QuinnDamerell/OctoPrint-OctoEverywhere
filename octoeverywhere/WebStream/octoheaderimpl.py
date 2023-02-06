@@ -1,4 +1,4 @@
-from urllib.parse import urlparse
+import sys
 
 from ..sentry import Sentry
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
@@ -138,7 +138,13 @@ class HeaderHelper:
         urlStart = sendHeaders[HeaderHelper.c_xForwardedForProtoHeaderName] + "://" + sendHeaders[HeaderHelper.c_xForwardedForHostHeaderName]
 
         try:
+            # Since urlparse is only support on py3, for py2, we don't support this feature.
+            if sys.version_info[0] < 3:
+                return locationValue
+
             # Parse the existing URL to get the path.
+            # pylint: disable=import-outside-toplevel
+            from urllib.parse import urlparse
             r = urlparse(locationValue)
 
             # Return the new URL

@@ -58,9 +58,19 @@ if __name__ == '__main__':
         print("ERROR! - Exception while parsing service config. "+str(e))
         sys.exit(1)
 
+
+    # For debugging, we also allow an optional dev object to be passed.
+    devConfig_CanBeNone = None
+    try:
+        if len(sys.argv) > 2:
+            devConfig_CanBeNone = json.loads(sys.argv[2])
+        print("Using dev confg: "+sys.argv[2])
+    except Exception as e:
+        print("ERROR! - Failed to parse dev config arg! "+str(e))
+
     # Create and run the main host!
     host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder)
-    host.RunBlocking(KlipperConfigFolder, MoonrakerConfigFile, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder)
+    host.RunBlocking(KlipperConfigFolder, MoonrakerConfigFile, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, devConfig_CanBeNone)
 
     # If we exit here, it's due to an error, since RunBlocking should be blocked forever.
     sys.exit(1)

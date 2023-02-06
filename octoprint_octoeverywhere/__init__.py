@@ -18,9 +18,10 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.Proto.ServerHost import ServerHost
+from octoeverywhere.commandhandler import CommandHandler
 
 from .printerstateobject import PrinterStateObject
-from .apicommandhandler import ApiCommandHandler
+from .octoprintcommandhandler import OctoPrintCommandHandler
 from .localauth import LocalAuth
 from .slipstream import Slipstream
 from .smartpause import SmartPause
@@ -41,7 +42,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Default the handler to None since that will make the var name exist
         # but we can't actually create the class yet until the system is more initialized.
         self.NotificationHandler = None
-        self.ApiCommandHandler = None
         # Init member vars
         self.octoKey = ""
         # Indicates if OnStartup has been called yet.
@@ -178,8 +178,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.NotificationHandler.SetPrinterId(printerId)
         printerStateObject.SetNotificationHandler(self.NotificationHandler)
 
-        # Create the API command handler now that we have the logger
-        self.ApiCommandHandler = ApiCommandHandler(self._logger, self.NotificationHandler, self._printer, self)
+        # Create our command handler and our platform specific command handler.
+        CommandHandler.Init(self._logger, self.NotificationHandler, OctoPrintCommandHandler(self._logger, self._printer, printerStateObject, self))
 
         # Create the smart pause handler
         SmartPause.Init(self._logger, self._printer, self._printer_profile_manager.get_current_or_default())
@@ -209,8 +209,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Functions for the Simple API Mixin
     #
     def get_api_commands(self):
-        # Ask the command handler for the commands.
-        return ApiCommandHandler.GetApiCommands()
+        return dict(
+            # Our frontend js logic calls this API when it detects a local LAN connection and reports the port used.
+            # We use the port internally as a solid indicator for what port the http proxy in front of OctoPrint is on.
+            # This is required because it's common to also have webcams setup behind the http proxy and there's no other
+            # way to query the port value from the system.
+            setFrontendLocalPort=["port"]
+        )
 
     def on_api_command(self, command, data):
         # Note this command is the only not handled in the api command handler.
@@ -240,11 +245,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                 OctoHttpRequest.SetLocalHttpProxyIsHttps(isHttps)
             else:
                 self._logger.info("SetFrontendLocalPort API called with no port.")
-            return None
-        else:
-            # All other commands get handled by the API command handler.
-            return self.ApiCommandHandler.HandleApiCommand(command, data)
-
 
     def on_api_get(self, request):
         # On get requests, share some data.

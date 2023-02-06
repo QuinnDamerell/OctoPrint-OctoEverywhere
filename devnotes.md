@@ -27,7 +27,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/moonraker2.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/command.zip
 
 ## Before checking in:
 - Run in py2 env

@@ -7,16 +7,19 @@ from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.snapshothelper import SnapshotHelper
+from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.ServerHost import ServerHost
 
 from .config import Config
+from .version import Version
 from .logger import LoggerInit
+from .smartpause import SmartPause
 from .uipopupinvoker import UiPopupInvoker
 from .systemconfigmanager import SystemConfigManager
-from .version import Version
 from .moonrakerclient import MoonrakerClient
+from .moonrakercommandhandler import MoonrakerCommandHandler
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -42,7 +45,7 @@ class MoonrakerHost:
             raise
 
 
-    def RunBlocking(self, klipperConfigDir, moonrakerConfigFilePath, localStorageDir, serviceName, pyVirtEnvRoot, repoRoot):
+    def RunBlocking(self, klipperConfigDir, moonrakerConfigFilePath, localStorageDir, serviceName, pyVirtEnvRoot, repoRoot, devConfig_CanBeNone):
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("##################################")
@@ -65,8 +68,15 @@ class MoonrakerHost:
             printerId = self.GetPrinterId()
             privateKey = self.GetPrivateKey()
 
+            # Unpack any dev vars that might exist
+            DevLocalServerAddress_CanBeNone = self.GetDevConfigStr(devConfig_CanBeNone, "LocalServerAddress")
+            if DevLocalServerAddress_CanBeNone is not None:
+                self.Logger.warning("~~~ Using Local Dev Server Address: %s ~~~", DevLocalServerAddress_CanBeNone)
+
             # Init Sentry, but it won't report since we are in dev mode.
             Telemetry.Init(self.Logger)
+            if DevLocalServerAddress_CanBeNone is not None:
+                Telemetry.SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
 
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
@@ -82,22 +92,28 @@ class MoonrakerHost:
 
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
-
-            # TODO - Setup the notifications handler.
-            #      - Setup SnapshotHelper
-            #      - Kill Slipstream
-            #      - Kill LocalAuth
+            if DevLocalServerAddress_CanBeNone is not None:
+                OctoPingPong.Get().DisablePrimaryOverride()
 
             # Setup the snapshot helper
             SnapshotHelper.Init(self.Logger, None)
+
+            # Setup our smart pause helper
+            SmartPause.Init(self.Logger)
 
             # When everything is setup, start the moonraker client object.
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
             MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId)
 
+            # Setup the command handler
+            CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))
+
             # Now start the main runner!
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker)
+            OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
+            if DevLocalServerAddress_CanBeNone is not None:
+                OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("!! Exception thrown out of main host run function.", e)
@@ -157,6 +173,18 @@ class MoonrakerHost:
 
     def GetPrivateKey(self):
         return self.Config.GetStr(Config.ServerSection, Config.PrivateKeyKey, None)
+
+
+    # Tries to load a dev config option as a string.
+    # If not found or it fails, this reutrn None
+    def GetDevConfigStr(self, devConfig, value):
+        if devConfig is None:
+            return None
+        if value in devConfig:
+            v = devConfig[value]
+            if v is not None and len(v) > 0 and v != "None":
+                return v
+        return None
 
 
     #

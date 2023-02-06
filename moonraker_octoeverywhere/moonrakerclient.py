@@ -95,6 +95,14 @@ class MoonrakerClient:
         self.WsThread.daemon = True
 
 
+    def GetNotificationHandler(self):
+        return self.MoonrakerCompat.GetNotificationHandler()
+
+
+    def GetMoonrakerCompat(self):
+        return self.MoonrakerCompat
+
+
     # Actually starts the client running, trying to connect the websocket and such.
     # This is done after the first connection to OctoEverywhere has been established, to ensure
     # the connection is setup before this, incase something needs to use it.
@@ -339,6 +347,18 @@ class MoonrakerClient:
                     elif state == "complete":
                         self.MoonrakerCompat.OnDone()
                         return
+
+            # Check for the webhook container
+            webhookContainerObj = self._GetWsMsgParam(msg, "webhooks")
+            if webhookContainerObj is not None:
+                wh = webhookContainerObj["webhooks"]
+                if "state" in wh:
+                    state = wh["state"]
+                    if state == "shutdown":
+                        errorStr = "Klippy Shutdown"
+                        if "state_message" in wh:
+                            errorStr = wh["state_message"]
+                        self.MoonrakerCompat.KlippyShutdown(errorStr)
 
             # Report progress. Do this after the others so they will report before a potential progress update.
             # Progress updates super frequently (like once a second) so there's plenty of chances.
@@ -588,6 +608,18 @@ class MoonrakerCompat:
         # fire any notifications before we run the print state sync logic.
         self.IsReadyToProcessNotifications = False
 
+        # Used to know when the last shutdown was, since in the case the connection is lost
+        # moonraker also sends a paused message, but the print can't be resumed.
+        self.LastKlippyShutdownMessageSec = 0
+
+        # A cached value for the file meta data that will estimate the time remaining.
+        # This only needs to be called onetime per file name, so we cache it to speed things up
+        # The file name indicates if we have checked and if so the filename, and the int indicates the data.
+        # So filename==blah and value==-1 means we checked, but there's no slicer estimated time.
+        self.FileMetadataCachedEstimatedTimeCurrentFileName = None
+        self.FileMetadataCachedEstimatedTimeSec = -1.0
+        self._ResetFileMetadataEstimatedTimeCache()
+
         # This class owns the notification handler.
         # We pass our self as the Printer State Interface
         self.NotificationHandler = NotificationsHandler(self.Logger, self)
@@ -598,14 +630,17 @@ class MoonrakerCompat:
         self.NotificationHandler.SetOctoKey(octoKey)
 
 
+    def GetNotificationHandler(self):
+        return self.NotificationHandler
+
+
     #
     # Events
     #
 
 
     # TODO - Notification Type Status!
-    #  OnStarted - Partial
-    #     Everything works except the estimated print time, because our current api can't compute it from the initial data.
+    #  OnStarted - Done
     #  OnFailed - Partial
     #     But right now we don't differentiate between failed due to error and failed due to user cancel.
     #  OnDone - Done
@@ -646,6 +681,10 @@ class MoonrakerCompat:
 
         self.NotificationHandler.OnStarted(fileName)
 
+        # This cache is dependent on the file name, but since we started a new print
+        # reset it since this could be a new print with the same name.
+        self._ResetFileMetadataEstimatedTimeCache()
+
 
     def OnDone(self):
         # Only process notifications when ready, aka after state sync.
@@ -673,6 +712,13 @@ class MoonrakerCompat:
     def OnPrintPaused(self):
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
+            return
+
+        # When the connection to the printer is lost mid-print, moonraker sends the klippy_shutdown
+        # message but also followed by a print_stats state paused. This doesn't make sense, because
+        # the print isn't paused and can't be resumed. So we use this logic to skip that notification.
+        deltaFromShutdownSec = time.time() - self.LastKlippyShutdownMessageSec
+        if deltaFromShutdownSec < 5.0:
             return
 
         # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
@@ -721,6 +767,17 @@ class MoonrakerCompat:
         self.NotificationHandler.OnError("Klipper Disconnected")
 
 
+    # Called when moonraker finds klippy has shutdown.
+    # Not sure all of the times this happens, but it does happen when the printer disconnects from klippy during a print (aka pull the usb)
+    def KlippyShutdown(self, errorStr):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
+        self.LastKlippyShutdownMessageSec = time.time()
+        self.NotificationHandler.OnError(errorStr)
+
+
     #
     # Printer State Interface
     #
@@ -733,29 +790,13 @@ class MoonrakerCompat:
         {
             "objects": {
                 "virtual_sdcard": None,
-                "print_stats": None
+                "print_stats": None,
+                "gcode_move": None,
             }
         })
-        if result.HasError():
-            self.Logger.error("GetPrintTimeRemainingEstimateInSeconds failed to query print objects: "+result.GetLoggingErrorStr())
-            return -1
-        # This is how the moonraker doc suggests we compute ETA, without a file metadata time.
-        # TODO - We should try to do this with the file meta, otherwise on start the ETA is unknown.
-        # The downside of the file metadata is I don't know how accurate it is, since it might not know live print settings.
-        try:
-            res = result.GetResult()["status"]
-            printDurationSec = res["print_stats"]["print_duration"]
-            progressFloat = res["virtual_sdcard"]["progress"]
-            totalTimeSec = printDurationSec / progressFloat
-            etaSec = totalTimeSec - printDurationSec
-            # On start, printDurationSec will be 0, so this will compute to 0, which makes no sense.
-            # So we just return unknown.
-            if totalTimeSec < 0.0001:
-                return -1
-            return int(etaSec)
-        except Exception as e:
-            Sentry.Exception("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
-        return -1
+        # Like on OctoPrint, this logic is complicated.
+        # So we use a shared common function to handle it.
+        return int(self.GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(result))
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
@@ -804,19 +845,8 @@ class MoonrakerCompat:
                 "print_stats": None
             }
         })
-        if result.HasError():
-            self.Logger.error("IsPrintWarmingUp failed to query print objects: "+result.GetLoggingErrorStr())
-            return False
-        try:
-            res = result.GetResult()["status"]
-            state = res["print_stats"]["state"]
-            printDurationSec = res["print_stats"]["print_duration"]
-            if state == "printing" and printDurationSec < 0.00001:
-                return True
-            return False
-        except Exception as e:
-            Sentry.Exception("IsPrintWarmingUp exception. ", e)
-        return False
+        # Use the common helper function.
+        return self.CheckIfPrinterIsWarmingUp_WithPrintStats(result)
 
 
     #
@@ -862,6 +892,143 @@ class MoonrakerCompat:
             self.Logger.error("Moonraker client didn't find required field in _GetCurrentPrintStats. "+json.dumps(printStats))
             return None
         return printStats
+
+
+    # A common function to check for the "warming up" state.
+    # Returns True if the printer is warming up, otherwise False
+    def CheckIfPrinterIsWarmingUp_WithPrintStats(self, result):
+        # Check the result.
+        if result.HasError():
+            self.Logger.error("CheckIfPrinterIsWarmingUp_WithPrintStats failed to query print objects: "+result.GetLoggingErrorStr())
+            return False
+
+        try:
+            res = result.GetResult()["status"]
+            state = res["print_stats"]["state"]
+            printDurationSec = res["print_stats"]["print_duration"]
+            # This is how we define warming up. The state is printing but the print duration is very low.
+            # Print duration only counts while the print is actually running, thus it excludes the warmup period.
+            if state == "printing" and printDurationSec < 0.00001:
+                return True
+            return False
+        except Exception as e:
+            Sentry.Exception("IsPrintWarmingUp exception. ", e)
+        return False
+
+
+    # Using the result of printer.objects.query with print_stats and virtual_sdcard, this will get the estimated time remaining in the best way possible.
+    # If it can be gotten, it's returned as an int.
+    # If it fails, it's returns -1
+    def GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(self, result):
+        # This logic is taken from the moonraker docs, that suggest how to find a good ETA
+        # https://moonraker.readthedocs.io/en/latest/web_api/#basic-print-status
+        #
+        # From what we have seen, this is what we ended up with.
+        #
+        # There are three ways to compute the ETA
+        #   1) Read it from the file if the slicer produces it
+        #   2) Use the elapsed time and the current % to guess the total time
+        #   3) Use the filament stat of how much filament is going to be used vs how much has been used. (mainsail does this)
+        #
+        # From our testing, it seems that #1 is the most accurate, if it's possible to get.
+        # If we can get it, we use it, if not, we fallback to #2.
+        #
+        try:
+            # Ensure the result is valid.
+            if result.HasError():
+                return -1
+
+            # Validate we have what we need.
+            res = result.GetResult()["status"]
+            if "print_stats" not in res or "virtual_sdcard" not in res or "gcode_move" not in res:
+                self.Logger.error("GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult passed a result with missing objects")
+                return -1
+
+            # Try to get the vars we need.
+            # Use the print duration, since that's only the time spent printing (excluding warming up and pause time.)
+            printDurationSec = res["print_stats"]["print_duration"]
+            fileName = res["print_stats"]["filename"]
+            progressFloat = res["virtual_sdcard"]["progress"]
+            # The runtime configured speed of the printer currently. Where 1.0 is 100%, 2.0 is 200%
+            speedFactorFloat = res["gcode_move"]["speed_factor"]
+            inverseSpeedFactorFloat = 1.0/speedFactorFloat
+
+            # If possible, get the estimated slicer time from the file metadata.
+            # This will return -1 if it's not known
+            if fileName is not None and len(fileName) > 0:
+                fileMetadataEstimatedTimeFloatSec = self._GetFileMetaEstimatedTimeFloatSec_IfKnown(fileName)
+                if fileMetadataEstimatedTimeFloatSec > 0:
+                    # If we get a valid ETA from the slicer, we will use it. From what we have seen, the slicer ETA
+                    # is usually more accurate than moonraker's, at the time of writing (2/5/2023)
+                    # This logic handles the progress being 0 just fine.
+                    timeConsumedFloatSec = progressFloat * fileMetadataEstimatedTimeFloatSec
+                    metadataEtaFloatSec = fileMetadataEstimatedTimeFloatSec - timeConsumedFloatSec
+                    # Before returning, we need to offset by the runtime speed, which will skew based on it.
+                    # For example, a speed of 200% will reduce the ETA by half.
+                    return int(metadataEtaFloatSec * inverseSpeedFactorFloat)
+
+            # If we didn't get a valid file metadata ETA, use a less accurate fallback.
+
+            # To start, if the progress time is really low (or 0), we can't compute a ETA.
+            if progressFloat < 0.0001:
+                return int(printDurationSec * inverseSpeedFactorFloat)
+
+            # Compute the ETA as suggested in the moonraker docs.
+            totalTimeSec = printDurationSec / progressFloat
+            basicEtaFloatSec = totalTimeSec - printDurationSec
+
+            # Before returning, we need to offset by the runtime speed, which will skew based on it.
+            # For example, a speed of 200% will reduce the ETA by half.
+            return int(basicEtaFloatSec * inverseSpeedFactorFloat)
+
+        except Exception as e:
+            Sentry.Exception("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
+        return -1
+
+
+    def _ResetFileMetadataEstimatedTimeCache(self):
+        self.FileMetadataCachedEstimatedTimeCurrentFileName = None
+        self.FileMetadataCachedEstimatedTimeSec = -1.0
+
+
+    # If the estimated time for the print can be gotten from the file metadata, this will return it
+    # It it's not known, returns -1
+    def _GetFileMetaEstimatedTimeFloatSec_IfKnown(self, filename):
+        # Check to see if we have checked for this file before.
+        if self.FileMetadataCachedEstimatedTimeCurrentFileName is not None:
+            # Check if it's the same file, case sensitive.
+            if self.FileMetadataCachedEstimatedTimeCurrentFileName == filename:
+                # Return the last result, this maybe valid or not.
+                return self.FileMetadataCachedEstimatedTimeSec
+
+        # The filename changed or we don't have one at all.
+        # Reset which will reset the cached time to -1.
+        self._ResetFileMetadataEstimatedTimeCache()
+
+        # Make the call.
+        result = MoonrakerClient.Get().SendJsonRpcRequest("server.files.metadata",
+        {
+            "filename": filename
+        })
+        # If we fail this call, return unknown.
+        if result.HasError():
+            self.Logger.error("_GetFileMetaEstimatedTimeFloatSec_IfKnown failed to get file meta. "+result.GetLoggingErrorStr())
+            return -1.0
+
+        # If we got here, we know we got a good result.
+        # Set the cached vars so we don't call again.
+        self.FileMetadataCachedEstimatedTimeCurrentFileName = filename
+        self.FileMetadataCachedEstimatedTimeSec = -1.0
+
+        # Get the value, if it exists and it's valid.
+        res = result.GetResult()
+        if "estimated_time" in res:
+            value = float(res["estimated_time"])
+            if value > 0.1:
+                self.FileMetadataCachedEstimatedTimeSec = float(res["estimated_time"])
+
+        self.Logger.info("Updating cached file metadata data estimated time for file "+filename+" to "+str(self.FileMetadataCachedEstimatedTimeSec) +" seconds")
+        return self.FileMetadataCachedEstimatedTimeSec
 
 
     # Queries moonraker for the camera config, and if found, setups up the snapshot system from it's defaults.
