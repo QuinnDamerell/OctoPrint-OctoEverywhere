@@ -1,7 +1,8 @@
+import json
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 
-from .moonrakerclient import MoonrakerClient
+from .moonrakerclient import MoonrakerClient, JsonRpcResponse
 from .smartpause import SmartPause
 
 # This class implements the Platform Command Handler Interface
@@ -118,9 +119,70 @@ class MoonrakerCommandHandler:
 
 
     # !! Platform Command Handler Interface Function !!
+    # This must check that the printer state is valid for the pause and the plugin is connected to the host.
+    # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
     def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup):
+        # Check the state and that we have a connection to the host.
+        result = self._CheckIfConnectedAndForExpectedStates(["printing"])
+        if result is not None:
+            return result
 
+        # The smart pause logic handles all pause commands.
+        return SmartPause.Get().ExecuteSmartPause(suppressNotificationBool)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This must check that the printer state is valid for the resume and the plugin is connected to the host.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def ExecuteResume(self):
+        # Check the state and that we have a connection to the host.
+        result = self._CheckIfConnectedAndForExpectedStates(["paused"])
+        if result is not None:
+            return result
+
+        # Do the resume.
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.resume", {})
+        if result.HasError():
+            self.Logger.error("ExecuteResume failed to request resume. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Failed to request resume")
+
+        # Check the response
+        if result.GetResult() != "ok":
+            self.Logger.error("ExecuteResume got an invalid request response. "+json.dumps(result.GetResult()))
+            return CommandResponse.Error(400, "Invalid request response.")
+
+        return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This must check that the printer state is valid for the cancel and the plugin is connected to the host.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def ExecuteCancel(self):
+        # Check the state and that we have a connection to the host.
+        result = self._CheckIfConnectedAndForExpectedStates(["printing","paused"])
+        if result is not None:
+            return result
+
+        # Do the resume.
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.cancel", {})
+        if result.HasError():
+            self.Logger.error("ExecuteCancel failed to request cancel. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Failed to request cancel")
+
+        # Check the response
+        if result.GetResult() != "ok":
+            self.Logger.error("ExecuteCancel got an invalid request response. "+json.dumps(result.GetResult()))
+            return CommandResponse.Error(400, "Invalid request response.")
+
+        return CommandResponse.Success(None)
+
+
+    # Checks if the printer is connected and in the correct state (or states)
+    # If everything checks out, returns None. Otherwise it returns a CommandResponse
+    def _CheckIfConnectedAndForExpectedStates(self, stateArray):
         # Only allow the pause if the print state is printing, otherwise the system seems to get confused.
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
@@ -129,18 +191,19 @@ class MoonrakerCommandHandler:
             }
         })
         if result.HasError():
-            self.Logger.error("ExecuteSmartPause failed to query printer status. "+result.GetLoggingErrorStr())
-            return CommandResponse.Error(500, "failed to get printer state.")
+            if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                self.Logger.error("Command failed because the printer is no connected. "+result.GetLoggingErrorStr())
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            self.Logger.error("Command failed to get state. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(500, "Error Getting State")
         res = result.GetResult()
         if "status" not in res or "print_stats" not in res["status"] or "state" not in res["status"]["print_stats"]:
-            self.Logger.error("ExecuteSmartPause failed to get the current state.")
-            return CommandResponse.Error(500, "Failed to find state.")
+            self.Logger.error("Command failed to get state, state not found in dict.")
+            return CommandResponse.Error(500, "Error Getting State From Dict")
         state = res["status"]["print_stats"]["state"]
+        for s in stateArray:
+            if s == state:
+                return None
 
-        # This is the only state we allow pause.
-        if state != "printing":
-            self.Logger.warn("SmartPause failed because the state is not printing. "+str(state))
-            return CommandResponse.Error(CommandHandler.c_CommandError_NoPrintRunning, "Printer state is not printing.")
-
-        # The smart pause logic handles all pause commands.
-        return SmartPause.Get().ExecuteSmartPause(suppressNotificationBool)
+        self.Logger.warn("Command failed, printer "+state+" not the expected states.")
+        return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Wrong State")

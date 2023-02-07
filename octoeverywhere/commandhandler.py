@@ -14,6 +14,8 @@ from .sentry import Sentry
 # GetCurrentJobStatus()
 # GetPlatformVersionStr()
 # ExecutePause(smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup)
+# ExecuteResume()
+# ExecuteCancel()
 
 # This class is responsible for handling OctoStream commands.
 #
@@ -40,8 +42,8 @@ class CommandHandler:
     # These are common command specific errors.
     # This means the plugin isn't connected to the host, or that possibly the host isn't connected to the firmware.
     c_CommandError_HostNotConnected = 785
-    # Used for things like the print or cancel command, to indicate there's nothing to take action on.
-    c_CommandError_NoPrintRunning = 786
+    # Used for things like the print, resume, or cancel command, to indicate there's nothing to take action on.
+    c_CommandError_InvalidPrinterState = 786
 
 
     _Instance = None
@@ -77,7 +79,7 @@ class CommandHandler:
             if self.PlatformCommandHandler is None:
                 self.Logger.warn("GetStatus command has no PlatformCommandHandler")
             else:
-                # If the plugin is connected and in a good state, this shoudl return the standard job status.
+                # If the plugin is connected and in a good state, this should return the standard job status.
                 # On error, meaning the plugin isn't connected to the host, this should return None, which then sends back the HostNotConnected error.
                 jobStatus = self.PlatformCommandHandler.GetCurrentJobStatus()
                 # This interface should always return None on failure, but make sure.
@@ -174,7 +176,7 @@ class CommandHandler:
                 # Get values
                 # ParseSmart Pause first, since it changes the default of suppressNotificationBool
                 if "SmartPause" in jsonObjData_CanBeNone:
-                    smartPause = jsonObjData_CanBeNone["smartpause"]
+                    smartPause = jsonObjData_CanBeNone["SmartPause"]
 
                 # Update the default of the notification suppression based on the type. We only suppress for smart pause
                 # because it will only happen from Gadget, which will send it's own notification.
@@ -197,11 +199,16 @@ class CommandHandler:
                 Sentry.Exception("Failed to ExecuteSmartPause, bad args.", e)
                 return CommandResponse.Error(400, "Failed to parse args")
 
-        try:
-            return self.PlatformCommandHandler.ExecutePause(smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup)
-        except Exception as e:
-            Sentry.Exception("Failed to execute smart pause command.", e)
-            return CommandResponse.Error(500, "Failed to execute")
+        # If this throws that's fine.
+        return self.PlatformCommandHandler.ExecutePause(smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup)
+
+
+    def Resume(self):
+        return self.PlatformCommandHandler.ExecuteResume()
+
+
+    def Cancel(self):
+        return self.PlatformCommandHandler.ExecuteCancel()
 
 
     #
@@ -293,6 +300,10 @@ class CommandHandler:
             return self.GetStatus()
         elif commandPathLower.startswith("pause"):
             return self.Pause(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("resume"):
+            return self.Resume()
+        elif commandPathLower.startswith("cancel"):
+            return self.Cancel()
 
         return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
 

@@ -32,6 +32,12 @@ class SmartPause:
     # Must return a CommandResponse
     def ExecuteSmartPause(self, suppressNotificationBool):
 
+        # Set the pause suppress, if desired.
+        # Do this first, since the notification will fire before we can suppress it.
+        if suppressNotificationBool:
+            self.Logger.info("Setting smart pause time to suppress the pause notification.")
+            self.LastPauseNotificationSuppressionTimeSec = time.time()
+
         # The only parameter we take is the notification suppression
         # This is because moonraker already does a "smart pause" on it's own.
         # All pauses move the head way from the print and then put it back on resume.
@@ -44,12 +50,6 @@ class SmartPause:
         if result.GetResult() != "ok":
             self.Logger.error("SmartPause got an invalid request response. "+json.dumps(result.GetResult()))
             return CommandResponse.Error(400, "Invalid request response.")
-
-
-        # Set the pause suppress, if desired.
-        if suppressNotificationBool:
-            self.Logger.info("Setting smart pause time to suppress the pause notification.")
-            self.LastPauseNotificationSuppressionTimeSec = time.time()
 
         # Return success.
         return CommandResponse.Success(None)

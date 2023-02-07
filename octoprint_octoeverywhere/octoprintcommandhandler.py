@@ -114,12 +114,14 @@ class OctoPrintCommandHandler:
 
 
     # !! Platform Command Handler Interface Function !!
+    # This must check that the printer state is valid for the pause and the plugin is connected to the host.
+    # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
     def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup):
         # Ensure we are printing, if not, respond with the common error.
         if self.OctoPrintPrinterObject.is_printing() is False:
             self.Logger.info("ExecutePause is not doing anything because theres' no print in progress..")
-            return CommandResponse.Error(CommandHandler.c_CommandError_NoPrintRunning, "Printer state is not printing.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Printer state is not printing.")
 
         # If we aren't using smart pause, just pause now.
         if smartPause is False:
@@ -151,4 +153,39 @@ class OctoPrintCommandHandler:
             self.MainPluginImpl.ShowSmartPausePopUpOnPortalLoad()
 
         # Success!
+        return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This must check that the printer state is valid for the resume and the plugin is connected to the host.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def ExecuteResume(self):
+        # Ensure we are paused, if not, respond with the common error.
+        if self.OctoPrintPrinterObject.is_paused() is False and self.OctoPrintPrinterObject.is_pausing() is False:
+            self.Logger.info("ExecuteResume is not doing anything because the printer isn't paused..")
+            return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Printer state is not paused.")
+
+        # Do the resume.
+        self.OctoPrintPrinterObject.resume_print()
+
+        # Return success.
+        return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This must check that the printer state is valid for the cancel and the plugin is connected to the host.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def ExecuteCancel(self):
+        # Ensure we are paused, if not, respond with the common error.
+        state = self.OctoPrintPrinterObject.get_state_id()
+        if state != "PRINTING" and state != "RESUMING" and state != "FINISHING" and state != "STARTING" and state != "PAUSED" and state != "PAUSING":
+            self.Logger.info("ExecuteCancel is not doing anything because the printer printing.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Printer state is not printing.")
+
+        # Do the cancel.
+        self.OctoPrintPrinterObject.cancel_print()
+
+        # Return success.
         return CommandResponse.Success(None)
