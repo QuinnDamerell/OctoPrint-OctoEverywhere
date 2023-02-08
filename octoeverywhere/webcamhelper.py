@@ -13,7 +13,7 @@ class WebcamSettingItem:
     #  snapshotUrl OR streamUrl can be None if the values aren't available, but not both.
     #  flipHBool & flipVBool & rotationInt must exist.
     #  rotationInt must be 0, 90, 180, or 270
-    def __init__(self, snapshotUrl, streamUrl, flipHBool, flipVBool, rotationInt) -> None:
+    def __init__(self, snapshotUrl, streamUrl, flipHBool, flipVBool, rotationInt):
         self.SnapshotUrl = snapshotUrl
         self.StreamUrl = streamUrl
         self.FlipH = flipHBool
