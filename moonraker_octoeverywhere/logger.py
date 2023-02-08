@@ -9,7 +9,7 @@ class LoggerInit:
 
     # Sets up and returns the main logger object
     @staticmethod
-    def GetLogger(config, klipperLogDir) -> logging.Logger:
+    def GetLogger(config, klipperLogDir, logLevelOverride_CanBeNone) -> logging.Logger:
         logger = logging.getLogger()
 
         # From the possible logging values, read the current value from the config.
@@ -21,6 +21,14 @@ class LoggerInit:
             "ERROR",
         ]
         logLevel = config.GetStrIfInAcceptableList(Config.LoggingSection, Config.LogLevelKey, "INFO", possibleValueList)
+
+        # Allow the dev config to override the log level.
+        if logLevelOverride_CanBeNone is not None:
+            logLevelOverride_CanBeNone = logLevelOverride_CanBeNone.upper()
+            print("Dev config override log level from "+logLevel+" to "+logLevelOverride_CanBeNone)
+            logLevel = logLevelOverride_CanBeNone
+
+        # Set the final log level.
         logger.setLevel(logLevel)
 
         # Define our format

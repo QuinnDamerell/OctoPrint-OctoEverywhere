@@ -16,7 +16,7 @@
                 // The string is a urlBase64 encoded string of json. We base64 encode it to prevent any issues with command line args.
                 "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfZGF0YS9jb25maWciLCAiTW9vbnJha2VyQ29uZmlnRmlsZSI6ICIvaG9tZS9waS9wcmludGVyX2RhdGEvY29uZmlnL21vb25yYWtlci5jb25mIiwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL29jdG9ldmVyeXdoZXJlLXN0b3JlIiwgIlNlcnZpY2VOYW1lIjogIm9jdG9ldmVyeXdoZXJlIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSJ9",
                 // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
-                //"{\"LocalServerAddress\":\"192.168.1.41\"}"
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"INFO\"}"
             ]
         },
         {

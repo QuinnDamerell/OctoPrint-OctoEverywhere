@@ -12,7 +12,7 @@ from .sentry import Sentry
 from .compat import Compat
 from .snapshotresizeparams import SnapshotResizeParams
 from .repeattimer import RepeatTimer
-from .snapshothelper import SnapshotHelper
+from .webcamhelper import WebcamHelper
 
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -468,7 +468,7 @@ class NotificationsHandler:
 
             # Use the snapshot helper to get the snapshot. This will handle advance logic like relative and absolute URLs
             # as well as getting a snapshot directly from a mjpeg stream if there's no snapshot URL.
-            octoHttpResponse = SnapshotHelper.Get().GetSnapshot()
+            octoHttpResponse = WebcamHelper.Get().GetSnapshot()
 
             # Check for a valid response.
             if octoHttpResponse is None or octoHttpResponse.Result is None or octoHttpResponse.Result.status_code != 200:
@@ -495,10 +495,10 @@ class NotificationsHandler:
                     snapshotResizeParams = SnapshotResizeParams(1080, True, False, False)
 
             # Manipulate the image if needed.
-            flipH = SnapshotHelper.Get().GetWebcamFlipH()
-            flipV = SnapshotHelper.Get().GetWebcamFlipV()
-            rotate90 = SnapshotHelper.Get().GetWebcamRotate90()
-            if rotate90 or flipH or flipV or snapshotResizeParams is not None:
+            flipH = WebcamHelper.Get().GetWebcamFlipH()
+            flipV = WebcamHelper.Get().GetWebcamFlipV()
+            rotation = WebcamHelper.Get().GetWebcamRotation()
+            if rotation != 0 or flipH or flipV or snapshotResizeParams is not None:
                 try:
                     if Image is not None:
 
@@ -523,8 +523,11 @@ class NotificationsHandler:
                         if flipV:
                             pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
                             didWork = True
-                        if rotate90:
-                            pilImage = pilImage.rotate(90)
+                        if rotation != 0:
+                            # Our rotation is clockwise while PIL is counter clockwise.
+                            # Subtract from 360 to get the opposite rotation.
+                            rotation = 360 - rotation
+                            pilImage = pilImage.rotate(rotation)
                             didWork = True
 
                         #

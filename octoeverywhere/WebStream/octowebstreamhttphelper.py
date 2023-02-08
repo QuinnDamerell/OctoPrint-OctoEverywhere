@@ -11,7 +11,7 @@ from .octoheaderimpl import HeaderHelper
 from .octoheaderimpl import BaseProtocol
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
-from ..snapshothelper import SnapshotHelper
+from ..webcamhelper import WebcamHelper
 from ..commandhandler import CommandHandler
 from ..sentry import Sentry
 from ..compat import Compat
@@ -147,13 +147,15 @@ class OctoWebStreamHttpHelper:
         # Before we make the request, make sure we shouldn't defer for a high pri request
         self.checkForDelayIfNotHighPri()
 
-        # If the service noted this as a snapshot request, use our special snapshot handler since it might do some extra
-        # magic to try to make the request. Note that not all snapshot requests will be flagged, this is only used for requests from
-        # Oracle, that the service knows are snapshot requests.
+        # Check for some special case requests before we handle the request as normal.
+        #
+        # 1) An oracle snapshot or webcam stream request. In this case the WebCamHelper class will handle the request.
+        # 2) If the request is a OctoStreamCommand, the CommandHandler will handle the request.
+        # 3) Finally, check if the request is cached in Slipstream.
         octoHttpResult = None
         isFromCache = False
-        if SnapshotHelper.Get().IsSnapshotOracleRequest(sendHeaders):
-            octoHttpResult = SnapshotHelper.Get().MakeHttpCall(httpInitialContext, method, sendHeaders, self.UploadBuffer)
+        if WebcamHelper.Get().IsSnapshotOrWebcamStreamOracleRequest(sendHeaders):
+            octoHttpResult = WebcamHelper.Get().MakeSnapshotOrWebcamStreamRequest(httpInitialContext, method, sendHeaders, self.UploadBuffer)
         # If this is a special command for OctoEverywhere, we handle it differently.
         elif CommandHandler.Get().IsCommandRequest(httpInitialContext):
             # This HandleCommand wil return a mock  OctoHttpResult, including a full mock response object.

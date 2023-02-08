@@ -13,17 +13,41 @@ class Config:
     PrinterIdKey = "printer_id"
     PrivateKeyKey = "private_key"
 
-    # Other config items.
-    LoggingSection = "logging"
     RelaySection = "relay"
+    RelayFrontEndPortKey = "frontend_port"
 
+    LoggingSection = "logging"
     LogLevelKey = "log_level"
     LogFileMaxSizeMbKey = "max_file_size_mb"
     LogFileMaxCountKey = "max_file_count"
 
-    RelayFrontEndPortKey = "frontend_port"
+    WebcamSection = "webcam"
+    WebcamAutoSettings = "auto_settings_detection"
+    WebcamStreamUrl = "stream_url"
+    WebcamSnapshotUrl = "snapshot_url"
+    WebcamFlipH = "flip_horizontally"
+    WebcamFlipY = "flip_vertically"
+    WebcamRotation = "rotate"
+
+    # This allows us to add comments into our config.
+    # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
+    # A string, which is the comment to be inserted.
+    c_ConfigComments = [
+        { "Target": PrinterIdKey,  "Comment": "Uniquely identifies your printer. Don't change or will have to re-link your printer with the service."},
+        { "Target": PrivateKeyKey, "Comment": "A private key linked to your printer ID. NEVER share this and also don't change it."},
+        { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value."},
+        { "Target": LogLevelKey,  "Comment": "The active logging level. Valid values include: DEBUG, INFO, WARNING, or ERROR."},
+        { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
+        { "Target": WebcamStreamUrl,  "Comment": "Webcam streaming URL. This can be a local relative path (ex: /webcam/?action=stream) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=stream or http://webcam.local/webcam/?action=stream)"},
+        { "Target": WebcamSnapshotUrl,  "Comment": "Webcam snapshot URL. This can be a local relative path (ex: /webcam/?action=snapshot) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=snapshot or http://webcam.local/webcam/?action=snapshot)"},
+        { "Target": WebcamFlipH,  "Comment": "Flips the webcam image horizontally. Valid values are True or False"},
+        { "Target": WebcamFlipY,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
+        { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
+    ]
+
 
     def __init__(self, klipperConfigPath) -> None:
+        self.Logger = None
         # Define our config path
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
         self.OeConfigFilePath = os.path.join(klipperConfigPath, "octoeverywhere.conf")
@@ -33,6 +57,18 @@ class Config:
         # Load the config on init, to ensure it exists.
         # This will throw if there's an error reading the config.
         self._LoadConfigIfNeeded_UnderLock()
+
+
+    # Allows the logger to be set when it's created.
+    def SetLogger(self, logger):
+        self.Logger = logger
+
+
+    # Forces a full config read & parse from the file.
+    def ReloadFromFile(self):
+        # Lock and force a read.
+        with self.ConfigLock:
+            self._LoadConfigIfNeeded_UnderLock(forceRead=True)
 
 
     # Gets a value from the config given the header and key.
@@ -49,10 +85,34 @@ class Config:
         self.SetStr(section, key, defaultValue)
         return defaultValue
 
+
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
     def GetInt(self, section, key, defaultValue):
-        return int(self.GetStr(section, key, str(defaultValue)))
+        # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
+        try:
+            return int(self.GetStr(section, key, str(defaultValue)))
+        except Exception as e:
+            self.Logger.error("Config settings error! "+key+" failed to get as int. Resetting to default. "+str(e))
+            self.SetStr(section, key, str(defaultValue))
+            return int(defaultValue)
+
+
+    # Gets a value from the config given the header and key.
+    # If the value isn't set, the default value is returned and the default value is saved into the config.
+    def GetBool(self, section, key, defaultValue):
+        # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
+        try:
+            strValue = self.GetStr(section, key, str(defaultValue)).lower()
+            if strValue == "false":
+                return False
+            elif strValue == "true":
+                return True
+            raise Exception("Invalid bool value, value was: "+strValue)
+        except Exception as e:
+            self.Logger.error("Config settings error! "+key+" failed to get as bool. Resetting to default. "+str(e))
+            self.SetStr(section, key, str(defaultValue))
+            return bool(defaultValue)
 
 
     # The same as Get, but this version ensures that the value matches a case insensitive value in the
@@ -89,6 +149,8 @@ class Config:
 
     # Sets the value into the config and saves it.
     def SetStr(self, section, key, value):
+        # Ensure the value is a string.
+        value = str(value)
         with self.ConfigLock:
             self._LoadConfigIfNeeded_UnderLock()
             # Ensure the section exists
@@ -104,9 +166,10 @@ class Config:
             self._SaveConfig_UnderLock()
 
 
-    def _LoadConfigIfNeeded_UnderLock(self) -> None:
-        if self.Config is not None:
+    def _LoadConfigIfNeeded_UnderLock(self, forceRead = False) -> None:
+        if self.Config is not None and forceRead is False:
             return
+
         # Always create a new object.
         self.Config = configparser.ConfigParser()
 
@@ -123,5 +186,27 @@ class Config:
     def _SaveConfig_UnderLock(self) -> None:
         if self.Config is None:
             return
+
+        # Write the current settings to the file.
+        # This lets the config lib format everything how it wants.
         with open(self.OeConfigFilePath, 'w', encoding="utf-8") as f:
             self.Config.write(f)
+
+        # After writing, read the file and insert any comments we have.
+        finalOutput = ""
+        with open(self.OeConfigFilePath, 'r', encoding="utf-8") as f:
+            # Read all lines
+            lines = f.readlines()
+            for line in lines:
+                lineLower = line.lower()
+                # If anything in the line matches the target, add the comment just before this line.
+                for cObj in Config.c_ConfigComments:
+                    if cObj["Target"] in lineLower:
+                        # Add the comment.
+                        finalOutput += "# " + cObj["Comment"] + os.linesep
+                        break
+                finalOutput += line
+
+        # Finally, write the file back one more time.
+        with open(self.OeConfigFilePath, 'w', encoding="utf-8") as f:
+            f.write(finalOutput)

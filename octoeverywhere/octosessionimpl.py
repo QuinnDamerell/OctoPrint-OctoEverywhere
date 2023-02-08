@@ -13,7 +13,6 @@ from .octohttprequest import OctoHttpRequest
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
-from .snapshothelper import SnapshotHelper
 from .sentry import Sentry
 
 from .Proto import OctoStreamMessage
@@ -237,9 +236,7 @@ class OctoSession:
             # Build the message
             buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt,
-                SnapshotHelper.Get().GetWebcamFlipH(), SnapshotHelper.Get().GetWebcamFlipV(), SnapshotHelper.Get().GetWebcamRotate90(),
-                summonMethod, self.ServerHostType)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType)
 
             # Send!
             self.OctoStream.SendMsg(buf)

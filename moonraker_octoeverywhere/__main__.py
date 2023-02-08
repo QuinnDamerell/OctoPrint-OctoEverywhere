@@ -69,7 +69,7 @@ if __name__ == '__main__':
         print("ERROR! - Failed to parse dev config arg! "+str(e))
 
     # Create and run the main host!
-    host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder)
+    host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone)
     host.RunBlocking(KlipperConfigFolder, MoonrakerConfigFile, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, devConfig_CanBeNone)
 
     # If we exit here, it's due to an error, since RunBlocking should be blocked forever.

@@ -4,7 +4,7 @@ import sys
 import random
 import string
 
-from octoeverywhere.snapshothelper import SnapshotHelper
+from octoeverywhere.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.octopingpong import OctoPingPong
@@ -18,6 +18,7 @@ from octoeverywhere.Proto.ServerHost import ServerHost
 from .localauth import LocalAuth
 from .slipstream import Slipstream
 from .smartpause import SmartPause
+from .octoprintwebcamhelper import OctoPrintWebcamHelper
 
 
 
@@ -192,7 +193,7 @@ if __name__ == '__main__':
     # result = apiCommandHandler.HandleApiCommand("status", None)
 
     # Setup the snapshot helper
-    SnapshotHelper.Init(logger, None)
+    WebcamHelper.Init(logger, OctoPrintWebcamHelper(logger, None))
 
     # These 3 classes are OctoPrint specific!
     # The order matters, LocalAuth needs to be init before Slipstream.

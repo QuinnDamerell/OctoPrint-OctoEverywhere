@@ -8,7 +8,7 @@ import flask
 import requests
 import octoprint.plugin
 
-from octoeverywhere.snapshothelper import SnapshotHelper
+from octoeverywhere.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler
@@ -22,6 +22,7 @@ from octoeverywhere.commandhandler import CommandHandler
 
 from .printerstateobject import PrinterStateObject
 from .octoprintcommandhandler import OctoPrintCommandHandler
+from .octoprintwebcamhelper import OctoPrintWebcamHelper
 from .localauth import LocalAuth
 from .slipstream import Slipstream
 from .smartpause import SmartPause
@@ -162,7 +163,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         LocalAuth.Init(self._logger, self._user_manager)
 
         # Init the static snapshot helper
-        SnapshotHelper.Init(self._logger, self._settings)
+        WebcamHelper.Init(self._logger, OctoPrintWebcamHelper(self._logger, self._settings))
 
         # Init the ping helper
         OctoPingPong.Init(self._logger, self.get_plugin_data_folder(), printerId)

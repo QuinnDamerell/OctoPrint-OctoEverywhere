@@ -6,7 +6,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.octopingpong import OctoPingPong
-from octoeverywhere.snapshothelper import SnapshotHelper
+from octoeverywhere.webcamhelper import WebcamHelper
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -20,11 +20,12 @@ from .uipopupinvoker import UiPopupInvoker
 from .systemconfigmanager import SystemConfigManager
 from .moonrakerclient import MoonrakerClient
 from .moonrakercommandhandler import MoonrakerCommandHandler
+from .moonrakerwebcamhelper import MoonrakerWebcamHelper
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
 
-    def __init__(self, klipperConfigDir, klipperLogDir) -> None:
+    def __init__(self, klipperConfigDir, klipperLogDir, devConfig_CanBeNone) -> None:
         # When we create our class, make sure all of our core requirements are created.
         try:
             # First, we need to load our config.
@@ -33,7 +34,9 @@ class MoonrakerHost:
             self.Config = Config(klipperConfigDir)
 
             # Next, setup the logger.
-            self.Logger = LoggerInit.GetLogger(self.Config, klipperLogDir)
+            logLevelOverride_CanBeNone = self.GetDevConfigStr(devConfig_CanBeNone, "LogLevel")
+            self.Logger = LoggerInit.GetLogger(self.Config, klipperLogDir, logLevelOverride_CanBeNone)
+            self.Config.SetLogger(self.Logger)
 
             # Init sentry, since it's needed for Exceptions.
             Sentry.Init(self.Logger, "klipper", True)
@@ -96,7 +99,8 @@ class MoonrakerHost:
                 OctoPingPong.Get().DisablePrimaryOverride()
 
             # Setup the snapshot helper
-            SnapshotHelper.Init(self.Logger, None)
+            moonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)
+            WebcamHelper.Init(self.Logger, moonrakerWebcamHelper)
 
             # Setup our smart pause helper
             SmartPause.Init(self.Logger)
@@ -104,7 +108,7 @@ class MoonrakerHost:
             # When everything is setup, start the moonraker client object.
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
-            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId)
+            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper)
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))

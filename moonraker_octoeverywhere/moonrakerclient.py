@@ -56,8 +56,8 @@ class MoonrakerClient:
 
 
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath, printerId):
-        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId)
+    def Init(logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper):
+        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper)
 
 
     @staticmethod
@@ -65,10 +65,11 @@ class MoonrakerClient:
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger, moonrakerConfigFilePath, printerId) -> None:
+    def __init__(self, logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper) -> None:
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
         self.MoonrakerHostAndPort = "127.0.0.1:7125"
+        self.MoonrakerWebcamHelper = moonrakerWebcamHelper
 
         # Setup the json-rpc vars
         self.JsonRpcIdLock = threading.Lock()
@@ -147,7 +148,7 @@ class MoonrakerClient:
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    # forceSendIgnoreWsState is only used to send the initial messages before the system is ready.
+    # forceSendIgnoreWsState is only used to send the initial messages before the system is ready and for things like webcam to query when klipper isn't connected.
     def SendJsonRpcRequest(self, method, paramsDict = None, forceSendIgnoreWsState = False) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
@@ -234,6 +235,9 @@ class MoonrakerClient:
                 self.Logger.info("Moonraker client - tired to send a websocket message before the websocket was created.")
                 return False
 
+            # Print for debugging.
+            self.Logger.debug("Ws ->: "+jsonStr)
+
             # Send under lock.
             try:
                 localWs.Send(jsonStr, False)
@@ -271,6 +275,9 @@ class MoonrakerClient:
             self._RestartWebsocket()
             return
 
+        # Kick off the webcam settings helper, to ensure it pulls fresh settings if desired.
+        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate()
+
         # Call the event handler
         self.MoonrakerCompat.OnMoonrakerClientConnected()
 
@@ -283,9 +290,6 @@ class MoonrakerClient:
             self.Logger.warn("Moonraker WS message received with no method "+json.dumps(msg))
             return
         method = msg["method"].lower()
-
-        # if method != "notify_proc_stat_update":
-        #     self.Logger.info("WS MSG: "+json.dumps(msg))
 
         # These objects can come in all shapes and sizes. So we only look for exactly what we need, if we don't find it
         # We ignore the object, someone else might match it.
@@ -347,18 +351,6 @@ class MoonrakerClient:
                     elif state == "complete":
                         self.MoonrakerCompat.OnDone()
                         return
-
-            # Check for the webhook container
-            webhookContainerObj = self._GetWsMsgParam(msg, "webhooks")
-            if webhookContainerObj is not None:
-                wh = webhookContainerObj["webhooks"]
-                if "state" in wh:
-                    state = wh["state"]
-                    if state == "shutdown":
-                        errorStr = "Klippy Shutdown"
-                        if "state_message" in wh:
-                            errorStr = wh["state_message"]
-                        self.MoonrakerCompat.KlippyShutdown(errorStr)
 
             # Report progress. Do this after the others so they will report before a potential progress update.
             # Progress updates super frequently (like once a second) so there's plenty of chances.
@@ -424,9 +416,14 @@ class MoonrakerClient:
                 self.WebSocketConnected = False
                 self.WebSocketKlippyReady = False
 
+            # When the websocket closes, we need to clear out all pending waiting contexts.
+            with self.JsonRpcIdLock:
+                for context in self.JsonRpcWaitingContexts.values():
+                    context.SetSocketClosed()
+
             # This will only happen if the websocket closes or there was an error.
             # Sleep for a bit so we don't spam the system with attempts.
-            time.sleep(5.0)
+            time.sleep(2.0)
 
 
     # Based on the docs: https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
@@ -449,6 +446,11 @@ class MoonrakerClient:
 
                 # Check for error
                 if result.HasError():
+                    # Handle the timeout without throwing, since this happens sometimes when the system is down.
+                    if result.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
+                        self.Logger.info("Moonraker client failed to send klippy ready query message, it hit a timeout.")
+                        self._RestartWebsocket()
+                        return
                     self.Logger.error("Moonraker client failed to send klippy ready query message. "+result.GetLoggingErrorStr())
                     raise Exception("Error returned from klippy state query. "+ str(result.GetLoggingErrorStr()))
 
@@ -517,27 +519,36 @@ class MoonrakerClient:
             # Parse the incoming message.
             msgObj = json.loads(msg)
 
+            # Get the method if there is one.
+            method_CanBeNone = None
+            if "method" in msgObj:
+                method_CanBeNone = msgObj["method"]
+
+            # Print for debugging - filter out chatty ones.
+            if method_CanBeNone is not None and method_CanBeNone != "notify_gcode_response":
+                self.Logger.debug("Ws <-: %s", msg)
+
             # Check if this is a response to a request
             # info: https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
             if "id" in msgObj:
                 with self.JsonRpcIdLock:
                     idInt = int(msgObj["id"])
                     if idInt in self.JsonRpcWaitingContexts:
-                        self.Logger.debug("Moonraker RPC response received for request: "+str(idInt))
                         self.JsonRpcWaitingContexts[idInt].SetResultAndEvent(msgObj)
                     else:
                         self.Logger.warn("Moonraker RPC response received for request "+str(idInt) + ", but there is no waiting context.")
                     # If once the response is handled, we are done.
                     return
 
-
             # Check for a special message that indicates the klippy connection has been lost.
             # According to the docs, in this case, we should restart the klippy ready process, so we will
             # nuke the WS and start again.
-            if "method" in msgObj and msgObj["method"] == "notify_klippy_disconnected":
-                self.Logger.info("Moonraker client received notify_klippy_disconnected notification, so we will restart our client connection.")
+            # The system seems to use both of these at different times. If there's a print running it uses notify_klippy_shutdown, where as if there's not
+            # it seems to use notify_klippy_disconnected. We handle them both as the same.
+            if method_CanBeNone is not None and (method_CanBeNone == "notify_klippy_disconnected" or method_CanBeNone == "notify_klippy_shutdown"):
+                self.Logger.info("Moonraker client received %s notification, so we will restart our client connection.", method_CanBeNone)
                 self._RestartWebsocket()
-                self.MoonrakerCompat.KlippyDisconnected()
+                self.MoonrakerCompat.KlippyDisconnectedOrShutdown()
                 return
 
             # We use a queue to handle all non reply messages to prevent this thread from getting blocked.
@@ -597,6 +608,11 @@ class JsonRpcWaitingContext:
         self.WaitEvent.set()
 
 
+    def SetSocketClosed(self):
+        self.Result = None
+        self.WaitEvent.set()
+
+
 # The goal of this class it add any needed compatibility logic to allow the moonraker system plugin into the
 # common OctoEverywhere logic.
 class MoonrakerCompat:
@@ -607,10 +623,6 @@ class MoonrakerCompat:
         # This indicates if we are ready to process notifications, so we don't
         # fire any notifications before we run the print state sync logic.
         self.IsReadyToProcessNotifications = False
-
-        # Used to know when the last shutdown was, since in the case the connection is lost
-        # moonraker also sends a paused message, but the print can't be resumed.
-        self.LastKlippyShutdownMessageSec = 0
 
         # A cached value for the file meta data that will estimate the time remaining.
         # This only needs to be called onetime per file name, so we cache it to speed things up
@@ -673,6 +685,20 @@ class MoonrakerCompat:
         self.IsReadyToProcessNotifications = True
 
 
+    # Called when moonraker's connection to klippy disconnects.
+    # The systems seems to use disconnect and shutdown at different times for the same purpose, so we handle both the same.
+    def KlippyDisconnectedOrShutdown(self):
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
+        # Set the flag to false again, since we can't send any more notifications until we are reconnected and re-synced.
+        self.IsReadyToProcessNotifications = False
+
+        # Send a notification to the user.
+        self.NotificationHandler.OnError("Klipper Disconnected")
+
+
     # Called when a new print is starting.
     def OnPrintStart(self, fileName):
         # Only process notifications when ready, aka after state sync.
@@ -714,13 +740,6 @@ class MoonrakerCompat:
         if self.IsReadyToProcessNotifications is False:
             return
 
-        # When the connection to the printer is lost mid-print, moonraker sends the klippy_shutdown
-        # message but also followed by a print_stats state paused. This doesn't make sense, because
-        # the print isn't paused and can't be resumed. So we use this logic to skip that notification.
-        deltaFromShutdownSec = time.time() - self.LastKlippyShutdownMessageSec
-        if deltaFromShutdownSec < 5.0:
-            return
-
         # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
         stats = self._GetCurrentPrintStats()
         fileName = None
@@ -756,26 +775,6 @@ class MoonrakerCompat:
         # This basically gives us a constant timer to fire it on. It doesn't do any work if it already fired the
         # first layer complete notification.
         self.NotificationHandler.OnZChange()
-
-
-    # Called when moonraker's connection to klippy disconnects.
-    def KlippyDisconnected(self):
-        # Only process notifications when ready, aka after state sync.
-        if self.IsReadyToProcessNotifications is False:
-            return
-
-        self.NotificationHandler.OnError("Klipper Disconnected")
-
-
-    # Called when moonraker finds klippy has shutdown.
-    # Not sure all of the times this happens, but it does happen when the printer disconnects from klippy during a print (aka pull the usb)
-    def KlippyShutdown(self, errorStr):
-        # Only process notifications when ready, aka after state sync.
-        if self.IsReadyToProcessNotifications is False:
-            return
-
-        self.LastKlippyShutdownMessageSec = time.time()
-        self.NotificationHandler.OnError(errorStr)
 
 
     #

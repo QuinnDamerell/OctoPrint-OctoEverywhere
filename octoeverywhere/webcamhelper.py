@@ -3,109 +3,160 @@ import time
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
 
-# The point of this class is to abstract the logic that needs to be done to reliably get a snapshot from many types of
-# OctoPrint setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
+# A platform agnostic definition of a webcam stream.
+#
+# Note that this data structure must stay in sync with the service!
+class WebcamSettingItem:
+
+    # The snapshotUrl and streamUrl can be relative or absolute.
+    #
+    #  snapshotUrl OR streamUrl can be None if the values aren't available, but not both.
+    #  flipHBool & flipVBool & rotationInt must exist.
+    #  rotationInt must be 0, 90, 180, or 270
+    def __init__(self, snapshotUrl, streamUrl, flipHBool, flipVBool, rotationInt) -> None:
+        self.SnapshotUrl = snapshotUrl
+        self.StreamUrl = streamUrl
+        self.FlipH = flipHBool
+        self.FlipV = flipVBool
+        self.Rotation = rotationInt
+
+
+# The point of this class is to abstract the logic that needs to be done to reliably get a webcam snapshot and stream from many types of
+# printer setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
 # setup. This includes USB based cameras, external IP based cameras, and OctoPrint instances that don't have a snapshot URL defined.
-class SnapshotHelper:
+class WebcamHelper:
+
+    # A header we apply to all snapshot and webcam streams so the client can get the correct transforms the user has setup.
+    c_OeWebcamTransformHeaderKey = "x-oe-webcam-transform"
 
     # Logic for a static singleton
     _Instance = None
 
+
     @staticmethod
-    def Init(logger, octoPrintSettingsObject):
-        SnapshotHelper._Instance = SnapshotHelper(logger, octoPrintSettingsObject)
+    def Init(logger, webcamPlatformHelperInterface):
+        WebcamHelper._Instance = WebcamHelper(logger, webcamPlatformHelperInterface)
+
 
     @staticmethod
     def Get():
-        return SnapshotHelper._Instance
+        return WebcamHelper._Instance
 
-    def __init__(self, logger, octoPrintSettingsObject):
+
+    def __init__(self, logger, webcamPlatformHelperInterface):
         self.Logger = logger
-        self.OctoPrintSettingsObject = octoPrintSettingsObject
+        self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
 
-    # Returns the snapshot URL from the settings. Can be null if there is no snapshot URL set in the settings!
+
+    # Returns the snapshot URL from the settings.
+    # Can be None if there is no snapshot URL set in the settings!
     # This URL can be absolute or relative.
     def GetSnapshotUrl(self):
-        if self.OctoPrintSettingsObject is not None :
-            # This is the normal plugin case
-            snapshotUrl = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"])
-            if snapshotUrl is None:
-                return None
-            if len(snapshotUrl) == 0:
-                return None
-            return snapshotUrl
-        else:
-            # This is the dev case
-            return "http://"+self.GetDevAddress()+"/webcam/?action=snapshot"
+        obj = self._GetWebcamSettingObj(0)
+        if obj is None:
+            return None
+        return obj.SnapshotUrl
+
+
+    # Returns the mjpeg stream URL from the settings.
+    # Can be None if there is no URL set in the settings!
+    # This URL can be absolute or relative.
+    def GetWebcamStreamUrl(self):
+        obj = self._GetWebcamSettingObj(0)
+        if obj is None:
+            return None
+        return obj.StreamUrl
+
 
     # Returns if flip H is set in the settings.
     def GetWebcamFlipH(self):
-        if self.OctoPrintSettingsObject is not None :
-            # This is the normal plugin case
-            flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"])
-            if flipH is None:
-                return False
-            return flipH
-        else:
-            return False
+        obj = self._GetWebcamSettingObj(0)
+        if obj is None:
+            return None
+        return obj.FlipH
+
 
     # Returns if flip V is set in the settings.
     def GetWebcamFlipV(self):
-        if self.OctoPrintSettingsObject is not None :
-            flipV = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"])
-            if flipV is None:
-                return False
-            return flipV
-        else:
-            return False
+        obj = self._GetWebcamSettingObj(0)
+        if obj is None:
+            return None
+        return obj.FlipV
+
 
     # Returns if rotate 90 is set in the settings.
-    def GetWebcamRotate90(self):
-        if self.OctoPrintSettingsObject is not None :
-            rotate = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"])
-            if rotate is None:
-                return False
-            return rotate
-        else:
-            return False
+    def GetWebcamRotation(self):
+        obj = self._GetWebcamSettingObj(0)
+        if obj is None:
+            return None
+        return obj.Rotation
 
-    # Returns the mjpeg stream URL from the settings. Can be null if there is no URL set in the settings!
-    # This URL can be absolute or relative.
-    def GetMjpegStreamUrl(self):
-        if self.OctoPrintSettingsObject is not None :
-            # This is the normal plugin case
-            streamUrl = self.OctoPrintSettingsObject.global_get(["webcam", "stream"])
-            if streamUrl is None:
-                return None
-            if len(streamUrl) == 0:
-                return None
-            return streamUrl
-        else:
-            # This is the dev case
-            return "http://"+self.GetDevAddress()+"/webcam/?action=stream"
 
-    # Given a set of request headers, this determine if this is a special Oracle call indicating it's a snapshot.
+    # Given a set of request headers, this determine if this is a special Oracle call indicating it's a snapshot or webcam stream.
+    def IsSnapshotOrWebcamStreamOracleRequest(self, requestHeadersDict):
+        return self.IsSnapshotOracleRequest(requestHeadersDict) or self.IsWebcamStreamOracleRequest(requestHeadersDict)
+
+
+    # Check if the special header is set, indicating this is a snapshot request.
     def IsSnapshotOracleRequest(self, requestHeadersDict):
-        # If this is a snapshot request from Oracle, this header will be set.
-        # Otherwise this is a normal request or even a snapshot request, but not one we will help with from Oracle.
         return "oe-snapshot" in requestHeadersDict
 
-    # Called by the OctoWebStreamHelper when a Oracle snapshot request is detected.
+
+    # Check if the special header is set, indicating this is a webcam stream request.
+    def IsWebcamStreamOracleRequest(self, requestHeadersDict):
+        return "oe-webcamstream" in requestHeadersDict
+
+
+    # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
     # It's important that this function returns a OctoHttpRequest that's very similar to what the default MakeHttpCall function
     # returns, to ensure the rest of the octostream http logic can handle the response.
-    def MakeHttpCall(self, httpInitialContext, method, sendHeaders, uploadBuffer):
-        # Instead of using any of the call context, (like the snapshot URL), we are just going to use GetSnapshot
-        # which will use the latest OctoPrint settings.
-        return self.GetSnapshot()
+    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders, uploadBuffer):
+        if self.IsSnapshotOracleRequest(sendHeaders):
+            return self.GetSnapshot()
+        elif self.IsWebcamStreamOracleRequest(sendHeaders):
+            return self.GetWebcamStream()
+        else:
+            raise Exception("Webcam helper MakeSnapshotOrWebcamStreamRequest was called but the request didn't have the oracle headers?")
+
+
+    # Tries to get a webcam stream from the system using the webcam stream URL or falling back to the passed path.
+    # Returns a OctoHttpResult on success and None on failure.
+    #
+    # On failure, this returns None. Returning None will fail out the request.
+    # On success, this will return a valid OctoHttpRequest.
+    def GetWebcamStream(self):
+        # Wrap the entire result in the add transform function, so on success the header gets added.
+        return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal())
+
+
+    def _GetWebcamStreamInternal(self):
+        # Try to get the URL from the settings.
+        webcamStreamUrl = self.GetWebcamStreamUrl()
+        if webcamStreamUrl is not None:
+            # Try to make a standard http call with this stream url
+            # Use use this HTTP call helper system because it might be somewhat tricky to know
+            # Where to actually make the webcam request in terms of IP and port.
+            #
+            # Whatever this returns, the rest of the request system will handle it, since it's expecting the OctoHttpRequest object
+            return OctoHttpRequest.MakeHttpCall(self.Logger, webcamStreamUrl, OctoHttpRequest.GetPathType(webcamStreamUrl), "GET", {})
+
+        # If we can't get the webcam stream URL, return None to fail out the request.
+        return None
+
 
     # Tries to get a snapshot from the system using the snapshot URL or falling back to the mjpeg stream.
     # Returns a OctoHttpResult on success and None on failure.
     #
-    # On failure, this returns None
+    # On failure, this returns None. Returning None will fail out the request.
     # On success, this will return a valid OctoHttpRequest that's fully filled out. It most likely will also set the FullBodyBuffer
     # variable in the OctoHttpRequest class. Note that if a requests result is returned, Stream=True was used and the body must be read
     # using: RequestsUtils.ReadAllContentFromStreamResponse()
     def GetSnapshot(self):
+        # Wrap the entire result in the add transform function, so on success the header gets added.
+        return self._AddOeWebcamTransformHeader(self._GetSnapshotInternal())
+
+
+    def _GetSnapshotInternal(self):
         # First, try to get the snapshot using the string defined in settings.
         snapshotUrl = self.GetSnapshotUrl()
         if snapshotUrl is not None:
@@ -118,10 +169,11 @@ class SnapshotHelper:
                 return octoHttpResult
 
         # If getting the snapshot from the snapshot URL fails, try getting a single frame from the mjpeg stream
-        streamUrl = self.GetMjpegStreamUrl()
+        streamUrl = self.GetWebcamStreamUrl()
         if streamUrl is None:
             return None
         return self._GetSnapshotFromStream(streamUrl)
+
 
     def _GetSnapshotFromStream(self, url):
         try:
@@ -268,6 +320,44 @@ class SnapshotHelper:
             Sentry.Exception("Failed to get fallback snapshot.", e)
 
         return None
+
+
+    # Returns the default webcam setting object or None if there isn't one.
+    def _GetWebcamSettingObj(self, index):
+        try:
+            a = self.WebcamPlatformHelperInterface.GetWebcamConfig()
+            if a is None or len(a) < index:
+                return None
+            return a[index]
+        except Exception as e:
+            Sentry.Exception("WebcamHelper _GetWebcamSettingObj exception.", e)
+        return None
+
+
+    # Checks if the result was success and if so adds the common header.
+    # Returns the octoHttpResult, so the function is chainable
+    def _AddOeWebcamTransformHeader(self, octoHttpResult):
+        if octoHttpResult is None or octoHttpResult.Result is None:
+            return octoHttpResult
+
+        # Default to none
+        transformStr = "none"
+
+        # If there are any settings build a string with them all contaminated.
+        settings = self._GetWebcamSettingObj(0)
+        if settings.FlipH or settings.FlipV or settings.Rotation != 0:
+            transformStr = ""
+            if settings.FlipH:
+                transformStr += "fliph "
+            if settings.FlipV:
+                transformStr += "flipv "
+            if settings.Rotation != 0:
+                transformStr += "rotate="+str(settings.Rotation)+" "
+
+        # Set the header
+        octoHttpResult.Result.headers[WebcamHelper.c_OeWebcamTransformHeaderKey] = transformStr
+        return octoHttpResult
+
 
     def GetDevAddress(self):
         return OctoHttpRequest.GetLocalhostAddress()+":"+str(OctoHttpRequest.GetLocalOctoPrintPort())
