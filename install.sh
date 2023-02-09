@@ -166,7 +166,8 @@ install_or_update_dependencies
 # Before launching our PY script, set any vars it needs to know
 USERNAME=${USER}
 USER_HOME=${HOME}
-PY_LAUNCH_JSON="{\"OE_REPO_DIR\":\"${OE_REPO_DIR}\",\"OE_ENV\":\"${OE_ENV}\",\"USERNAME\":\"${USERNAME}\",\"USER_HOME\":\"${USER_HOME}\"}"
+OPTIONAL_MOONRAKER_CONFIG_FILE=${1}
+PY_LAUNCH_JSON="{\"OE_REPO_DIR\":\"${OE_REPO_DIR}\",\"OE_ENV\":\"${OE_ENV}\",\"USERNAME\":\"${USERNAME}\",\"USER_HOME\":\"${USER_HOME}\",\"MOONRAKER_CONFIG\":\"${OPTIONAL_MOONRAKER_CONFIG_FILE}\"}"
 
 # Now launch into our py setup script, that does everything else required.
 log_info "Running the python install finisher..."

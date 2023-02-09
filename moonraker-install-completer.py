@@ -120,8 +120,10 @@ class MoonrakerInstaller:
             Blank()
             Blank()
             Blank()
-
-
+            Error( "               Remember This Is A Beta Release!               ")
+            Error( " Please Send Issues Or Feedback To support@octoeverywhere.com ")
+            Blank()
+            Blank()
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -153,6 +155,7 @@ class MoonrakerInstaller:
                     self.VirtualEnvPath = argObj["OE_ENV"]
                     self.UserName = argObj["USERNAME"]
                     self.UserHomePath = argObj["USER_HOME"]
+                    # MOONRAKER_CONFIG is optional.
                     if "MOONRAKER_CONFIG" in argObj:
                         self.MOONRAKER_CONFIG = argObj["MOONRAKER_CONFIG"]
                     if self.RepoRootFolder is None:
@@ -163,7 +166,6 @@ class MoonrakerInstaller:
                         raise Exception("Required Env Var USERNAME was not found; make sure to run the install.sh script to begin the installation process.")
                     if self.UserHomePath is None:
                         raise Exception("Required Env Var USER_HOME was not found; make sure to run the install.sh script to begin the installation process.")
-                    # MOONRAKER_CONFIG is optional.
             if jsonFound is False:
                 raise Exception("Required Env Var json was not found; make sure to run the install.sh script to begin the installation process.")
         except Exception as e:
