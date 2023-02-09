@@ -30,7 +30,7 @@ class SmartPause:
 
     # Does the actual smart pause.
     # Must return a CommandResponse
-    def ExecuteSmartPause(self, suppressNotificationBool):
+    def ExecuteSmartPause(self, suppressNotificationBool) -> CommandResponse:
 
         # Set the pause suppress, if desired.
         # Do this first, since the notification will fire before we can suppress it.

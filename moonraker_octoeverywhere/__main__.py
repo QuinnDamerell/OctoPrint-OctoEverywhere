@@ -64,7 +64,7 @@ if __name__ == '__main__':
     try:
         if len(sys.argv) > 2:
             devConfig_CanBeNone = json.loads(sys.argv[2])
-        print("Using dev confg: "+sys.argv[2])
+        print("Using dev config: "+sys.argv[2])
     except Exception as e:
         print("ERROR! - Failed to parse dev config arg! "+str(e))
 

@@ -122,7 +122,7 @@ class MoonrakerCommandHandler:
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
-    def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup):
+    def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup) -> CommandResponse:
         # Check the state and that we have a connection to the host.
         result = self._CheckIfConnectedAndForExpectedStates(["printing"])
         if result is not None:
@@ -136,7 +136,7 @@ class MoonrakerCommandHandler:
     # This must check that the printer state is valid for the resume and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
-    def ExecuteResume(self):
+    def ExecuteResume(self) -> CommandResponse:
         # Check the state and that we have a connection to the host.
         result = self._CheckIfConnectedAndForExpectedStates(["paused"])
         if result is not None:
@@ -160,7 +160,7 @@ class MoonrakerCommandHandler:
     # This must check that the printer state is valid for the cancel and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
-    def ExecuteCancel(self):
+    def ExecuteCancel(self) -> CommandResponse:
         # Check the state and that we have a connection to the host.
         result = self._CheckIfConnectedAndForExpectedStates(["printing","paused"])
         if result is not None:
@@ -182,7 +182,7 @@ class MoonrakerCommandHandler:
 
     # Checks if the printer is connected and in the correct state (or states)
     # If everything checks out, returns None. Otherwise it returns a CommandResponse
-    def _CheckIfConnectedAndForExpectedStates(self, stateArray):
+    def _CheckIfConnectedAndForExpectedStates(self, stateArray) -> CommandResponse:
         # Only allow the pause if the print state is printing, otherwise the system seems to get confused.
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {

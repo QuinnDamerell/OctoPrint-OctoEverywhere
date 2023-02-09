@@ -56,7 +56,7 @@ class MoonrakerHost:
             self.Logger.info("##################################")
 
             # Find the version of the plugin, this is required and it will throw if it fails.
-            pluginVersionStr = Version.GetPluginVersion(self.Logger, repoRoot)
+            pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
 
             # Before we do this first time setup, make sure our config files are in place. This is important
@@ -180,7 +180,7 @@ class MoonrakerHost:
 
 
     # Tries to load a dev config option as a string.
-    # If not found or it fails, this reutrn None
+    # If not found or it fails, this return None
     def GetDevConfigStr(self, devConfig, value):
         if devConfig is None:
             return None

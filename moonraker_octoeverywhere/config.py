@@ -65,7 +65,7 @@ class Config:
 
 
     # Forces a full config read & parse from the file.
-    def ReloadFromFile(self):
+    def ReloadFromFile(self) -> None:
         # Lock and force a read.
         with self.ConfigLock:
             self._LoadConfigIfNeeded_UnderLock(forceRead=True)
@@ -73,7 +73,7 @@ class Config:
 
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
-    def GetStr(self, section, key, defaultValue):
+    def GetStr(self, section, key, defaultValue) -> str:
         with self.ConfigLock:
             # Ensure we have the config.
             self._LoadConfigIfNeeded_UnderLock()
@@ -88,7 +88,7 @@ class Config:
 
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
-    def GetInt(self, section, key, defaultValue):
+    def GetInt(self, section, key, defaultValue) -> int:
         # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
         try:
             return int(self.GetStr(section, key, str(defaultValue)))
@@ -100,7 +100,7 @@ class Config:
 
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
-    def GetBool(self, section, key, defaultValue):
+    def GetBool(self, section, key, defaultValue) -> bool:
         # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
         try:
             strValue = self.GetStr(section, key, str(defaultValue)).lower()
@@ -117,7 +117,7 @@ class Config:
 
     # The same as Get, but this version ensures that the value matches a case insensitive value in the
     # acceptable value list. If it's not, the default value is used.
-    def GetStrIfInAcceptableList(self, section, key, defaultValue, acceptableValueList):
+    def GetStrIfInAcceptableList(self, section, key, defaultValue, acceptableValueList) -> str:
         existing = self.GetStr(section, key, defaultValue)
         # Check the acceptable values
         for v in acceptableValueList:
@@ -131,7 +131,7 @@ class Config:
 
 
     # The same as Get, but it makes sure the value is in a range.
-    def GetIntIfInRange(self, section, key, defaultValue, lowerBoundInclusive, upperBoundInclusive):
+    def GetIntIfInRange(self, section, key, defaultValue, lowerBoundInclusive, upperBoundInclusive) -> int:
         existingStr = self.GetStr(section, key, str(defaultValue))
 
         # Make sure the value is in range.
@@ -148,7 +148,7 @@ class Config:
 
 
     # Sets the value into the config and saves it.
-    def SetStr(self, section, key, value):
+    def SetStr(self, section, key, value) -> None:
         # Ensure the value is a string.
         value = str(value)
         with self.ConfigLock:

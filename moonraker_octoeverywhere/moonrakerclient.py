@@ -3,6 +3,7 @@ import threading
 import time
 import json
 import queue
+import logging
 
 import configparser
 
@@ -19,7 +20,7 @@ class JsonRpcResponse:
     OE_ERROR_TIMEOUT = 99990002
     OE_ERROR_EXCEPTION = 99990003
 
-    def __init__(self, resultObj, errorCode = 0, errorStr = None) -> None:
+    def __init__(self, resultObj, errorCode = 0, errorStr : str = None) -> None:
         self.Result = resultObj
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
@@ -31,13 +32,13 @@ class JsonRpcResponse:
     def HasError(self) -> bool:
         return self.ErrorCode != 0
 
-    def GetErrorCode(self):
+    def GetErrorCode(self) -> int:
         return self.ErrorCode
 
-    def GetErrorStr(self):
+    def GetErrorStr(self) -> str:
         return self.ErrorStr
 
-    def GetLoggingErrorStr(self):
+    def GetLoggingErrorStr(self) -> str:
         return str(self.ErrorCode) + " - " + str(self.ErrorStr)
 
     def GetResult(self):
@@ -65,7 +66,7 @@ class MoonrakerClient:
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper) -> None:
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, printerId:str, moonrakerWebcamHelper) -> None:
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
         self.MoonrakerHostAndPort = "127.0.0.1:7125"
@@ -96,7 +97,7 @@ class MoonrakerClient:
         self.WsThread.daemon = True
 
 
-    def GetNotificationHandler(self):
+    def GetNotificationHandler(self) -> NotificationsHandler:
         return self.MoonrakerCompat.GetNotificationHandler()
 
 
@@ -107,7 +108,7 @@ class MoonrakerClient:
     # Actually starts the client running, trying to connect the websocket and such.
     # This is done after the first connection to OctoEverywhere has been established, to ensure
     # the connection is setup before this, incase something needs to use it.
-    def StartRunningIfNotAlready(self, octoKey):
+    def StartRunningIfNotAlready(self, octoKey:str) -> None:
         # Always update the octokey, to make sure we are current.
         self.MoonrakerCompat.SetOctoKey(octoKey)
 
@@ -149,7 +150,7 @@ class MoonrakerClient:
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
     # forceSendIgnoreWsState is only used to send the initial messages before the system is ready and for things like webcam to query when klipper isn't connected.
-    def SendJsonRpcRequest(self, method, paramsDict = None, forceSendIgnoreWsState = False) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict = None, forceSendIgnoreWsState = False) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -221,7 +222,7 @@ class MoonrakerClient:
 
     # Sends a string to the connected websocket.
     # forceSend is used to send the initial messages before the system is ready.
-    def _WebSocketSend(self, jsonStr, forceSend = False) -> bool:
+    def _WebSocketSend(self, jsonStr:str, forceSend = False) -> bool:
         # Only allow one send at a time, thus we do it under lock.
         with self.WebSocketLock:
             if self.WebSocketConnected is False and forceSend is False:
@@ -284,7 +285,7 @@ class MoonrakerClient:
 
     # Called when the websocket gets any other message that's not a RPC response.
     # If we throw from here, the websocket will close and restart.
-    def _OnWsNonResponseMessage(self, msg):
+    def _OnWsNonResponseMessage(self, msg:str):
         # Get the common method string
         if "method" not in msg:
             self.Logger.warn("Moonraker WS message received with no method "+json.dumps(msg))
@@ -617,7 +618,7 @@ class JsonRpcWaitingContext:
 # common OctoEverywhere logic.
 class MoonrakerCompat:
 
-    def __init__(self, logger, printerId) -> None:
+    def __init__(self, logger:logging.Logger, printerId:str) -> None:
         self.Logger = logger
 
         # This indicates if we are ready to process notifications, so we don't
@@ -638,7 +639,7 @@ class MoonrakerCompat:
         self.NotificationHandler.SetPrinterId(printerId)
 
 
-    def SetOctoKey(self, octoKey):
+    def SetOctoKey(self, octoKey:str):
         self.NotificationHandler.SetOctoKey(octoKey)
 
 

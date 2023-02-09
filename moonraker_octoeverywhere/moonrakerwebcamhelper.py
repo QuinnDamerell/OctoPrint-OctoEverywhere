@@ -225,7 +225,7 @@ class MoonrakerWebcamHelper():
     # If it fails, it return None
     def _TryToFigureOutSnapshotUrl(self, streamUrl):
         # If we have no snapshot url, see if we can figure one out.
-        # We know most all webcam interfaces use the "jmpegstreamer" web url signatures.
+        # We know most all webcam interfaces use the "mjpegstreamer" web url signatures.
         # So if we find "action=stream" as in "http://127.0.0.1/webcam/?action=stream", try to get a snapshot.
         streamUrlLower = streamUrl.lower()
         c_streamAction = "action=stream"

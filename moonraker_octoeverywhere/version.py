@@ -5,7 +5,7 @@ class Version:
     # Parses the common plugin version from the setup.py file.
     # Throws if the file can't be found or the version string can't be found.
     @staticmethod
-    def GetPluginVersion(logger, repoRoot):
+    def GetPluginVersion(repoRoot):
         # Since OctoPrint says the version must be in the setup.py file, we share the same file to reduce any duplication.
         setupFilePath = os.path.join(repoRoot, "setup.py")
         if os.path.exists(setupFilePath) is False:
