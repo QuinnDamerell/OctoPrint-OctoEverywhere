@@ -462,8 +462,7 @@ class MoonrakerInstaller:
         Blank()
         Blank()
         Warn( "You're 10 seconds away from free and unlimited printer access from anywhere!")
-        Warn( "USE THIS URL to securely link this printer to your OctoEverywhere account:")
-        Header(self.GetAddPrinterUrl(printerId))
+        self.PrintShortCodeStyleOrFullUrl(printerId)
         Blank()
         Blank()
 
@@ -478,6 +477,7 @@ class MoonrakerInstaller:
             if printerNameIfConnectedToAccount is not None:
                 # Connected!
                 isLinked = True
+                Blank()
                 Header("Success! This printer is securely connected to your account as '"+str(printerNameIfConnectedToAccount)+"'")
                 return
 
@@ -504,14 +504,13 @@ class MoonrakerInstaller:
             else:
                 # The plugin is connected but no user account is connected yet.
                 timeDeltaSec = time.time() - startTimeSec
-                if timeDeltaSec > 30.0:
+                if timeDeltaSec > 60.0:
                     startTimeSec = time.time()
                     Warn("It doesn't look like this printer has been connected to your account yet.")
                     if self.AskYesOrNoQuestion("Do you want to keep waiting?"):
                         Blank()
                         Blank()
-                        Warn("Use this URL to link this printer to your account.")
-                        Header(self.GetAddPrinterUrl(printerId))
+                        self.PrintShortCodeStyleOrFullUrl(printerId)
                         Blank()
                         continue
 
@@ -552,6 +551,30 @@ class MoonrakerInstaller:
 
     def GetAddPrinterUrl(self, printerId):
         return "https://octoeverywhere.com/getstarted?printerid="+printerId
+
+
+    def PrintShortCodeStyleOrFullUrl(self, printerId):
+        # To make the setup easier, we will present the user with a short code if we can get one.
+        # If not, fallback to the full URL.
+        try:
+            # Try to get a short code. We do a quick timeout so if this fails, we just present the user the longer URL.
+            # Any failures, like rate limiting, server errors, whatever, and we just use the long URL.
+            r = requests.post('https://octoeverywhere.com/api/shortcode/create', json={"Type": 1, "PrinterId": printerId}, timeout=2.0)
+            if r.status_code == 200:
+                jsonResponse = r.json()
+                if "Result" in jsonResponse and "Code" in jsonResponse["Result"]:
+                    codeStr = jsonResponse["Result"]["Code"]
+                    if len(codeStr) > 0:
+                        Warn("To securely link this printer to your OctoEverywhere account, go to the following website and use the code.")
+                        Blank()
+                        Header("Website: https://octoeverywhere.com/code")
+                        Header("Code:    "+codeStr)
+                        return
+        except Exception:
+            pass
+
+        Warn("Use this URL to securely link this printer to your OctoEverywhere account:")
+        Header(self.GetAddPrinterUrl(printerId))
 
 # Run the installer
 installer = MoonrakerInstaller()
