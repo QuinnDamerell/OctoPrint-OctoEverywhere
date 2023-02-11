@@ -168,11 +168,13 @@ class MoonrakerWebcamHelper():
 
                     # For rotation, fluidd sets a key of 'rotation' as an int
                     # Mainsail uses 'rotate' as an int, but only lets the user set it for "adaptive mjpeg-stream"
-                    # We decided to check rotate and use it, if it exists, otherwise use rotation.
+                    # We decided to try rotate first, and if it exists get the value
                     rotation = 0
                     if "rotate" in webcamSettingsObj:
                         rotation = webcamSettingsObj["rotate"]
-                    elif "rotation" in webcamSettingsObj:
+                    # If 'rotate' didn't exist or it's 0, also check rotation
+                    # 'rotation' is fluidd's way of doing it, and it's more accessible than moonraker's value.
+                    if rotation == 0 and "rotation" in webcamSettingsObj:
                         rotation = webcamSettingsObj["rotation"]
 
                     # Validate and return if we found good settings.
