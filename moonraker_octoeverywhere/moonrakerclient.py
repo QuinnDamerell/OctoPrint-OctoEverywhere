@@ -775,7 +775,7 @@ class MoonrakerCompat:
         # Moonraker sends about 3 of these per second, which is way faster than we need to
         # process them. Especially since the OnZChange logic needs to make system calls while it's still waiting
         # to fire it's "first layer done" notification. However, we can't back the updates off too much, since
-        # first layer done notification needs to see multiple z offsets above the target before fireing.
+        # first layer done notification needs to see multiple z offsets above the target before firing.
         # It's currently set to 10. So 10 * time between each check = min time to fire first layer complete.
         nowSec = time.time()
         timeDeltaSec = nowSec - self.TimeSinceLastProgressUpdate
