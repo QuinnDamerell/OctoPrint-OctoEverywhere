@@ -16,7 +16,7 @@ class MoonrakerWebcamHelper():
     c_DelayBetweenAutoSettingsCheckSec = 5 * 60
 
     # The min time between checks when there's webcam activity.
-    c_MinTimeBetweenWebcamActivityInvokesSec = 20 # 60
+    c_MinTimeBetweenWebcamActivityInvokesSec = 60
 
     # Default settings.
     c_DefaultAutoSettings = True
@@ -112,13 +112,15 @@ class MoonrakerWebcamHelper():
     # Does the settings update.
     def _DoAutoSettingsUpdate(self):
         try:
+            self.Logger.debug("Starting auto webcam settings update...")
+
             # Try to query the common settings path.
             result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
                 {
                     "namespace": "webcams",
                 },
                 True # Use the force flag, so we can try to query even when klipper isn't connected.
-                )
+            )
 
             # If we failed don't do anything.
             if result.HasError():

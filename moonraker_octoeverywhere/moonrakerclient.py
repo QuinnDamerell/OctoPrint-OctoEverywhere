@@ -176,7 +176,7 @@ class MoonrakerClient:
 
             # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
             jsonStr = json.dumps(obj, default=str)
-            self.Logger.debug("Moonraker RPC Request - "+str(id)+" : "+method+" "+jsonStr)
+            self.Logger.debug("Moonraker RPC Request - "+str(msgId)+" : "+method+" "+jsonStr)
             if self._WebSocketSend(jsonStr, forceSendIgnoreWsState) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
                 return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
@@ -525,9 +525,8 @@ class MoonrakerClient:
             if "method" in msgObj:
                 method_CanBeNone = msgObj["method"]
 
-            # Print for debugging - filter out chatty ones.
-            if method_CanBeNone is not None and method_CanBeNone != "notify_gcode_response":
-                self.Logger.debug("Ws <-: %s", msg)
+            # Print for debugging
+            self.Logger.debug("Ws <-: %s", msg)
 
             # Check if this is a response to a request
             # info: https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
@@ -676,9 +675,6 @@ class MoonrakerCompat:
 
     # Called when a new websocket is established to moonraker.
     def OnMoonrakerClientConnected(self):
-        # Before we restore state, setup the webcams paths if needed. We do this before since the state setup
-        # might fire notifications.
-        self._GetSnapshotConfig()
 
         # This is the hardest of all the calls. The reason being, this call can happen if our service or moonraker restarted, an print
         # can be running while either of those restart. So we need to sync the state here, and make sure things like Gadget and the
@@ -1043,13 +1039,3 @@ class MoonrakerCompat:
 
         self.Logger.info("Updating cached file metadata data estimated time for file "+filename+" to "+str(self.FileMetadataCachedEstimatedTimeSec) +" seconds")
         return self.FileMetadataCachedEstimatedTimeSec
-
-
-    # Queries moonraker for the camera config, and if found, setups up the snapshot system from it's defaults.
-    def _GetSnapshotConfig(self):
-        # Check the first source.
-        # TODO
-        # result = MoonrakerClient.Get().SendJsonRpcRequest("server.webcams.list", {
-        #     "namespace": "webcams",
-        # })
-        pass
