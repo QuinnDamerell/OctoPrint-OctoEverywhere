@@ -176,10 +176,13 @@ class MoonrakerInstaller:
     def AskYesOrNoQuestion(self, question) -> bool:
         val = None
         while True:
-            val = input(question+" [y/n] ")
-            val = val.lower().strip()
-            if val == "n" or val == "y":
-                break
+            try:
+                val = input(question+" [y/n] ")
+                val = val.lower().strip()
+                if val == "n" or val == "y":
+                    break
+            except Exception as e:
+                Warn("Invalid input, try again. Error: "+str(e))
         return val == "y"
 
 
