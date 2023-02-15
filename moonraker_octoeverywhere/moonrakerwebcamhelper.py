@@ -1,5 +1,8 @@
 import threading
 import time
+import logging
+import json
+
 import requests
 
 from octoeverywhere.sentry import Sentry
@@ -27,7 +30,7 @@ class MoonrakerWebcamHelper():
     c_DefaultFlipV = False
     c_DefaultRotation = 0
 
-    def __init__(self, logger, config : Config) -> None:
+    def __init__(self, logger:logging.Logger, config : Config) -> None:
         self.Logger = logger
         self.Config = config
 
@@ -135,6 +138,10 @@ class MoonrakerWebcamHelper():
             if "value" not in res:
                 self.Logger.warn("Moonraker webcam helper failed to find value in result.")
                 return
+
+            # To help debugging, log the result.
+            if self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug("Returned webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
 
             # Look for a camera that's listed and marked enabled.
             # Since we only support one webcam, we take the first for now.
