@@ -21,12 +21,16 @@ from .systemconfigmanager import SystemConfigManager
 from .moonrakerclient import MoonrakerClient
 from .moonrakercommandhandler import MoonrakerCommandHandler
 from .moonrakerwebcamhelper import MoonrakerWebcamHelper
+from .moonrakerdatabase import MoonrakerDatabase
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
 
     def __init__(self, klipperConfigDir, klipperLogDir, devConfig_CanBeNone) -> None:
         # When we create our class, make sure all of our core requirements are created.
+        self.MoonrakerWebcamHelper = None
+        self.MoonrakerDatabase = None
+
         try:
             # First, we need to load our config.
             # Note that the config MUST BE WRITTEN into this folder, that's where the setup installer is going to look for it.
@@ -84,6 +88,9 @@ class MoonrakerHost:
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
 
+            # Setup the database helper
+            self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId)
+
             # Setup the http requester. We default to port 80 and assume the frontend can be found there.
             # TODO - parse nginx to see what front ends exist and make them switchable
             # TODO - detect HTTPS port if 80 is not bound.
@@ -99,8 +106,8 @@ class MoonrakerHost:
                 OctoPingPong.Get().DisablePrimaryOverride()
 
             # Setup the snapshot helper
-            moonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)
-            WebcamHelper.Init(self.Logger, moonrakerWebcamHelper)
+            self.MoonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)
+            WebcamHelper.Init(self.Logger, self.MoonrakerWebcamHelper)
 
             # Setup our smart pause helper
             SmartPause.Init(self.Logger)
@@ -108,7 +115,7 @@ class MoonrakerHost:
             # When everything is setup, start the moonraker client object.
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
-            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper)
+            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, self)
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))
@@ -192,7 +199,7 @@ class MoonrakerHost:
 
 
     #
-    # StatusChangeHandler Interface
+    # StatusChangeHandler Interface - Called by the OctoEverywhere logic when the server connection has been established.
     #
     def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
@@ -202,8 +209,20 @@ class MoonrakerHost:
 
 
     #
-    # StatusChangeHandler Interface
+    # StatusChangeHandler Interface - Called by the OctoEverywhere logic when a plugin update is required for this client.
     #
     def OnPluginUpdateRequired(self):
         self.Logger.error("!!! A Plugin Update Is Required -- If This Plugin Isn't Updated It Might Stop Working !!!")
         self.Logger.error("!!! Please use the update manager in Mainsail of Fluidd to update this plugin         !!!")
+
+
+    #
+    # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and is ready to be used.
+    #
+    def OnMoonrakerClientConnected(self):
+
+        # Kick off the webcam settings helper, to ensure it pulls fresh settings if desired.
+        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate()
+
+        # Also allow the database logic to ensure our public keys exist and are updated.
+        self.MoonrakerDatabase.EnsureOctoEverywhereDatabaseEntry()

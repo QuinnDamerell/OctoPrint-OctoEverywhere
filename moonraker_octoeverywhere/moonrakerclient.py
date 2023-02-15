@@ -57,8 +57,8 @@ class MoonrakerClient:
 
 
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper):
-        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId, moonrakerWebcamHelper)
+    def Init(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler):
+        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler)
 
 
     @staticmethod
@@ -66,11 +66,12 @@ class MoonrakerClient:
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, printerId:str, moonrakerWebcamHelper) -> None:
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler) -> None:
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
         self.MoonrakerHostAndPort = "127.0.0.1:7125"
-        self.MoonrakerWebcamHelper = moonrakerWebcamHelper
+        self.PrinterId = printerId
+        self.ConnectionStatusHandler = connectionStatusHandler
 
         # Setup the json-rpc vars
         self.JsonRpcIdLock = threading.Lock()
@@ -276,11 +277,11 @@ class MoonrakerClient:
             self._RestartWebsocket()
             return
 
-        # Kick off the webcam settings helper, to ensure it pulls fresh settings if desired.
-        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate()
-
         # Call the event handler
         self.MoonrakerCompat.OnMoonrakerClientConnected()
+
+        # Finally, tell the host that we are connected and ready.
+        self.ConnectionStatusHandler.OnMoonrakerClientConnected()
 
 
     # Called when the websocket gets any other message that's not a RPC response.
