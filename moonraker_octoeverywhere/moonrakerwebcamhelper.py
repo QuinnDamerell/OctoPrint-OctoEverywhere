@@ -165,7 +165,7 @@ class MoonrakerWebcamHelper():
                     # Snapshot URL seems to be only set and visible in the mainsail UI
                     snapshotUrl = None
                     if "urlSnapshot" in webcamSettingsObj:
-                        snapshotUrl = webcamSettingsObj["urlStream"]
+                        snapshotUrl = webcamSettingsObj["urlSnapshot"]
 
                     # Both seem to set the flip values
                     flipH = False
@@ -281,6 +281,7 @@ class MoonrakerWebcamHelper():
 
     # If called, this should force the settings to the defaults, if auto settings are on.
     def _ResetValuesToDefaults(self):
+        self.Logger.debug("Resetting the webcam settings to the defaults.")
         self._SetNewValues(MoonrakerWebcamHelper.c_DefaultStreamUrl, MoonrakerWebcamHelper.c_DefaultSnapshotUrl, MoonrakerWebcamHelper.c_DefaultFlipH, MoonrakerWebcamHelper.c_DefaultFlipV, MoonrakerWebcamHelper.c_DefaultRotation)
 
 
