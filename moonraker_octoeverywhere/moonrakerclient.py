@@ -526,7 +526,10 @@ class MoonrakerClient:
                 method_CanBeNone = msgObj["method"]
 
             # Print for debugging
-            self.Logger.debug("Ws <-: %s", msg)
+            if self.Logger.isEnabledFor(logging.DEBUG):
+                # Exclude this really chatty message.
+                if "moonraker_stats" not in msg:
+                    self.Logger.debug("Ws <-: %s", msg)
 
             # Check if this is a response to a request
             # info: https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview

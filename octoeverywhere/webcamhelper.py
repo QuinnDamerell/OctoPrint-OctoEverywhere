@@ -163,6 +163,7 @@ class WebcamHelper:
             # Try to make a standard http call with this snapshot url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
             # Where to actually make the webcam request in terms of IP and port.
+            self.Logger.debug("Trying to get a snapshot using url: %s", snapshotUrl)
             octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, snapshotUrl, OctoHttpRequest.GetPathType(snapshotUrl), "GET", {})
             # If the result was successful, we are done.
             if octoHttpResult is not None and octoHttpResult.Result is not None and octoHttpResult.Result.status_code == 200:
@@ -171,6 +172,7 @@ class WebcamHelper:
         # If getting the snapshot from the snapshot URL fails, try getting a single frame from the mjpeg stream
         streamUrl = self.GetWebcamStreamUrl()
         if streamUrl is None:
+            self.Logger.debug("Snapshot helper failed to get a snapshot from the snapshot URL, but we also don't have a stream URL.")
             return None
         return self._GetSnapshotFromStream(streamUrl)
 
@@ -179,140 +181,137 @@ class WebcamHelper:
         try:
             # Try to connect the the mjpeg stream using the http helper class.
             # This is required because knowing the port to connect to might be tricky.
+            self.Logger.debug("_GetSnapshotFromStream - Trying to get a snapshot using THE STREAM URL: %s", url)
             octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, OctoHttpRequest.GetPathType(url), "GET", {})
             if octoHttpResult is None or octoHttpResult.Result is None:
+                self.Logger.debug("_GetSnapshotFromStream - Failed to make web request.")
                 return None
 
             # Check for success.
             response = octoHttpResult.Result
             if response is None or response.status_code != 200:
-                self.Logger.info("Snapshot fallback failed due to bad http call.")
+                if response is None:
+                    self.Logger.info("Snapshot fallback failed due to the http call having no response object.")
+                else:
+                    self.Logger.info("Snapshot fallback failed due to the http call having a bad status: "+str(response.status_code))
                 return None
 
-            # We expect this to be a multipart stream if it's going to be a mjpeg stream.
-            isMultipartStream = False
-            contentTypeLower = ""
-            for name in response.headers:
-                nameLower = name.lower()
-                if nameLower == "content-type":
-                    contentTypeLower = response.headers[name].lower()
-                    if contentTypeLower.startswith("multipart/"):
-                        isMultipartStream = True
-                    break
-
-            # If this isn't a multipart stream, get out of here.
-            if isMultipartStream is False:
-                self.Logger.info("Snapshot fallback failed not correct content type: "+str(contentTypeLower))
-                return None
-
-            # Try to read some of the stream, so we can find the content type and the size of this first frame.
-            dataBuffer = None
-            for data in response.iter_content(chunk_size=300):
-                # Skip keep alive
-                if data:
-                    dataBuffer = data
-                    break
-            if dataBuffer is None:
-                self.Logger.info("Snapshot fallback failed no data returned.")
-                return None
-
-            # Decode the headers
-            # Example --boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
-            headerStr = dataBuffer.decode(errors="ignore")
-
-            # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
-            endOfAllHeadersMatch = "\r\n\r\n"
-            endOfHeaderMatch = "\r\n"
-            headerStrSize = headerStr.find(endOfAllHeadersMatch)
-            if headerStrSize == -1:
-                self.Logger.info("Snapshot fallback failed no end of headers found.")
-                return None
-
-            # Add 4 bytes for the \r\n\r\n end of header sequence.
-            headerStrSize += 4
-
-            # Try to find the size of this chunk.
-            frameSizeInt = 0
-            contentType = None
-            headers = headerStr.split(endOfHeaderMatch)
-            for header in headers:
-                headerLower = header.lower()
-                if headerLower.startswith("content-type"):
-                    # We found the content-length header!
-                    p = header.split(':')
-                    if len(p) == 2:
-                        contentType = p[1].strip()
-
-                if headerLower.startswith("content-length"):
-                    # We found the content-length header!
-                    p = header.split(':')
-                    if len(p) == 2:
-                        frameSizeInt = int(p[1].strip())
-
-            if frameSizeInt == 0 or contentType is None:
-                self.Logger.info("Snapshot fallback failed to find frame size or content type.")
-                return None
-
-            # Read the entire first image into the buffer.
-            totalDesiredBufferSize = frameSizeInt + headerStrSize
-            toRead = totalDesiredBufferSize - len(dataBuffer)
-            spinCount = 0
-            if toRead > 0:
-                # This API should either return toRead or it should throw, but we have this logic just incase.
-                for data in response.iter_content(chunk_size=toRead):
-                    # For loop sanity.
-                    spinCount += 1
-                    if spinCount > 100:
-                        self.Logger.error("Snapshot fallback broke out of the data read loop.")
+            # Hold the entire response in a with block, so that we we leave it will be cleaned up, since it's most likely a streaming stream.
+            with response:
+                # We expect this to be a multipart stream if it's going to be a mjpeg stream.
+                isMultipartStream = False
+                contentTypeLower = ""
+                for name in response.headers:
+                    nameLower = name.lower()
+                    if nameLower == "content-type":
+                        contentTypeLower = response.headers[name].lower()
+                        if contentTypeLower.startswith("multipart/"):
+                            isMultipartStream = True
                         break
 
-                    # Skip keep alive
-                    if data:
-                        dataBuffer += data
-                        toRead = totalDesiredBufferSize - len(dataBuffer)
-                        if len(dataBuffer) >= totalDesiredBufferSize:
-                            break
+                # If this isn't a multipart stream, get out of here.
+                if isMultipartStream is False:
+                    self.Logger.info("Snapshot fallback failed not correct content type: "+str(contentTypeLower))
+                    return None
 
-                    # If we didn't get the full buffer sleep for a bit, so we don't spin in a tight loop.
-                    time.sleep(0.01)
+                # Try to read some of the stream, so we can find the content type and the size of this first frame.
+                # We use the raw response, so we can control directly how much we read.
+                dataBuffer = response.raw.read(300)
+                if dataBuffer is None:
+                    self.Logger.info("Snapshot fallback failed no data returned.")
+                    return None
 
-            # Since this is a stream, ideally we close it as soon as possible to not waste resources.
-            # Otherwise this will be auto closed when the object is GCed, which happens really quickly after it
-            # goes out of scope. Thus it's not a big deal if we early return and don't close it.
-            try:
-                response.close()
-            except Exception:
-                pass
+                # Decode the headers
+                # Example --boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
+                #      or \r\n--boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
+                #      or boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
+                headerStr = dataBuffer.decode(errors="ignore")
 
-            # If we got extra data trim it.
-            # This shouldn't happen, but just incase the api changes.
-            if len(dataBuffer) > totalDesiredBufferSize:
-                dataBuffer = dataBuffer[:totalDesiredBufferSize]
+                # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
+                endOfAllHeadersMatch = "\r\n\r\n"
+                endOfHeaderMatch = "\r\n"
+                headerStrSize = headerStr.find(endOfAllHeadersMatch)
+                if headerStrSize == -1:
+                    self.Logger.info("Snapshot fallback failed no end of headers found.")
+                    return None
 
-            # Check we got what we wanted.
-            if len(dataBuffer) != totalDesiredBufferSize:
-                self.Logger.warn("Snapshot callback failed, the data read loop didn't produce the expected data size. desired: "+str(totalDesiredBufferSize)+", got: "+str(len(dataBuffer)))
-                return None
+                # Add 4 bytes for the \r\n\r\n end of header sequence.
+                headerStrSize += 4
 
-            # Get only the jpeg buffer
-            imageBuffer = dataBuffer[headerStrSize:]
-            if len(imageBuffer) != frameSizeInt:
-                self.Logger.warn("Snapshot callback final image size was not the frame size. expected: "+str(frameSizeInt)+", got: "+str(len(imageBuffer)))
+                # Try to find the size of this chunk.
+                frameSizeInt = 0
+                contentType = None
+                headers = headerStr.split(endOfHeaderMatch)
+                for header in headers:
+                    headerLower = header.lower()
+                    if headerLower.startswith("content-type"):
+                        # We found the content-length header!
+                        p = header.split(':')
+                        if len(p) == 2:
+                            contentType = p[1].strip()
 
-            # If successful, we will use the already existing response object but update the values to match the fixed size body and content type.
-            response.status_code = 200
-            # Clear all of the current
-            response.headers.clear()
-            # Set the content type to the header we got from the stream chunk.
-            response.headers["content-type"] = contentType
-            # It's very important this size matches the body buffer we give OctoHttpRequest, or the logic in the http loop will fail because it will keep trying to read more.
-            response.headers["content-length"] = str(len(imageBuffer))
-            # Return a result. Return the full image buffer which will be used as the response body.
-            return OctoHttpRequest.Result(response, url, True, imageBuffer)
+                    if headerLower.startswith("content-length"):
+                        # We found the content-length header!
+                        p = header.split(':')
+                        if len(p) == 2:
+                            frameSizeInt = int(p[1].strip())
+
+                if frameSizeInt == 0 or contentType is None:
+                    if frameSizeInt == 0:
+                        self.Logger.info("Snapshot fallback failed to find frame size.")
+                    if contentType is None:
+                        self.Logger.info("Snapshot fallback failed to find the content type.")
+                    return None
+                self.Logger.debug("Image found in webcam stream. Size: %s, Type: %s", str(frameSizeInt), str(contentType))
+
+                # Read the entire first image into the buffer.
+                totalDesiredBufferSize = frameSizeInt + headerStrSize
+                toRead = totalDesiredBufferSize - len(dataBuffer)
+                if toRead > 0:
+                    data = response.raw.read(toRead)
+                    if data is None:
+                        self.Logger.error("_GetSnapshotFromStream failed to read the rest of the image buffer.")
+                        return None
+                    dataBuffer += data
+
+                # Since this is a stream, ideally we close it as soon as possible to not waste resources.
+                # Otherwise this will be auto closed when the function leaves, since we are using the with: scope
+                try:
+                    response.close()
+                except Exception:
+                    pass
+
+                # If we got extra data trim it.
+                # This shouldn't happen, but just incase the api changes.
+                if len(dataBuffer) > totalDesiredBufferSize:
+                    dataBuffer = dataBuffer[:totalDesiredBufferSize]
+
+                # Check we got what we wanted.
+                if len(dataBuffer) != totalDesiredBufferSize:
+                    self.Logger.warn("Snapshot callback failed, the data read loop didn't produce the expected data size. desired: "+str(totalDesiredBufferSize)+", got: "+str(len(dataBuffer)))
+                    return None
+
+                # Get only the jpeg buffer
+                imageBuffer = dataBuffer[headerStrSize:]
+                if len(imageBuffer) != frameSizeInt:
+                    self.Logger.warn("Snapshot callback final image size was not the frame size. expected: "+str(frameSizeInt)+", got: "+str(len(imageBuffer)))
+
+                # If successful, we will use the already existing response object but update the values to match the fixed size body and content type.
+                response.status_code = 200
+                # Clear all of the current
+                response.headers.clear()
+                # Set the content type to the header we got from the stream chunk.
+                response.headers["content-type"] = contentType
+                # It's very important this size matches the body buffer we give OctoHttpRequest, or the logic in the http loop will fail because it will keep trying to read more.
+                response.headers["content-length"] = str(len(imageBuffer))
+                # Return a result. Return the full image buffer which will be used as the response body.
+                self.Logger.debug("Successfully got image from stream URL. Size: %s, Format: %s", str(len(imageBuffer)), contentType)
+                return OctoHttpRequest.Result(response, url, True, imageBuffer)
         except ConnectionError as e:
             # We have a lot of telemetry indicating a read timeout can happen while trying to read from the stream
             # in that case we should just get out of here.
             if "Read timed out" in str(e):
+                self.Logger.debug("_GetSnapshotFromStream got a timeout while reading the stream.")
                 return None
             else:
                 Sentry.Exception("Failed to get fallback snapshot due to ConnectionError", e)

@@ -754,7 +754,8 @@ class OctoWebStreamHttpHelper:
                 # Validate the headers starts with what we expect.
                 # According the the RFC, the boundary should start with the boundary string or '--' + boundary string.
                 # However, we have also seen \r\n--<str> and also no boundary string for the first frame as well. So this might fire once or twice, and that's fine.
-                if headerStr.startswith("--"+boundaryStr) is False and headerStr.startswith(boundaryStr) is False:
+                # These are in order of how common they are, for perf.
+                if headerStr.startswith("--"+boundaryStr) is False and headerStr.startswith(boundaryStr) is False and headerStr.startswith("\r\n--"+boundaryStr) is False:
                     # Always report the first time we find this, otherwise, report only occasionally.
                     if self.MissingBoundaryWarningCounter % 120 == 0:
                         # Trim the string to print it.

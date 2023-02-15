@@ -68,7 +68,7 @@ class MoonrakerWebcamHelper():
 
         # Return the current values.
         return [
-            WebcamSettingItem(self.SnapshotUrl, self.StreamUrl, self.FlipH, self.FlipY, self.Rotation)
+            WebcamSettingItem(None, self.StreamUrl, self.FlipH, self.FlipY, self.Rotation)
         ]
 
 
@@ -255,6 +255,7 @@ class MoonrakerWebcamHelper():
                     if testSnapshotUrl.startswith("/") is False:
                         testSnapshotUrl = "/"+testSnapshotUrl
                     testSnapshotUrl = "http://127.0.0.1"+testSnapshotUrl
+                self.Logger.debug("Trying to find a snapshot url, testing: %s - from stream URL: %s", testSnapshotUrl, streamUrl)
 
                 # We can't use .head because that only pulls the headers from nginx, it doesn't get the full headers.
                 # So we use .get with a timeout.
@@ -264,14 +265,17 @@ class MoonrakerWebcamHelper():
                         return None
 
                     # This is a good sign, check the content type.
-                    if "content-type" in response.headers:
-                        if "image" in response.headers["content-type"].lower():
+                    contentTypeHeaderKey = "content-type"
+                    if contentTypeHeaderKey in response.headers:
+                        if "image" in response.headers[contentTypeHeaderKey].lower():
                             # Success!
+                            self.Logger.debug("Found a valid snapshot URL! Url: %s, Content-Type: %s", testSnapshotUrl, response.headers[contentTypeHeaderKey])
                             return possibleSnapshotUrl
 
             except Exception:
                 pass
         # On any failure, return None
+        self.Logger.debug("FAILED to find a snapshot url from stream URL")
         return None
 
 
@@ -286,6 +290,9 @@ class MoonrakerWebcamHelper():
         # Check that we are using auto config.
         if self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings) is False:
             return
+
+        # Found valid config
+        self.Logger.debug(f'Webcam helper found settings. streamUrl: {self.StreamUrl}, snapshotUrl: {self.SnapshotUrl}, flipH: {self.FlipH}, flipY: {self.FlipY}, rotation: {self.Rotation}')
 
         # Make sure there's a difference
         if streamUrl == self.StreamUrl and snapshotUrl == self.SnapshotUrl and flipH == self.FlipH and flipY == self.FlipY and rotation == self.Rotation:
