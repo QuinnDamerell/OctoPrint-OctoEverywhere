@@ -1,5 +1,3 @@
-import time
-
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
 
