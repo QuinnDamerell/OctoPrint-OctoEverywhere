@@ -33,7 +33,7 @@ class OctoServerCon:
     RunForTimeCheckerIntervalSec = 60 * 2 # 2 minutes
 
     # The min amount of time from the last user activity RunFor will wait before disconnecting.
-    RunForMinTimeSinceLastUserActivitySec = 60 * 10 # 10 minutes.
+    RunForMinTimeSinceLastUserActivitySec = 60 * 5 # 5 minutes.
 
     # The max amount of time beyond the RunFor limit we will wait for user activity to stop.
     RunForMaxUserActivityWaitTimeSec = 60 * 60 * 2 # 2 hours.
@@ -241,9 +241,11 @@ class OctoServerCon:
             Sentry.Exception("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
 
         # Close the websocket, which will cause the run loop to spin and reconnect.
-        self.Logger.info("OctoServerCon websocket close start")
-        if self.Ws:
-            self.Ws.Close()
+        ws = self.Ws
+        self.Logger.info("OctoServerCon websocket close start. IsPrimary?:"+str(self.IsPrimaryConnection) + "; wsAddr:+"+str(ws))
+
+        if ws:
+            ws.Close()
         self.Logger.info("OctoServerCon disconnect complete.")
 
 

@@ -111,7 +111,10 @@ class Sentry:
             return
 
         tb = traceback.format_exc()
-        Sentry.logger.error(msg + "; Exception: " + str(exception) + "; "+str(tb))
+        exceptionClassType = "unknown_type"
+        if exception is not None:
+            exceptionClassType = exception.__class__.__name__
+        Sentry.logger.error(msg + "; "+str(exceptionClassType)+" Exception: " + str(exception) + "; "+str(tb))
 
         # Sentry is disabled for now.
         # Never send in dev mode, as Sentry will not be setup.

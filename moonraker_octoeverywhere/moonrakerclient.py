@@ -50,7 +50,8 @@ class JsonRpcResponse:
 class MoonrakerClient:
 
     # The max amount of time we will wait for a request before we timeout.
-    RequestTimeoutSec = 30.0
+    # For some reason, some calls seem to take a really long time to complete (like database calls), so we make this timeout quite high.
+    RequestTimeoutSec = 60.0
 
     # Logic for a static singleton
     _Instance = None
