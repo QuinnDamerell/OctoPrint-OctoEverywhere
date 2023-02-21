@@ -670,7 +670,6 @@ class MoonrakerCompat:
     #     We report if klippy disconnects from moonraker
     #  OnWaiting - Missing
     #     Unsure if we get this from moonraker
-    #  OnZChange - Done
     #  OnFilamentChange - Missing
     #     Unsure if we get this from moonraker
     #  OnUserInteractionNeeded - Missing
@@ -773,24 +772,15 @@ class MoonrakerCompat:
         if self.IsReadyToProcessNotifications is False:
             return
 
-        # Moonraker sends about 3 of these per second, which is way faster than we need to
-        # process them. Especially since the OnZChange logic needs to make system calls while it's still waiting
-        # to fire it's "first layer done" notification. However, we can't back the updates off too much, since
-        # first layer done notification needs to see multiple z offsets above the target before firing.
-        # It's currently set to 10. So 10 * time between each check = min time to fire first layer complete.
+        # Moonraker sends about 3 of these per second, which is way faster than we need to process them.
         nowSec = time.time()
         timeDeltaSec = nowSec - self.TimeSinceLastProgressUpdate
-        if timeDeltaSec < 3.0:
+        if timeDeltaSec < 5.0:
             return
         self.TimeSinceLastProgressUpdate = nowSec
 
         # Moonraker uses from 0->1 to progress while we assume 100->0
         self.NotificationHandler.OnPrintProgress(None, progressFloat*100.0)
-
-        # For moonraker, we also fire the OnZChange on progress updates.
-        # This basically gives us a constant timer to fire it on. It doesn't do any work if it already fired the
-        # first layer complete notification.
-        self.NotificationHandler.OnZChange()
 
 
     #
@@ -815,17 +805,25 @@ class MoonrakerCompat:
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
+    # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
     def GetCurrentZOffset(self):
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
             "objects": {
-                "toolhead": None
+                "toolhead": None,
+                "print_stats": None
             }
         })
         if result.HasError():
             self.Logger.error("GetCurrentZOffset failed to query toolhead objects: "+result.GetLoggingErrorStr())
             return False
+
+        # If we are warming up, don't return a value, since the z-axis could be at any level before the print starts.
+        if self.CheckIfPrinterIsWarmingUp_WithPrintStats(result):
+            return -1
+
+        # Try to get the z-axis position
         try:
             res = result.GetResult()["status"]
             zAxisPositionFloat = res["toolhead"]["position"][2]

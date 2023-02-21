@@ -391,8 +391,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # GCODE Events
         # Note most of these aren't sent when printing from the SD card
-        elif event == "ZChange":
-            self.NotificationHandler.OnZChange()
         elif event == "Waiting":
             self.NotificationHandler.OnWaiting()
 

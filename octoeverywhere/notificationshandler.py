@@ -49,7 +49,8 @@ class NotificationsHandler:
         self.PrinterId = None
         self.ProtocolAndDomain = "https://printer-events-v1-oeapi.octoeverywhere.com"
         self.PrinterStateInterface = printerStateInterface
-        self.PingTimer = None
+        self.ProgressTimer = None
+        self.FirstLayerTimer = None
         self.Gadget = Gadget(logger, self, self.PrinterStateInterface)
 
         # Define all the vars
@@ -171,7 +172,7 @@ class NotificationsHandler:
             # There's no print running.
             if self._IsPingTimerRunning():
                 self.Logger.info("Moonraker client sync state: Detected no active print but our ping timers ARE RUNNING. Stopping them now.")
-                self.StopPingTimer()
+                self.StopTimers()
                 return
             else:
                 self.Logger.info("Moonraker client sync state: Detected no active print and no ping timers are running, so there's nothing to do.")
@@ -207,10 +208,10 @@ class NotificationsHandler:
 
             # Setup the timers, with hours reported, to make sure that the ping timer and Gadget are running.
             self.Logger.info("Moonraker client sync state: Restoring printing timer with existing duration of "+str(totalDurationFloatSec_CanBeNone))
-            self.SetupPingTimer(False, hoursReportedInt)
+            self.StartPrintTimers(False, hoursReportedInt)
         else:
             # On paused, make sure they are stopped.
-            self.StopPingTimer()
+            self.StopTimers()
 
 
     # Only used for testing.
@@ -232,7 +233,7 @@ class NotificationsHandler:
     def OnStarted(self, fileName):
         self.ResetForNewPrint(None)
         self._updateCurrentFileName(fileName)
-        self.SetupPingTimer(True, None)
+        self.StartPrintTimers(True, None)
         self._sendEvent("started")
         self.Logger.info("New print started; PrintId: "+str(self.PrintId))
 
@@ -241,7 +242,7 @@ class NotificationsHandler:
     def OnFailed(self, fileName, durationSecStr, reason):
         self._updateCurrentFileName(fileName)
         self._updateToKnownDuration(durationSecStr)
-        self.StopPingTimer()
+        self.StopTimers()
         self._sendEvent("failed", { "Reason": reason})
 
 
@@ -250,7 +251,7 @@ class NotificationsHandler:
     def OnDone(self, fileName_CanBeNone, durationSecStr_CanBeNone):
         self._updateCurrentFileName(fileName_CanBeNone)
         self._updateToKnownDuration(durationSecStr_CanBeNone)
-        self.StopPingTimer()
+        self.StopTimers()
         self._sendEvent("done")
 
 
@@ -272,7 +273,7 @@ class NotificationsHandler:
             self._sendEvent("paused")
 
         # Stop the ping timer, so we don't report progress while we are paused.
-        self.StopPingTimer()
+        self.StopTimers()
 
 
     # Fired when a print is resumed
@@ -281,12 +282,12 @@ class NotificationsHandler:
         self._sendEvent("resume")
 
         # Start the ping timer, to ensure it's running now.
-        self.SetupPingTimer(False, None)
+        self.StartPrintTimers(False, None)
 
 
     # Fired when OctoPrint or the printer hits an error.
     def OnError(self, error):
-        self.StopPingTimer()
+        self.StopTimers()
 
         # This might be spammy from OctoPrint, so limit how often we bug the user with them.
         if self._shouldSendSpammyEvent("on-error"+str(error), 30.0) is False:
@@ -301,32 +302,48 @@ class NotificationsHandler:
         self.OnPaused(self.CurrentFileName)
 
 
-    # For OctoPrint this fires - EVERY TIME the z-axis changes.
-    # For Moonraker, this fires on every progress update.
-    def OnZChange(self):
+    #
+    # Note this values are important!
+    # The cost of getting the current z offset is decently high, and thus we can't check it too often.
+    # However, the our "first layer complete" logic works by watching the zoffset to detect when it has moved above
+    # the "lowest ever seen.". It will only fire the notification after we have seen something above "the lowest ever seen"
+    # so many times. If we don't poll frequently enough, the notification will be delayed and we might miss some of the layer heights changes.
+    #
+    # For now, we settled on checking every 2 seconds and a FirstLayerCountAboveLowestBeforeNotify value of 5, meaning we need to constantly see
+    # a layer height above the lowest for 10 seconds before we will fire the notification.
+    FirstLayerTimerIntervalSec = 2.0
+    FirstLayerCountAboveLowestBeforeNotify = 5
+
+
+    # Called by our firstLayerTimer at a fixed interval defined by FirstLayerTimerIntervalSec.
+    # Returns True if the timer should continue, otherwise False
+    def _OnFirstLayerWatchTimer(self):
+
         # If we have already sent the first layer done message there's nothing to do.
+        # Remember! This timer will be started mid print for a Moonraker state restore or on resume, so we need to make
+        # Sure we handle that. Right now we use HasSendFirstLayerDoneMessage to ensure we don't run the logic anymore until the print restarts.
         if self.HasSendFirstLayerDoneMessage:
-            return
+            return False
 
         # Ensure we are in state where we should fire this (printing)
-        # Otherwise we will set the flag to disable the message, which will be reset on the
-        # next print start.
         if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
             self.HasSendFirstLayerDoneMessage = True
-            return
+            return False
 
         # Get the current zoffset value.
         currentZOffsetMM = self.PrinterStateInterface.GetCurrentZOffset()
 
         # Make sure we know it.
+        # If not, return True so we keep checking.
         if currentZOffsetMM == -1:
-            return
+            return True
 
         # If the value is 0.0, the printer is still warming up or getting ready. We can't print at 0.0, because that's the nozzle touching the plate.
         # Ignore this value, so we don't lock to it as the "lowest we have seen."
         # I'm not sure if OctoPrint does this, but moonraker will report the value of 0.0
+        # In this case, return True so we keep checking.
         if currentZOffsetMM < 0.0001:
-            return
+            return True
 
         # The trick here is how we do figure out when the first layer is done with out knowing the print layer height
         # or how the gcode is written to do zhops.
@@ -359,12 +376,15 @@ class NotificationsHandler:
         # The idea is to keep it high, which will delay the first layer notification some, but it will give us more time
         # to be sure we have moved past the first layer, and the head isn't just z-hoping.
         # After the head goes back down to the lowest layer, this will reset to 0.
-        if self.zOffsetNotAtLowestCount < 10:
-            return
+        if self.zOffsetNotAtLowestCount < NotificationsHandler.FirstLayerCountAboveLowestBeforeNotify:
+            # Not done yet, return True to keep checking.
+            return True
 
         # Send the message.
         self.HasSendFirstLayerDoneMessage = True
         self._sendEvent("firstlayerdone", {"ZOffsetMM" : str(currentZOffsetMM) })
+        # We are done, return false so the timer stops.
+        return False
 
 
     # Fired when we get a M600 command from the printer to change the filament
@@ -827,10 +847,33 @@ class NotificationsHandler:
         return [args, files]
 
 
-    # Starts a ping timer which is used to fire "every x minutes events".
-    def SetupPingTimer(self, resetHoursReported, restoreActionSetHoursReportedInt_OrNone):
+    # Stops any running timer, be it the progress timer, the Gadget timer, or something else.
+    def StopTimers(self):
+        # Capture locally & Stop
+        progressTimer = self.ProgressTimer
+        self.ProgressTimer = None
+        if progressTimer is not None:
+            progressTimer.Stop()
+
+        # Stop the first layer timer.
+        self.StopFirstLayerTimer()
+
+        # Stop Gadget From Watching
+        self.Gadget.StopWatching()
+
+
+    def StopFirstLayerTimer(self):
+        # Capture locally & Stop
+        firstLayerTimer = self.FirstLayerTimer
+        self.FirstLayerTimer = None
+        if firstLayerTimer is not None:
+            firstLayerTimer.Stop()
+
+
+    # Starts all print timers, including the progress time, Gadget, and the first layer watcher.
+    def StartPrintTimers(self, resetHoursReported, restoreActionSetHoursReportedInt_OrNone):
         # First, stop any timer that's currently running.
-        self.StopPingTimer()
+        self.StopTimers()
 
         # Make sure the hours flag is cleared when we start a new timer.
         if resetHoursReported:
@@ -840,31 +883,25 @@ class NotificationsHandler:
         if restoreActionSetHoursReportedInt_OrNone is not None:
             self.PingTimerHoursReported = int(restoreActionSetHoursReportedInt_OrNone)
 
-        # Setup the new timer
+        # Setup the progress timer
         intervalSec = 60 * 60 # Fire every hour.
-        timer = RepeatTimer(self.Logger, intervalSec, self.PingTimerCallback)
+        timer = RepeatTimer(self.Logger, intervalSec, self.ProgressTimerCallback)
         timer.start()
-        self.PingTimer = timer
+        self.ProgressTimer = timer
+
+        # Setup the first layer watcher - we use a different timer since this timer is really short lived and it fires much more often.
+        intervalSec = NotificationsHandler.FirstLayerTimerIntervalSec
+        firstLayerTimer = RepeatTimer(self.Logger, intervalSec, self.FirstLayerTimerCallback)
+        firstLayerTimer.start()
+        self.FirstLayerTimer = firstLayerTimer
 
         # Start Gadget From Watching
         self.Gadget.StartWatching()
 
 
-    # Stops any running ping timer.
-    def StopPingTimer(self):
-        # Capture locally
-        pingTimer = self.PingTimer
-        self.PingTimer = None
-        if pingTimer is not None:
-            pingTimer.Stop()
-
-        # Stop Gadget From Watching
-        self.Gadget.StopWatching()
-
-
     # Let's the caller know if the ping timer is running, and thus we are tracking a print.
     def _IsPingTimerRunning(self):
-        return self.PingTimer is not None
+        return self.ProgressTimer is not None
 
 
     # Returns if we have a current print file name, indication if we are setup to track a print at all, even a paused one.
@@ -873,17 +910,30 @@ class NotificationsHandler:
 
 
     # Fired when the ping timer fires.
-    def PingTimerCallback(self):
+    def ProgressTimerCallback(self):
 
         # Double check the state is still printing before we send the notification.
         # Even if the state is paused, we want to stop, since the resume command will restart the timers
         if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
-            self.Logger.info("Notification ping timer state doesn't seem to be printing, stopping timer.")
-            self.StopPingTimer()
+            self.Logger.info("Notification progress timer state doesn't seem to be printing, stopping timer.")
+            self.StopTimers()
             return
 
         # Fire the event.
         self.OnPrintTimerProgress()
+
+
+    # Fired when the ping timer fires.
+    def FirstLayerTimerCallback(self):
+
+        # Don't check the printer state, we will allow the function to handle all of that
+        # If the function returns True, the timer should continue. If it returns false, the time should be stopped.
+        if self._OnFirstLayerWatchTimer() is True:
+            return
+
+        # Stop the timer.
+        self.Logger.info("First layer timer is done. Stopping.")
+        self.StopFirstLayerTimer()
 
 
     # Only allows possibly spammy events to be sent every x minutes.

@@ -73,6 +73,7 @@ class MockPrinterStateObject:
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
+    # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
     def GetCurrentZOffset(self):
         # Failed to find it.
@@ -118,8 +119,6 @@ class StatusChangeHandlerStub():
         # NotificationHandlerInstance.OnError("test error string")
         # NotificationHandlerInstance.OnError("test error string")
         # NotificationHandlerInstance.OnError("test error string")
-        #handler.OnZChange()
-        #handler.OnZChange()
         #handler.OnFilamentChange()
         #handler.OnPrintProgress(20)
 

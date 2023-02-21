@@ -56,10 +56,16 @@ class PrinterStateObject:
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
+    # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
     def GetCurrentZOffset(self):
         # Try to get the current value from the data.
         try:
+            # Don't get the current zoffset until the print is running, since the tool could be at any
+            # height before the print starts.
+            if self.IsPrintWarmingUp():
+                return -1
+
             # We have seen in client logs sometimes this value doesn't exist,
             # and sometime it does, but it's just None.
             currentData = self.OctoPrintPrinterObject.get_current_data()

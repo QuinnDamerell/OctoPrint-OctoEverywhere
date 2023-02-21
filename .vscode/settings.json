@@ -79,6 +79,7 @@
         "octopingpong",
         "octoprint",
         "octoprintcommandhandler",
+        "octoprintwebcamhelper",
         "octoproxysocketimpl",
         "octoservercon",
         "octosessionimpl",
