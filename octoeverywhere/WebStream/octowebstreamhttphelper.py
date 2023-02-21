@@ -874,6 +874,11 @@ class OctoWebStreamHttpHelper:
             # TODO - this will leave this stream with an incomplete body size, we should indicate that to the server.
             return None
         except Exception as e:
+            # There doesn't seem to be an exception type for this one, so we will just catch it like this.
+            if "IncompleteRead" in str(e):
+                # Don't do the entire sentry exception print, since it's too long.
+                self.Logger.warn("doBodyRead failed with an IncompleteRead, so the stream is done.")
+                return None
             Sentry.Exception(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read.", e)
             return None
 

@@ -342,13 +342,16 @@ class NotificationsHandler:
         if currentZOffsetMM > self.zOffsetLowestSeenMM - 0.01 and currentZOffsetMM < self.zOffsetLowestSeenMM + 0.01:
             # The zOffset is the same as the previously seen.
             self.zOffsetNotAtLowestCount = 0
+            self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - Same as the 'lowest ever seen', resetting the counter.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
         elif currentZOffsetMM < self.zOffsetLowestSeenMM:
             # We found a new low, record it.
             self.zOffsetLowestSeenMM = currentZOffsetMM
             self.zOffsetNotAtLowestCount = 0
+            self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - New lowest zoffset ever seen.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
         else:
             # The zOffset is higher than the lowest we have seen.
             self.zOffsetNotAtLowestCount += 1
+            self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - Offset is higher than lowest seen, adding to the count.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
 
         # After zOffsetNotAtLowestCount >= 10, we consider the first layer to be done.
         # This means we won't fire the event until we see ten zmoves that are above the known min.

@@ -43,7 +43,7 @@ class Client:
             # For this special case, call our function.
             self.handleWsError(exception)
 
-        # Create it!
+        # Create the websocket. Once created, this is never destroyed while this class exists.
         self.Ws = WebSocketApp(url,
                                   on_open = OnOpen,
                                   on_message = OnMsg,
@@ -129,9 +129,11 @@ class Client:
 
     def Close(self):
         self.hasClientRequestedClose = True
-        if self.Ws:
+        # Always try to call close, even if we have already done it.
+        try:
             self.Ws.close()
-            self.Ws = None
+        except Exception:
+            pass
 
 
     def Send(self, msgBytes, isData):
@@ -142,10 +144,9 @@ class Client:
 
 
     def SendWithOptCode(self, msgBytes, opcode):
-        if self.Ws:
-            try:
-                self.Ws.send(msgBytes, opcode)
-            except Exception as e:
-                # If any exception happens during sending, we want to report the error
-                # and shutdown the entire websocket.
-                self.handleWsError(e)
+        try:
+            self.Ws.send(msgBytes, opcode)
+        except Exception as e:
+            # If any exception happens during sending, we want to report the error
+            # and shutdown the entire websocket.
+            self.handleWsError(e)

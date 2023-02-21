@@ -224,26 +224,28 @@ class OctoServerCon:
 
 
     def Disconnect(self):
-        # If we have already gotten the disconnect signal, ignore future requests.
+        # Only close the OctoStream once, even though we might get multiple calls.
         # This can happen because disconnecting might case proxy socket errors, for example
         # if we closed all of the sockets locally and then the server tries to close one.
-        if self.IsDisconnecting is True:
-            self.Logger.info("Ignoring the session disconnect command because we are already working on it.")
-            return
-        self.IsDisconnecting = True
+        if self.IsDisconnecting is False:
+            self.IsDisconnecting = True
+            # Try to close all of the sockets before we disconnect, so we send the messages.
+            # It's important to try catch this logic to ensure we always end up calling close on the current websocket.
+            try:
+                if self.OctoSession:
+                    self.OctoSession.CloseAllWebStreamsAndDisable()
+            except Exception as e:
+                Sentry.Exception("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
+        else:
+            self.Logger.info("OctoServerCon Disconnect was called, but we are skipping the CloseAllWebStreamsAndDisable because it has already been done.")
 
-        # Try to close all of the sockets before we disconnect, so we send the messages.
-        # It's important to try catch this logic to ensure we always end up calling close on the current websocket.
-        try:
-            if self.OctoSession:
-                self.OctoSession.CloseAllWebStreamsAndDisable()
-        except Exception as e:
-            Sentry.Exception("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
-
-        # Close the websocket, which will cause the run loop to spin and reconnect.
+        # On every disconnect call, try to disconnect the websocket. We do this because we have seen that for some reason calling Close doesn't seem
+        # to always actually cause the websocket to close and cause RunUntilClosed to return. Thus we hope if we keep trying to close it, maybe it will.
+        # We have traced this bug down in to the WS lib, so it's kind of out of our control.
+        # What we want is for this Close() to cause the websocket to disconnect, which will make RunUntilClosed return and then the connection loop will handle
+        # the reconnect.
         ws = self.Ws
-        self.Logger.info("OctoServerCon websocket close start. IsPrimary?:"+str(self.IsPrimaryConnection) + "; wsAddr:+"+str(ws))
-
+        self.Logger.info("OctoServerCon websocket close start. IsPrimary?:"+str(self.IsPrimaryConnection) + "; wsId:"+self.GetWsId(ws))
         if ws:
             ws.Close()
         self.Logger.info("OctoServerCon disconnect complete.")
@@ -314,8 +316,8 @@ class OctoServerCon:
                 endpoint = self.GetEndpoint()
 
                 # Connect to the service.
-                self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString())
                 self.Ws = Client(endpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
+                self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString() + " wsId:"+self.GetWsId(self.Ws))
                 self.Ws.RunUntilClosed()
 
                 # Handle disconnects
@@ -363,3 +365,10 @@ class OctoServerCon:
         # When we send any message, consider it user activity.
         self.LastUserActivityTime = datetime.now()
         self.Ws.Send(msgBytes, True)
+
+
+    def GetWsId(self, ws):
+        ws = self.Ws
+        if ws is not None:
+            return str(id(ws))
+        return "UNKNOWN"
