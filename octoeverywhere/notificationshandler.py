@@ -60,6 +60,7 @@ class NotificationsHandler:
         self.MoonrakerReportedProgressFloat_CanBeNone = None
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
+        self.HasSendThirdLayerDoneMessage = False
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
         self.ProgressCompletionReported = []
@@ -81,6 +82,7 @@ class NotificationsHandler:
         self.MoonrakerReportedProgressFloat_CanBeNone = None
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
+        self.HasSendThirdLayerDoneMessage = False
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
@@ -192,6 +194,7 @@ class NotificationsHandler:
 
         # Disable the first layer complete logic, since we don't know what the base z-axis was
         self.HasSendFirstLayerDoneMessage = True
+        self.HasSendThirdLayerDoneMessage = True
 
         # Set this flag so the first progress update will restore the progress to the current progress without
         # firing all of the progress points we missed.
@@ -322,12 +325,13 @@ class NotificationsHandler:
         # If we have already sent the first layer done message there's nothing to do.
         # Remember! This timer will be started mid print for a Moonraker state restore or on resume, so we need to make
         # Sure we handle that. Right now we use HasSendFirstLayerDoneMessage to ensure we don't run the logic anymore until the print restarts.
-        if self.HasSendFirstLayerDoneMessage:
+        if self.HasSendFirstLayerDoneMessage and self.HasSendThirdLayerDoneMessage:
             return False
 
         # Ensure we are in state where we should fire this (printing)
         if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
             self.HasSendFirstLayerDoneMessage = True
+            self.HasSendThirdLayerDoneMessage = True
             return False
 
         # Get the current zoffset value.
@@ -354,37 +358,81 @@ class NotificationsHandler:
         #
         # Typically, the flow looks something like... 0.4 -> 0.2 -> 0.4 -> 0.2 -> 0.4 -> 0.5 -> 0.7 -> 0.5 -> 0.7...
         # Where the layer hight is 0.2 (because it's the lowest first value) and the zhops are 0.4 or more.
+        #
+        # This system is pumped every FirstLayerTimerIntervalSec and the z offset is checked.
 
-        # Since this is a float, avoid ==
-        if currentZOffsetMM > self.zOffsetLowestSeenMM - 0.01 and currentZOffsetMM < self.zOffsetLowestSeenMM + 0.01:
-            # The zOffset is the same as the previously seen.
+        # First, do the logic for the first layer
+        if self.HasSendFirstLayerDoneMessage is False:
+            # Since this is a float, avoid ==
+            if currentZOffsetMM > self.zOffsetLowestSeenMM - 0.01 and currentZOffsetMM < self.zOffsetLowestSeenMM + 0.01:
+                # The zOffset is the same as the previously seen.
+                self.zOffsetNotAtLowestCount = 0
+                self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - Same as the 'lowest ever seen', resetting the counter.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
+            elif currentZOffsetMM < self.zOffsetLowestSeenMM:
+                # We found a new low, record it.
+                self.zOffsetLowestSeenMM = currentZOffsetMM
+                self.zOffsetNotAtLowestCount = 0
+                self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - New lowest zoffset ever seen.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
+            else:
+                # The zOffset is higher than the lowest we have seen.
+                self.zOffsetNotAtLowestCount += 1
+                self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - Offset is higher than lowest seen, adding to the count.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
+
+            # Check if we have been above the min layer height for FirstLayerCountAboveLowestBeforeNotify of times in a row.
+            # If not, keep waiting, if so, fire the notification.
+            if self.zOffsetNotAtLowestCount < NotificationsHandler.FirstLayerCountAboveLowestBeforeNotify:
+                # Not done yet, return True to keep checking.
+                return True
+
+            # Set the flag and reset the count, since it will now be used for the third lowest layer notification.
+            self.HasSendFirstLayerDoneMessage = True
             self.zOffsetNotAtLowestCount = 0
-            self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - Same as the 'lowest ever seen', resetting the counter.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
-        elif currentZOffsetMM < self.zOffsetLowestSeenMM:
-            # We found a new low, record it.
-            self.zOffsetLowestSeenMM = currentZOffsetMM
-            self.zOffsetNotAtLowestCount = 0
-            self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - New lowest zoffset ever seen.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
-        else:
-            # The zOffset is higher than the lowest we have seen.
-            self.zOffsetNotAtLowestCount += 1
-            self.Logger.debug("First Layer Logic - currentOffset: %.4f; lowestSeen: %.4f; notAtLowestCount: %d - Offset is higher than lowest seen, adding to the count.", currentZOffsetMM, self.zOffsetLowestSeenMM, self.zOffsetNotAtLowestCount)
 
-        # After zOffsetNotAtLowestCount >= 10, we consider the first layer to be done.
-        # This means we won't fire the event until we see ten zmoves that are above the known min.
-        # This is a hard metric to get right, but we have to account for z-hops.
-        # The idea is to keep it high, which will delay the first layer notification some, but it will give us more time
-        # to be sure we have moved past the first layer, and the head isn't just z-hoping.
-        # After the head goes back down to the lowest layer, this will reset to 0.
-        if self.zOffsetNotAtLowestCount < NotificationsHandler.FirstLayerCountAboveLowestBeforeNotify:
-            # Not done yet, return True to keep checking.
-            return True
+            # Send the message.
+            self._sendEvent("firstlayerdone", {"ZOffsetMM" : str(currentZOffsetMM) })
 
-        # Send the message.
-        self.HasSendFirstLayerDoneMessage = True
-        self._sendEvent("firstlayerdone", {"ZOffsetMM" : str(currentZOffsetMM) })
-        # We are done, return false so the timer stops.
-        return False
+        # Next, after we know the first layer is done, do the logic for the third layer notification.
+        elif self.HasSendThirdLayerDoneMessage is False:
+            # Sanity check we have a valid value for self.zOffsetLowestSeenMM, from the first layer notification.
+            if self.zOffsetLowestSeenMM > 50.0:
+                self.Logger.warn("First layer notification has sent but third layer hans't but the zOffsetLowestSeenMM value is really high, seems like it's unset. Value: "+str(self.zOffsetLowestSeenMM))
+                self.HasSendThirdLayerDoneMessage = True
+                return False
+            if self.zOffsetLowestSeenMM <= 0.0001:
+                self.Logger.warn("zOffsetLowestSeenMM is too low for third layer notification. Value: "+str(self.zOffsetLowestSeenMM))
+                self.HasSendThirdLayerDoneMessage = True
+                return False
+
+            # To compute the third layer, we assume the lowest z offset height is the layer height.
+            # Since we don't allow a value of 0, this is reasonable.
+            thirdLayerHeight = self.zOffsetLowestSeenMM * 3
+            if currentZOffsetMM > thirdLayerHeight + 0.001:
+                # The current offset is larger than the third layer height, count it.
+                self.zOffsetNotAtLowestCount += 1
+                self.Logger.debug("Third Layer Logic - currentOffset: %.4f; thirdLayerHeight: %.4f; notAtLowestCount: %d - Offset is higher than the third layer height, adding to the count.", currentZOffsetMM, thirdLayerHeight, self.zOffsetNotAtLowestCount)
+
+            else:
+                # The current layer height is equal to or at the third layer height, reset the count
+                self.zOffsetNotAtLowestCount = 0
+                self.Logger.debug("Third Layer Logic - currentOffset: %.4f; thirdLayerHeight: %.4f; notAtLowestCount: %d - Offset less than or equal to the third layer height, resetting the count.", currentZOffsetMM, thirdLayerHeight, self.zOffsetNotAtLowestCount)
+
+            # Check if we have been above the third layer height for FirstLayerCountAboveLowestBeforeNotify of times in a row.
+            # If not, keep waiting, if so, fire the notification.
+            if self.zOffsetNotAtLowestCount < NotificationsHandler.FirstLayerCountAboveLowestBeforeNotify:
+                # Not done yet, return True to keep checking.
+                return True
+
+            # Set the flag to indicate we sent the notification
+            self.HasSendThirdLayerDoneMessage = True
+
+            # Send the notification.
+            self._sendEvent("thirdlayerdone", {"ZOffsetMM" : str(currentZOffsetMM) })
+
+        # If we have fired both, we are done.
+        # If we are not done, return True, so we keep going.
+        # Otherwise, return false, to stop the timer, because we are done.
+        isDone = self.HasSendFirstLayerDoneMessage is True and self.HasSendThirdLayerDoneMessage is True
+        return isDone is False
 
 
     # Fired when we get a M600 command from the printer to change the filament
