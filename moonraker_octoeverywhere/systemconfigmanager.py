@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 class SystemConfigManager:
 
@@ -56,6 +57,15 @@ subscriptions:
             file.write(expectedUpdateFileContent)
         logger.info("No update config found or it was out of date, writing a new file.")
 
+        # Whenever we update the file on disk, also restart moonraker so that it reads it and
+        # pull the update information into the update manager. It's safe to restart moonraker during a print
+        # so this won't effect anything.
+        logger.info("No config file was found on disk, so we are going to attempt to restart moonraker.")
+        try:
+            SystemConfigManager._RunShellCommand("systemctl restart moonraker")
+        except Exception as e:
+            logger.warn("Failed to restart moonraker service. "+str(e))
+
 
     # This doesn't relate to the update manager, but if we put our service name in this file
     # The user can then use the UI buttons to start, restart, and stop it.
@@ -111,3 +121,10 @@ subscriptions:
         with open(moonrakerConfigFilePath,'a', encoding="utf-8") as f:
             f.write("\n"+includeText+"\n")
         logger.info("Our update config include was not found in the moonraker config, so we added it.")
+
+
+    @staticmethod
+    def _RunShellCommand(cmd):
+        status = subprocess.call(cmd, shell=True)
+        if status != 0:
+            raise Exception("Command "+cmd+" failed to execute. Code: "+str(status))
