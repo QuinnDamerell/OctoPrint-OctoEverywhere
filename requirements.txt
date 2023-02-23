@@ -14,6 +14,6 @@ pillow
 certifi
 rsa
 sentry-sdk
-dnspython
+dnspython>=2.3.0
 # The following are required only for Moonraker
 configparser

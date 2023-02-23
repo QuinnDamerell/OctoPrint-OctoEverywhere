@@ -124,6 +124,7 @@
         "subcode",
         "systemconfigmanager",
         "telemetryaccumulator",
+        "thirdlayerdone",
         "threaddebug",
         "timerprogress",
         "toradio",
