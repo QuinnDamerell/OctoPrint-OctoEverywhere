@@ -49,12 +49,24 @@ class MDns:
         if self.Cache is None:
             self._ResetCacheFile()
 
-        # Setup the client
-        self.dnsResolver = dns.resolver.Resolver()
-        # Use the mdns multicast address
-        self.dnsResolver.nameservers = ["224.0.0.251"]
-        # Use the mdns port.
-        self.dnsResolver.port = 5353
+        # TODO - The dns.resolver.Resolver was added to this package back in 2020, in this commit.
+        # https://github.com/rthalley/dnspython/commit/0f365dc3f8876d99682d0473a2befc08dbe8ec67
+        # We have seen issues where some PY3 setups have libs that are older than 2.1.0, which brought this class.
+        # BUT - We can't simply require a later version of dnspython, like 2.3.0, because the newest package for PY2 is 1.16.0
+        # If we try to force the package to be dnspython>=2.3.0, new PY2 installs will break.
+        # So, for now, until we stop supporting PY2, we just disable the local DNS lookup if the class fails to load.
+        # This sucks, because that means some PY3 users that could use this can't just because we can't force the package to update.
+        # TODO - sys.version_info[0] < 3: when we drop PY2 support, remove this try catch and update our requirements to be dnspython>=2.3.0
+        try:
+            # Setup the client
+            self.dnsResolver = dns.resolver.Resolver()
+            # Use the mdns multicast address
+            self.dnsResolver.nameservers = ["224.0.0.251"]
+            # Use the mdns port.
+            self.dnsResolver.port = 5353
+        except Exception as e:
+            self.dnsResolver = None
+            self.Logger.warn("Failed to create DNS class, local dns resolve is disabled. "+str(e))
 
 
     # Given a full url with protocol, hostname, and path, this will look for a local mdns hostname, try to resolve it, and return the full URL again with
@@ -144,7 +156,7 @@ class MDns:
 
         # TODO - Right now the DNS lib we use doesn't support PY2 the same way this PY3 logic is written. There might be a way to write a
         # version of this logic that would support PY2, but for now, we just don't support it. Upgrade to PY3 people!
-        if sys.version_info[0] < 3:
+        if sys.version_info[0] < 3 or self.dnsResolver is None:
             return None
 
         # We have seen that occasionally a first resolve won't work, but future resolves will.

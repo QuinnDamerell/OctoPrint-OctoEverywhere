@@ -14,7 +14,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this is also parsed by the moonraker module to pull the version, so the string and format must remain the same!
-plugin_version = "2.3.8"
+plugin_version = "2.3.9"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -43,11 +43,10 @@ plugin_license = "AGPLv3"
 #
 # Other lib version notes:
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.
-#   dnspython - We require dnspython 2.3.0 and above because some older versions don't have the classes we require.
 #
 # Note! These need to stay in sync with .github/pylint.yml decencies.
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
-plugin_requires = ["websocket_client>=0.56.0,<1.4.0", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi", "rsa", "sentry-sdk", "dnspython>=2.3.0" ]
+plugin_requires = ["websocket_client>=0.56.0,<1.4.0", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi", "rsa", "sentry-sdk", "dnspython" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point
