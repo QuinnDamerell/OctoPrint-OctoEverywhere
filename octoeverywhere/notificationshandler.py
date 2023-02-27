@@ -1035,13 +1035,11 @@ class SpammyEventContext:
             delayMultiplier = self.ConcurrentCount
 
         # Sanity check.
-        if delayMultiplier < 1:
-            delayMultiplier = 1
+        delayMultiplier = max(delayMultiplier, 1)
 
         # Ensure we don't try to delay too long.
         # Most of these timers are base intervals of 5 minutes, so 288 is one every 24 hours.
-        if delayMultiplier > 288:
-            delayMultiplier = 288
+        delayMultiplier = min(delayMultiplier, 288)
 
         timeSinceLastSendSec = time.time() - self.LastSentTimeSec
         sendIntervalSec = baseTimeIntervalMinutesFloat * 60.0
