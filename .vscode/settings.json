@@ -59,6 +59,7 @@
         "Mjpg",
         "moonrakerclient",
         "moonrakercommandhandler",
+        "moonrakerdatabase",
         "moonrakerhost",
         "moonrakerwebcamhelper",
         "msgcount",

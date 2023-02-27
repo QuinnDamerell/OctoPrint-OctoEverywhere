@@ -100,7 +100,7 @@ class NotificationsHandler:
         self.PrintStartTimeSec = time.time()
 
         # Reset our anti spam times.
-        self.SpammyEventTimeDict = {}
+        self._clearSpammyEventContexts()
 
         # Build the progress completion reported list.
         # Add an entry for each progress we want to report, not including 0 and 100%.
@@ -283,6 +283,9 @@ class NotificationsHandler:
     def OnResume(self, fileName):
         self._updateCurrentFileName(fileName)
         self._sendEvent("resume")
+
+        # Clear any spammy event contexts we have, assuming the user cleared any issues before resume.
+        self._clearSpammyEventContexts()
 
         # Start the ping timer, to ensure it's running now.
         self.StartPrintTimers(False, None)
@@ -992,15 +995,56 @@ class NotificationsHandler:
             # Check if the event has been added to the dict yet.
             if eventName not in self.SpammyEventTimeDict:
                 # No event added yet, so add it now.
-                self.SpammyEventTimeDict[eventName] = time.time()
+                self.SpammyEventTimeDict[eventName] = SpammyEventContext()
                 return True
 
             # Check how long it's been since the last notification was sent.
             # If it's less than 5 minutes, don't allow the event to send.
-            deltaSec = time.time() - self.SpammyEventTimeDict[eventName]
-            if deltaSec < (60.0 * minTimeBetweenMinutesFloat):
+            if self.SpammyEventTimeDict[eventName].ShouldSendEvent(minTimeBetweenMinutesFloat) is False:
                 return False
 
-            # Allow the event to send and update the time we are allowing it.
-            self.SpammyEventTimeDict[eventName] = time.time()
+            # Report we are sending an event and return true.
+            self.SpammyEventTimeDict[eventName].ReportEventSent()
             return True
+
+
+    def _clearSpammyEventContexts(self):
+        with self.SpammyEventLock:
+            self.SpammyEventTimeDict = {}
+
+
+class SpammyEventContext:
+
+    def __init__(self) -> None:
+        self.ConcurrentCount = 0
+        self.LastSentTimeSec = 0
+        self.ReportEventSent()
+
+
+    def ReportEventSent(self):
+        self.ConcurrentCount += 1
+        self.LastSentTimeSec = time.time()
+
+
+    def ShouldSendEvent(self, baseTimeIntervalMinutesFloat):
+        # Figure out what the delay multiplier should be.
+        delayMultiplier = 1
+
+        # For the first 3 events, don't back off.
+        if self.ConcurrentCount > 3:
+            delayMultiplier = self.ConcurrentCount
+
+        # Sanity check.
+        if delayMultiplier < 1:
+            delayMultiplier = 1
+
+        # Ensure we don't try to delay too long.
+        # Most of these timers are base intervals of 5 minutes, so 288 is one every 24 hours.
+        if delayMultiplier > 288:
+            delayMultiplier = 288
+
+        timeSinceLastSendSec = time.time() - self.LastSentTimeSec
+        sendIntervalSec = baseTimeIntervalMinutesFloat * 60.0
+        if timeSinceLastSendSec > sendIntervalSec * delayMultiplier:
+            return True
+        return False
