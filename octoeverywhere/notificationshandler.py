@@ -1015,7 +1015,7 @@ class NotificationsHandler:
 
 class SpammyEventContext:
 
-    def __init__(self) -> None:
+    def __init__(self):
         self.ConcurrentCount = 0
         self.LastSentTimeSec = 0
         self.ReportEventSent()
