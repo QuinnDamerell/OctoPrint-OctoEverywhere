@@ -1,14 +1,14 @@
 <p align="center"><img src="https://octoeverywhere.com/img/logo.png" alt="OctoEverywhere's Logo" style="width:100px" /></p>
 <h1 align="center" style="margin-bottom:20px"><a href="https://octoeverywhere.com/?source=github_readme">OctoEverywhere</a></h1>
 
-Cloud empower your OctoPrint or Klipper printer with **free, private, and unlimited remote access to your full web control portal from anywhere!** Developed for the maker community, powered by the maker community.
+Cloud empower your OctoPrint and Klipper printers with **free, private, and unlimited remote access to your full web control portal from anywhere!** Developed for the maker community, powered by the maker community.
 
 ## Features
 
-- 🚀 Free & full remote access to your OctoPrint, Mainsail, and Fluidd portals from anywhere.
+- 🚀 Free remote access to your full OctoPrint, Mainsail, and Fluidd web portals from anywhere.
 - 🤖 **Free & unlimited AI failure detection** that will automatically stop failed prints to save you time and money.
 - 📷 Full resolution and full frame-rate webcam streaming.
-- 📱 Empower your favorite OctoPrint & Klipper, iOS and Android apps with [remote access](https://octoeverywhere.com/appsetup?source=github_readme).
+- 📱 Empower your favorite OctoPrint & Klipper iOS and Android apps with [remote access](https://octoeverywhere.com/appsetup?source=github_readme).
 - 📺 Live stream your 3D prints to your friends or the entire world with [Live Links](https://octoeverywhere.com/live?source=github_readme).
 - 🔔 Instant [printer notifications](https://octoeverywhere.com/notifications?source=github_readme) sent to SMS, Email, Discord, Telegram, Slack, and more.
 - 🔗 Share secure access of your full OctoPrint portal with others.
