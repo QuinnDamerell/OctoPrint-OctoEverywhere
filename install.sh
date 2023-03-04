@@ -11,7 +11,9 @@ set -e
 # Get the root path of the repo, aka, where this script is executing
 OE_REPO_DIR=$(realpath $(dirname "$0"))
 
-# This is the root of where our py virt env will be
+# This is the root of where our py virtual env will be. Note that all OctoEverywhere instances share this same
+# virtual environment. This how the rest of the system is, where all other services, even with multiple instances, share the same
+# virtual environment. I probably wouldn't have done it like this, but we have to create this before we know what instance we are targeting, so it's fine.
 OE_ENV="${HOME}/octoeverywhere-env"
 
 # Note that this is parsed by the update process to find and update required system packages on update!
@@ -150,7 +152,7 @@ cat << EOF
 EOF
 log_blank
 log_blank
-log_info "OctoEverywhere empowers the worldwide maker community with free Klipper remote access, AI failure detection, notifications, live streaming, and so much more!" 
+log_info "OctoEverywhere empowers the worldwide maker community with free Klipper remote access, AI failure detection, notifications, live streaming, and so much more!"
 log_blank
 log_blank
 

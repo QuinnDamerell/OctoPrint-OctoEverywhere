@@ -1,3 +1,36 @@
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#                                                             READ ME
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# This script is responsible for the remainder of the OctoEverywhere for klipper setup process, after the bash script bootstrapped things.
+# The script should only be launched by the install.sh bash script, since the install.sh script bootstraps the install process by setting up
+# required system packages, the virtual env, and the python packages required. This install script runs in the same service virtual env.
+#
+# The only parameter the system takes is the moonraker config file path. Based on that one file, we can find everything we need, like the answers
+# to the setup differences listed below. If the user launches the install scrip by hand, the config file isn't passed usually. We will try to auto-detect
+# the config file path or ask the user to provide it. If we are being launched from Kiauh, the config file will be passed, and we don't have to ask the
+# user anything.
+#
+# Info about Kiauh, Klipper, Moonraker, etc. from the Kiauh and Moonraker devs, this is the proper way to setup into the system.
+#
+# If only one instance of klipper and moonraker is running, thing are very easy.
+#
+# Service Files:
+#    1) Every instance of klipper and moonraker both have their own service files.
+#          a) If there is only one instance, the service file name is `moonraker.service`
+#          b) If there are multiple instances of klipper and thus moonraker, the service file names will be `moonraker-<number or name>.service` and match `klipper-<number or name>.service`
+#                i) These names are set in stone one setup from the install, if the user wanted to change them they would have to re-install.
+#    2) Thus OctoEverywhere will follow the same naming convention, in regards to the service file names.
+#
+# Moonraker Data Folders:
+#   1) Every klipper and paired moonraker instance has it's own data folder.
+#          a) If there is only one instance, data folder defaults to ~/printer_data
+#          b) If there are multiple instances of klipper and thus moonraker, the folders will be ~/<name>_data
+#   2) For OctoEverywhere since we setup and target per moonraker instance, all per instances files will be stored in the data folder that matches the targeted instance.
+#
+#
 
 import os
 import sys
@@ -12,10 +45,6 @@ import pwd
 import configparser
 import requests
 
-#
-# This script is responsible for the remainder of the moonraker setup process, after the bash script bootstrapped things.
-# This script should only be launched by the bash script, since it requires params and to be ran in the octoeverywhere virt env.
-#
 
 #
 # Output Helpers
@@ -64,15 +93,16 @@ class MoonrakerInstaller:
         self.VirtualEnvPath = None
         self.UserName = None
         self.UserHomePath = None
-        # This one is optional.
+        # This one is optional - for installs with Kiauh it will be passed, otherwise we will auto-detect it and ask the user to confirm.
         self.MOONRAKER_CONFIG = None
 
         # These var are all setup in InitForMoonrakerConfig(), once we know the config we are targeting.
         self.ServiceName = None
         self.ServiceFilePath = None
         self.LocalFileStoragePath =  None
-        self.KlipperConfigFolder = None
-        self.KlipperLogFolder = None
+        self.PrinterDataFolder = None      # This is the data folder root (most single instance setups this is ~/printer_data/)
+        self.PrinterConfigFolder = None    # This should be PrinterDataFolder/config
+        self.PrinterLogFolder = None       # This should be PrinterDataFolder/log
 
 
     def Run(self):
@@ -86,10 +116,8 @@ class MoonrakerInstaller:
             self.ParseArgs()
             Debug("Args parsed")
 
-            # Make sure we have a moonraker config, or the user supplied one.
+            # Make sure we have a moonraker config. It will either be passed to us as an argument, we auto detect it, or the user can supply it.
             self.EnsureMoonrakerConfig()
-            self.MOONRAKER_CONFIG = self.MOONRAKER_CONFIG.strip()
-            Info("Moonraker config set to: "+self.MOONRAKER_CONFIG)
 
             # Setup all of the class vars based on the instance of moonraker we are targeting.
             self.InitForMoonrakerConfig()
@@ -153,6 +181,8 @@ class MoonrakerInstaller:
                     # MOONRAKER_CONFIG is optional.
                     if "MOONRAKER_CONFIG" in argObj:
                         self.MOONRAKER_CONFIG = argObj["MOONRAKER_CONFIG"]
+
+                    # Validate the required vars exist.
                     if self.RepoRootFolder is None:
                         raise Exception("Required Env Var OE_REPO_DIR was not found; make sure to run the install.sh script to begin the installation process.")
                     if self.VirtualEnvPath is None:
@@ -185,7 +215,7 @@ class MoonrakerInstaller:
     # If not, it tries to find one or gets it from the user.
     def EnsureMoonrakerConfig(self):
         # If we already have one, validate it.
-        if self.MOONRAKER_CONFIG is not None:
+        if self.MOONRAKER_CONFIG is not None and len(self.MOONRAKER_CONFIG) > 0:
             if os.path.exists(self.MOONRAKER_CONFIG):
                 Info("Moonraker config passed to setup. "+self.MOONRAKER_CONFIG)
                 return
@@ -193,6 +223,7 @@ class MoonrakerInstaller:
                 Warn("Moonraker config passed to setup, but the file wasn't found. "+self.MOONRAKER_CONFIG)
 
         # Look for a config, try the default locations.
+        # TODO - This should really enumerate the moonraker service config files and choose based off them.
         self.MOONRAKER_CONFIG = os.path.join(self.UserHomePath, "printer_data/config/moonraker.conf")
         Debug("Testing path "+self.MOONRAKER_CONFIG)
         if os.path.exists(self.MOONRAKER_CONFIG) is False:
@@ -224,61 +255,122 @@ class MoonrakerInstaller:
                 sys.exit(1)
 
 
+    # Returns the parent directory of the passed directory or file path.
+    def GetParentDirectory(self, path):
+        return os.path.abspath(os.path.join(path, os.pardir))
+
+
+    # Recursively looks though the systemd folders for files matching the prefix given and ending in .service.
+    # Returns an empty list if none are found, otherwise a list of matched files.
+    def FindAllSystemdServiceFiles(self, serviceNamePrefix, path = None):
+        if path is None:
+            path = MoonrakerInstaller.SystemdServiceFilePath
+
+        fileAndDirList = os.listdir(path)
+        result = []
+        for fileOrDirName in fileAndDirList:
+            fullFileOrDirPath = os.path.join(path, fileOrDirName)
+
+            # Look through child folders.
+            if os.path.isdir(fullFileOrDirPath):
+                tempResult = self.FindAllSystemdServiceFiles(serviceNamePrefix, fullFileOrDirPath)
+                if tempResult is not None and len(tempResult) > 0:
+                    for t in tempResult:
+                        result.append(t)
+            # If it's a file, test if it's one of our matching files.
+            # Ignore symlink files, since the .target.wants folders have sym links to the .service files.
+            elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
+                fileNameLower = fileOrDirName.lower()
+                if fileNameLower.startswith(serviceNamePrefix.lower()) and fileNameLower.endswith(".service"):
+                    result.append(fullFileOrDirPath)
+        return result
+
+
     # After we know we have a valid config file, setup the rest of our vars based on it.
     def InitForMoonrakerConfig(self):
-        # To support multiple configs, we base some of our instance names off the moonraker port number defined in the config.
-        config = configparser.ConfigParser()
-        config.read(self.MOONRAKER_CONFIG)
-        moonrakerPort = config['server']['port']
-        if moonrakerPort is None:
-            raise Exception("Moonraker port not found in config file.")
 
-        # If the port is default, use no suffix.
-        # Otherwise, suffix things with the port.
-        portSuffixStr = ""
-        if int(moonrakerPort) != 7125:
-            portSuffixStr = "-"+str(moonrakerPort)
+        # Clean up the config string.
+        self.MOONRAKER_CONFIG = self.MOONRAKER_CONFIG.strip()
+        Info("Moonraker config set to: "+self.MOONRAKER_CONFIG)
+
+        # As according to the notes at the top of this file, from the config file, we want to target the same service name structure as this moonraker.
+        # To do this, using the full config path, we can find data folder for moonraker.
+        # The path should be like this
+        #   <some name>_data/config/moonraker.conf
+        self.PrinterConfigFolder = self.GetParentDirectory(self.MOONRAKER_CONFIG)
+        self.PrinterDataFolder = self.GetParentDirectory(self.PrinterConfigFolder)
+        Debug("Printer data folder: "+self.PrinterDataFolder)
+
+        # Once we have the data folder, we can find the matching service file for moonraker, to figure out it's name.
+        # If there is only one instance running on the device, the name will be moonraker.service.
+        # If there are multiple instances, the name will be moonraker-<number or name>.service.
+        moonrakerSystemdFilePaths = self.FindAllSystemdServiceFiles("moonraker")
+        if len(moonrakerSystemdFilePaths) == 0:
+            raise Exception("No moonraker systemd service file(s) found.")
+
+        # Default to None, which means we didn't find it.
+        # If there is only one instance, this will be "". If there are many, this will be "-<number or name>"
+        serviceSuffixStr = None
+        moonrakerServiceName = None
+
+        # Append a / if there isn't one, to make sure we don't match partial paths.
+        dataPathToSearchFor = self.PrinterDataFolder.lower()
+        if dataPathToSearchFor.endswith('/') is False:
+            dataPathToSearchFor += "/"
+
+        # Look through all of the moonraker service files to find a line that matches our printer data path.
+        # We read each service file and look for the env line, which looks like this: EnvironmentFile=/home/pi/printer_data/systemd/moonraker.env
+        for filePath in moonrakerSystemdFilePaths:
+            try:
+                with open(filePath, "r", encoding="utf-8") as serviceFile:
+                    lines = serviceFile.readlines()
+                    for l in lines:
+                        if dataPathToSearchFor in l.lower():
+                            # We found it, use it's service name as our naming scheme.
+                            fileName = filePath[filePath.rindex('/'):]
+                            moonrakerServiceName = fileName
+                            fileNameNoFileType = fileName.split('.')[0]
+                            if '-' in fileNameNoFileType:
+                                moonrakerServiceSuffix = fileNameNoFileType.split('-')
+                                serviceSuffixStr = "-" + moonrakerServiceSuffix[1]
+                            else:
+                                serviceSuffixStr = ""
+                            break
+            except Exception:
+                Warn("Failed to read service config file: "+filePath)
+
+        # Ensure we found a matching service file.
+        if serviceSuffixStr is None or moonrakerServiceName is None:
+            Info("Printer Data Folder: "+self.PrinterDataFolder)
+            for f in moonrakerSystemdFilePaths:
+                Info("Moonraker Service Config: "+f)
+            raise Exception("Failed to find a matching moonraker service file with matching printer data folder.")
 
         # This is the name of our service we create. If the port is the default port, use the default name.
         # Otherwise, add the port to keep services unique.
-        self.ServiceName = "octoeverywhere"+portSuffixStr
+        self.ServiceName = "octoeverywhere"+serviceSuffixStr
         self.ServiceFilePath = os.path.join(MoonrakerInstaller.SystemdServiceFilePath, self.ServiceName+".service")
-
-        # According to the mainsail developers, the moonraker folder layout is like:
-        #   <name>_data
-        #       - config
-        #           - Config files
-        #       - logs
-        #       - ...
-        # But, this layout is only for newish installs. There was an older layout from the past.
-        # Also, this folder structure is bound to one instance of moonraker, so everything in here is unique per instance.
-
-        # Find the base config folder.
-        self.KlipperConfigFolder = os.path.abspath(os.path.join(self.MOONRAKER_CONFIG, os.pardir))
-
-        # Find the root folder for this moonraker instance.
-        klipperBaseFolder = os.path.abspath(os.path.join(self.KlipperConfigFolder, os.pardir))
 
         # Since the moonraker config folder is unique to the moonraker instance, we will put our storage in it.
         # This also prevents the user from messing with it accidentally.
-        self.LocalFileStoragePath = os.path.join(klipperBaseFolder, "octoeverywhere-store")
+        self.LocalFileStoragePath = os.path.join(self.PrinterDataFolder, "octoeverywhere-store")
 
         # There's not a great way to find the log path from the config file, since the only place it's located is in the systemd file.
-        self.KlipperLogFolder = None
+        self.PrinterLogFolder = None
 
         # First, we will see if we can find a named folder relative to this folder.
-        self.KlipperLogFolder = os.path.join(klipperBaseFolder, "logs")
-        if os.path.exists(self.KlipperLogFolder) is False:
+        self.PrinterLogFolder = os.path.join(self.PrinterDataFolder, "logs")
+        if os.path.exists(self.PrinterLogFolder) is False:
             # Try an older path
-            self.KlipperLogFolder = os.path.join(klipperBaseFolder, "klipper_logs")
-            if os.path.exists(self.KlipperLogFolder) is False:
+            self.PrinterLogFolder = os.path.join(self.PrinterDataFolder, "klipper_logs")
+            if os.path.exists(self.PrinterLogFolder) is False:
                 # Failed, make a folder in the user's home.
-                self.KlipperLogFolder = os.path.join(klipperBaseFolder, "octoeverywhere-logs"+portSuffixStr)
+                self.PrinterLogFolder = os.path.join(self.PrinterDataFolder, "octoeverywhere-logs"+serviceSuffixStr)
                 # Create the folder and force the permissions so our service can write to it.
-                self.EnsureDirExists(self.KlipperLogFolder, True)
+                self.EnsureDirExists(self.PrinterLogFolder, True)
 
         # Report
-        Info(f'Configured. Port: {str(moonrakerPort)}, Service: {self.ServiceName}, Path: {self.ServiceFilePath}, LocalStorage: {self.LocalFileStoragePath}, Config Dir: {self.KlipperConfigFolder}, Logs: {self.KlipperLogFolder}')
+        Info(f'Configured. Moonraker Service: {moonrakerServiceName}, Service: {self.ServiceName}, Path: {self.ServiceFilePath}, LocalStorage: {self.LocalFileStoragePath}, Config Dir: {self.PrinterConfigFolder}, Logs: {self.PrinterLogFolder}')
 
 
     def RunShellCommand(self, cmd):
@@ -306,9 +398,9 @@ class MoonrakerInstaller:
         # First, we create a json object that we use as arguments. Using a json object makes parsing and such more flexible.
         # We base64 encode the json string to prevent any arg passing issues with things like quotes, spaces, or other chars.
         argsJson = json.dumps({
-            'KlipperConfigFolder': self.KlipperConfigFolder,
+            'KlipperConfigFolder': self.PrinterConfigFolder,
             'MoonrakerConfigFile': self.MOONRAKER_CONFIG,
-            'KlipperLogFolder': self.KlipperLogFolder,
+            'KlipperLogFolder': self.PrinterLogFolder,
             'LocalFileStoragePath': self.LocalFileStoragePath,
             'ServiceName': self.ServiceName,
             'VirtualEnvPath': self.VirtualEnvPath,
@@ -384,7 +476,7 @@ class MoonrakerInstaller:
     # Get's the printer id from an existing service config file, if it can be found.
     def GetPrinterIdFromServiceConfigFile(self) -> str or None:
         # This path and name must stay in sync with where the plugin will write the file.
-        oeServiceConfigFilePath = os.path.join(self.KlipperConfigFolder, "octoeverywhere.conf")
+        oeServiceConfigFilePath = os.path.join(self.PrinterConfigFolder, "octoeverywhere.conf")
 
         # Check if there is a file. If not, it means the service hasn't been run yet and this is a first time setup.
         if os.path.exists(oeServiceConfigFilePath) is False:
@@ -433,7 +525,7 @@ class MoonrakerInstaller:
                     Blank()
                     Blank()
                     Error("We didn't get a response from the OctoEverywhere service when waiting for the printer id.")
-                    Error("You can find service logs which might indicate the error in: "+self.KlipperLogFolder)
+                    Error("You can find service logs which might indicate the error in: "+self.PrinterLogFolder)
                     Blank()
                     Blank()
                     Error("Attempting to print the service logs:")
@@ -494,7 +586,7 @@ class MoonrakerInstaller:
                     Blank()
                     Blank()
                     Error("The plugin hasn't connected to our service yet. Something might be wrong.")
-                    Error("You can find service logs which might indicate the error in: "+self.KlipperLogFolder)
+                    Error("You can find service logs which might indicate the error in: "+self.PrinterLogFolder)
                     Blank()
                     Blank()
                     Error("Attempting to print the service logs:")
