@@ -203,6 +203,22 @@ class MoonrakerHost:
     #
     def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
+
+        # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
+        # This would be if the skipped the printer link or missed it in the setup script.
+        if connectedAccounts is None or len(connectedAccounts) == 0:
+            self.Logger.warning("")
+            self.Logger.warning("")
+            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.warning("          This Plugin Isn't Connected To OctoEverywhere!          ")
+            self.Logger.warning(" Use the following link to finish the setup and get remote access:")
+            self.Logger.warning(" %s", HostCommon.GetAddPrinterUrl(self.GetPrinterId(), False))
+            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.warning("")
+            self.Logger.warning("")
+
         # Now that we are connected, start the moonraker client.
         # We do this after the connection incase it needs to send any notifications or messages when starting.
         MoonrakerClient.Get().StartRunningIfNotAlready(octoKey)

@@ -119,11 +119,6 @@ class MoonrakerInstaller:
             Error( "                            <3                               ")
             Blank()
             Blank()
-            Blank()
-            Error( "               Remember This Is A Beta Release!               ")
-            Error( " Please Send Issues Or Feedback To support@octoeverywhere.com ")
-            Blank()
-            Blank()
 
         except Exception as e:
             tb = traceback.format_exc()

@@ -86,8 +86,8 @@ install_or_update_dependencies()
 
     # These we require to be installed in the OS.
     # Note we need to do this before we create our virtual environment
-    sudo apt-get update --allow-releaseinfo-change
-    sudo apt-get install --yes ${PKGLIST}
+    sudo apt update --allow-releaseinfo-change
+    sudo apt install --yes ${PKGLIST}
     log_info "System package install complete."
 
     # Now, ensure the virtual environment is created.
