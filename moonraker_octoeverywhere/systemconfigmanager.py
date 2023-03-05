@@ -28,8 +28,9 @@ origin: https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere.git
 env: {pyVirtEnvRoot}/bin/python
 requirements: requirements.txt
 install_script: install.sh
+# Even though our actual service name might have a suffix, the system will take care of matching it.
 managed_services:
-  {ServiceName}
+  octoeverywhere
 
 # This allows users of OctoEverywhere to get announcements from the system.
 [announcements]
