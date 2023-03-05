@@ -13,13 +13,14 @@ class SystemConfigManager:
     def EnsureUpdateManagerFilesSetup(logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot):
 
         # Create the expected update config contents
+        # Note that the update_manager extension name and the managed_services names must match, and the must match the systemd service file name.
         d = {
             'RepoRootFolder': repoRoot,
             'ServiceName' : serviceName,
             'pyVirtEnvRoot' : pyVirtEnvRoot,
         }
         expectedUpdateFileContent = '''\
-[update_manager octoeverywhere]
+[update_manager {ServiceName}]
 type: git_repo
 # Using `channel: beta` makes moonraker only update to the lasted tagged commit on the branch. Which lets us control releases.
 channel: beta
@@ -28,9 +29,8 @@ origin: https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere.git
 env: {pyVirtEnvRoot}/bin/python
 requirements: requirements.txt
 install_script: install.sh
-# Even though our actual service name might have a suffix, the system will take care of matching it.
 managed_services:
-  octoeverywhere
+  {ServiceName}
 
 # This allows users of OctoEverywhere to get announcements from the system.
 [announcements]
