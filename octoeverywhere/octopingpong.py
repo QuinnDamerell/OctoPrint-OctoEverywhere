@@ -103,7 +103,9 @@ class OctoPingPong:
                 secondsSinceLastWork = time.time() - lastWorkTime
 
                 # Compute how long until we should do work, this will be negative if the time has passed.
-                timeUntilNextWorkSec = (oneHourOfSeconds * 30) - secondsSinceLastWork
+                # Right now the time span is set to 50 hours, which is just over 2 days. We don't need to update too often
+                # and it's a decent amount of work due to hitting every server.
+                timeUntilNextWorkSec = (oneHourOfSeconds * 50) - secondsSinceLastWork
 
                 # If lastWorkTime is 0, the file was just created, so this is the first time the plugin has ran.
                 if lastWorkTime == 0:
