@@ -285,6 +285,18 @@ class MDns:
                 return ipList[lastMatchingIpIndex]
             # Else it's -2, keep going.
 
+        # If we get to thw end of the list with multiple matches, just pick one.
+        c = 0
+        for ip in ipList:
+            if matches[c] is True:
+                self.Logger.info("MDNS got to end of of the IP string with multiple matches, so we will just return this: "+str(ip))
+                return ip
+            c += 1
+
+        # If we totally fail, just return the first.
+        self.Logger.warn("MDNS got to end of GetSameLanIp without selecting an ip.")
+        return ipList[0]
+
 
     # Starts a thread to update the domain in the cache async.
     def TryToUpdateCacheAsync(self, domain):
