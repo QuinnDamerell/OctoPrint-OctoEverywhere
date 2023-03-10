@@ -405,3 +405,6 @@ class Slipstream:
                 if "session_p443" in valueLower:
                     return True
                 return False
+
+        # No cookie header found
+        return False
