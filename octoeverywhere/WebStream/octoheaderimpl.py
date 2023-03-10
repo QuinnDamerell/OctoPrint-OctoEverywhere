@@ -124,11 +124,11 @@ class HeaderHelper:
             return locationValue
 
         # Check if we have a X-Forwarded-Host. If we don't, we can't do anything, because we don't know the host to replace.
-        if HeaderHelper.c_xForwardedForHostHeaderName in sendHeaders is False:
+        if (HeaderHelper.c_xForwardedForHostHeaderName in sendHeaders) is False:
             logger.warn("CorrectLocationResponseHeaderIfNeeded got a location header, but no X-Forwarded-Host header was set.")
             return locationValue
         # Check if we have a X-Forwarded-Proto. If we don't, we can't do anything, because we don't know the proto to replace.
-        if HeaderHelper.c_xForwardedForProtoHeaderName in sendHeaders is False:
+        if (HeaderHelper.c_xForwardedForProtoHeaderName in sendHeaders) is False:
             logger.warn("CorrectLocationResponseHeaderIfNeeded got a location header, but no X-Forwarded-Proto header was set.")
             return locationValue
 
