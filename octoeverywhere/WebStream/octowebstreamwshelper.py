@@ -175,7 +175,7 @@ class OctoWebStreamWsHelper:
         self.ConnectionAttempt += 1
 
         # Make the websocket object and start it running.
-        self.Logger.info(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
+        self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
         self.Ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError)
         self.Ws.RunAsync()
 
@@ -194,7 +194,7 @@ class OctoWebStreamWsHelper:
             # We will close now, so set the flag.
             self.IsClosed = True
 
-        self.Logger.info(self.getLogMsgPrefix()+"websocket closed after" +str(time.time() - self.OpenedTime) + " seconds")
+        self.Logger.info(self.getLogMsgPrefix()+"websocket closed after " +str(time.time() - self.OpenedTime) + " seconds")
 
         # The initial connection is created (or at least started) in the constructor, but there's re-attempt logic
         # that can cause the websocket to be destroyed and re-created. For that reason we need to grab a local ref

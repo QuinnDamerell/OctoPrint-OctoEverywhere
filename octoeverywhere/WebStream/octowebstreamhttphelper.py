@@ -3,6 +3,7 @@
 import time
 import zlib
 import sys
+import logging
 
 import requests
 import urllib3
@@ -246,8 +247,8 @@ class OctoWebStreamHttpHelper:
 
             # Since streams with unknown content-lengths can run for a while, report now when we start one.
             # If the status code is 304 or 204, we don't expect content.
-            if contentLength is None and response.status_code != 304 and response.status_code != 204:
-                self.Logger.info(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
+            if self.Logger.isEnabledFor(logging.DEBUG) and contentLength is None and response.status_code != 304 and response.status_code != 204:
+                self.Logger.debug(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
 
             # Setup a loop to read the stream and push it out in multiple messages.
             contentReadBytes = 0
@@ -355,9 +356,10 @@ class OctoWebStreamHttpHelper:
                 isFirstResponse = False
                 messageCount += 1
 
-            # Log about it.
+            # Log about it - only if debug is enabled. Otherwise, we don't want to waste time making the log string.
             responseWriteDone = time.time()
-            self.Logger.info(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s; body_read:"+str(format(self.BodyReadTimeSec, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s; octo_stream_upload:"+str(format(self.ServiceUploadTimeSec, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" microreads:"+str(self.IsDoingMicroBodyReads)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
+            if self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s; body_read:"+str(format(self.BodyReadTimeSec, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s; octo_stream_upload:"+str(format(self.ServiceUploadTimeSec, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" microreads:"+str(self.IsDoingMicroBodyReads)+" type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" cached:"+str(isFromCache)+" for " + uri)
 
 
     def buildHeaderVector(self, builder, response):
@@ -695,7 +697,7 @@ class OctoWebStreamHttpHelper:
             # Right now only the Slipstream cached Index pages have to do this.
             if sys.version_info[0] < 3:
                 if isinstance(finalDataBuffer, bytearray):
-                    self.Logger.info("PY2 bytearray->bytes conversion applied.")
+                    self.Logger.debug("PY2 bytearray->bytes conversion applied.")
                     finalDataBuffer = bytes(finalDataBuffer)
 
             start = time.time()

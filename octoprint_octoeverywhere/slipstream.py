@@ -141,7 +141,7 @@ class Slipstream:
         # We have our path, check if it's in the map
         with self.Lock:
             if path in self.Cache:
-                self.Logger.info("Slipstream returning cached content for "+path)
+                self.Logger.debug("Slipstream returning cached content for "+path)
                 return self.Cache[path]
 
         # Otherwise return cache miss.
@@ -325,7 +325,7 @@ class Slipstream:
 
             requestDuration = compressStart - start
             compressDuration = time.time() - compressStart
-            self.Logger.info("Slipstream Cached [request:"+str(format(requestDuration, '.3f'))+", compression:"+str(format(compressDuration, '.3f'))+"] ["+str(ogSize)+"->"+str(len(buffer))+" "+format(((len(buffer)/ogSize)*100), '.3f')+"%] "+url)
+            self.Logger.debug("Slipstream Cached [request:"+str(format(requestDuration, '.3f'))+", compression:"+str(format(compressDuration, '.3f'))+"] ["+str(ogSize)+"->"+str(len(buffer))+" "+format(((len(buffer)/ogSize)*100), '.3f')+"%] "+url)
 
             # Return the result on success.
             success = True
