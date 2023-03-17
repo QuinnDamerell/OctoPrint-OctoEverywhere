@@ -27,7 +27,7 @@ class Compat:
     def HasSlipstream():
         return Compat._SlipstreamObj is not None
 
-    # Must implement the smart puase interface.
+    # Must implement the smart pause interface.
     #
     # GetAndResetLastPauseNotificationSuppressionTimeSec - Returns None if there is no current suppression or the time of the last time it was requested
     #
@@ -41,3 +41,15 @@ class Compat:
     @staticmethod
     def HasSmartPauseInterface():
         return Compat._SmartPauseInterfaceObj is not None
+
+
+    _MainsailConfigHandler = None
+    @staticmethod
+    def GetMainsailConfigHandler():
+        return Compat._MainsailConfigHandler
+    @staticmethod
+    def SetMainsailConfigHandler(obj):
+        Compat._MainsailConfigHandler = obj
+    @staticmethod
+    def HasMainsailConfigHandler():
+        return Compat._MainsailConfigHandler is not None

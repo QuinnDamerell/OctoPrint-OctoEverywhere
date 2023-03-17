@@ -22,6 +22,7 @@ from .moonrakerclient import MoonrakerClient
 from .moonrakercommandhandler import MoonrakerCommandHandler
 from .moonrakerwebcamhelper import MoonrakerWebcamHelper
 from .moonrakerdatabase import MoonrakerDatabase
+from .mainsailconfighandler import MainsailConfigHandler
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -119,6 +120,9 @@ class MoonrakerHost:
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))
+
+            # Setup the mainsail config handler
+            MainsailConfigHandler.Init(self.Logger)
 
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri

@@ -134,10 +134,28 @@ class MoonrakerClient:
         moonrakerConfig = configparser.ConfigParser()
         moonrakerConfig.read(self.MoonrakerConfigFilePath)
         moonrakerHost = moonrakerConfig['server']['host']
-        moonrakerPort = moonrakerConfig['server']['port']
+        moonrakerPort = self.GetMoonrakerPort()
 
         # Set the new address
-        self.MoonrakerHostAndPort =  moonrakerHost + ":" + moonrakerPort
+        self.MoonrakerHostAndPort =  moonrakerHost + ":" + str(moonrakerPort)
+
+
+    # Parses the config (if known) to find the moonraker port.
+    # Returns the default moonraker port if no moonraker config file is found or if it's invalid.
+    def GetMoonrakerPort(self) -> int:
+        # Ensure we have a file.
+        defaultPort = 7125
+        if os.path.exists(self.MoonrakerConfigFilePath) is False:
+            self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
+            return defaultPort
+        try:
+            # Parse the config to find the host and port.
+            moonrakerConfig = configparser.ConfigParser()
+            moonrakerConfig.read(self.MoonrakerConfigFilePath)
+            return int(moonrakerConfig['server']['port'])
+        except Exception as e:
+            self.Logger.error("Moonraker client failed to parse the moonraker config to get the port." +str(e))
+            return defaultPort
 
 
     #
