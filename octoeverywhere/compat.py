@@ -53,3 +53,15 @@ class Compat:
     @staticmethod
     def HasMainsailConfigHandler():
         return Compat._MainsailConfigHandler is not None
+
+
+    _ApiRouterHandler = None
+    @staticmethod
+    def GetApiRouterHandler():
+        return Compat._ApiRouterHandler
+    @staticmethod
+    def SetApiRouterHandler(obj):
+        Compat._ApiRouterHandler = obj
+    @staticmethod
+    def HasApiRouterHandler():
+        return Compat._ApiRouterHandler is not None

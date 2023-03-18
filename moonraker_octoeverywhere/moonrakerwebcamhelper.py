@@ -16,7 +16,13 @@ class MoonrakerWebcamHelper():
 
     # The amount of time we will wait between settings checks.
     # These are also invoked when there's webcam activity, so we don't need to check too frequently.
-    c_DelayBetweenAutoSettingsCheckSec = 5 * 60
+    c_DelayBetweenAutoSettingsCheckSec = 30 * 60
+
+    # When the plugin starts, this is the delay we use before checking.
+    # We want this to be shorter, so if something changed or this is the first install, we pickup the webcam settings quickly
+    # We will always run once klippy is connected, but even if it's not, we should try to do a run.
+    # Give the system just enough time to start up, then run.
+    c_DelayForFirstRunAutoSettingsCheckSec = 5
 
     # The min time between checks when there's webcam activity.
     c_MinTimeBetweenWebcamActivityInvokesSec = 60
@@ -87,12 +93,20 @@ class MoonrakerWebcamHelper():
     # TODO - right now we use a poll based system, which is kind of shitty. Ideally we would figure out a way to make this push based.
     def _WebcamSettingsUpdateWorker(self):
         lastAutoSettingsValue = True
+        isFirstRun = True
         while True:
             try:
+                # Adjust the delay of our first run on plugin start.
+                delayTimeSec = MoonrakerWebcamHelper.c_DelayBetweenAutoSettingsCheckSec
+                if isFirstRun:
+                    delayTimeSec = MoonrakerWebcamHelper.c_DelayForFirstRunAutoSettingsCheckSec
+                    isFirstRun = False
+
                 # Start the loop by clearing and waiting on the value. This means our first wake up will usually be either webcam activity
-                # or the moonraker client telling us the websocket is connected.
+                # or the moonraker client telling us the websocket is connected. Note we also do a shorter time on first run, so if klippy isn't
+                # in a ready state, we still try to check.
                 self.AutoSettingsWorkerEvent.clear()
-                self.AutoSettingsWorkerEvent.wait(MoonrakerWebcamHelper.c_DelayBetweenAutoSettingsCheckSec)
+                self.AutoSettingsWorkerEvent.wait(delayTimeSec)
 
                 # Force a config reload, so if the user changed this setting, we respect it.
                 self.Config.ReloadFromFile()

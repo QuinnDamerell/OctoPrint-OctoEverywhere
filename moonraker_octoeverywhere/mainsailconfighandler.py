@@ -25,7 +25,6 @@ class MainsailConfigHandler:
 
     def __init__(self, logger):
         self.Logger = logger
-        self.LastPauseNotificationSuppressionTimeSec = 0
 
 
     # !! Interface Function !! This implementation must not change!

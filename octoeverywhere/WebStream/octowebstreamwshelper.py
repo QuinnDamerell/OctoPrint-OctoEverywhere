@@ -12,6 +12,7 @@ from ..mdns import MDns
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..localip import LocalIpHelper
 from ..websocketimpl import Client
+from ..compat import Compat
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
 from ..Proto import WebSocketDataTypes
@@ -103,8 +104,14 @@ class OctoWebStreamWsHelper:
             # If the path is relative, we will make a few attempts to connect.
             # Note these attempts are very closely related to the logic in the OctoHttpRequest class and should stay in sync.
             if self.ConnectionAttempt == 0:
-                # Try to connect using the main URL, this is what we expect to work.
-                uri = "ws://" + str(OctoHttpRequest.GetLocalhostAddress()) + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
+                # If we have an API handler, see if it wants to overwrite the URL.
+                # We have to do this first, because the generated URL might work, but not be the right one.
+                # Right now this is only used for moonraker. MapRelativePathToAbsolutePathIfNeeded will return None if there's nothing to do.
+                if Compat.HasApiRouterHandler():
+                    uri = Compat.GetApiRouterHandler().MapRelativePathToAbsolutePathIfNeeded(path, "ws://")
+                if uri is None:
+                    # Try to connect using the main URL, this is what we expect to work.
+                    uri = "ws://" + str(OctoHttpRequest.GetLocalhostAddress()) + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
             elif self.ConnectionAttempt == 1:
                 # Attempt 2 is to where we think the http proxy port is.
                 # For this address, we need set the protocol correctly depending if the client detected https or not.

@@ -14,7 +14,12 @@
                 // The module requires these aregs to be passed. These are examples of a typical default setup.
                 // This is obviously linux depdent, and is expected to be ran out of an installed repo with moonraker running.
                 // The string is a urlBase64 encoded string of json. We base64 encode it to prevent any issues with command line args.
-                "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfZGF0YS9jb25maWciLCAiTW9vbnJha2VyQ29uZmlnRmlsZSI6ICIvaG9tZS9waS9wcmludGVyX2RhdGEvY29uZmlnL21vb25yYWtlci5jb25mIiwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL29jdG9ldmVyeXdoZXJlLXN0b3JlIiwgIlNlcnZpY2VOYW1lIjogIm9jdG9ldmVyeXdoZXJlIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSJ9",
+                //
+                // This is the single instance setup
+                //"eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfZGF0YS9jb25maWciLCAiTW9vbnJha2VyQ29uZmlnRmlsZSI6ICIvaG9tZS9waS9wcmludGVyX2RhdGEvY29uZmlnL21vb25yYWtlci5jb25mIiwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL29jdG9ldmVyeXdoZXJlLXN0b3JlIiwgIlNlcnZpY2VOYW1lIjogIm9jdG9ldmVyeXdoZXJlIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSJ9",
+                //
+                // This is the multi instance seutp
+                "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZyIsICJNb29ucmFrZXJDb25maWdGaWxlIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZy9tb29ucmFrZXIuY29uZiIsICJLbGlwcGVyTG9nRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl8xX2RhdGEvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtMSIsICJWaXJ0dWFsRW52UGF0aCI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUifQ==",
                 // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]

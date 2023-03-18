@@ -4,6 +4,7 @@ import requests
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .mdns import MDns
+from .compat import Compat
 from .Proto.PathTypes import PathTypes
 
 class OctoHttpRequest:
@@ -175,6 +176,16 @@ class OctoHttpRequest:
             # For this address, we need set the protocol correctly depending if the client detected https
             # or not.
             fallbackUrl = httpProxyProtocol + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + pathOrUrl
+
+            # Special case for systems with an API router (only moonraker as of now)
+            # If the API router wants to redirect the URL, it must be tried first, since the default URL
+            # might also work, but might be incorrect.
+            if Compat.HasApiRouterHandler():
+                reroutedUrl = Compat.GetApiRouterHandler().MapRelativePathToAbsolutePathIfNeeded(pathOrUrl, "http://")
+                if reroutedUrl is not None:
+                    # If we got a redirect URL, make sure it's the first URL, and use the default URL as the fallback.
+                    fallbackUrl = url
+                    url = reroutedUrl
 
             # If the two URLs above don't work, we will try to call the server using the local IP since the server might not be bound to localhost.
             # Note we only build the suffix part of the string here, because we don't want to do the local IP detection if we don't have to.
