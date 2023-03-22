@@ -125,40 +125,52 @@ class MoonrakerClient:
     # value in our settings, which could change. This is called by the Websocket and then the result is saved in the class
     # This is so every http call doesn't have to read the file, but as long as the WS is connected, we know the address is correct.
     def _UpdateMoonrakerHostAndPort(self) -> None:
-        # Ensure we have a file.
+        # Ensure we have a file. For now, this is required.
         if os.path.exists(self.MoonrakerConfigFilePath) is False:
             self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
             raise Exception("No config file found")
 
-        # Parse the config to find the host and port.
-        moonrakerConfig = configparser.ConfigParser()
-        moonrakerConfig.read(self.MoonrakerConfigFilePath)
-        moonrakerHost = moonrakerConfig['server']['host']
-        moonrakerPort = self.GetMoonrakerPortFromConfig()
-        if moonrakerPort is None:
-            raise Exception("Failed to parse moonraker port from config.")
+        # Get the values.
+        (hostStr, portInt) = self.GetMoonrakerHostAndPortFromConfig()
 
         # Set the new address
-        self.MoonrakerHostAndPort =  moonrakerHost + ":" + str(moonrakerPort)
+        self.MoonrakerHostAndPort =  hostStr + ":" + str(portInt)
 
 
-    # Parses the config (if known) to find the moonraker port.
-    # If there is no config on on error, this returns None. Otherwise the port as an int.
-    # Note that this can't really error, because if the config can't be read the plugin doesn't really work.
-    # So if the plugin is working, this will be successful.
-    def GetMoonrakerPortFromConfig(self) -> int:
-        # Ensure we have a file.
-        if os.path.exists(self.MoonrakerConfigFilePath) is False:
-            self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
-            return None
+    # Parses the config file for the hostname and port.
+    # If no file is found or the server block is missing, this will return the default values.
+    # Always returns the hostname as a string, and the port as an int.
+    def GetMoonrakerHostAndPortFromConfig(self):
+        currentPortInt = 7125
+        currentHostStr = "0.0.0.0"
         try:
-            # Parse the config to find the host and port.
+            # Ensure we have a file.
+            if os.path.exists(self.MoonrakerConfigFilePath) is False:
+                self.Logger.error("GetMoonrakerHostAndPortFromConfig failed to find moonraker config file.")
+                return (currentHostStr, currentPortInt)
+
+            # Open and read the config.
             moonrakerConfig = configparser.ConfigParser()
             moonrakerConfig.read(self.MoonrakerConfigFilePath)
-            return int(moonrakerConfig['server']['port'])
+
+            # We have found that some users don't have a [server] block, so if they don't, return the defaults.
+            if "server" not in moonrakerConfig:
+                self.Logger.info("No server block found in the moonraker config, so we are returning the defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt))
+                return (currentHostStr, currentPortInt)
+
+            # Otherwise, parse the host and port, if they exist.
+            serverBlock = moonrakerConfig["server"]
+            if "host" in serverBlock:
+                currentHostStr = moonrakerConfig['server']['host']
+            if "port" in serverBlock:
+                currentPortInt = int(moonrakerConfig['server']['port'])
+
+            # Done!
+            return (currentHostStr, currentPortInt)
+
         except Exception as e:
-            self.Logger.error("Moonraker client failed to parse the moonraker config to get the port." +str(e))
-        return None
+            Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
+            return (currentHostStr, currentPortInt)
 
 
     #

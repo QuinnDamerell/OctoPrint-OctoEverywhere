@@ -30,12 +30,10 @@ class MoonrakerApiRouter:
         self.Logger = logger
         self.MoonrakerPortStr = None
 
-        portIntOrNone = MoonrakerClient.Get().GetMoonrakerPortFromConfig()
-        if portIntOrNone is None:
-            self.Logger.warn("MoonrakerApiRouter FAILED to get moonraker port")
-        else:
-            self.MoonrakerPortStr = str(portIntOrNone)
-            self.Logger.info("MoonrakerApiRouter using bound to moonraker at port "+self.MoonrakerPortStr)
+        # Get the moonraker port from the config.
+        (_, portInt) = MoonrakerClient.Get().GetMoonrakerHostAndPortFromConfig()
+        self.MoonrakerPortStr = str(portInt)
+        self.Logger.info("MoonrakerApiRouter using bound to moonraker at port "+self.MoonrakerPortStr)
 
 
     # !! Interface Function !! This implementation must not change!
