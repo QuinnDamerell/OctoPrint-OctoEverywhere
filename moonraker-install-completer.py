@@ -211,10 +211,88 @@ class MoonrakerInstaller:
         return val == "y"
 
 
+    # Recursively looks from the root path for the moonraker config file.
+    def FindMoonrakerConfigFromPath(self, path, depth = 0):
+        if depth > 20:
+            return None
+        fileAndDirList = os.listdir(path)
+        for fileOrDirName in fileAndDirList:
+            fullFileOrDirPath = os.path.join(path, fileOrDirName)
+            # Look through child folders.
+            if os.path.isdir(fullFileOrDirPath):
+                tempResult = self.FindMoonrakerConfigFromPath(fullFileOrDirPath, depth + 1)
+                if tempResult is not None:
+                    return tempResult
+            # If it's a file, test if it.
+            elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
+                fileNameLower = fileOrDirName.lower()
+                if fileNameLower.startswith("moonraker.conf"):
+                    return fullFileOrDirPath
+        return None
+
+
+    # Searches for moonraker service files and tries to find the config files from them.
+    # Returns a list of found config files or an empty list if none are found.
+    def SearchForMoonrakerConfigsFromServiceFiles(self):
+        result = []
+        # Find all of the service files.
+        moonrakerServiceFilePaths = self.FindAllSystemdServiceFiles("moonraker")
+        for filePath in moonrakerServiceFilePaths:
+            try:
+                Debug("Found moonraker service file: "+filePath)
+                with open(filePath, "r", encoding="utf-8") as serviceFile:
+                    lines = serviceFile.readlines()
+                    configPathFound = False
+                    for l in lines:
+                        if configPathFound is True:
+                            break
+                        # Search for the line that has the moonraker environment.
+                        # Ex EnvironmentFile=/home/pi/printer_1_data/systemd/moonraker.env
+                        if "moonraker.env" in l.lower():
+                            Debug("Found moonraker.env line: "+l)
+
+                            # When found, try to file the config path.
+                            equalsPos = l.find('=')
+                            if equalsPos == -1:
+                                continue
+                            # Move past the = sign.
+                            equalsPos += 1
+
+                            # Find the end of the path.
+                            filePathEnd = l.find(' ', equalsPos)
+                            if filePathEnd == -1:
+                                filePathEnd = len(l)
+
+                            # Get the file path.
+                            # Sample path /home/pi/printer_1_data/systemd/moonraker.env
+                            envFilePath = l[equalsPos:filePathEnd]
+
+                            # From the env, remove the file name and test if the config is in the same dir, which is not common.
+                            searchConfigPath = self.GetParentDirectory(envFilePath)
+                            moonrakerConfigFilePath = self.FindMoonrakerConfigFromPath(searchConfigPath)
+                            if moonrakerConfigFilePath is None:
+                                # To to the parent of the current folder and search again. This where we expect to find the config for most setups.
+                                searchConfigPath = self.GetParentDirectory(searchConfigPath)
+                                moonrakerConfigFilePath = self.FindMoonrakerConfigFromPath(searchConfigPath)
+
+                            # If we don't have it, we can't find it.
+                            if moonrakerConfigFilePath is None:
+                                Warn("Failed to find moonraker config from service file: "+filePath)
+                                continue
+
+                            Debug("Service file "+filePath + " -> "+moonrakerConfigFilePath)
+                            result.append(moonrakerConfigFilePath)
+                            configPathFound = True
+            except Exception:
+                Warn("Failed to read service config file: "+filePath)
+        # Return what we found.
+        return result
+
+
     # Ensures we have a moonraker config to target.
     # If not, it tries to find one or gets it from the user.
     def EnsureMoonrakerConfig(self):
-        # If we already have one, validate it.
+        # If a config was passed to the setup, validate it and use it.
         if self.MOONRAKER_CONFIG is not None and len(self.MOONRAKER_CONFIG) > 0:
             if os.path.exists(self.MOONRAKER_CONFIG):
                 Info("Moonraker config passed to setup. "+self.MOONRAKER_CONFIG)
@@ -222,20 +300,56 @@ class MoonrakerInstaller:
             else:
                 Warn("Moonraker config passed to setup, but the file wasn't found. "+self.MOONRAKER_CONFIG)
 
-        # Look for a config, try the default locations.
-        # TODO - This should really enumerate the moonraker service config files and choose based off them.
-        self.MOONRAKER_CONFIG = os.path.join(self.UserHomePath, "printer_data/config/moonraker.conf")
-        Debug("Testing path "+self.MOONRAKER_CONFIG)
-        if os.path.exists(self.MOONRAKER_CONFIG) is False:
-            Debug("Testing path "+self.MOONRAKER_CONFIG)
-            self.MOONRAKER_CONFIG = os.path.join(self.UserHomePath, "klipper_config/moonraker.conf")
+        # Our plugin current requires the service file to be found, so we can properly bind to the correct service suffix
+        # for the given instance. The logic in InitForMoonrakerConfig also relies on the service file being found.
+        # So if we need to find a config, we will find all of the service files and then try to find the config files that match.
+        #
+        # TODO - This could be made better by if we dont't find the service file, asking the use if they want to enter it.
+        moonrakerConfigFilePaths = self.SearchForMoonrakerConfigsFromServiceFiles()
+        if len(moonrakerConfigFilePaths) > 0:
+            # If there is only one config file path found, just use it.
+            if len(moonrakerConfigFilePaths) == 1:
+                self.MOONRAKER_CONFIG = moonrakerConfigFilePaths[0]
+                Info("Moonraker config found from a service file: "+self.MOONRAKER_CONFIG)
+                return
 
-        # If we got a path, ask if it's the one they want to use.
-        if os.path.exists(self.MOONRAKER_CONFIG):
+            # Otherwise, if multiple files were found, ask the user to select one.
             Blank()
             Blank()
-            Warn("Moonraker config detected as ["+self.MOONRAKER_CONFIG+"]")
-            if self.AskYesOrNoQuestion("Do you want to use this config?"):
+            Warn("Multiple moonraker instances found.")
+            Warn("You can setup OctoEverywhere up for all of them, but you must run this install script for each each one individually.")
+            Blank()
+            # Print the config files found.
+            count = 0
+            for c in moonrakerConfigFilePaths:
+                count += 1
+                Info("  "+str(count)+") "+c)
+            Blank()
+            # Ask the user which number they want.
+            responseInt = -1
+            isFirstPrint = True
+            while True:
+                try:
+                    if isFirstPrint:
+                        isFirstPrint = False
+                    else:
+                        Warn("If you need help, contact us! https://octoeverywhere.com/support")
+                    response = input("Enter the number for the config you would like to setup now (or enter m to manually enter a path): ")
+                    response = response.lower().strip()
+                    if response == "m":
+                        break
+                    # Parse the input and -1 it, so it aligns with the array length.
+                    tempInt = int(response.lower().strip()) - 1
+                    if tempInt >= 0 and tempInt < len(moonrakerConfigFilePaths):
+                        responseInt = tempInt
+                        break
+                    Warn("Invalid number selection, try again.")
+                except Exception as e:
+                    Warn("Invalid input, try again. Error: "+str(e))
+
+            # If we got a valid response, use it. Otherwise, go into the manual entry mode.
+            if responseInt != -1:
+                self.MOONRAKER_CONFIG = moonrakerConfigFilePaths[responseInt]
                 return
 
         # No path was found, try to get one from the user.
@@ -266,7 +380,8 @@ class MoonrakerInstaller:
         if path is None:
             path = MoonrakerInstaller.SystemdServiceFilePath
 
-        fileAndDirList = os.listdir(path)
+        # Use sorted, so the results are in a nice user presentable order.
+        fileAndDirList = sorted(os.listdir(path))
         result = []
         for fileOrDirName in fileAndDirList:
             fullFileOrDirPath = os.path.join(path, fileOrDirName)
