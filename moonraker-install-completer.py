@@ -218,15 +218,19 @@ class MoonrakerInstaller:
         fileAndDirList = os.listdir(path)
         for fileOrDirName in fileAndDirList:
             fullFileOrDirPath = os.path.join(path, fileOrDirName)
+            fileNameOrDirLower = fileOrDirName.lower()
             # Look through child folders.
             if os.path.isdir(fullFileOrDirPath):
+                # Ignore backup folders
+                if fileNameOrDirLower == "backup":
+                    continue
                 tempResult = self.FindMoonrakerConfigFromPath(fullFileOrDirPath, depth + 1)
                 if tempResult is not None:
                     return tempResult
             # If it's a file, test if it.
             elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
-                fileNameLower = fileOrDirName.lower()
-                if fileNameLower.startswith("moonraker.conf"):
+                # We use an exact match, to prevent things like moonraker.conf.backup from matching, which is common.
+                if fileNameOrDirLower == "moonraker.conf":
                     return fullFileOrDirPath
         return None
 
@@ -267,13 +271,21 @@ class MoonrakerInstaller:
                             # Sample path /home/pi/printer_1_data/systemd/moonraker.env
                             envFilePath = l[equalsPos:filePathEnd]
 
-                            # From the env, remove the file name and test if the config is in the same dir, which is not common.
+                            # From the env path, remove the file name and test if the config is in the same dir, which is not common.
                             searchConfigPath = self.GetParentDirectory(envFilePath)
                             moonrakerConfigFilePath = self.FindMoonrakerConfigFromPath(searchConfigPath)
                             if moonrakerConfigFilePath is None:
-                                # To to the parent of the current folder and search again. This where we expect to find the config for most setups.
-                                searchConfigPath = self.GetParentDirectory(searchConfigPath)
+                                # Move to the parent and look explicitly in the config folder if there is one, this is where we expect to find it.
+                                # We do this to prevent finding config files in other printer_data folders, like backup.
+                                Debug("Moonraker config not found in env dir")
+                                searchConfigPath = self.GetParentDirectory(self.GetParentDirectory(envFilePath))
+                                searchConfigPath = os.path.join(searchConfigPath, "config")
                                 moonrakerConfigFilePath = self.FindMoonrakerConfigFromPath(searchConfigPath)
+                                if moonrakerConfigFilePath is None:
+                                    Debug("Moonraker config not config dir")
+                                    # If we still didn't find it, move the printer_data root, and look one last time.
+                                    searchConfigPath = self.GetParentDirectory(self.GetParentDirectory(envFilePath))
+                                    moonrakerConfigFilePath = self.FindMoonrakerConfigFromPath(searchConfigPath)
 
                             # If we don't have it, we can't find it.
                             if moonrakerConfigFilePath is None:
@@ -283,8 +295,8 @@ class MoonrakerInstaller:
                             Debug("Service file "+filePath + " -> "+moonrakerConfigFilePath)
                             result.append(moonrakerConfigFilePath)
                             configPathFound = True
-            except Exception:
-                Warn("Failed to read service config file: "+filePath)
+            except Exception as e:
+                Warn("Failed to read service config file for config find.: "+filePath+" "+str(e))
         # Return what we found.
         return result
 
