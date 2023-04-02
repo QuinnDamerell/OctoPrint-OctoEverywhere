@@ -428,6 +428,18 @@ class MoonrakerInstaller:
         #   <some name>_data/config/moonraker.conf
         self.PrinterConfigFolder = self.GetParentDirectory(self.MOONRAKER_CONFIG)
         self.PrinterDataFolder = self.GetParentDirectory(self.PrinterConfigFolder)
+        # Hack for RatOS! - Rat OS has two moonraker.conf files, one in ~/printer_data/config/moonraker.conf and one at ~/printer_data/config/RatOS/moonraker.conf
+        # ~/printer_data/config/RatOS/moonraker.conf is the file with the actual moonraker config info in it. The other file is for users to overwrite some things.
+        # It just to happens that our auto config logic will find the correct file (~/printer_data/config/RatOS/moonraker.conf) first.
+        # The but the problem is the self.PrinterDataFolder needs to be set two parents up, so it's the actual printer_data folder.
+        # Without this, the printer data folder path is ~/printer_data/config which fails to match any service files.
+        #
+        # TODO - To fix this correctly, when looking for the moonraker config to start with, we should follow any includes to find the file that actually has the [server] block.
+        # TODO - Secondly, this logic should be made more robust, so that it doesn't always just do one parent up.
+        #
+        if self.PrinterDataFolder.lower().find("ratos"):
+            Info("RatOs hack applied to the pritner data folder.")
+            self.PrinterDataFolder = self.GetParentDirectory(self.PrinterDataFolder)
         Debug("Printer data folder: "+self.PrinterDataFolder)
 
         # Once we have the data folder, we can find the matching service file for moonraker, to figure out it's name.
