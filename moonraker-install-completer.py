@@ -627,8 +627,15 @@ class MoonrakerInstaller:
         # If the file exists, try to read it.
         # If this fails, let it throw, so the user knows something is wrong.
         Info("Found existing OctoEverywhere service config.")
-        config = configparser.ConfigParser()
-        config.read(oeServiceConfigFilePath)
+        try:
+            config = configparser.ConfigParser()
+            config.read(oeServiceConfigFilePath)
+        except Exception as e:
+            # Print the file for debugging.
+            Info("Failed to read config file. "+str(e)+ ", trying again...")
+            with open(oeServiceConfigFilePath, 'r', encoding="utf-8") as f:
+                Info("file contents:"+f.read())
+            return None
 
         # Look for these sections, but don't throw if they aren't there. The service first creates the file and then
         # adds these, so it might be the case that the service just hasn't created them yet.
