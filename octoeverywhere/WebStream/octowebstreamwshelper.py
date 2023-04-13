@@ -290,8 +290,7 @@ class OctoWebStreamWsHelper:
                 sendType = WebSocketDataTypes.WebSocketDataTypes.Binary
             elif msgType == websocket.ABNF.OPCODE_TEXT:
                 sendType = WebSocketDataTypes.WebSocketDataTypes.Text
-                # If the buffer is text, we need to encode it as bytes.
-                buffer = buffer.encode()
+                # In PY3 using the modern websocket_client lib the text also comes as a byte buffer.
             else:
                 raise Exception("Web stream ws helper got a message type that's not supported. "+str(msgType))
 

@@ -7,13 +7,12 @@
 #
 # For comments on package lock versions, see the comments in the setup.py file.
 #
-websocket_client>=0.56.0,<1.4.0
+websocket_client>=1.5.1,<1.5.99
 requests>=2.24.0
 octoflatbuffers==2.0.5
 pillow
-certifi
-rsa
-sentry-sdk
-dnspython
+certifi>=2022.12.7
+rsa>=4.0
+dnspython>=2.3.0
 # The following are required only for Moonraker
 configparser

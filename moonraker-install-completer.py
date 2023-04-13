@@ -84,6 +84,7 @@ class MoonrakerInstaller:
 
     DebugLogging = False
     SystemdServiceFilePath = "/etc/systemd/system"
+    MinPrinterIdLength = 40
 
     def __init__(self) -> None:
 
@@ -639,7 +640,11 @@ class MoonrakerInstaller:
         if key not in config[section].keys():
             Info("Printer id not found in OE config.")
             return None
-        return config[section][key]
+        printerId = config[section][key]
+        if len(printerId) < MoonrakerInstaller.MinPrinterIdLength:
+            Info("Printer ID found, but the length is less than "+str(MoonrakerInstaller.MinPrinterIdLength)+" chars? value:`"+printerId+"`")
+            return None
+        return printerId
 
 
     # Used for first time setups of the service. Waits for a printer id and then helps the user add the printer to their account.
@@ -792,6 +797,8 @@ class MoonrakerInstaller:
         try:
             # Try to get a short code. We do a quick timeout so if this fails, we just present the user the longer URL.
             # Any failures, like rate limiting, server errors, whatever, and we just use the long URL.
+            # TODO - remove this print when we are done debugging the short code None error.
+            Info("Creating short code for printer id: "+str(printerId))
             r = requests.post('https://octoeverywhere.com/api/shortcode/create', json={"Type": 1, "PrinterId": printerId}, timeout=2.0)
             if r.status_code == 200:
                 jsonResponse = r.json()

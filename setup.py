@@ -14,7 +14,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this is also parsed by the moonraker module to pull the version, so the string and format must remain the same!
-plugin_version = "2.4.0"
+plugin_version = "2.5.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -32,21 +32,25 @@ plugin_url = "http://www.OctoEverywhere.com"
 # The plugin's license. Can be overwritten within OctoPrint's internal data via __plugin_license__ in the plugin module
 plugin_license = "AGPLv3"
 
-# Any additional requirements besides OctoPrint should be listed here
-# Note! Some older version of OctoPrint seems to have a system dependency that locks websocket_client to exactly 0.56.0. When we tried to update to a newer version,
-# this broke that dependency and made all of OctoPrint unhappy. So don't update the version unless we really need to.
+# Any additional requirements besides OctoPrint should be listed here.
 #
-# UPDATE on ^ - As of October 14th 2022 - OctoPrint uses websocket-client as >=1.0.0,<2.0.0, so it installs whatever version is latests and that's 1.x. (I think the logic above applies to PY2 versions of OctoPrint?)
-# BUT in websocket-client 1.4.0, there seems to be a bug where some ssl ws connections fail due to said bug: https://github.com/websocket-client/websocket-client/issues/857
-# To work around this, we pin websocket client < 1.4.0. This bug mostly seems to be effecting octo4a users, maybe because their installs always pull the latest of packages?
-# TODO - In the future, we should remove the lock to <1.4.0, but make sure we avoid version that have problems.
+# On 4/13/2023 we updated to only support PY3, which frees us up from a lot of package issues. A lot the packages we depend on only support PY3 now.
+#
+# websocket_client
+# 	For the websocket_client, some older versions seem to have a thread issue that causes the 24 hour disconnect logic to fail, and eventually makes the thread limit get hit.
+# 	Version 1.4.0 also has an SSL error in it. https://github.com/websocket-client/websocket-client/issues/857
+#	So for the websocket_client, we need at least 1.5.1.
+# dnspython
+#	We depend on a feature that was released with 2.3.0, so we need to require at least that.
 #
 # Other lib version notes:
-#   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.
+#   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
+#   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
+#   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
 #
 # Note! These need to stay in sync with .github/pylint.yml decencies.
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
-plugin_requires = ["websocket_client>=0.56.0,<1.4.0", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi", "rsa", "sentry-sdk", "dnspython" ]
+plugin_requires = ["websocket_client>=1.5.1,<1.5.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2022.12.7", "rsa>=4.0", "dnspython>=2.3.0" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point

@@ -68,8 +68,10 @@ ensure_py_venv()
     # If the service is already running, we can't recreate the virtual env
     # so if it exists, don't try to create it.
     if [ -d $OE_ENV ]; then
-        log_info "Virtual environment found, updating to the latest version of python."
-        python3 -m venv --upgrade "${OE_ENV}"
+        # This virtual env refresh fails on some devices when the service is already running, so skip it for now.
+        # This only refreshes the virtual environment package anyways, so it's not super needed.
+        #log_info "Virtual environment found, updating to the latest version of python."
+        #python3 -m venv --upgrade "${OE_ENV}"
         return 0
     fi
 

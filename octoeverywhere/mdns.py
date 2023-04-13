@@ -49,14 +49,7 @@ class MDns:
         if self.Cache is None:
             self._ResetCacheFile()
 
-        # TODO - The dns.resolver.Resolver was added to this package back in 2020, in this commit.
-        # https://github.com/rthalley/dnspython/commit/0f365dc3f8876d99682d0473a2befc08dbe8ec67
-        # We have seen issues where some PY3 setups have libs that are older than 2.1.0, which brought this class.
-        # BUT - We can't simply require a later version of dnspython, like 2.3.0, because the newest package for PY2 is 1.16.0
-        # If we try to force the package to be dnspython>=2.3.0, new PY2 installs will break.
-        # So, for now, until we stop supporting PY2, we just disable the local DNS lookup if the class fails to load.
-        # This sucks, because that means some PY3 users that could use this can't just because we can't force the package to update.
-        # TODO - sys.version_info[0] < 3: when we drop PY2 support, remove this try catch and update our requirements to be dnspython>=2.3.0
+        # Now that we support only PY3, this should never fail.
         try:
             # Setup the client
             self.dnsResolver = dns.resolver.Resolver()

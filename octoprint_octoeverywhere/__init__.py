@@ -742,7 +742,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self._settings.save(force=True)
 
 __plugin_name__ = "OctoEverywhere!"
-__plugin_pythoncompat__ = ">=2.7,<4" # py 2.7 or 3
+__plugin_pythoncompat__ = ">=3.0,<4" # Only PY3
 
 def __plugin_load__():
     global __plugin_implementation__
