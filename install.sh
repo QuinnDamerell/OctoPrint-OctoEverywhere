@@ -154,11 +154,11 @@ cat << EOF
 EOF
 log_blank
 log_blank
-log_header "OctoEverywhere empowers the worldwide maker community."
-log_info   "  - Free & Unlimited Mainsail and Fluidd remote access"
-log_info   "  - Free & Unlimited Next-gen AI print failure detection"
-log_info   "  - Real-time print notifications"
-log_info   "  - And so much more"
+log_important "OctoEverywhere empowers the worldwide maker community with..."
+log_info      "  - Free & Unlimited Mainsail and Fluidd remote access"
+log_info      "  - Free & Unlimited Next-gen AI print failure detection"
+log_info      "  - Real-time print notifications"
+log_info      "  - And so much more"
 log_blank
 log_blank
 
