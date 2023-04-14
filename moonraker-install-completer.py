@@ -805,7 +805,7 @@ class MoonrakerInstaller:
             # Try to get a short code. We do a quick timeout so if this fails, we just present the user the longer URL.
             # Any failures, like rate limiting, server errors, whatever, and we just use the long URL.
             # TODO - remove this print when we are done debugging the short code None error.
-            Info("Creating short code for printer id: "+str(printerId))
+            Info("Creating short code for printer id: "+str(printerId)+" t:"+str(type(printerId)))
             r = requests.post('https://octoeverywhere.com/api/shortcode/create', json={"Type": 1, "PrinterId": printerId}, timeout=2.0)
             if r.status_code == 200:
                 jsonResponse = r.json()
