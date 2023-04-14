@@ -438,8 +438,8 @@ class MoonrakerInstaller:
         # TODO - To fix this correctly, when looking for the moonraker config to start with, we should follow any includes to find the file that actually has the [server] block.
         # TODO - Secondly, this logic should be made more robust, so that it doesn't always just do one parent up.
         #
-        if self.PrinterDataFolder.lower().find("ratos"):
-            Info("RatOs hack applied to the pritner data folder.")
+        if self.PrinterDataFolder.lower().find("ratos") != -1:
+            Info("RatOs hack applied to the printer data folder.")
             self.PrinterDataFolder = self.GetParentDirectory(self.PrinterDataFolder)
         Debug("Printer data folder: "+self.PrinterDataFolder)
 
