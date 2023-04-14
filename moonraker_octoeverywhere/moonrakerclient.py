@@ -550,10 +550,10 @@ class MoonrakerClient:
         t.start()
 
 
-    def _onWsMsg(self, ws, msg):
+    def _onWsMsg(self, ws, msgBytes: bytes):
         try:
             # Parse the incoming message.
-            msgObj = json.loads(msg)
+            msgObj = json.loads(msgBytes)
 
             # Get the method if there is one.
             method_CanBeNone = None
@@ -563,8 +563,9 @@ class MoonrakerClient:
             # Print for debugging
             if self.Logger.isEnabledFor(logging.DEBUG):
                 # Exclude this really chatty message.
-                if "moonraker_stats" not in msg:
-                    self.Logger.debug("Ws <-: %s", msg)
+                msgStr = msgBytes.decode(encoding="utf-8")
+                if "moonraker_stats" not in msgStr:
+                    self.Logger.debug("Ws <-: %s", msgStr)
 
             # Check if this is a response to a request
             # info: https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
