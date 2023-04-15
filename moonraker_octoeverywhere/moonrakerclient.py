@@ -10,6 +10,8 @@ import configparser
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
+from .moonrakercredentailmanager import MoonrakerCredentialManager
+
 
 # The response object for a json rpc request.
 # Contains information on the state, and if successful, the result.
@@ -58,8 +60,8 @@ class MoonrakerClient:
 
 
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler):
-        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler)
+    def Init(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr):
+        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr)
 
 
     @staticmethod
@@ -67,12 +69,13 @@ class MoonrakerClient:
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler) -> None:
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler, pluginVersionStr:str) -> None:
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
         self.MoonrakerHostAndPort = "127.0.0.1:7125"
         self.PrinterId = printerId
         self.ConnectionStatusHandler = connectionStatusHandler
+        self.PluginVersionStr = pluginVersionStr
 
         # Setup the json-rpc vars
         self.JsonRpcIdLock = threading.Lock()
@@ -87,6 +90,10 @@ class MoonrakerClient:
         self.NonResponseMsgQueue = queue.Queue(20000)
         self.NonResponseMsgThread = threading.Thread(target=self._NonResponseMsgQueueWorker)
         self.NonResponseMsgThread.start()
+
+        # Some instances use auth and we need an API key to access them. If this is not set to None, it's the API key.
+        # This is found and set when we try to connect and we fail due to an unauthed socket.
+        self.MoonrakerApiKey = None
 
         # Setup the WS vars and a websocket worker thread.
         # Don't run it until StartRunningIfNotAlready is called!
@@ -477,11 +484,40 @@ class MoonrakerClient:
                     self.Logger.warn("The target websocket changed while waiting on klippy ready.")
                     return
 
+                # Before we do anything, we need to identify ourselves.
+                # This is also how we authorize ourself with the API key, if needed.
+                # https://moonraker.readthedocs.io/en/latest/web_api/#identify-connection
+                params = {
+                    "client_name": "OctoEverywhere",
+                    "version": self.PluginVersionStr,
+                    "type": "other",
+                    "url": "https://octoeverywhere.com",
+                }
+                if self.MoonrakerApiKey is not None:
+                    self.Logger.info("API key added to websocket identify message.")
+                    params["api_key"] =  self.MoonrakerApiKey
+                # Since "server.info" already handles all of the error logic, we don't bother here,
+                # since server.info will get the same error anyways. (timeouts, unauthorized, etc.)
+                _ = self.SendJsonRpcRequest("server.connection.identify", params, True)
+
                 # Query the state, use the force flag to make sure we send even though klippy ready is not set.
                 result = self.SendJsonRpcRequest("server.info", None, True)
 
                 # Check for error
                 if result.HasError():
+                    # Check if the error is Unauthorized, in which case we need to try to get credentials.
+                    if result.ErrorCode == -32602 or result.ErrorStr == "Unauthorized":
+                        self.Logger.info("Our websocket connection to moonraker needs auth, trying to get the API key...")
+                        self.MoonrakerApiKey = MoonrakerCredentialManager.Get().TryToGetApiKey()
+                        if self.MoonrakerApiKey is None:
+                            self.Logger.error("Our websocket connection to moonraker needs auth and we failed to get the API key.")
+                            raise Exception("Websocket unauthorized.")
+                        else:
+                            self.Logger.info("Successfully got the API key, restarting the websocket to try again using it.")
+                            # Shut down the websocket so we do the reconnect logic.
+                            self._RestartWebsocket()
+                            return
+
                     # Handle the timeout without throwing, since this happens sometimes when the system is down.
                     if result.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
                         self.Logger.info("Moonraker client failed to send klippy ready query message, it hit a timeout.")

@@ -24,6 +24,7 @@ from .moonrakerwebcamhelper import MoonrakerWebcamHelper
 from .moonrakerdatabase import MoonrakerDatabase
 from .mainsailconfighandler import MainsailConfigHandler
 from .moonrakerapirouter import MoonrakerApiRouter
+from .moonrakercredentailmanager import MoonrakerCredentialManager
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -93,6 +94,9 @@ class MoonrakerHost:
             # Setup the database helper
             self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId)
 
+            # Setup the credential manager.
+            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath)
+
             # Setup the http requester. We default to port 80 and assume the frontend can be found there.
             # TODO - parse nginx to see what front ends exist and make them switchable
             # TODO - detect HTTPS port if 80 is not bound.
@@ -117,7 +121,7 @@ class MoonrakerHost:
             # When everything is setup, start the moonraker client object.
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
-            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, self)
+            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, self, pluginVersionStr)
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))
