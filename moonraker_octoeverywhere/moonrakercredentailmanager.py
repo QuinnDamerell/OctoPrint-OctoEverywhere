@@ -66,7 +66,7 @@ class MoonrakerCredentialManager:
                 "id": msgId
             }
             jsonStr = json.dumps(obj, default=str)
-            # Add the End Of Text value of 3 to the string to indicate the end of message.
+            # Add the End Of Text ascii value of 3 to the string to indicate the end of message.
             jsonStr += b'\x03'.decode()
 
             # Send it on the socket.
@@ -113,6 +113,7 @@ class MoonrakerCredentialManager:
 
         except Exception as e:
             Sentry.Exception("TryToGetCredentials failed to open the unix socket.", e)
+            return None
 
 
     def _TryToFindUnixSocket(self) -> str or None:
