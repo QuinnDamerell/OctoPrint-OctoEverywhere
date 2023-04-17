@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #
-# The responsibility of this script is to setup the required system libs, environment, and py requirements
-# and then passing the rest of install responsibility to the python setup script.
+# The responsibility of this script is to bootstrap the setup by installing the required system libs,
+# virtual environment, and py requirements. The core of the setup logic is done by the PY install script.
 #
 
 # Set this to terminate on error.
@@ -86,7 +86,7 @@ ensure_py_venv()
 install_or_update_dependencies()
 {
     log_header "Checking required system packages are installed..."
-    log_important "You might be asked for your system password, this is required for apt-get to install system packages."
+    log_important "You might be asked for your system password - this is required to install the required system packages."
 
     # These we require to be installed in the OS.
     # Note we need to do this before we create our virtual environment
@@ -149,9 +149,9 @@ cat << EOF
 @@@@@########,,,,,,,,,,,,//,,,,,,,,********@@@@@@@
 @@@@@#@@@@,,,,,,,,,,,,,,,,,,,,,,,,,,,***,@@@@@@@@@
 @@@@@@@@@@@@@@@,,,,,,,,,,,,,,,,,,,,,@@@@@@@@@@@@@@
-
-           OctoEverywhere For Klipper
 EOF
+log_blank
+log_header "           OctoEverywhere For Klipper"
 log_blank
 log_blank
 log_important "OctoEverywhere empowers the worldwide maker community with..."
@@ -172,14 +172,18 @@ check_for_octoprint
 install_or_update_dependencies
 
 # Before launching our PY script, set any vars it needs to know
+# Pass all of the command line args, so they can be handled by the PY script.
 USERNAME=${USER}
 USER_HOME=${HOME}
-OPTIONAL_MOONRAKER_CONFIG_FILE=${1}
-PY_LAUNCH_JSON="{\"OE_REPO_DIR\":\"${OE_REPO_DIR}\",\"OE_ENV\":\"${OE_ENV}\",\"USERNAME\":\"${USERNAME}\",\"USER_HOME\":\"${USER_HOME}\",\"MOONRAKER_CONFIG\":\"${OPTIONAL_MOONRAKER_CONFIG_FILE}\"}"
+CMD_LINE_ARGS=${@}
+PY_LAUNCH_JSON="{\"OE_REPO_DIR\":\"${OE_REPO_DIR}\",\"OE_ENV\":\"${OE_ENV}\",\"USERNAME\":\"${USERNAME}\",\"USER_HOME\":\"${USER_HOME}\",\"CMD_LINE_ARGS\":\"${CMD_LINE_ARGS}\"}"
 
+log_info "Bootstrap done. Starting python installer..."
 # Now launch into our py setup script, that does everything else required.
-log_info "Running the python install finisher..."
-sudo ${OE_ENV}/bin/python3 "${OE_REPO_DIR}/moonraker-install-completer.py" ${PY_LAUNCH_JSON}
+# Since we use a module for file includes, we need to set the path to the root of the module
+# so python will find it.
+export PYTHONPATH="${OE_REPO_DIR}"
+sudo ${OE_ENV}/bin/python3 -m moonraker_installer ${PY_LAUNCH_JSON}
 
 # Check the output of the py script.
 retVal=$?

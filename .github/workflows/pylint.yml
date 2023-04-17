@@ -25,3 +25,4 @@ jobs:
         pylint ./octoeverywhere/
         pylint ./octoprint_octoeverywhere/
         pylint ./moonraker_octoeverywhere/
+        pylint ./moonraker_installer/
