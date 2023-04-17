@@ -183,7 +183,9 @@ log_info "Bootstrap done. Starting python installer..."
 # Since we use a module for file includes, we need to set the path to the root of the module
 # so python will find it.
 export PYTHONPATH="${OE_REPO_DIR}"
+pushd ${OE_REPO_DIR}
 sudo ${OE_ENV}/bin/python3 -m moonraker_installer ${PY_LAUNCH_JSON}
+popd
 
 # Check the output of the py script.
 retVal=$?
