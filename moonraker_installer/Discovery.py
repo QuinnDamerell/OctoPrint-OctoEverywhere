@@ -162,12 +162,21 @@ class Discovery:
             with open(serviceFilePath, "r", encoding="utf-8") as serviceFile:
                 lines = serviceFile.readlines()
                 for l in lines:
-                    # Search for the line that has the moonraker environment.
+                    # Search for lines that might indicate the config path.
+                    # For newer setups, we expect to see this EnvironmentFile line in the service.
                     # Ex EnvironmentFile=/home/pi/printer_1_data/systemd/moonraker.env
-                    if "moonraker.env" in l.lower():
-                        Logger.Debug("Found moonraker.env line: "+l)
+                    #
+                    # For some older setups, we will find lines like these in the service file.
+                    # Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf
+                    # Environment=MOONRAKER_LOG=/home/mks/klipper_logs/moonraker.log
+                    #
+                    # The logic below must be able to handle getting the path out of both!
+                    if "moonraker.env" in l.lower() or "moonraker.conf" in l.lower():
+                        Logger.Debug("Found possible path line: "+l)
 
                         # When found, try to file the config path.
+                        # It's important to use rfind, to find the last = for cases like
+                        # Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf
                         equalsPos = l.rfind('=')
                         if equalsPos == -1:
                             continue
@@ -181,11 +190,12 @@ class Discovery:
 
                         # Get the file path.
                         # Sample path /home/pi/printer_1_data/systemd/moonraker.env
-                        envFilePath = l[equalsPos:filePathEnd]
-                        envFilePath = envFilePath.strip()
+                        testPath = l[equalsPos:filePathEnd]
+                        testPath = testPath.strip()
 
                         # From the env path, remove the file name and test if the config is in the same dir, which is not common.
-                        searchConfigPath = Util.GetParentDirectory(envFilePath)
+                        # For the second case [Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf] we do expect the config to be in this folder
+                        searchConfigPath = Util.GetParentDirectory(testPath)
                         moonrakerConfigFilePath = self._FindMoonrakerConfigFromPath(searchConfigPath)
                         if moonrakerConfigFilePath is not None:
                             Logger.Debug("Moonraker config found in env dir")
@@ -193,7 +203,7 @@ class Discovery:
 
                         # Move to the parent and look explicitly in the config folder, if there is one, this is where we expect to find it.
                         # We do this to prevent finding config files in other printer_data folders, like backup.
-                        searchConfigPath = Util.GetParentDirectory(Util.GetParentDirectory(envFilePath))
+                        searchConfigPath = Util.GetParentDirectory(Util.GetParentDirectory(testPath))
                         searchConfigPath = os.path.join(searchConfigPath, "config")
                         if os.path.exists(searchConfigPath):
                             moonrakerConfigFilePath = self._FindMoonrakerConfigFromPath(searchConfigPath)
@@ -202,7 +212,7 @@ class Discovery:
                                 return moonrakerConfigFilePath
 
                         # If we still didn't find it, move the printer_data root, and look one last time.
-                        searchConfigPath = Util.GetParentDirectory(Util.GetParentDirectory(envFilePath))
+                        searchConfigPath = Util.GetParentDirectory(Util.GetParentDirectory(testPath))
                         moonrakerConfigFilePath = self._FindMoonrakerConfigFromPath(searchConfigPath)
                         if moonrakerConfigFilePath is not None:
                             Logger.Debug("Moonraker config found from printer data root")
