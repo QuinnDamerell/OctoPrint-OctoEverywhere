@@ -47,10 +47,11 @@ plugin_license = "AGPLv3"
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
 #   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
 #   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
+#   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it. We had a user having an issue that updated to 0.24.0, and it resolved the issue.
 #
 # Note! These need to stay in sync with .github/pylint.yml decencies.
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
-plugin_requires = ["websocket_client>=1.5.1,<1.5.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2022.12.7", "rsa>=4.0", "dnspython>=2.3.0" ]
+plugin_requires = ["websocket_client>=1.5.1,<1.5.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2022.12.7", "rsa>=4.0", "dnspython>=2.3.0", "httpx==0.24.0" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point
