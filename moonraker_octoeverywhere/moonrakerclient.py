@@ -114,6 +114,10 @@ class MoonrakerClient:
         return self.MoonrakerCompat
 
 
+    def GetIsKlippyReady(self):
+        return self.WebSocketKlippyReady
+
+
     # Actually starts the client running, trying to connect the websocket and such.
     # This is done after the first connection to OctoEverywhere has been established, to ensure
     # the connection is setup before this, incase something needs to use it.
@@ -769,8 +773,19 @@ class MoonrakerCompat:
         # Set the flag to false again, since we can't send any more notifications until we are reconnected and re-synced.
         self.IsReadyToProcessNotifications = False
 
-        # Send a notification to the user.
-        self.NotificationHandler.OnError("Klipper Disconnected")
+        # Since we will get this disconnected error for anything, including intentional restarts,
+        # we defer the notification for a few seconds and check if the system is still disconnected.
+        # If it's still down, we fire the notification.
+        def disconnectWaiter():
+            time.sleep(5.0)
+            if MoonrakerClient.Get().GetIsKlippyReady() is False:
+                # Send a notification to the user.
+                self.NotificationHandler.OnError("Klipper Disconnected")
+
+        # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
+        thread = threading.Thread(target=disconnectWaiter)
+        thread.isDaemon = True
+        thread.start()
 
 
     # Called when a new print is starting.
