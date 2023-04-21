@@ -41,6 +41,7 @@
         "hostcommon",
         "hostnames",
         "Hotend",
+        "httpx",
         "INET",
         "inited",
         "ints",
