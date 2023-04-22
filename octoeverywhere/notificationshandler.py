@@ -2,7 +2,8 @@ import math
 import time
 import io
 import threading
-from random import randint
+import random
+import string
 
 import requests
 
@@ -41,6 +42,10 @@ class NotificationsHandler:
 
     # This is the max snapshot file size we will allow to be sent.
     MaxSnapshotFileSizeBytes = 2 * 1024 * 1024
+
+    # The length of the random print id. This must be a large number, since it needs to be
+    # globally unique.
+    PrintIdLength = 60
 
     def __init__(self, logger, printerStateInterface):
         self.Logger = logger
@@ -93,8 +98,8 @@ class NotificationsHandler:
             self.CurrentPrintStartTime -= restoreDurationOffsetSec_OrNone
 
         # Each time a print starts, we generate a fixed length random id to identify it.
-        # This just helps the server keep track of events that are related.
-        self.PrintId = randint(100000000, 999999999)
+        # This id is used to globally identify the print for the user, so it needs to have high entropy.
+        self.PrintId = ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase + string.digits, k=NotificationsHandler.PrintIdLength))
 
         # Note the time this print started
         self.PrintStartTimeSec = time.time()
