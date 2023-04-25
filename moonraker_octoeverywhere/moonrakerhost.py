@@ -126,6 +126,11 @@ class MoonrakerHost:
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))
 
+            # If we have a local dev server, set it in the notification handler.
+            if DevLocalServerAddress_CanBeNone is not None:
+                MoonrakerClient.Get().GetNotificationHandler().SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
+                MoonrakerClient.Get().GetNotificationHandler().SetGadgetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
+
             # Setup the mainsail config handler
             MainsailConfigHandler.Init(self.Logger)
 
