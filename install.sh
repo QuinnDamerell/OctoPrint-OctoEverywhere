@@ -171,6 +171,10 @@ check_for_octoprint
 # is handled by one function.
 install_or_update_dependencies
 
+# Clean up any old bite code that might exist from the past, before we added the -B argument to the installer.
+# TODO - Remove at some point.
+sudo rm -fdr "${OE_REPO_DIR}/moonraker_installer/__pycache__/"
+
 # Before launching our PY script, set any vars it needs to know
 # Pass all of the command line args, so they can be handled by the PY script.
 USERNAME=${USER}
@@ -184,7 +188,11 @@ log_info "Bootstrap done. Starting python installer..."
 # so python will find it.
 export PYTHONPATH="${OE_REPO_DIR}"
 pushd ${OE_REPO_DIR} > /dev/null
-sudo ${OE_ENV}/bin/python3 -m moonraker_installer ${PY_LAUNCH_JSON}
+
+# Disable the PY cache files (-B), since they will be written as sudo, since that's what we launch the PY
+# installer as. The PY installer must be sudo to write the service files, but we don't want the
+# complied files to stay in the repo with sudo permissions.
+sudo ${OE_ENV}/bin/python3 -B -m moonraker_installer ${PY_LAUNCH_JSON}
 popd > /dev/null
 
 # Check the output of the py script.
