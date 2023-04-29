@@ -171,7 +171,7 @@ class Linker:
         # If this fails, let it throw, so the user knows something is wrong.
         Logger.Info("Found existing OctoEverywhere service config.")
         try:
-            config = configparser.ConfigParser()
+            config = configparser.ConfigParser(allow_no_value=True, strict=False)
             config.read(oeServiceConfigFilePath)
         except Exception as e:
             # Print the file for Logger.Debugging.

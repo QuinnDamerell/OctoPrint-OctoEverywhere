@@ -55,6 +55,7 @@ class MoonrakerCredentialManager:
 
         try:
             # Try to open the socket.
+            # pylint: disable=no-member # Only exists on linux
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             sock.connect(moonrakerSocketFilePath)
 
@@ -121,7 +122,9 @@ class MoonrakerCredentialManager:
         # First, try to parse the moonraker config to find the klipper socket path, since the moonraker socket should be similar.
         try:
             # Open and read the config.
-            moonrakerConfig = configparser.ConfigParser()
+            # allow_no_value allows keys with no values - strict allows duplicate sections, because sometimes that happens for unknown reasons.
+            # Since this is edited by the user, we allow non-strict stuff, since they can make mistakes like multiple sections.
+            moonrakerConfig = configparser.ConfigParser(allow_no_value=True, strict=False)
             moonrakerConfig.read(self.MoonrakerConfigFilePath)
             if "server" not in moonrakerConfig:
                 self.Logger.info("_TryToFindUnixSocket - No server block found in moonraker config.")

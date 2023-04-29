@@ -171,6 +171,7 @@ class Config:
             return
 
         # Always create a new object.
+        # For our config, we use strict and such, so we know the config is valid.
         self.Config = configparser.ConfigParser()
 
         # If a config exists, read it.
