@@ -64,6 +64,9 @@ class HeaderHelper:
                     # We should never send these to OctoPrint, or it will detect the IP as external and show
                     # the external connection warning.
                     continue
+                if lowerName == "x-original-proto":
+                    # There's no need to send this as well.
+                    continue
 
                 # Update any headers we need to for the local call.
                 if lowerName == "host" :
@@ -106,6 +109,36 @@ class HeaderHelper:
         # Unless we can get the already encoded bytes out of the request client, then that might be interesting.
         # Setting this to empty also prevents the server from returning chunk-based transfers for the index and such.
         sendHeaders["Accept-Encoding"] = ""
+
+        return sendHeaders
+
+    # Called only for websockets to get headers.
+    @staticmethod
+    def GatherWebsocketRequestHeaders(logger, httpInitialContext) :
+        # Get the count of headers in the message.
+        headersLen = httpInitialContext.HeadersLength()
+
+        i = 0
+        sendHeaders = {}
+        while i < headersLen:
+            # Get the header
+            header = httpInitialContext.Headers(i)
+            i += 1
+
+            # Get the values & validate
+            name = OctoStreamMsgBuilder.BytesToString(header.Key())
+            value = OctoStreamMsgBuilder.BytesToString(header.Value())
+            if name is None or value is None:
+                logger.warn("GatherWebsocketRequestHeaders found a header that has a null name or value.")
+                continue
+            lowerName = name.lower()
+
+            # Right now we only allow the x-api-key header to be sent to the websocket.
+            # This is because the OctoPrint websocket server seems to fail if we send most of the standard headers.
+            # The only one that's known be required right now is the x-api-key, since it needed by moonraker apps if auth is enabled.
+            if lowerName.startswith("x-api-key"):
+                # Add the header. (use the original case)
+                sendHeaders[name] = value
 
         return sendHeaders
 

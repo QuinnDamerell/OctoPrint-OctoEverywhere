@@ -7,6 +7,7 @@ import string
 from octoeverywhere.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.sentry import Sentry
@@ -36,7 +37,7 @@ LocalServerAddress = None
 #LocalServerAddress = "127.0.0.1"
 
 OctoPrintIp = None
-OctoPrintIp = "192.168.1.36"
+OctoPrintIp = "192.168.1.28"
 
 OctoPrintPort = None
 OctoPrintPort = 80
@@ -187,9 +188,10 @@ if __name__ == '__main__':
     NotificationHandlerInstance = NotificationsHandler(logger, MockPrinterStateObject(logger))
 
     # Setup the api command handler if needed for testing.
-    # apiCommandHandler = ApiCommandHandler(logger, NotificationHandlerInstance, None)
+    CommandHandler.Init(logger, NotificationHandlerInstance, None)
     # Note this will throw an exception because we don't have a flask context setup.
     # result = apiCommandHandler.HandleApiCommand("status", None)
+    # Setup the command handler
 
     # Setup the snapshot helper
     WebcamHelper.Init(logger, OctoPrintWebcamHelper(logger, None))
