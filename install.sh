@@ -20,7 +20,7 @@ OE_ENV="${HOME}/octoeverywhere-env"
 # On update THIS SCRIPT ISN'T RAN, only this line is parsed out and used to install / update system packages.
 # For python packages, the `requirements.txt` package is used on update.
 # This var name MUST BE `PKGLIST`!!
-PKGLIST="python3 python3-pip python3-venv virtualenv"
+PKGLIST="python3 python3-pip virtualenv"
 
 #
 # Console Write Helpers
