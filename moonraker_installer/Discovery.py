@@ -170,35 +170,74 @@ class Discovery:
                     # Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf
                     # Environment=MOONRAKER_LOG=/home/mks/klipper_logs/moonraker.log
                     #
-                    # The logic below must be able to handle getting the path out of both!
+                    # Even older setups might also have:
+                    # [ExecStart=/home/pi/moonraker-env/bin/python /home/pi/moonraker/moonraker/moonraker.py -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log
+                    #
+                    # The logic below must be able to handle getting the path out of any of these!
+                    #
                     if "moonraker.env" in l.lower() or "moonraker.conf" in l.lower():
                         Logger.Debug("Found possible path line: "+l)
 
-                        # When found, try to file the config path.
-                        # It's important to use rfind, to find the last = for cases like
-                        # Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf
-                        equalsPos = l.rfind('=')
-                        if equalsPos == -1:
-                            continue
-                        # Move past the = sign.
-                        equalsPos += 1
+                        # Try to parse the test path
+                        # In some cases this path will be the full moonraker config file path, while in other cases it might be the printer data root folder, systemd folder, config folder.
+                        testPath = ""
+                        c_commandStringSearch = " -c "
+                        if l.lower().find(c_commandStringSearch) != -1:
+                            #
+                            # Handle the -c service file line.
+                            #
+                            cmdFlagStart = l.lower().find(c_commandStringSearch)
+                            cmdFlagStart += len(c_commandStringSearch) # Move past the " -c "
 
-                        # Find the end of the path.
-                        filePathEnd = l.find(' ', equalsPos)
-                        if filePathEnd == -1:
-                            filePathEnd = len(l)
+                            # Truncate the string after the known " -c ", so we can strip any more leading spaces off the string before trying to find the end.
+                            cmdStringAfterSearchStart = l[cmdFlagStart:]
+                            cmdStringAfterSearchStart = cmdStringAfterSearchStart.strip()
 
-                        # Get the file path.
-                        # Sample path /home/pi/printer_1_data/systemd/moonraker.env
-                        testPath = l[equalsPos:filePathEnd]
-                        testPath = testPath.strip()
+                            # Now find the next space, which will be the next cmd line arg part.
+                            cmdEnd = cmdStringAfterSearchStart.find(' ')
+                            if cmdEnd == -1:
+                                # This is the end of the command line string.
+                                cmdEnd = len(cmdStringAfterSearchStart)
 
-                        # From the env path, remove the file name and test if the config is in the same dir, which is not common.
+                            # Get the parsed moonraker path.
+                            testPath = cmdStringAfterSearchStart[:cmdEnd]
+                            Logger.Debug(f"Parsed moonraker config path is [{testPath}] - '-c' parse.")
+                        else:
+                            #
+                            # Handle the Environment* path
+                            #
+                            # When found, try to file the config path.
+                            # It's important to use rfind, to find the last = for cases like
+                            # Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf
+                            equalsPos = l.rfind('=')
+                            if equalsPos == -1:
+                                continue
+                            # Move past the = sign.
+                            equalsPos += 1
+
+                            # Find the end of the path.
+                            filePathEnd = l.find(' ', equalsPos)
+                            if filePathEnd == -1:
+                                filePathEnd = len(l)
+
+                            # Get the file path.
+                            # Sample path /home/pi/printer_1_data/systemd/moonraker.env
+                            testPath = l[equalsPos:filePathEnd]
+                            testPath = testPath.strip()
+                            Logger.Debug(f"Parsed moonraker config path is [{testPath}] - From env parse.")
+
+                        # Once the path is parsed, it can be the full path to the moonraker config file, the path to the printer data folder, a path to the printer data systemd folder, or config folder.
+                        # We must handle all of these cases!
+
+                        # First, test if the moonraker config is in this parent path.
+                        # This is needed for the case where the path is the full moonraker config file path, the parent will be the dir and then we will find the file.
+                        #
                         # For the second case [Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf] we do expect the config to be in this folder
+                        # Or for the case of  [ExecStart=/home/pi/moonraker-env/bin/python /home/pi/moonraker/moonraker/moonraker.py -c /home/pi/klipper_config/moonraker.conf -l /home/pi/klipper_logs/moonraker.log
                         searchConfigPath = Util.GetParentDirectory(testPath)
                         moonrakerConfigFilePath = self._FindMoonrakerConfigFromPath(searchConfigPath)
                         if moonrakerConfigFilePath is not None:
-                            Logger.Debug("Moonraker config found in env dir")
+                            Logger.Debug(f"Moonraker config found in {searchConfigPath}")
                             return moonrakerConfigFilePath
 
                         # Move to the parent and look explicitly in the config folder, if there is one, this is where we expect to find it.
@@ -208,14 +247,14 @@ class Discovery:
                         if os.path.exists(searchConfigPath):
                             moonrakerConfigFilePath = self._FindMoonrakerConfigFromPath(searchConfigPath)
                             if moonrakerConfigFilePath is not None:
-                                Logger.Debug("Moonraker config found in config dir")
+                                Logger.Debug(f"Moonraker config found in {searchConfigPath}")
                                 return moonrakerConfigFilePath
 
                         # If we still didn't find it, move the printer_data root, and look one last time.
                         searchConfigPath = Util.GetParentDirectory(Util.GetParentDirectory(testPath))
                         moonrakerConfigFilePath = self._FindMoonrakerConfigFromPath(searchConfigPath)
                         if moonrakerConfigFilePath is not None:
-                            Logger.Debug("Moonraker config found from printer data root")
+                            Logger.Debug(f"Moonraker config found from printer data root {searchConfigPath}")
                             return moonrakerConfigFilePath
 
                         Logger.Debug(f"No matching config file was found for line [{l}] in service file, looking for more lines...")
@@ -229,41 +268,46 @@ class Discovery:
         if depth > 20:
             return None
 
-        # Get all files and dirs in this dir
-        fileAndDirList = os.listdir(path)
+        try:
+            # Get all files and dirs in this dir
+            # This throws if the path doesn't exist.
+            fileAndDirList = os.listdir(path)
 
-        # First, check all of the files.
-        dirsToSearch = []
-        for fileOrDirName in fileAndDirList:
-            fullFileOrDirPath = os.path.join(path, fileOrDirName)
-            fileNameOrDirLower = fileOrDirName.lower()
-            # If we find a dir, cache it, so we check all of the files in this folder first.
-            # This is important, because some OS images like RatOS have moonraker.conf files in nested folders
-            # that we don't want to find first.
-            if os.path.isdir(fullFileOrDirPath):
-                dirsToSearch.append(fileOrDirName)
-            # If it's a file, test if it.
-            elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
-                # We use an exact match, to prevent things like moonraker.conf.backup from matching, which is common.
-                if fileNameOrDirLower == "moonraker.conf":
-                    return fullFileOrDirPath
+            # First, check all of the files.
+            dirsToSearch = []
+            for fileOrDirName in fileAndDirList:
+                fullFileOrDirPath = os.path.join(path, fileOrDirName)
+                fileNameOrDirLower = fileOrDirName.lower()
+                # If we find a dir, cache it, so we check all of the files in this folder first.
+                # This is important, because some OS images like RatOS have moonraker.conf files in nested folders
+                # that we don't want to find first.
+                if os.path.isdir(fullFileOrDirPath):
+                    dirsToSearch.append(fileOrDirName)
+                # If it's a file, test if it.
+                elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
+                    # We use an exact match, to prevent things like moonraker.conf.backup from matching, which is common.
+                    if fileNameOrDirLower == "moonraker.conf":
+                        return fullFileOrDirPath
 
-        # We didn't find a matching file, process the sub dirs.
-        for d in dirsToSearch:
-            fullFileOrDirPath = os.path.join(path, d)
-            fileNameOrDirLower = d.lower()
-            # Ignore backup folders
-            if fileNameOrDirLower == "backup":
-                continue
-            # For RatOS (a prebuilt pi image) there's a folder named RatOS in the config folder.
-            # That folder is a git repo for the RatOS project, and it contains a moonraker.conf, but it's not the one we should target.
-            # The community has told us to target the moonraker.conf in the ~/printer_data/config/
-            # Luckily, this is quite a static image, so there aren't too many variants of it.
-            if fileNameOrDirLower == "ratos":
-                continue
-            tempResult = self._FindMoonrakerConfigFromPath(fullFileOrDirPath, depth + 1)
-            if tempResult is not None:
-                return tempResult
+            # We didn't find a matching file, process the sub dirs.
+            for d in dirsToSearch:
+                fullFileOrDirPath = os.path.join(path, d)
+                fileNameOrDirLower = d.lower()
+                # Ignore backup folders
+                if fileNameOrDirLower == "backup":
+                    continue
+                # For RatOS (a prebuilt pi image) there's a folder named RatOS in the config folder.
+                # That folder is a git repo for the RatOS project, and it contains a moonraker.conf, but it's not the one we should target.
+                # The community has told us to target the moonraker.conf in the ~/printer_data/config/
+                # Luckily, this is quite a static image, so there aren't too many variants of it.
+                if fileNameOrDirLower == "ratos":
+                    continue
+                tempResult = self._FindMoonrakerConfigFromPath(fullFileOrDirPath, depth + 1)
+                if tempResult is not None:
+                    return tempResult
+        except Exception as e:
+            # This is mostly used to catch os.listdir which might throw.
+            Logger.Debug(f"Failed to _FindMoonrakerConfigFromPath from path {path}: "+str(e))
 
         # We didn't find it.
         return None
