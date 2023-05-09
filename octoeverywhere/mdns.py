@@ -2,7 +2,6 @@ import threading
 import time
 import os
 import json
-import sys
 
 import dns.resolver
 
@@ -147,11 +146,6 @@ class MDns:
     # Returns a string with the local IP if the IP can be found, otherwise, it returns None.
     def _TryToResolve(self, domain):
 
-        # TODO - Right now the DNS lib we use doesn't support PY2 the same way this PY3 logic is written. There might be a way to write a
-        # version of this logic that would support PY2, but for now, we just don't support it. Upgrade to PY3 people!
-        if sys.version_info[0] < 3 or self.dnsResolver is None:
-            return None
-
         # We have seen that occasionally a first resolve won't work, but future resolves will.
         # For this reason, we do shorter lifetime resolves, but try a few times.
         attempt = 0
@@ -243,6 +237,7 @@ class MDns:
 
         # See which IP in our list matches this the best.
         offset = 0
+        lastBestMatch = -1
         for c in ourIp:
             # For this current char, check if each ip has it still.
             ipIndex = 0
@@ -262,6 +257,7 @@ class MDns:
             currentIndex = 0
             while currentIndex < len(ipList):
                 if matches[currentIndex] is True:
+                    lastBestMatch = currentIndex
                     if lastMatchingIpIndex == -1:
                         lastMatchingIpIndex = currentIndex
                     else:
@@ -270,6 +266,13 @@ class MDns:
 
             # If -1 no ip matches.
             if lastMatchingIpIndex == -1:
+                # If lastBestMatch != -1, that means previous to this round at least two IPs both matched, but as of this round, no IPs do.
+                # Example, our IP is `192.168.1.41` and the list contains [`172.17.0.1`, `192.168.1.28`, `192.168.1.12`]. Both of the final two will match up to `192.168.1.` and then both fail in the same round.
+                # We will just use one of them to return.
+                if lastBestMatch != -1:
+                    self.LogDebug(f"There were at least two IPs that matched until this round [{offset}] and then neither did. We are selecting [{lastBestMatch}]")
+                    return ipList[lastBestMatch]
+                # No IP matched.
                 self.LogDebug("All ips returned failed to match at the same time, so we are going with index 0.")
                 return ipList[0]
             # If it's > -1, we have one matching left
