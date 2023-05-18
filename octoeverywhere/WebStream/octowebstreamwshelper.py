@@ -41,6 +41,7 @@ class OctoWebStreamWsHelper:
         self.Ws = None
         self.FirstWsMessageSentToLocal = False
         self.ResolvedLocalHostnameUrl = None
+        self.LookingForConnectMsgAttempts = 0
 
         # These vars indicate if the actual websocket is opened or closed.
         # This is different from IsClosed, which is tracking if the webstream closed status.
@@ -278,7 +279,7 @@ class OctoWebStreamWsHelper:
         return False
 
 
-    def onWsData(self, ws, buffer, msgType):
+    def onWsData(self, ws, buffer:bytes, msgType):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -294,6 +295,51 @@ class OctoWebStreamWsHelper:
                 # In PY3 using the modern websocket_client lib the text also comes as a byte buffer.
             else:
                 raise Exception("Web stream ws helper got a message type that's not supported. "+str(msgType))
+
+            # What is this?
+            #
+            # OctoPrint has a "connected" message that includes a config hash that indicates the has of the current
+            # settings of OctoPrint. Since OctoEverywhere might modify the settings, for example update the webcam absolute urls,
+            # we need to indicate the hash has changed. For web clients, there's no effect, since they will always load the websocket with this value.
+            # But, for any kind of app that might be switching between LAN and OE connections, they might use this to know if the settings changed.
+            # If we don't update it, they might not pull the OE updated settings when switching from LAN to OE, and then the webcam won't work.
+            #
+            # Thus, we will search the first few messages for the string we expect. Note that we don't parse the json, to make sure it's not changed at all.
+            # If we find the string value we expect, we inject a constant as a prefix, to ensure the same has from OE is used, but it will always be unique for OE.
+            # The only issue this could cause is if any system is expecting the hash to be a fixed length, (which it kind of should be) this will break that assumption.
+            if Compat.IsOctoPrint() and self.LookingForConnectMsgAttempts < 5:
+                self.LookingForConnectMsgAttempts += 1
+                try:
+                    c_configHashStringSearch = "config_hash"
+                    msgStr = buffer.decode(encoding="utf-8")
+                    indexOfConfigHash = msgStr.find(c_configHashStringSearch)
+                    if indexOfConfigHash != -1:
+                        # We found it!
+                        # Notes:
+                        #   We don't want to assume any kind of white space, so we parse each token we need to find.
+                        #   This should always really be the same, but we are trying to be robust.
+                        indexOfConfigHash += len(c_configHashStringSearch)
+                        # Try to find the closing quote of the key.
+                        closeKeyQuote = msgStr.find("\"", indexOfConfigHash)
+                        if closeKeyQuote == -1:
+                            raise Exception("Failed to find closing key quote. "+msgStr)
+                        closeKeyQuote += 1
+                        # Try to find the quote that opens the hash string.
+                        openStringQuote = msgStr.find("\"", closeKeyQuote)
+                        if openStringQuote == -1:
+                            raise Exception("Failed to find open key quote. "+msgStr)
+                        openStringQuote += 1
+                        # We don't need to find the end quote, we just need to inject our key into the string.
+                        # since the hash is all lower case letters and numbers, use a similar thing for our header.
+                        newStr = msgStr[:openStringQuote] + "oe" + msgStr[openStringQuote:]
+                        buffer = newStr.encode(encoding="utf-8")
+                        # Set this number high, so we dont have to look anymore.
+                        self.LookingForConnectMsgAttempts = 9999
+                    elif self.LookingForConnectMsgAttempts >= 5:
+                        self.Logger.warn(self.getLogMsgPrefix()+" failed to to find OctoPrint connect message in the first few WS messages.")
+                except Exception as ex:
+                    Sentry.Exception("Websocket stream helper failed to parse websocket for config hash mod.", ex)
+
 
             # Some messages are large, so compression helps.
             # We also don't consider the message type, since binary messages can very easily be

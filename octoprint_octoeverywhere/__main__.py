@@ -14,6 +14,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.Proto.ServerHost import ServerHost
+from octoeverywhere.compat import Compat
 #from .threaddebug import ThreadDebug
 
 from .localauth import LocalAuth
@@ -37,7 +38,7 @@ LocalServerAddress = None
 #LocalServerAddress = "127.0.0.1"
 
 OctoPrintIp = None
-OctoPrintIp = "192.168.1.28"
+OctoPrintIp = "192.168.1.10"
 
 OctoPrintPort = None
 OctoPrintPort = 80
@@ -144,6 +145,9 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+    # Set our compat mode
+    Compat.SetIsOctoPrint(True)
 
     # Init Sentry, but it won't report since we are in dev mode.
     Sentry.Init(logger, "dev", True)

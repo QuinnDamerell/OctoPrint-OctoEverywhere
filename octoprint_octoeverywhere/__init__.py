@@ -19,6 +19,8 @@ from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.commandhandler import CommandHandler
+from octoeverywhere.compat import Compat
+
 
 from .printerstateobject import PrinterStateObject
 from .octoprintcommandhandler import OctoPrintCommandHandler
@@ -49,6 +51,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.HasOnStartupBeenCalledYet = False
         # Indicates if there's a pending smart print notification that should be shown when the user sees the dashboard next.
         self.HasPendingSmartPauseMessage = False
+        # Let the compat system know this is an OctoPrint host.
+        Compat.SetIsOctoPrint(True)
 
      # Assets we use, just for the wizard right now.
     def get_assets(self):

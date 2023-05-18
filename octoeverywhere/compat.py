@@ -4,6 +4,22 @@
 # if some objects are available depending on the platform.
 class Compat:
 
+    _IsOctoPrintHost = False
+    _IsMoonrakerHost = False
+    @staticmethod
+    def IsOctoPrint() -> bool:
+        return Compat._IsOctoPrintHost
+    @staticmethod
+    def IsMoonraker() -> bool:
+        return Compat._IsMoonrakerHost
+    @staticmethod
+    def SetIsOctoPrint(b):
+        Compat._IsOctoPrintHost = b
+    @staticmethod
+    def SetIsMoonraker(b):
+        Compat._IsMoonrakerHost = b
+
+
     _LocalAuthObj = None
     @staticmethod
     def GetLocalAuth():

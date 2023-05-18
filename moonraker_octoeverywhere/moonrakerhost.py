@@ -11,6 +11,7 @@ from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.ServerHost import ServerHost
+from octoeverywhere.compat import Compat
 
 from .config import Config
 from .version import Version
@@ -33,6 +34,9 @@ class MoonrakerHost:
         # When we create our class, make sure all of our core requirements are created.
         self.MoonrakerWebcamHelper = None
         self.MoonrakerDatabase = None
+
+        # Let the compat system know this is an Moonraker host.
+        Compat.SetIsMoonraker(True)
 
         try:
             # First, we need to load our config.
