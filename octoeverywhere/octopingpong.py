@@ -112,8 +112,8 @@ class OctoPingPong:
                     self.Logger.info("PingPong has detected a first time run. Updating latency stats now.")
                     timeUntilNextWorkSec = 0
                     # Since the first run will be a little after OctoPrint or device boot, we need to wait a bit before for things to settle.
-                    # For reference, it takes slipstream about 20 seconds to get the full index cache after OctoPrint boot.
-                    time.sleep(30)
+                    # We also don't want to restart right as the user gets setup, so delay a bit.
+                    time.sleep(60 * 15)
 
                 # If it's not time to work, sleep until it is time.
                 if timeUntilNextWorkSec > 0:
