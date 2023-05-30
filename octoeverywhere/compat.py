@@ -59,16 +59,16 @@ class Compat:
         return Compat._SmartPauseInterfaceObj is not None
 
 
-    _MainsailConfigHandler = None
+    _WebRequestResponseHandler = None
     @staticmethod
-    def GetMainsailConfigHandler():
-        return Compat._MainsailConfigHandler
+    def GetWebRequestResponseHandler():
+        return Compat._WebRequestResponseHandler
     @staticmethod
-    def SetMainsailConfigHandler(obj):
-        Compat._MainsailConfigHandler = obj
+    def SetWebRequestResponseHandler(obj):
+        Compat._WebRequestResponseHandler = obj
     @staticmethod
-    def HasMainsailConfigHandler():
-        return Compat._MainsailConfigHandler is not None
+    def HasWebRequestResponseHandler():
+        return Compat._WebRequestResponseHandler is not None
 
 
     _ApiRouterHandler = None

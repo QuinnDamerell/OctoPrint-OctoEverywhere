@@ -221,10 +221,31 @@ class MoonrakerWebcamHelper():
             if streamUrl is None or len(streamUrl) == 0:
                 return False
 
+            # Ensure the values start with a /, mainsail works even if they don't, but we expect them to.
+            if streamUrl.startswith("/") is False:
+                streamUrl = "/" + streamUrl
+            if snapshotUrl is not None and len(snapshotUrl) > 0:
+                if snapshotUrl.startswith("/") is False:
+                    snapshotUrl = "/" + snapshotUrl
+
             # This is a fix for a Fluidd bug. The UI defaults to /webcam?action... which results in nginx redirecting to /webcam/?action...
             # That's ok, but it makes us take an entire extra trip for webcam calls. So if we see it, we will correct it.
             if streamUrl.startswith("/webcam?action"):
                 streamUrl = streamUrl.replace("/webcam?action", "/webcam/?action")
+
+            # As of crowsnest 4.0, a common backend is camera-streamer, which supports WebRTC! This is a great choice because it's more efficient than jmpeg,
+            # but it's impossible to stream via our backend.. For the full portal connection we try to allow WebRTC to work over the WAN, but for OE service things
+            # like Live Links and Quick View, we need to use a jmpeg stream so we can proxy the video feed and not expose the user's home IP address.
+            # Thus, if we see the /webcam<*>/webrtc URL as the stream URL, we will replace it with the stream URL for OE's internal uses.
+            # Luckily, camera-stream also supports jmpeg streaming.
+            if streamUrl.lower().endswith("/webrtc"):
+                lastSlashPos = streamUrl.rfind('/')
+                streamUrl = streamUrl[:lastSlashPos] + "/stream"
+                # If the stream url is /webrtc, we know the snapshot url must almost always be /webcam/snapshot
+                # If we have no snapshot URL or the snapshot URL is the old URL, update it to the camera-streamer snapshot URL.
+                if snapshotUrl is None or len(snapshotUrl) == 0 or snapshotUrl.lower().index("action=snapshot") != -1:
+                    self.Logger.Info(f"Webcam helper found a snapshot url of [{snapshotUrl}] but detected WebRTC for the stream URL, so we are updating the URL to the camera-streamer snapshot URL")
+                    snapshotUrl = streamUrl[:lastSlashPos] + "/snapshot"
 
             # Snapshot URL isn't required, but it's nice to have.
             if snapshotUrl is None or len(snapshotUrl) == 0:

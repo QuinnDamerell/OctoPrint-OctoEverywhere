@@ -23,7 +23,7 @@ from .moonrakerclient import MoonrakerClient
 from .moonrakercommandhandler import MoonrakerCommandHandler
 from .moonrakerwebcamhelper import MoonrakerWebcamHelper
 from .moonrakerdatabase import MoonrakerDatabase
-from .mainsailconfighandler import MainsailConfigHandler
+from .webrequestresponsehandler import MoonrakerWebRequestResponseHandler
 from .moonrakerapirouter import MoonrakerApiRouter
 from .moonrakercredentailmanager import MoonrakerCredentialManager
 
@@ -135,8 +135,8 @@ class MoonrakerHost:
                 MoonrakerClient.Get().GetNotificationHandler().SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
                 MoonrakerClient.Get().GetNotificationHandler().SetGadgetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
 
-            # Setup the mainsail config handler
-            MainsailConfigHandler.Init(self.Logger)
+            # Setup the moonraker config handler
+            MoonrakerWebRequestResponseHandler.Init(self.Logger)
 
             # Setup the moonraker API router
             MoonrakerApiRouter.Init(self.Logger)

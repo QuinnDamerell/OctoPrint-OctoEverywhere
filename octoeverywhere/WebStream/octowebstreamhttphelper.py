@@ -250,9 +250,11 @@ class OctoWebStreamHttpHelper:
             if self.Logger.isEnabledFor(logging.DEBUG) and contentLength is None and response.status_code != 304 and response.status_code != 204:
                 self.Logger.debug(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(response.status_code)+" for " + uri)
 
-            # Special case for the mainsail config file!
-            # The config file might need to be edited, so when we detected it's request we let the mainsail config helper handle it.
-            isMainsailConfigFileRequest = uri.lower().endswith("/config.json")
+            # Check for a response handler and if we have one, check if it might want to edit the response of this call.
+            # If so, it will return a context object. If not, it will return None.
+            responseHandlerContext = None
+            if Compat.HasWebRequestResponseHandler():
+                responseHandlerContext = Compat.GetWebRequestResponseHandler().CheckIfResponseNeedsToBeHandled(uri)
 
             # Setup a loop to read the stream and push it out in multiple messages.
             contentReadBytes = 0
@@ -283,17 +285,17 @@ class OctoWebStreamHttpHelper:
                     # Start by reading data from the response.
                     # This function will return a read length of 0 and a null data offset if there's nothing to read.
                     # Otherwise, it will return the length of the read data and the data offset in the buffer.
-                    nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody, contentTypeLower, contentLength, isMainsailConfigFileRequest)
+                    nonCompressedBodyReadSize, lastBodyReadLength, dataOffset = self.readContentFromBodyAndMakeDataVector(builder, octoHttpResult, response, boundaryStr, compressBody, contentTypeLower, contentLength, responseHandlerContext)
                 contentReadBytes += lastBodyReadLength
                 nonCompressedContentReadSizeBytes += nonCompressedBodyReadSize
 
-                # Special Case - For the mainsail config, or anytime we end up modifying a file.
+                # Special Case - If this request was handled by the Web Request Response Handler, the body buffer might have been edited.
                 # We need to update the content length for the message, so it's sent correctly in the OctoStream response.
                 # Since we know we read the entire file at once, this should be the first message, which means updating it now
                 # works. This is a little hacky, there could be a better way to do this.
-                if isMainsailConfigFileRequest and contentLength is not None:
+                if responseHandlerContext is not None and contentLength is not None:
                     if isFirstResponse is False:
-                        self.Logger.error("We edited the mainsail config file and need to update the request content length but this isn't the first request?")
+                        self.Logger.error("We edited the response and need to update the request content length but this isn't the first request?")
                     # Always update the content length, because the new size could be smaller or larger than the original.
                     contentLength = nonCompressedBodyReadSize
 
@@ -590,7 +592,7 @@ class OctoWebStreamHttpHelper:
     # Reads data from the response body, puts it in a data vector, and returns the offset.
     # If the body has been fully read, this should return ogLen == 0, len = 0, and offset == None
     # The read style depends on the presence of the boundary string existing.
-    def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult, response, boundaryStr_opt, shouldCompress, contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown, isMainsailConfigFileRequest):
+    def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult, response, boundaryStr_opt, shouldCompress, contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown, responseHandlerContext):
         # This is the max size each body read will be. Since we are making local calls, most of the time
         # we will always get this full amount as long as theres more body to read.
         # Note that this amount is larger than a single read of the websocket on the server. After some testing
@@ -622,7 +624,7 @@ class OctoWebStreamHttpHelper:
                 if readLength != 0:
                     finalDataBuffer = self.BodyReadTempBuffer[0:readLength]
             else:
-                if isMainsailConfigFileRequest is False and self.shouldDoUnknownBodySizeRead(contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown):
+                if responseHandlerContext is None and self.shouldDoUnknownBodySizeRead(contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown):
                     # If we don't know the content length AND there is no boundary string, this request is probably a event stream of some sort.
                     # We have to use this special read function, because doBodyRead will block until the full buffer is filled, which might take a long time
                     # for a number of streamed messages to fill it up. This special function does micro reads on the socket until a time limit is hit, and then
@@ -634,8 +636,8 @@ class OctoWebStreamHttpHelper:
                     # This will block until either the full defaultBodyReadSizeBytes is read or the full request has been received.
                     # If this returns None, we hit a read timeout or the stream is done, so we are done.
 
-                    # If this request is known to be for the mainsail config file, we want to force the body read to read the entire thing at once.
-                    if isMainsailConfigFileRequest:
+                    # If this request will be handled by the a response handler, we need to load the full body into one buffer.
+                    if responseHandlerContext:
                         defaultBodyReadSizeBytes = 99999999999999
                     finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
 
@@ -647,14 +649,15 @@ class OctoWebStreamHttpHelper:
             # Return empty to indicate the body has been fully read.
             return (0, 0, None)
 
-        # Before we do any compression, check if this is a special case for the mainsail config file, and if so, handle it.
-        if isMainsailConfigFileRequest:
+        # Before we do any compression, check if there is a response handler context, meaning there's a response handler that
+        # might want to edit the body buffer before it's compressed.
+        if responseHandlerContext:
             if contentLength_NoneIfNotKnown is not None and len(finalDataBuffer) != contentLength_NoneIfNotKnown:
-                self.Logger.error("We detected the read of the mainsail config file, but the buffer size doesn't match the content length.")
+                self.Logger.error("We detected the read of the web request response handler message, but the buffer size doesn't match the content length.")
             else:
                 # If we have the compat handler, give it the buffer before we finalize the size, as it might want to edit the buffer.
-                if Compat.HasMainsailConfigHandler():
-                    finalDataBuffer = Compat.GetMainsailConfigHandler().HandleMoonrakerConfigRequest(finalDataBuffer)
+                if Compat.HasWebRequestResponseHandler():
+                    finalDataBuffer = Compat.GetWebRequestResponseHandler().HandleResponse(responseHandlerContext, finalDataBuffer)
 
         # If we were asked to compress, do it
         originalBufferSize = len(finalDataBuffer)
