@@ -244,7 +244,7 @@ class MoonrakerWebcamHelper():
                 # If the stream url is /webrtc, we know the snapshot url must almost always be /webcam/snapshot
                 # If we have no snapshot URL or the snapshot URL is the old URL, update it to the camera-streamer snapshot URL.
                 if snapshotUrl is None or len(snapshotUrl) == 0 or snapshotUrl.lower().index("action=snapshot") != -1:
-                    self.Logger.Info(f"Webcam helper found a snapshot url of [{snapshotUrl}] but detected WebRTC for the stream URL, so we are updating the URL to the camera-streamer snapshot URL")
+                    self.Logger.info(f"Webcam helper found a snapshot url of [{snapshotUrl}] but detected WebRTC for the stream URL, so we are updating the URL to the camera-streamer snapshot URL")
                     snapshotUrl = streamUrl[:lastSlashPos] + "/snapshot"
 
             # Snapshot URL isn't required, but it's nice to have.
