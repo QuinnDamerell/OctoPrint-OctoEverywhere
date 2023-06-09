@@ -1,5 +1,6 @@
 
 from octoeverywhere.webcamhelper import WebcamSettingItem
+from octoeverywhere.octohttprequest import OctoHttpRequest
 
 # This class implements the webcam platform helper interface for OctoPrint.
 class OctoPrintWebcamHelper():
@@ -17,8 +18,11 @@ class OctoPrintWebcamHelper():
     def GetWebcamConfig(self):
         # In dev mode, we won't have this.
         if self.OctoPrintSettingsObject is None:
-            self.Logger.info("OctoPrintWebcamHelper has no OctoPrintSettingsObject")
-            return None
+            self.Logger.info("OctoPrintWebcamHelper has no OctoPrintSettingsObject. Returning default address.")
+            baseUrl = f"http://{OctoHttpRequest.GetLocalhostAddress()}"
+            return [
+                WebcamSettingItem(f"{baseUrl}/webcam/?action=snapshot", f"{baseUrl}/webcam/?action=stream", False, False, 0)
+            ]
 
         # This is the normal case when running in OctoPrint.
         snapshotUrl = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"])

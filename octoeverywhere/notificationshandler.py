@@ -14,6 +14,7 @@ from .compat import Compat
 from .snapshotresizeparams import SnapshotResizeParams
 from .repeattimer import RepeatTimer
 from .webcamhelper import WebcamHelper
+from .finalsnap import FinalSnap
 
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -56,6 +57,7 @@ class NotificationsHandler:
         self.PrinterStateInterface = printerStateInterface
         self.ProgressTimer = None
         self.FirstLayerTimer = None
+        self.FinalSnapObj:FinalSnap = None
         self.Gadget = Gadget(logger, self, self.PrinterStateInterface)
 
         # Define all the vars
@@ -92,6 +94,9 @@ class NotificationsHandler:
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
         self.RestorePrintProgressPercentage = False
+
+        # Ensure there's no final snap running.
+        self._getFinalSnapSnapshotAndStop()
 
         # If we have a restore time offset, back up the start time to make it reflect when the print started.
         if restoreDurationOffsetSec_OrNone is not None:
@@ -260,7 +265,7 @@ class NotificationsHandler:
         self._updateCurrentFileName(fileName_CanBeNone)
         self._updateToKnownDuration(durationSecStr_CanBeNone)
         self.StopTimers()
-        self._sendEvent("done")
+        self._sendEvent("done", useFinalSnapSnapshot=True)
 
 
     # Fired when a print is paused
@@ -487,6 +492,19 @@ class NotificationsHandler:
         # Get the computed print progress value. (see _getCurrentProgressFloat about why)
         computedProgressFloat = self._getCurrentProgressFloat()
 
+        # If we are near the end of the print, start the final snap image capture system, to ensure we get a good "done" image.
+        # This is a tricky number to set. For long prints, 1% can be very long, where as for quick prints we might not even see
+        # all of the % updates.
+        # First of all, don't bother unless the % complete is > 90% (this also guards from divide by 0)
+        if computedProgressFloat > 90.0 and self.FinalSnapObj is None:
+            currentTimeSec = self.GetCurrentDurationSecFloat()
+            estTimeRemainingSec = (self.GetCurrentDurationSecFloat() * 100.0) / computedProgressFloat
+            estTimeUntilCompleteSec = estTimeRemainingSec - currentTimeSec
+            # If we guess the print will be done in less than one minute, then start the final snap system.
+            if estTimeUntilCompleteSec < 60.0:
+                if self.FinalSnapObj is None:
+                    self.FinalSnapObj = FinalSnap(self.Logger, self)
+
         # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
         # It's possible we get duplicate ints or even progresses that goes back in time.
         # To account for this, we will make sure we only send the update for each progress update once.
@@ -542,7 +560,15 @@ class NotificationsHandler:
     # SnapshotResizeParams can be passed BUT MIGHT BE IGNORED if the PIL lib can't be loaded.
     # SnapshotResizeParams will also be ignored if the current image is smaller than the requested size.
     # If this fails for any reason, None is returned.
-    def getSnapshot(self, snapshotResizeParams = None):
+    def GetNotificationSnapshot(self, snapshotResizeParams = None):
+
+        # If no snapshot resize param was specified, use the default for notifications.
+        if snapshotResizeParams is None:
+            # For notifications, if possible, we try to resize any image to be less than 720p.
+            # This scale will preserve the aspect ratio and won't happen if the image is already less than 720p.
+            # The scale might also fail if the image lib can't be loaded correctly.
+            snapshotResizeParams = SnapshotResizeParams(1080, True, False, False)
+
         try:
 
             # Use the snapshot helper to get the snapshot. This will handle advance logic like relative and absolute URLs
@@ -731,6 +757,19 @@ class NotificationsHandler:
         self.CurrentFileName = fileNameStr
 
 
+    # Stops the final snap object if it's running and returns
+    # the final image if possible.
+    def _getFinalSnapSnapshotAndStop(self):
+        # Capture the class member locally.
+        localFs = self.FinalSnapObj
+        self.FinalSnapObj = None
+
+        # If there is one, stop it and return it's snapshot.
+        if localFs is not None:
+            return localFs.GetFinalSnapAndStop()
+        return None
+
+
     # Returns the current print progress as a float.
     def _getCurrentProgressFloat(self):
         # Special platform logic here!
@@ -781,9 +820,9 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEvent(self, event, args = None, progressOverwriteFloat = None):
+    def _sendEvent(self, event, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
-        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, ))
+        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ))
         thread.start()
 
         return True
@@ -791,15 +830,10 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEventThreadWorker(self, event, args=None, progressOverwriteFloat=None):
+    def _sendEventThreadWorker(self, event, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
         try:
-            # For notifications, if possible, we try to resize any image to be less than 720p.
-            # This scale will preserve the aspect ratio and won't happen if the image is already less than 720p.
-            # The scale might also fail if the image lib can't be loaded correctly.
-            snapshotResizeParams = SnapshotResizeParams(1080, True, False, False)
-
             # Build the common even args.
-            requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat, snapshotResizeParams)
+            requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat=progressOverwriteFloat, useFinalSnapSnapshot=useFinalSnapSnapshot)
 
             # Handle the result indicating we don't have the proper var to send yet.
             if requestArgs is None:
@@ -858,7 +892,7 @@ class NotificationsHandler:
     # Used by notifications and gadget to build a common event args.
     # Returns an array of [args, files] which are ready to be used in the request.
     # Returns None if the system isn't ready yet.
-    def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None, snapshotResizeParams = None):
+    def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None, snapshotResizeParams = None, useFinalSnapSnapshot = False):
 
         # Ensure we have the required var set already. If not, get out of here.
         if self.PrinterId is None or self.OctoKey is None:
@@ -896,7 +930,18 @@ class NotificationsHandler:
 
         # Also always include a snapshot if we can get one.
         files = {}
-        snapshot = self.getSnapshot(snapshotResizeParams)
+        snapshot = None
+
+        # If we are requested to use a final snapshot, try to use the snapshot from it.
+        # This should only be requested for the "done" notification.
+        if useFinalSnapSnapshot:
+            snapshot = self._getFinalSnapSnapshotAndStop()
+
+        # If we don't have a snapshot, try to get one now.
+        if snapshot is None:
+            snapshot = self.GetNotificationSnapshot(snapshotResizeParams)
+
+        # If we got one, save it to the request.
         if snapshot is not None:
             files['attachment'] = ("snapshot.jpg", snapshot)
 
