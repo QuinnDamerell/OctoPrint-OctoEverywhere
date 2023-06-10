@@ -15,7 +15,7 @@ class FinalSnap:
     c_defaultSnapIntervalSec = 1
 
     # When the on complete notification fires, this is how long we will try to go back in time to fetch a snapshot.
-    c_onCompleteSnapDelaySec = 5
+    c_onCompleteSnapDelaySec = 4
 
     # Creates the object and starts the timer.
     def __init__(self, logger:logging.Logger, notificationHandler) -> None:
