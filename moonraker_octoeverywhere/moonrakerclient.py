@@ -558,8 +558,8 @@ class MoonrakerClient:
                     continue
 
                 # Unknown state
-                self.Logger.error("Moonraker client is in an unknown klippy waiting state. "+state)
-                raise Exception("Unknown klippy waiting state.")
+                self.Logger.error(f"Moonraker client is in an unknown klippy waiting state. state '{state}'")
+                raise Exception(f"Unknown klippy waiting state. {state}")
 
             except Exception as e:
                 Sentry.Exception("Moonraker client exception in klippy waiting logic.", e)
@@ -574,6 +574,7 @@ class MoonrakerClient:
                 return
             self.Logger.info("Moonraker client websocket shutdown called.")
             self.WebSocket.Close()
+            self.Logger.info("Moonraker client websocket shutdown complete.")
 
 
     # Called when the websocket is opened.
@@ -657,7 +658,7 @@ class MoonrakerClient:
 
     # Called when the websocket is closed for any reason, connection loss or exception
     def _onWsClose(self, ws):
-        self.Logger.info("Connection to moonraker lost.")
+        self.Logger.info("Moonraker websocket connection closed.")
 
 
     # Called if the websocket hits an error and is closing.

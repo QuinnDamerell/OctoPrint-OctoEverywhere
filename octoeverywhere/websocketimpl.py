@@ -16,6 +16,9 @@ class Client:
         self.wsErrorCallbackLock = threading.Lock()
         self.hasFiredWsErrorCallback = False
 
+        # Used to log more details about what's going on with the websocket.
+        # websocket.enableTrace(True)
+
         # Used to indicate if the client has started to close this WS. If so, we won't fire
         # any errors.
         self.hasClientRequestedClose = False
@@ -94,22 +97,22 @@ class Client:
 
 
     def RunUntilClosed(self):
-        # Note we must set the ping_interval and ping_timeout or we won't get a multithread
-        # safe socket... python. >.>
-        # Update on ^ - After some release they now default the multi_threading to True, but this is still a problem
-        # on older versions of the lib.
         #
         # The client is responsible for sending keep alive pings the server will then pong respond to.
-        # If that's not done, the connection will timeout.
-        # We will send a ping every 10 minutes, and expected a pong back within 5 minutes.
+        # If that's not done, the connection will timeout. We will send a ping every 10 minutes.
         #
         # skip_utf8_validation=True is important, because otherwise we waste a lot of time doing slow, py based validation code.
         #
         # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
         # Since let's encrypt updated their CA root, we need to use certify's root or the connection will likely fail.
         # The requests lib already does this, so we only need to worry about it for websockets.
+        #
+        # Another important note!
+        # The ping_timeout is used to timeout the select() call when the websocket is waiting for data. There's a bug in the WebSocketApp
+        # where it will call select() after the socket is closed, which makes select() hang until the time expires.
+        # Thus we need to keep the ping_timeout low, so when this happens, it doesn't hang forever.
         try:
-            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=300, sslopt={"ca_certs":certifi.where()})
+            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=20, sslopt={"ca_certs":certifi.where()})
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,
