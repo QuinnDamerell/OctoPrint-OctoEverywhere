@@ -6,7 +6,7 @@ import json
 import requests
 
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.webcamhelper import WebcamSettingItem
+from octoeverywhere.webcamhelper import WebcamSettingItem, WebcamHelper
 
 from .config import Config
 from .moonrakerclient import MoonrakerClient
@@ -238,14 +238,11 @@ class MoonrakerWebcamHelper():
             # like Live Links and Quick View, we need to use a jmpeg stream so we can proxy the video feed and not expose the user's home IP address.
             # Thus, if we see the /webcam<*>/webrtc URL as the stream URL, we will replace it with the stream URL for OE's internal uses.
             # Luckily, camera-stream also supports jmpeg streaming.
-            if streamUrl.lower().endswith("/webrtc"):
-                lastSlashPos = streamUrl.rfind('/')
-                streamUrl = streamUrl[:lastSlashPos] + "/stream"
-                # If the stream url is /webrtc, we know the snapshot url must almost always be /webcam/snapshot
-                # If we have no snapshot URL or the snapshot URL is the old URL, update it to the camera-streamer snapshot URL.
-                if snapshotUrl is None or len(snapshotUrl) == 0 or snapshotUrl.lower().index("action=snapshot") != -1:
-                    self.Logger.info(f"Webcam helper found a snapshot url of [{snapshotUrl}] but detected WebRTC for the stream URL, so we are updating the URL to the camera-streamer snapshot URL")
-                    snapshotUrl = streamUrl[:lastSlashPos] + "/snapshot"
+            #
+            # We dont need to update the snapshot URL, because camera-streamer has compat for /?action=snapshot -> /snapshot.
+            cameraStreamerJmpegUrl = WebcamHelper.DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl)
+            if cameraStreamerJmpegUrl is not None:
+                streamUrl = cameraStreamerJmpegUrl
 
             # Snapshot URL isn't required, but it's nice to have.
             if snapshotUrl is None or len(snapshotUrl) == 0:

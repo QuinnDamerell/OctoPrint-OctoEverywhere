@@ -1,5 +1,5 @@
 
-from octoeverywhere.webcamhelper import WebcamSettingItem
+from octoeverywhere.webcamhelper import WebcamSettingItem, WebcamHelper
 from octoeverywhere.octohttprequest import OctoHttpRequest
 
 # This class implements the webcam platform helper interface for OctoPrint.
@@ -43,6 +43,18 @@ class OctoPrintWebcamHelper():
             flipV = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "flipV"])
         if rotate90 is None:
             rotate90 = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "rotate90"])
+
+        # As of the new OctoPi image, a common backend is camera-streamer, which supports WebRTC! This is a great choice because it's more efficient than jmpeg,
+        # but it's impossible to stream via our backend.. For the full portal connection we try to allow WebRTC to work over the WAN, but for OE service things
+        # like Live Links and Quick View, we need to use a jmpeg stream so we can proxy the video feed and not expose the user's home IP address.
+        # Thus, if we see the /webcam<*>/webrtc URL as the stream URL, we will replace it with the stream URL for OE's internal uses.
+        # Luckily, camera-stream also supports jmpeg streaming.
+        #
+        # We dont need to update the snapshot URL, because camera-streamer has compat for /?action=snapshot -> /snapshot.
+        cameraStreamerJmpegUrl = WebcamHelper.DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl)
+        if cameraStreamerJmpegUrl is not None:
+            self.Logger.info(f"Camera-streamer webrtc stream url {streamUrl} converted to jmpeg {cameraStreamerJmpegUrl}")
+            streamUrl = cameraStreamerJmpegUrl
 
         # These values must exist, so if they don't default them.
         # TODO - We could better guess at either of these URLs if one doesn't exist and the other does.

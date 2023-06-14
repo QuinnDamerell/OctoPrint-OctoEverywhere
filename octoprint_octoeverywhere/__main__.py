@@ -35,10 +35,10 @@ from .octoprintwebcamhelper import OctoPrintWebcamHelper
 
 # For local setups, use these vars to configure things.
 LocalServerAddress = None
-#LocalServerAddress = "127.0.0.1"
+#LocalServerAddress = "octoeverywhere.dev"
 
 OctoPrintIp = None
-OctoPrintIp = "192.168.1.10"
+OctoPrintIp = "192.168.1.12"
 
 OctoPrintPort = None
 OctoPrintPort = 80
@@ -170,7 +170,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, SignalHandler)
 
     # Dev props
-    OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
+    OctoEverywhereWsUri = "ws://starport-v1.octoeverywhere.com/octoclientws"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
@@ -188,7 +188,7 @@ if __name__ == '__main__':
     # Init the ping pong helper.
     OctoPingPong.Init(logger, PluginFilePathRoot, PrinterId)
     # If we are using a local dev connection, disable this or it will overwrite.
-    if OctoEverywhereWsUri.startswith("ws://"):
+    if LocalServerAddress is not None:
         OctoPingPong.Get().DisablePrimaryOverride()
 
     # Setup the notification handler.

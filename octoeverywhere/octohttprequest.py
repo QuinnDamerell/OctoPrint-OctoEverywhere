@@ -231,6 +231,15 @@ class OctoHttpRequest:
         if data is not None and len(data) == 0:
             data = None
 
+        # All of the users of MakeHttpCall don't handle compressed responses.
+        # For OctoStream request, this header is already set in GatherRequestHeaders, but for things like webcam snapshot requests and such, it's not set.
+        # Beyond nothing handling compressed responses, since the call is almost always over localhost, there's no point in doing compression, since it mainly just helps in transmit less data.
+        # Thus, for all calls, we set the Accept-Encoding to identity, telling the server no response compression is allowed.
+        # This is important for somethings like camera-streamer, which will use gzip by default. (which is also silly, because it's sending jpegs and jmpeg streams?)
+        if headers is None:
+            headers = {}
+        headers["Accept-Encoding"] = "identity"
+
         # First, try the main URL.
         # For the first main url, we set the main response to None and is fallback to False.
         ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Main request", method, url, headers, data, None, False, fallbackUrl)

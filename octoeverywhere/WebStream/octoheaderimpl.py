@@ -106,9 +106,10 @@ class HeaderHelper:
         # We exclude this from being set above, but even more so, we want to define it as empty.
         # If we exclude it, the py request lib seems to add it by itself.
         # We don't want to mess with encoding, because doing to encoding over local host is a waste of time.
-        # Unless we can get the already encoded bytes out of the request client, then that might be interesting.
-        # Setting this to empty also prevents the server from returning chunk-based transfers for the index and such.
-        sendHeaders["Accept-Encoding"] = ""
+        #
+        # Note this header is also force set in MakeHttpCall, because calls to things like camera-streamer must set it
+        # and no users of the MakeHttpCall support handing response compression.
+        sendHeaders["Accept-Encoding"] = "identity"
 
         return sendHeaders
 

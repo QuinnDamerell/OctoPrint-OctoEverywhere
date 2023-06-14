@@ -45,6 +45,36 @@ class WebcamHelper:
         self.Logger = logger
         self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
 
+    # A static helper that provides common logic to detect urls for camera-streamer.
+    #
+    # Both OctoPrint and Klipper are using camera-streamer for WebRTC webcam streaming. If the system is going to be WebRTC based,
+    # it's going to be camera-streamer. There are a ton of other streaming types use commonly, the most common being jmpeg from server sources, as well as HLS, and more.
+    #
+    # This function is designed to detect the camera-streamer URLs and fix them up for our internal use. We support WebRTC via the Klipper or OctoPrint portals,
+    # but for all of our service related streaming we can't support WebRTC. For things like Live Links, WebRTC would expose the WAN IP of the user's device.
+    # Thus, for anything internally to OctoEverywhere, we convert camera-streamer's webrtc stream URL to jmpeg.
+    #
+    # If the camera-streamer webrtc stream URL is found, the correct camera-streamer jmpeg stream is returned.
+    # Otherwise None is returned.
+    @staticmethod
+    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str):
+        # try to find anything with /webrtc in it, which is a pretty unique signature for camera-streamer
+        streamUrlLower = streamUrl.lower()
+        webRtcLocation = streamUrlLower.find("/webrtc")
+        if webRtcLocation == -1:
+            return streamUrl
+
+        # Since just /webrtc is vague, make sure there's no more paths after the webrtc
+        forwardSlashAfterWebrtc = streamUrlLower.find('/', webRtcLocation + 1)
+        if forwardSlashAfterWebrtc != -1:
+            # If there's another / after the /webtrc chunk, this isn't camera streamer.
+            # Just return the stream URL.
+            return streamUrl
+
+        # This is camera-streamer.
+        # We want to preserver the URL before the /webrtc, and only replace the /webrtc.
+        return streamUrl[:webRtcLocation] + "/stream"
+
 
     # Returns the snapshot URL from the settings.
     # Can be None if there is no snapshot URL set in the settings!
