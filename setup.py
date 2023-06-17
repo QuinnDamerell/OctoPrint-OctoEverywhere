@@ -14,7 +14,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this is also parsed by the moonraker module to pull the version, so the string and format must remain the same!
-plugin_version = "2.5.12"
+plugin_version = "2.6.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -39,7 +39,8 @@ plugin_license = "AGPLv3"
 # websocket_client
 # 	For the websocket_client, some older versions seem to have a thread issue that causes the 24 hour disconnect logic to fail, and eventually makes the thread limit get hit.
 # 	Version 1.4.0 also has an SSL error in it. https://github.com/websocket-client/websocket-client/issues/857
-#	So for the websocket_client, we need at least 1.5.1.
+#	Update: We also found a bug where the ping timer doesn't get cleaned up: https://github.com/websocket-client/websocket-client/pull/918
+#   Thus we need version 1.6.0 or higher.
 # dnspython
 #	We depend on a feature that was released with 2.3.0, so we need to require at least that.
 #
@@ -51,7 +52,7 @@ plugin_license = "AGPLv3"
 #   urllib3 - There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
-plugin_requires = ["websocket_client>=1.5.1,<1.5.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2022.12.7", "rsa>=4.0", "dnspython>=2.3.0", "httpx==0.24.0", "urllib3>=1.26.15,<1.27.0" ]
+plugin_requires = ["websocket_client>=1.6.0,<1.6.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2022.12.7", "rsa>=4.0", "dnspython>=2.3.0", "httpx==0.24.0", "urllib3>=1.26.15,<1.27.0" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point
