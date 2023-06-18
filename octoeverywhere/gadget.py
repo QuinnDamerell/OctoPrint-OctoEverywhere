@@ -2,6 +2,7 @@ import random
 import threading
 import time
 import json
+import logging
 
 import requests
 
@@ -25,7 +26,7 @@ class Gadget:
     # Assuming 20 second checks, 100 checks is about 30 minutes of data.
     c_maxScoreHistoryItems = 100
 
-    def __init__(self, logger, notificationHandler, printerStateInterface):
+    def __init__(self, logger:logging.Logger, notificationHandler, printerStateInterface):
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PrinterStateInterface = printerStateInterface
@@ -58,7 +59,7 @@ class Gadget:
         self.ImageScaleMaxHeight = 0
 
 
-    def SetServerProtocolAndDomain(self, protocolAndDomain):
+    def SetServerProtocolAndDomain(self, protocolAndDomain:str):
         # If a custom domain is set, disable host lock, so we don't jump off it.
         self.Logger.info("Gadget default protocol and hostname set to: "+protocolAndDomain + " Host Lock Is DISABLED")
         self.DefaultProtocolAndDomain = protocolAndDomain
@@ -227,6 +228,7 @@ class Gadget:
             # Next, check if there's a valid snapshot image.
             if len(files) == 0:
                 # If not, update our interval to be the default no snapshot interval and return.
+                self.Logger.debug("Gadget isn't making a prediction because it failed to get a snapshot.")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec_NoSnapshot)
                 return
 
