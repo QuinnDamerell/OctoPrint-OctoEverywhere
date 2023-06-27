@@ -45,7 +45,7 @@ class NotificationsHandler:
     MaxSnapshotFileSizeBytes = 2 * 1024 * 1024
 
     # The length of the random print id. This must be a large number, since it needs to be
-    # globally unique.
+    # globally unique. This value must stay in sync with the service.
     PrintIdLength = 60
 
     def __init__(self, logger, printerStateInterface):
@@ -71,7 +71,7 @@ class NotificationsHandler:
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
         self.ProgressCompletionReported = []
-        self.PrintId = 0
+        self.PrintId = "none"
         self.PrintStartTimeSec = 0
         self.RestorePrintProgressPercentage = False
 
@@ -145,7 +145,7 @@ class NotificationsHandler:
         self.Gadget.SetServerProtocolAndDomain(protocolAndDomain)
 
 
-    def GetPrintId(self):
+    def GetPrintId(self) -> str:
         return self.PrintId
 
 

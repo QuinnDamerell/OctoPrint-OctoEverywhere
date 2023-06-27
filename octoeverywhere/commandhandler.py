@@ -101,9 +101,10 @@ class CommandHandler:
             else:
                 gadget = self.NotificationHandler.GetGadget()
                 octoeverywhereStatus = {
-                    # <int> The most recent print id. This is only updated when a new print starts, so it will remain until replaced.
-                    # Defaults to some print id.
-                    "MostRecentPrintId" : self.NotificationHandler.GetPrintId(),
+                    # <str> The most recent print id. This is only updated when a new print starts, so it will remain until replaced.
+                    # Defaults to "none", but it should always be set when the notification manager is inited.
+                    # Note there was an older MostRecentPrintId (with no str) that's deprecated.
+                    "MostRecentPrintIdStr" : self.NotificationHandler.GetPrintId(),
                     # <int> The number of seconds since the epoch when the print started, AKA when MostRecentPrintId was created.
                     # Defaults to the current time.
                     "PrintStartTimeSec" : self.NotificationHandler.GetPrintStartTimeSec(),
