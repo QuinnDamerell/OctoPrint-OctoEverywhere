@@ -795,7 +795,8 @@ class MoonrakerCompat:
         if self.IsReadyToProcessNotifications is False:
             return
 
-        self.NotificationHandler.OnStarted(fileName)
+        # TODO - Other props
+        self.NotificationHandler.OnStarted(fileName, 0, 0)
 
         # This cache is dependent on the file name, but since we started a new print
         # reset it since this could be a new print with the same name.

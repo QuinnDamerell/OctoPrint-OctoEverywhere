@@ -1,4 +1,5 @@
 from octoprint import __version__
+from octoprint.printer import PrinterInterface
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
@@ -8,7 +9,7 @@ from .smartpause import SmartPause
 # This class implements the Platform Command Handler Interface
 class OctoPrintCommandHandler:
 
-    def __init__(self, logger, octoPrintPrinterObject, printerStateObject, mainPluginImpl):
+    def __init__(self, logger, octoPrintPrinterObject:PrinterInterface, printerStateObject, mainPluginImpl):
         self.Logger = logger
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.PrinterStateObject = printerStateObject
@@ -46,8 +47,13 @@ class OctoPrintCommandHandler:
 
             # Get the file name. This only exists when a file is loaded or printing.
             fileName = ""
-            if "display" in currentData["job"]["file"]:
+            if "file" in currentData["job"] and "display" in currentData["job"]["file"]:
                 fileName = currentData["job"]["file"]["display"]
+
+            # Get the estimated total filament used.
+            estTotalFilamentUsageMm = 0
+            if "filament" in currentData["job"] and "tool0" in currentData["job"]["filament"] and "length" in currentData["job"]["filament"]["tool0"]:
+                estTotalFilamentUsageMm = int(currentData["job"]["filament"]["tool0"]["length"])
 
             # Get the error, if there is one.
             errorStr_CanBeNone = None
@@ -91,7 +97,8 @@ class OctoPrintCommandHandler:
                     "Progress" : progress,
                     "DurationSec" : durationSec,
                     "TimeLeftSec" : timeLeftSec,
-                    "FileName" : fileName
+                    "FileName" : fileName,
+                    "EstTotalFilUsedMm" : estTotalFilamentUsageMm,
                 }
             }
 

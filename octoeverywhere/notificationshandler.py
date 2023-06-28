@@ -4,6 +4,7 @@ import io
 import threading
 import random
 import string
+import logging
 
 import requests
 
@@ -48,7 +49,7 @@ class NotificationsHandler:
     # globally unique. This value must stay in sync with the service.
     PrintIdLength = 60
 
-    def __init__(self, logger, printerStateInterface):
+    def __init__(self, logger:logging.Logger, printerStateInterface):
         self.Logger = logger
         # On init, set the key to empty.
         self.OctoKey = None
@@ -62,6 +63,8 @@ class NotificationsHandler:
 
         # Define all the vars
         self.CurrentFileName = ""
+        self.CurrentFileSizeInKBytes = 0
+        self.CurrentEstFilamentUsageMm = 0
         self.CurrentPrintStartTime = time.time()
         self.FallbackProgressInt = 0
         self.MoonrakerReportedProgressFloat_CanBeNone = None
@@ -84,6 +87,8 @@ class NotificationsHandler:
 
     def ResetForNewPrint(self, restoreDurationOffsetSec_OrNone):
         self.CurrentFileName = ""
+        self.CurrentFileSizeInKBytes = 0
+        self.CurrentEstFilamentUsageMm = 0
         self.CurrentPrintStartTime = time.time()
         self.FallbackProgressInt = 0
         self.MoonrakerReportedProgressFloat_CanBeNone = None
@@ -155,6 +160,12 @@ class NotificationsHandler:
 
     def GetGadget(self):
         return self.Gadget
+
+
+    def ReportPositiveExtrudeCommandSent(self):
+        fsLocal = self.FinalSnapObj
+        if fsLocal is not None:
+            fsLocal.ReportPositiveExtrudeCommandSent()
 
 
     # A special case used by moonraker to restore the state of an ongoing print that we don't know of.
@@ -243,12 +254,14 @@ class NotificationsHandler:
 
 
     # Fired when a print starts.
-    def OnStarted(self, fileName):
+    def OnStarted(self, fileName:str, fileSizeKBytes:int, totalFilamentUsageMm:int):
         self.ResetForNewPrint(None)
         self._updateCurrentFileName(fileName)
+        self.CurrentFileSizeInKBytes = fileSizeKBytes
+        self.CurrentEstFilamentUsageMm = totalFilamentUsageMm
         self.StartPrintTimers(True, None)
         self._sendEvent("started")
-        self.Logger.info("New print started; PrintId: "+str(self.PrintId))
+        self.Logger.info(f"New print started; PrintId: {str(self.PrintId)} file:{str(self.CurrentFileName)} size:{str(self.CurrentFileSizeInKBytes)} filament:{str(self.CurrentEstFilamentUsageMm)}")
 
 
     # Fired when a print fails
@@ -847,41 +860,48 @@ class NotificationsHandler:
             # Setup the url
             eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
 
-            # Attempt to send the notification twice. If the first time fails,
-            # we will wait a bit and try again. It's really unlikely for a notification to fail, the biggest reason
-            # would be if the server is updating, there can be a ~20 second window where the call might fail
+            # Use fairly aggressive retry logic on notifications if they fail to send.
+            # This is important because they power some of the other features of OctoEverywhere now, so having them as accurate as possible is ideal.
             attempts = 0
-            while attempts < 2:
+            while attempts < 6:
                 attempts += 1
-
-                # Make the request.
-                r = None
+                statusCode = 0
                 try:
                     # Since we are sending the snapshot, we must send a multipart form.
                     # Thus we must use the data and files fields, the json field will not work.
                     r = requests.post(eventApiUrl, data=args, files=files, timeout=5*60)
 
+                    # Capture the status code.
+                    statusCode = r.status_code
+
                     # Check for success.
-                    if r.status_code == 200:
+                    if statusCode == 200:
                         self.Logger.info("NotificationsHandler successfully sent '"+event+"'")
                         return True
 
                 except Exception as e:
-                    # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors.
-                    self.Logger.warn("Failed to send notification due to a connection error, trying again. "+str(e))
+                    # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors, server not connectable, etc.
+                    self.Logger.warn("Failed to send notification due to a connection error. "+str(e))
 
                 # On failure, log the issue.
-                self.Logger.error("NotificationsHandler failed to send event "+str(event)+". Code:"+str(r.status_code) + "; Body:"+r.content.decode())
+                self.Logger.warn(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
 
                 # If the error is in the 400 class, don't retry since these are all indications there's something
-                # wrong with the request, which won't change.
-                if r.status_code < 500:
+                # wrong with the request, which won't change. But we don't want to include anything above or below that.
+                if statusCode > 399 and statusCode < 500:
                     return False
 
-                # If the error is a 500 error, we will try again. Sleep for about 30 seconds to give the server time
-                # to boot and be ready again. We would rather wait too long but succeeded, rather than not wait long
-                # enough and fail again.
-                time.sleep(30)
+                # We have quite a few reties and back off a decent amount. As said above, we want these to be reliable as possible, even if they are late.
+                # We want the first few retires to be quick, so the notifications happens ASAP. This will help in teh case where the server is updating, it should be
+                # back withing 2-4 seconds, but 20 is a good time to wait.
+                # If it's still failing, we want to allow the system some time to do a do a fail over or something, thus we give the retry timer more time.
+                if attempts < 3: # Attempt 1 and 2 will wait 20 seconds.
+                    time.sleep(20)
+                else: # Attempt 3, 4, 5 will wait longer.
+                    time.sleep(60 * attempts)
+
+            # We never sent it successfully.
+            self.Logger.error("NotificationsHandler failed to send event "+str(event)+" due to a network issues after many retries.")
 
         except Exception as e:
             Sentry.Exception("NotificationsHandler failed to send event code "+str(event), e)
@@ -908,8 +928,10 @@ class NotificationsHandler:
         args["OctoKey"] = self.OctoKey
         args["Event"] = event
 
-        # Always add the file name
+        # Always add the file name and other common props
         args["FileName"] = str(self.CurrentFileName)
+        args["FileSizeKb"] = str(self.CurrentFileSizeInKBytes)
+        args["FilamentUsageMm"] = str(self.CurrentEstFilamentUsageMm)
 
         # Always include the ETA, note this will be -1 if the time is unknown.
         timeRemainEstStr =  str(self.PrinterStateInterface.GetPrintTimeRemainingEstimateInSeconds())

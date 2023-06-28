@@ -1,9 +1,11 @@
+from octoprint.printer import PrinterInterface
+
 from octoeverywhere.sentry import Sentry
 
 # Implements a common interface shared by OctoPrint and Moonraker.
 class PrinterStateObject:
 
-    def __init__(self, logger, octoPrintPrinterObject):
+    def __init__(self, logger, octoPrintPrinterObject: PrinterInterface):
         self.Logger = logger
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.NotificationHandler = None
