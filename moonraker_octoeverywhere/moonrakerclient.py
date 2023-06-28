@@ -11,7 +11,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
 from .moonrakercredentailmanager import MoonrakerCredentialManager
-
+from .filemetadatacache import FileMetadataCache
 
 # The response object for a json rpc request.
 # Contains information on the state, and if successful, the result.
@@ -704,14 +704,6 @@ class MoonrakerCompat:
         # fire any notifications before we run the print state sync logic.
         self.IsReadyToProcessNotifications = False
 
-        # A cached value for the file meta data that will estimate the time remaining.
-        # This only needs to be called onetime per file name, so we cache it to speed things up
-        # The file name indicates if we have checked and if so the filename, and the int indicates the data.
-        # So filename==blah and value==-1 means we checked, but there's no slicer estimated time.
-        self.FileMetadataCachedEstimatedTimeCurrentFileName = None
-        self.FileMetadataCachedEstimatedTimeSec = -1.0
-        self._ResetFileMetadataEstimatedTimeCache()
-
         # We get progress updates super frequently, we don't need to handle them all.
         self.TimeSinceLastProgressUpdate = time.time()
 
@@ -795,12 +787,20 @@ class MoonrakerCompat:
         if self.IsReadyToProcessNotifications is False:
             return
 
-        # TODO - Other props
-        self.NotificationHandler.OnStarted(fileName, 0, 0)
+        # Since this is a new print, reset the cache. The file name might be the same as the last, but have
+        # different props, so we will always reset. We know when we are printing the same file name will have the same props.
+        FileMetadataCache.Get().ResetCache()
 
-        # This cache is dependent on the file name, but since we started a new print
-        # reset it since this could be a new print with the same name.
-        self._ResetFileMetadataEstimatedTimeCache()
+        # Try to get the starting file info if we can.
+        filamentUsageMm = FileMetadataCache.Get().GetEstimatedFilamentUsageMm(fileName)
+        fileSizeKBytes = FileMetadataCache.Get().GetFileSizeKBytes(fileName)
+
+        # Commonize to the notification handler standard.
+        filamentUsageMm = max(filamentUsageMm, 0)
+        fileSizeKBytes = max(fileSizeKBytes, 0)
+
+        # Fire on started.
+        self.NotificationHandler.OnStarted(fileName, fileSizeKBytes, filamentUsageMm)
 
 
     def OnDone(self):
@@ -1056,7 +1056,7 @@ class MoonrakerCompat:
             # If possible, get the estimated slicer time from the file metadata.
             # This will return -1 if it's not known
             if fileName is not None and len(fileName) > 0:
-                fileMetadataEstimatedTimeFloatSec = self._GetFileMetaEstimatedTimeFloatSec_IfKnown(fileName)
+                fileMetadataEstimatedTimeFloatSec = FileMetadataCache.Get().GetEstimatedPrintTimeSec(fileName)
                 if fileMetadataEstimatedTimeFloatSec > 0:
                     # If we get a valid ETA from the slicer, we will use it. From what we have seen, the slicer ETA
                     # is usually more accurate than moonraker's, at the time of writing (2/5/2023)
@@ -1084,48 +1084,3 @@ class MoonrakerCompat:
         except Exception as e:
             Sentry.Exception("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
         return -1
-
-
-    def _ResetFileMetadataEstimatedTimeCache(self):
-        self.FileMetadataCachedEstimatedTimeCurrentFileName = None
-        self.FileMetadataCachedEstimatedTimeSec = -1.0
-
-
-    # If the estimated time for the print can be gotten from the file metadata, this will return it
-    # It it's not known, returns -1
-    def _GetFileMetaEstimatedTimeFloatSec_IfKnown(self, filename):
-        # Check to see if we have checked for this file before.
-        if self.FileMetadataCachedEstimatedTimeCurrentFileName is not None:
-            # Check if it's the same file, case sensitive.
-            if self.FileMetadataCachedEstimatedTimeCurrentFileName == filename:
-                # Return the last result, this maybe valid or not.
-                return self.FileMetadataCachedEstimatedTimeSec
-
-        # The filename changed or we don't have one at all.
-        # Reset which will reset the cached time to -1.
-        self._ResetFileMetadataEstimatedTimeCache()
-
-        # Make the call.
-        result = MoonrakerClient.Get().SendJsonRpcRequest("server.files.metadata",
-        {
-            "filename": filename
-        })
-        # If we fail this call, return unknown.
-        if result.HasError():
-            self.Logger.error("_GetFileMetaEstimatedTimeFloatSec_IfKnown failed to get file meta. "+result.GetLoggingErrorStr())
-            return -1.0
-
-        # If we got here, we know we got a good result.
-        # Set the cached vars so we don't call again.
-        self.FileMetadataCachedEstimatedTimeCurrentFileName = filename
-        self.FileMetadataCachedEstimatedTimeSec = -1.0
-
-        # Get the value, if it exists and it's valid.
-        res = result.GetResult()
-        if "estimated_time" in res:
-            value = float(res["estimated_time"])
-            if value > 0.1:
-                self.FileMetadataCachedEstimatedTimeSec = float(res["estimated_time"])
-
-        self.Logger.info("Updating cached file metadata data estimated time for file "+filename+" to "+str(self.FileMetadataCachedEstimatedTimeSec) +" seconds")
-        return self.FileMetadataCachedEstimatedTimeSec

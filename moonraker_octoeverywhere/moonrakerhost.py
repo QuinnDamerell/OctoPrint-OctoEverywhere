@@ -26,6 +26,7 @@ from .moonrakerdatabase import MoonrakerDatabase
 from .webrequestresponsehandler import MoonrakerWebRequestResponseHandler
 from .moonrakerapirouter import MoonrakerApiRouter
 from .moonrakercredentailmanager import MoonrakerCredentialManager
+from .filemetadatacache import FileMetadataCache
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -126,6 +127,9 @@ class MoonrakerHost:
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
             MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, self, pluginVersionStr)
+
+            # Init our file meta data cache helper
+            FileMetadataCache.Init(self.Logger, MoonrakerClient.Get())
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))

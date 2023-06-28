@@ -74,7 +74,7 @@ class MoonrakerWebcamHelper():
 
         # Return the current values.
         return [
-            WebcamSettingItem(None, self.StreamUrl, self.FlipH, self.FlipY, self.Rotation)
+            WebcamSettingItem(self.SnapshotUrl, self.StreamUrl, self.FlipH, self.FlipY, self.Rotation)
         ]
 
 
@@ -136,7 +136,7 @@ class MoonrakerWebcamHelper():
                 {
                     "namespace": "webcams",
                 },
-                True # Use the force flag, so we can try to query even when klipper isn't connected.
+                forceSendIgnoreWsState=True # Use the force flag, so we can try to query even when klipper isn't connected.
             )
 
             # If we failed don't do anything.

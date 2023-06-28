@@ -4,6 +4,7 @@ from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 
 from .moonrakerclient import MoonrakerClient, JsonRpcResponse
 from .smartpause import SmartPause
+from .filemetadatacache import FileMetadataCache
 
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler:
@@ -84,6 +85,11 @@ class MoonrakerCommandHandler:
             if "filename" in ps:
                 fileName = ps["filename"]
 
+        # If we have a file name, try to get the current filament usage.
+        filamentUsageMm = 0
+        if fileName is not None and len(fileName) > 0:
+            filamentUsageMm = FileMetadataCache.Get().GetEstimatedFilamentUsageMm(fileName)
+
         # Get the progress
         progress = 0.0
         if "status" in res and "virtual_sdcard" in res["status"]:
@@ -91,7 +97,6 @@ class MoonrakerCommandHandler:
             if "progress" in vs:
                 # Convert progress 0->1 to 0->100
                 progress = vs["progress"] * 100.0
-
 
         # Time left can be hard to compute correctly, so use the common function to do it based
         # on what we can get as a best effort.
@@ -106,7 +111,8 @@ class MoonrakerCommandHandler:
                 "Progress" : progress,
                 "DurationSec" : durationSec,
                 "TimeLeftSec" : timeLeftSec,
-                "FileName" : fileName
+                "FileName" : fileName,
+                "EstTotalFilUsedMm" : filamentUsageMm,
             }
         }
 
