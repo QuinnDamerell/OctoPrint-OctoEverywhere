@@ -98,15 +98,15 @@ class OctoPrintCommandHandler:
             if "tool0" in currentTemps:
                 tool0 = currentTemps["tool0"]
                 if "actual" in tool0:
-                    hotendActual = float(tool0["actual"])
+                    hotendActual = round(float(tool0["actual"]), 2)
                 if "target" in tool0:
-                    hotendTarget = float(tool0["target"])
+                    hotendTarget = round(float(tool0["target"]), 2)
             if "bed" in currentTemps:
                 bed = currentTemps["bed"]
                 if "actual" in bed:
-                    bedActual = float(bed["actual"])
+                    bedActual = round(float(bed["actual"]), 2)
                 if "target" in bed:
-                    bedTarget = float(bed["target"])
+                    bedTarget = round(float(bed["target"]), 2)
 
             # Build the object and return.
             return {

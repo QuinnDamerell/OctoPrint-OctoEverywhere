@@ -110,15 +110,15 @@ class MoonrakerCommandHandler:
         if "status" in res and "extruder" in res["status"]:
             extruder = res["status"]["extruder"]
             if "temperature" in extruder:
-                hotendActual = float(extruder["temperature"])
+                hotendActual = round(float(extruder["temperature"]), 2)
             if "target" in extruder:
-                hotendTarget = float(extruder["target"])
+                hotendTarget = round(float(extruder["target"]), 2)
         if "status" in res and "heater_bed" in res["status"]:
             heater_bed = res["status"]["heater_bed"]
             if "temperature" in heater_bed:
-                bedActual = float(heater_bed["temperature"])
+                bedActual = round(float(heater_bed["temperature"]), 2)
             if "target" in heater_bed:
-                bedTarget = float(heater_bed["target"])
+                bedTarget = round(float(heater_bed["target"]), 2)
 
         # Build the object and return.
         return {
