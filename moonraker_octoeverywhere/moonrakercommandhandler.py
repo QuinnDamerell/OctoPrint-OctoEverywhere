@@ -30,11 +30,11 @@ class MoonrakerCommandHandler:
                 "print_stats": None,    # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
                 "gcode_move": None,     # Needed for GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult to get the current speed
                 "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
+                "extruder": None,       # Needed for temps
+                "heater_bed": None,     # Needed for temps
                 # "webhooks": None,
-                # "toolhead": None,
                 # "extruder": None,
                 # "bed_mesh": None,
-
             }
         })
         # Validate
@@ -102,6 +102,24 @@ class MoonrakerCommandHandler:
         # on what we can get as a best effort.
         timeLeftSec = MoonrakerClient.Get().GetMoonrakerCompat().GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(result)
 
+        # Get the current temps if possible.
+        hotEndActual = 0.0
+        hotEndTarget = 0.0
+        bedTarget = 0.0
+        bedActual = 0.0
+        if "status" in res and "extruder" in res["status"]:
+            extruder = res["status"]["extruder"]
+            if "temperature" in extruder:
+                hotEndActual = float(extruder["temperature"])
+            if "target" in extruder:
+                hotEndTarget = float(extruder["target"])
+        if "status" in res and "heater_bed" in res["status"]:
+            heater_bed = res["status"]["heater_bed"]
+            if "temperature" in heater_bed:
+                bedActual = float(heater_bed["temperature"])
+            if "target" in heater_bed:
+                bedTarget = float(heater_bed["target"])
+
         # Build the object and return.
         return {
             "State": state,
@@ -113,6 +131,12 @@ class MoonrakerCommandHandler:
                 "TimeLeftSec" : timeLeftSec,
                 "FileName" : fileName,
                 "EstTotalFilUsedMm" : filamentUsageMm,
+                "Temps": {
+                    "BedActual": bedActual,
+                    "BedTarget": bedTarget,
+                    "HotEndActual": hotEndActual,
+                    "HotEndTarget": hotEndTarget,
+                }
             }
         }
 
