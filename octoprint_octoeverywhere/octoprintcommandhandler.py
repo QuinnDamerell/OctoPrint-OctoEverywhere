@@ -91,16 +91,16 @@ class OctoPrintCommandHandler:
             # Get the current temps if possible.
             # Note there will be no objects in the dic if the printer isn't connected or in other cases.
             currentTemps = self.OctoPrintPrinterObject.get_current_temperatures()
-            hotEndActual = 0.0
-            hotEndTarget = 0.0
+            hotendActual = 0.0
+            hotendTarget = 0.0
             bedTarget = 0.0
             bedActual = 0.0
             if "tool0" in currentTemps:
                 tool0 = currentTemps["tool0"]
                 if "actual" in tool0:
-                    hotEndActual = float(tool0["actual"])
+                    hotendActual = float(tool0["actual"])
                 if "target" in tool0:
-                    hotEndTarget = float(tool0["target"])
+                    hotendTarget = float(tool0["target"])
             if "bed" in currentTemps:
                 bed = currentTemps["bed"]
                 if "actual" in bed:
@@ -122,8 +122,8 @@ class OctoPrintCommandHandler:
                     "Temps": {
                         "BedActual": bedActual,
                         "BedTarget": bedTarget,
-                        "HotEndActual": hotEndActual,
-                        "HotEndTarget": hotEndTarget,
+                        "HotendActual": hotendActual,
+                        "HotendTarget": hotendTarget,
                     }
                 }
             }

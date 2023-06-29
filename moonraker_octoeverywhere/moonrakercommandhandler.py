@@ -103,16 +103,16 @@ class MoonrakerCommandHandler:
         timeLeftSec = MoonrakerClient.Get().GetMoonrakerCompat().GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(result)
 
         # Get the current temps if possible.
-        hotEndActual = 0.0
-        hotEndTarget = 0.0
+        hotendActual = 0.0
+        hotendTarget = 0.0
         bedTarget = 0.0
         bedActual = 0.0
         if "status" in res and "extruder" in res["status"]:
             extruder = res["status"]["extruder"]
             if "temperature" in extruder:
-                hotEndActual = float(extruder["temperature"])
+                hotendActual = float(extruder["temperature"])
             if "target" in extruder:
-                hotEndTarget = float(extruder["target"])
+                hotendTarget = float(extruder["target"])
         if "status" in res and "heater_bed" in res["status"]:
             heater_bed = res["status"]["heater_bed"]
             if "temperature" in heater_bed:
@@ -134,8 +134,8 @@ class MoonrakerCommandHandler:
                 "Temps": {
                     "BedActual": bedActual,
                     "BedTarget": bedTarget,
-                    "HotEndActual": hotEndActual,
-                    "HotEndTarget": hotEndTarget,
+                    "HotendActual": hotendActual,
+                    "HotendTarget": hotendTarget,
                 }
             }
         }
