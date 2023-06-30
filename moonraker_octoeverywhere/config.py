@@ -23,10 +23,11 @@ class Config:
 
     WebcamSection = "webcam"
     WebcamAutoSettings = "auto_settings_detection"
+    WebcamNameToUseAsPrimary = "webcam_name_to_use_as_primary"
     WebcamStreamUrl = "stream_url"
     WebcamSnapshotUrl = "snapshot_url"
     WebcamFlipH = "flip_horizontally"
-    WebcamFlipY = "flip_vertically"
+    WebcamFlipV = "flip_vertically"
     WebcamRotation = "rotate"
 
     # This allows us to add comments into our config.
@@ -37,11 +38,12 @@ class Config:
         { "Target": PrivateKeyKey, "Comment": "A private key linked to your printer ID. NEVER share this and also don't change it."},
         { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value."},
         { "Target": LogLevelKey,  "Comment": "The active logging level. Valid values include: DEBUG, INFO, WARNING, or ERROR."},
+        { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
         { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
         { "Target": WebcamStreamUrl,  "Comment": "Webcam streaming URL. This can be a local relative path (ex: /webcam/?action=stream) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=stream or http://webcam.local/webcam/?action=stream)"},
         { "Target": WebcamSnapshotUrl,  "Comment": "Webcam snapshot URL. This can be a local relative path (ex: /webcam/?action=snapshot) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=snapshot or http://webcam.local/webcam/?action=snapshot)"},
         { "Target": WebcamFlipH,  "Comment": "Flips the webcam image horizontally. Valid values are True or False"},
-        { "Target": WebcamFlipY,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
+        { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
     ]
 

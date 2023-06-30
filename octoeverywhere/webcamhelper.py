@@ -57,7 +57,7 @@ class WebcamHelper:
     # If the camera-streamer webrtc stream URL is found, the correct camera-streamer jmpeg stream is returned.
     # Otherwise None is returned.
     @staticmethod
-    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str):
+    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str) -> str:
         # try to find anything with /webrtc in it, which is a pretty unique signature for camera-streamer
         streamUrlLower = streamUrl.lower()
         webRtcLocation = streamUrlLower.find("/webrtc")
@@ -67,7 +67,7 @@ class WebcamHelper:
         # Since just /webrtc is vague, make sure there's no more paths after the webrtc
         forwardSlashAfterWebrtc = streamUrlLower.find('/', webRtcLocation + 1)
         if forwardSlashAfterWebrtc != -1:
-            # If there's another / after the /webtrc chunk, this isn't camera streamer.
+            # If there's another / after the /webrtc chunk, this isn't camera streamer.
             # Just return the stream URL.
             return streamUrl
 
