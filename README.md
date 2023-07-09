@@ -34,7 +34,7 @@ Firmware updates will most likely completely overwrite these changes.
 
 11. Click the link that the script echos to finish setup on Octoeverywhere's website
 
-12. You're linked to Octoeverywhere! Last step is to make sure we start this service on startup. Copy `octoeverywhere_service` from this repo to `/etc/init.d/octoeverywhere_service`
+12. You're linked to Octoeverywhere! Last step is to make sure we start this service on startup. Copy `S99octoeverywhere` from this repo to `/etc/init.d/S99octoeverywhere`
 
 13. Restart your printer
 
