@@ -1,4 +1,4 @@
-#!/bin/bash
+#~/bin/sh
 
 #
 # The responsibility of this script is to bootstrap the setup by installing the required system libs,
@@ -14,7 +14,7 @@ OE_REPO_DIR=$(realpath $(dirname "$0"))
 # This is the root of where our py virtual env will be. Note that all OctoEverywhere instances share this same
 # virtual environment. This how the rest of the system is, where all other services, even with multiple instances, share the same
 # virtual environment. I probably wouldn't have done it like this, but we have to create this before we know what instance we are targeting, so it's fine.
-OE_ENV="${HOME}/octoeverywhere-env"
+OE_ENV="/usr/data/octoeverywhere-env"
 
 # Note that this is parsed by the update process to find and update required system packages on update!
 # On update THIS SCRIPT ISN'T RAN, only this line is parsed out and used to install / update system packages.
@@ -87,12 +87,6 @@ install_or_update_dependencies()
 {
     log_header "Checking required system packages are installed..."
     log_important "You might be asked for your system password - this is required to install the required system packages."
-
-    # These we require to be installed in the OS.
-    # Note we need to do this before we create our virtual environment
-    sudo apt update
-    sudo apt install --yes ${PKGLIST}
-    log_info "System package install complete."
 
     # Now, ensure the virtual environment is created.
     ensure_py_venv
@@ -173,7 +167,7 @@ install_or_update_dependencies
 
 # Clean up any old bite code that might exist from the past, before we added the -B argument to the installer.
 # TODO - Remove at some point.
-sudo rm -fdr "${OE_REPO_DIR}/moonraker_installer/__pycache__/"
+rm -fr "${OE_REPO_DIR}/moonraker_installer/__pycache__/"
 
 # Before launching our PY script, set any vars it needs to know
 # Pass all of the command line args, so they can be handled by the PY script.
@@ -187,13 +181,13 @@ log_info "Bootstrap done. Starting python installer..."
 # Since we use a module for file includes, we need to set the path to the root of the module
 # so python will find it.
 export PYTHONPATH="${OE_REPO_DIR}"
-pushd ${OE_REPO_DIR} > /dev/null
+#pushd ${OE_REPO_DIR} > /dev/null
 
 # Disable the PY cache files (-B), since they will be written as sudo, since that's what we launch the PY
 # installer as. The PY installer must be sudo to write the service files, but we don't want the
 # complied files to stay in the repo with sudo permissions.
-sudo ${OE_ENV}/bin/python3 -B -m moonraker_installer ${PY_LAUNCH_JSON}
-popd > /dev/null
+${OE_ENV}/bin/python3 -B -m moonraker_installer ${PY_LAUNCH_JSON}
+#popd > /dev/null
 
 # Check the output of the py script.
 retVal=$?

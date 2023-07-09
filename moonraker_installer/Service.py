@@ -69,12 +69,12 @@ class Service:
             serviceFile.write(s)
 
         Logger.Info("Registering service...")
-        Util.RunShellCommand("systemctl enable "+context.ServiceName)
-        Util.RunShellCommand("systemctl daemon-reload")
+        # Util.RunShellCommand("systemctl enable "+context.ServiceName)
+        # Util.RunShellCommand("systemctl daemon-reload")
 
         # Stop and start to restart any running services.
         Logger.Info("Starting service...")
-        Util.RunShellCommand("systemctl stop "+context.ServiceName)
-        Util.RunShellCommand("systemctl start "+context.ServiceName)
+        # Util.RunShellCommand("systemctl stop "+context.ServiceName)
+        # Util.RunShellCommand("systemctl start "+context.ServiceName)
 
         Logger.Info("Service setup and start complete!")
