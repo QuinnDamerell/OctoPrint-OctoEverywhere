@@ -16,35 +16,26 @@ DESC="octoeverywhere daemon"
 NAME="octoeverywhere"
 PIDFILE=/var/run/octoeverywhere.pid
 
-. /lib/lsb/init-functions
-
 case "$1" in
-start)  log_daemon_msg "Starting" $NAME
+start)  echo "Starting Octoeverywhere"
         start-stop-daemon --start --quiet --exec /usr/data/startup_script.sh \
                           --background --pidfile $PIDFILE --make-pidfile \
                           --chuid root --user root \
 #                          -- $OCTO_ARGS
-        log_end_msg $?
         ;;
-stop)   log_daemon_msg "Stopping" $NAME
-        killproc -p $PIDFILE $OCTO_EXEC
+stop)   killproc -p $PIDFILE $OCTO_EXEC
         pkill -f python3
         RETVAL=$?
         [ $RETVAL -eq 0 ] && [ -e "$PIDFILE" ] && rm -f $PIDFILE
-        log_end_msg $RETVAL
         ;;
 restart) log_daemon_msg "Restarting" $NAME
         $0 stop
         $0 start
         ;;
 reload|force-reload)
-        log_daemon_msg "Reloading configuration not supported" $NAME
-        log_end_msg 1
+        echo "Reloading configuration not supported"
         ;;
-status)
-        status_of_proc -p $PIDFILE $OCTO_EXEC $NAME && exit 0 || exit $?
-        ;;
-*)      log_action_msg "Usage: /etc/init.d/octoeverywhere {start|stop|status|restart|reload|force-reload}"
+*)      echo "Usage: /etc/init.d/octoeverywhere {start|stop|status|restart|reload|force-reload}"
         exit 2
         ;;
 esac
