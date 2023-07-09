@@ -1,38 +1,41 @@
-<p align="center"><img src="https://octoeverywhere.com/img/logo.png" alt="OctoEverywhere's Logo" style="width:100px" /></p>
-<h1 align="center" style="margin-bottom:20px"><a href="https://octoeverywhere.com/?source=github_readme">OctoEverywhere</a></h1>
+# K1 Octoeverywhere
 
-Cloud empower your OctoPrint and Klipper printers with **free, private, and unlimited remote access to your full web control portal from anywhere!** Developed for the maker community, powered by the maker community.
+This repo edits the install script for Octoeverywhere to work with the limited MIPS architecture for the Creality K1. There are various services not available such as systemd, pushd, apt, etc. There are additional steps you will need to take as well.
 
-## Features
+## Requirements
 
-- 🚀 Free remote access to your full OctoPrint, Mainsail, and Fluidd web portals from anywhere.
-- 🤖 **Free & unlimited AI failure detection** that will automatically stop failed prints to save you time and money.
-- 📷 Full resolution and full frame-rate webcam streaming.
-- 📱 Empower your favorite OctoPrint & Klipper iOS and Android apps with [remote access](https://octoeverywhere.com/appsetup?source=github_readme).
-- 📺 Live stream your 3D prints to your friends or the entire world with [Live Links](https://octoeverywhere.com/live?source=github_readme).
-- 🔔 Instant [printer notifications](https://octoeverywhere.com/notifications?source=github_readme) sent to SMS, Email, Discord, Telegram, Slack, and more.
-- 🔗 Share secure access of your full OctoPrint portal with others.
-- 💪 Full OctoPrint plugin functionality.
-- 🤹 Full multicam support.
-- ... and much, much more!
+This requires you to have root access to your Creality K1. This is done through an exploit using a shadow gcode file. For more information, please check out https://github.com/giveen/K1_Files/tree/ab81d83ca6421c8420a7a85e456059eb0e641bd3/exploit
 
-## Try It Now!
+## Caveats
 
-With a Trustpilot rating of **[4.9/5 stars](https://www.trustpilot.com/review/octoeverywhere.com)** and over **96k** makers are already using OctoEverywhere, what are you waiting for?
-<br/>
-<br/>
-**[Click Here To Try OctoEverywhere Now! It's free and takes less than 20 seconds to setup!](https://octoeverywhere.com/getstarted?source=github_plugin_repo)**
-<br/>
-<br/>
+Firmware updates will most likely completely overwrite these changes.
 
-## Bugs & Feedback
+## Installation
 
-We love to hear from you! Please submit bugs or feedback on this github page, our [Discord server](https://discord.gg/v3qbxPee4E), or via [our support system](https://octoeverywhere.com/support).
+1. Edit /usr/bin/virtualenv with `vi`. The first line should be changed from `#!/usr/bin/python` to `#!/usr/bin/python3`
 
-## Contributing
+2. Make a directory named `octoeverywhere-logs` in `/usr/data/`
 
-Feel free to fork, hack, slash, and PR code! OctoEverywhere is made for the maker community, we appreciate any ideas or help we can get!
+3. Make a dummy systemd service (even though this board doesn't use it, just for the script to detect with minimal changes) in `/etc/systemd/system/moonraker.service` 
 
-## OctoPrint And Klipper Plugin Setup
+4. Add this line: `Environment=MOONRAKER_CONF=/usr/data/printer_data/config/moonraker.conf` to the contents of the created moonraker.service abov
 
-Follow our [Getting Started Guide](https://octoeverywhere.com/getstarted?source=github_plugin_repo) to get up and running in less than 20 seconds!
+5. Clone this repo into `/usr/data`
+
+6. Rename the cloned folder to `octoeverywhere`
+
+7. `cd` into `octoeverywhere` and run `./install.sh`
+
+8. The script will hang on `Waiting for the plugin to produce a printer id...` - go ahead and respond `n` when it asks you if you want to keep waiting.
+
+9. Copy the `startup_script.sh` from this repo into `/usr/data/`
+
+10. Run the startup script `./startup_script.sh` (might need to make it executable `chmod 777 startup_script.sh`)
+
+11. Click the link that the script echos to finish setup on Octoeverywhere's website
+
+12. You're linked to Octoeverywhere! Last step is to make sure we start this service on startup. Copy `octoeverywhere_service` from this repo to `/etc/init.d/octoeverywhere_service`
+
+13. Restart your printer
+
+14. Profit! Enjoy :) 
