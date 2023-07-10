@@ -1,3 +1,5 @@
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/X8X7LBLK2)
+
 # K1 Octoeverywhere
 
 This repo edits the install script for Octoeverywhere to work with the limited MIPS architecture for the Creality K1. There are various services not available such as systemd, pushd, apt, etc. There are additional steps you will need to take as well.
