@@ -38,6 +38,8 @@ Firmware updates will most likely completely overwrite these changes.
 
 12. You're linked to Octoeverywhere! Last step is to make sure we start this service on startup. Copy `S99octoeverywhere` from this repo to `/etc/init.d/S99octoeverywhere`
 
+13. Make sure that the script has the correct permissions: `chmod 755 /etc/init.d/S99octoeverywhere`
+
 13. Restart your printer
 
 14. Profit! Enjoy :) 
