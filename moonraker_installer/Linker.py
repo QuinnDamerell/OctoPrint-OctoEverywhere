@@ -137,8 +137,6 @@ class Linker:
         try:
             # Try to get a short code. We do a quick timeout so if this fails, we just present the user the longer URL.
             # Any failures, like rate limiting, server error, whatever, and we just use the long URL.
-            # TODO - remove this print when we are done debugging the short code None error.
-            Logger.Info("Creating short code for printer id: "+str(printerId)+" t:"+str(type(printerId)))
             r = requests.post('https://octoeverywhere.com/api/shortcode/create', json={"Type": 1, "PrinterId": printerId}, timeout=10.0)
             if r.status_code == 200:
                 jsonResponse = r.json()
@@ -202,24 +200,40 @@ class Linker:
     #   1 - bool - Is the printer connected to the service
     #   2 - string - If the printer is setup on an account, the printer name.
     def _IsPrinterConnectedToAnAccount(self, printerId):
-        # Query the printer status.
-        r = requests.post('https://octoeverywhere.com/api/printer/info', json={"Id": printerId}, timeout=20)
+        # Adding retry logic, since one call can fail if the server is updating or whatever.
+        attempt = 0
+        while True:
+            try:
+                # Keep track of attempts and timeout if there have been too many.
+                attempt += 1
+                if attempt > 5:
+                    Logger.Error(f"Failed to query current printer info from service after {attempt} attempts.")
+                    return (False, None)
 
-        # Any bad code reports as not connected.
-        Logger.Debug("OE Printer info API Result: "+str(r.status_code))
-        if r.status_code != 200:
-            return (False, None)
+                # Query the printer status.
+                r = requests.post('https://octoeverywhere.com/api/printer/info', json={"Id": printerId}, timeout=20)
 
-        # On success, try to parse the response and see if it's connected.
-        jResult = r.json()
-        Logger.Debug("OE Printer API info; Name:"+jResult["Result"]["Name"] + " HasOwners:" +str(jResult["Result"]["HasOwners"]))
+                Logger.Debug("OE Printer info API Result: "+str(r.status_code))
+                # If the status code is above 500, retry.
+                if r.status_code >= 500:
+                    raise Exception(f"Failed call with status code {r.status_code}")
 
-        # Only return the name if there the printer is linked to an account.
-        printerName = None
-        if jResult["Result"]["HasOwners"] is True:
-            printerName = jResult["Result"]["Name"]
-        return (True, printerName)
+                # Anything else we report as not connected.
+                if r.status_code != 200:
+                    return (False, None)
 
+                # On success, try to parse the response and see if it's connected.
+                jResult = r.json()
+                Logger.Debug("OE Printer API info; Name:"+jResult["Result"]["Name"] + " HasOwners:" +str(jResult["Result"]["HasOwners"]))
+
+                # Only return the name if there the printer is linked to an account.
+                printerName = None
+                if jResult["Result"]["HasOwners"] is True:
+                    printerName = jResult["Result"]["Name"]
+                return (True, printerName)
+            except Exception:
+                Logger.Warn("Failed to get printer info from service, trying again in just a second...")
+                time.sleep(2.0 * attempt)
 
     def _GetAddPrinterUrl(self, printerId):
         return "https://octoeverywhere.com/getstarted?printerid="+printerId
