@@ -616,7 +616,6 @@ class NotificationsHandler:
             flipH = WebcamHelper.Get().GetWebcamFlipH()
             flipV = WebcamHelper.Get().GetWebcamFlipV()
             rotation = WebcamHelper.Get().GetWebcamRotation()
-            flipH = True
             if rotation != 0 or flipH or flipV or snapshotResizeParams is not None:
                 try:
                     if Image is not None:
