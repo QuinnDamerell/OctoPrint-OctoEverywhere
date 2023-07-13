@@ -364,6 +364,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if self.NotificationHandler is not None:
             self.NotificationHandler.OnPrintProgress(progressInt, None)
 
+
+    # A dict helper
+    def _exists(self, dictObj:dict, key:str) -> bool:
+        return key in dictObj and dictObj[key] is not None
+
+
     #
     # Functions for the Event Handler Mixin
     #
@@ -396,10 +402,10 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Gather some stats from other places, if they exist.
             currentData = self._printer.get_current_data()
             fileSizeKBytes = 0
-            if "file" in currentData["job"] and "size" in currentData["job"]["file"]:
+            if self._exists(currentData, "job") and self._exists(currentData["job"], "file") and self._exists(currentData["job"]["file"], "size"):
                 fileSizeKBytes = int(currentData["job"]["file"]["size"]) / 1024
             totalFilamentUsageMm = 0
-            if "filament" in currentData["job"] and "tool0" in currentData["job"]["filament"] and "length" in currentData["job"]["filament"]["tool0"]:
+            if self._exists(currentData, "job") and self._exists(currentData["job"], "filament") and self._exists(currentData["job"]["filament"], "tool0") and self._exists(currentData["job"]["filament"]["tool0"], "length"):
                 totalFilamentUsageMm = int(currentData["job"]["filament"]["tool0"]["length"])
             self.NotificationHandler.OnStarted(fileName, fileSizeKBytes, totalFilamentUsageMm)
         elif event == "PrintFailed":
