@@ -1,3 +1,5 @@
+import logging
+
 from octoprint import __version__
 from octoprint.printer import PrinterInterface
 
@@ -9,11 +11,16 @@ from .smartpause import SmartPause
 # This class implements the Platform Command Handler Interface
 class OctoPrintCommandHandler:
 
-    def __init__(self, logger, octoPrintPrinterObject:PrinterInterface, printerStateObject, mainPluginImpl):
+    def __init__(self, logger:logging.Logger, octoPrintPrinterObject:PrinterInterface, printerStateObject, mainPluginImpl):
         self.Logger = logger
         self.OctoPrintPrinterObject = octoPrintPrinterObject
         self.PrinterStateObject = printerStateObject
         self.MainPluginImpl = mainPluginImpl
+
+
+    # A helper for checking if things exist in dicts.
+    def _Exists(self, dictObj:dict, key:str):
+        return key in dictObj and dictObj[key] is not None
 
 
     # !! Platform Command Handler Interface Function !!
@@ -21,7 +28,7 @@ class OctoPrintCommandHandler:
     # This must return the common "JobStatus" dict or None on failure.
     # The format of this must stay consistent with OctoPrint and the service.
     # Returning None send back the NoHostConnected error, assuming that the plugin isn't connected to the host or the host isn't
-    # connected to the pritner's firmware.
+    # connected to the printer's firmware.
     #
     # See the JobStatusV2 class in the service for the object definition.
     #
@@ -32,12 +39,12 @@ class OctoPrintCommandHandler:
 
             # Get progress
             progress = 0.0
-            if "completion" in currentData["progress"] and currentData["progress"]["completion"] is not None:
+            if self._Exists(currentData, "progress") and self._Exists(currentData["progress"], "completion"):
                 progress = float(currentData["progress"]["completion"])
 
             # Get the current print time
             durationSec = 0
-            if "printTime" in currentData["progress"] and currentData["progress"]["printTime"] is not None:
+            if self._Exists(currentData, "progress") and self._Exists(currentData["progress"], "printTime"):
                 durationSec = int(currentData["progress"]["printTime"])
 
             # Get the current print time
@@ -47,17 +54,17 @@ class OctoPrintCommandHandler:
 
             # Get the file name. This only exists when a file is loaded or printing.
             fileName = ""
-            if "file" in currentData["job"] and "display" in currentData["job"]["file"]:
+            if self._Exists(currentData, "job") and self._Exists(currentData["job"], "file") and self._Exists(currentData["job"]["file"], "display"):
                 fileName = currentData["job"]["file"]["display"]
 
             # Get the estimated total filament used.
             estTotalFilamentUsageMm = 0
-            if "filament" in currentData["job"] and "tool0" in currentData["job"]["filament"] and "length" in currentData["job"]["filament"]["tool0"]:
+            if self._Exists(currentData, "job") and self._Exists(currentData["job"], "filament") and self._Exists(currentData["job"]["filament"], "tool0") and self._Exists(currentData["job"]["filament"]["tool0"], "length"):
                 estTotalFilamentUsageMm = int(currentData["job"]["filament"]["tool0"]["length"])
 
             # Get the error, if there is one.
             errorStr_CanBeNone = None
-            if "error" in currentData["state"] and currentData["state"]["error"] is not None:
+            if self._Exists(currentData, "state") and self._Exists(currentData["state"], "error"):
                 errorStr_CanBeNone = currentData["state"]["error"]
 
             # Map the state to our common states.
@@ -95,17 +102,17 @@ class OctoPrintCommandHandler:
             hotendTarget = 0.0
             bedTarget = 0.0
             bedActual = 0.0
-            if "tool0" in currentTemps:
+            if self._Exists(currentTemps, "tool0"):
                 tool0 = currentTemps["tool0"]
-                if "actual" in tool0:
+                if self._Exists(tool0, "actual"):
                     hotendActual = round(float(tool0["actual"]), 2)
-                if "target" in tool0:
+                if self._Exists(tool0, "target"):
                     hotendTarget = round(float(tool0["target"]), 2)
-            if "bed" in currentTemps:
+            if self._Exists(currentTemps, "bed"):
                 bed = currentTemps["bed"]
-                if "actual" in bed:
+                if self._Exists(bed, "actual"):
                     bedActual = round(float(bed["actual"]), 2)
-                if "target" in bed:
+                if self._Exists(bed, "target"):
                     bedTarget = round(float(bed["target"]), 2)
 
             # Build the object and return.
