@@ -115,9 +115,12 @@ class OctoHttpRequest:
         # Make the common call.
         return OctoHttpRequest.MakeHttpCall(logger, path, pathType, method, headers, data)
 
+    # allowRedirects should be false for all proxy calls. If it's true, then the content returned might be from a redirected URL and the actual URL will be incorrect.
+    # Instead, the system needs to handle the redirect 301 or 302 call as normal, sending it back to the caller, and allowing them to follow the redirect if needed.
+    # The X-Forwarded-Host header will tell the OctoPrint server the correct place to set the location redirect header.
+    # However, for calls that aren't proxy calls, things like local snapshot requests and such, we want to allow redirects to be more robust.
     @staticmethod
-    def MakeHttpCall(logger, pathOrUrl, pathOrUrlType, method, headers, data=None):
-
+    def MakeHttpCall(logger, pathOrUrl, pathOrUrlType, method, headers, data=None, allowRedirects=False):
         # First of all, we need to figure out what the URL is. There are two options
         #
         # 1) Absolute URLs
@@ -242,7 +245,7 @@ class OctoHttpRequest:
 
         # First, try the main URL.
         # For the first main url, we set the main response to None and is fallback to False.
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Main request", method, url, headers, data, None, False, fallbackUrl)
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Main request", method, url, headers, data, None, False, fallbackUrl, allowRedirects)
         # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
@@ -252,7 +255,7 @@ class OctoHttpRequest:
         mainResult = ret.Result
 
         # Main failed, try the fallback, which should be the http proxy.
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Http proxy fallback", method, fallbackUrl, headers, data, mainResult, True, fallbackLocalIpHttpProxySuffix)
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Http proxy fallback", method, fallbackUrl, headers, data, mainResult, True, fallbackLocalIpHttpProxySuffix, allowRedirects)
         # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
@@ -265,7 +268,7 @@ class OctoHttpRequest:
         # With the local IP, first try to use the http proxy URL, since it's the most likely to be bound to the public IP and not firewalled.
         # It's important we use the right http proxy protocol with the http proxy port.
         localIpFallbackUrl = httpProxyProtocol + localIp + fallbackLocalIpHttpProxySuffix
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP Http Proxy Fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackLocalIpOctoPrintPortSuffix)
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP Http Proxy Fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackLocalIpOctoPrintPortSuffix, allowRedirects)
         # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
@@ -273,7 +276,7 @@ class OctoHttpRequest:
 
         # Now try the OcotoPrint direct port with the local IP.
         localIpFallbackUrl = "http://" + localIp + fallbackLocalIpOctoPrintPortSuffix
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackWebcamUrl)
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackWebcamUrl, allowRedirects)
         # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
@@ -282,7 +285,7 @@ class OctoHttpRequest:
         # If all others fail, try the hardcoded webcam URL.
         # Note this has to be last, because there commonly isn't a fallbackWebcamUrl, so it will stop the
         # chain of other attempts.
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Webcam hardcode fallback", method, fallbackWebcamUrl, headers, data, mainResult, True, None)
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Webcam hardcode fallback", method, fallbackWebcamUrl, headers, data, mainResult, True, None, allowRedirects)
         # No matter what, always return the result now.
         return ret.Result
 
@@ -304,7 +307,7 @@ class OctoHttpRequest:
 
     # This function should always return a AttemptResult object.
     @staticmethod
-    def MakeHttpCallAttempt(logger, attemptName, method, url, headers, data, mainResult, isFallback, nextFallbackUrl):
+    def MakeHttpCallAttempt(logger, attemptName, method, url, headers, data, mainResult, isFallback, nextFallbackUrl, allowRedirects:bool = False):
         response = None
         try:
             # Try to make the http call.
@@ -312,10 +315,7 @@ class OctoHttpRequest:
             # Note we use a long timeout because some api calls can hang for a while.
             # For example when plugins are installed, some have to compile which can take some time.
             #
-            # Also note we want to disable redirects. Since we are proxying the http calls, we want to send
-            # the redirect back to the client so it can handle it. Otherwise we will return the redirected content
-            # for this url, which is incorrect. The X-Forwarded-Host header will tell the OctoPrint server the correct
-            # place to set the location redirect header.
+            # See the note about allowRedirects above MakeHttpCall.
             #
             # It's important to set the `verify` = False, since if the server is using SSL it's probably a self-signed cert.
             #
@@ -323,7 +323,7 @@ class OctoHttpRequest:
             # This means that response.content will not be valid and we will always use the iter_content. But it also means
             # iter_content will ready into memory on demand and throw when the stream is consumed. This is important, because
             # our logic relies on the exception when the stream is consumed to end the http response stream.
-            response = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=False, stream=True, verify=False)
+            response = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=allowRedirects, stream=True, verify=False)
         except Exception as e:
             logger.info(attemptName + " http URL threw an exception: "+str(e))
 

@@ -1,3 +1,5 @@
+import logging
+
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
 
@@ -32,7 +34,7 @@ class WebcamHelper:
 
 
     @staticmethod
-    def Init(logger, webcamPlatformHelperInterface):
+    def Init(logger:logging.Logger, webcamPlatformHelperInterface):
         WebcamHelper._Instance = WebcamHelper(logger, webcamPlatformHelperInterface)
 
 
@@ -41,39 +43,9 @@ class WebcamHelper:
         return WebcamHelper._Instance
 
 
-    def __init__(self, logger, webcamPlatformHelperInterface):
+    def __init__(self, logger:logging.Logger, webcamPlatformHelperInterface):
         self.Logger = logger
         self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
-
-    # A static helper that provides common logic to detect urls for camera-streamer.
-    #
-    # Both OctoPrint and Klipper are using camera-streamer for WebRTC webcam streaming. If the system is going to be WebRTC based,
-    # it's going to be camera-streamer. There are a ton of other streaming types use commonly, the most common being jmpeg from server sources, as well as HLS, and more.
-    #
-    # This function is designed to detect the camera-streamer URLs and fix them up for our internal use. We support WebRTC via the Klipper or OctoPrint portals,
-    # but for all of our service related streaming we can't support WebRTC. For things like Live Links, WebRTC would expose the WAN IP of the user's device.
-    # Thus, for anything internally to OctoEverywhere, we convert camera-streamer's webrtc stream URL to jmpeg.
-    #
-    # If the camera-streamer webrtc stream URL is found, the correct camera-streamer jmpeg stream is returned.
-    # Otherwise None is returned.
-    @staticmethod
-    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str) -> str:
-        # try to find anything with /webrtc in it, which is a pretty unique signature for camera-streamer
-        streamUrlLower = streamUrl.lower()
-        webRtcLocation = streamUrlLower.find("/webrtc")
-        if webRtcLocation == -1:
-            return streamUrl
-
-        # Since just /webrtc is vague, make sure there's no more paths after the webrtc
-        forwardSlashAfterWebrtc = streamUrlLower.find('/', webRtcLocation + 1)
-        if forwardSlashAfterWebrtc != -1:
-            # If there's another / after the /webrtc chunk, this isn't camera streamer.
-            # Just return the stream URL.
-            return streamUrl
-
-        # This is camera-streamer.
-        # We want to preserver the URL before the /webrtc, and only replace the /webrtc.
-        return streamUrl[:webRtcLocation] + "/stream"
 
 
     # Returns the snapshot URL from the settings.
@@ -164,9 +136,10 @@ class WebcamHelper:
             # Try to make a standard http call with this stream url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
             # Where to actually make the webcam request in terms of IP and port.
+            # We use the allow redirects flag to make the API more robust, since some webcam images might need that.
             #
             # Whatever this returns, the rest of the request system will handle it, since it's expecting the OctoHttpRequest object
-            return OctoHttpRequest.MakeHttpCall(self.Logger, webcamStreamUrl, OctoHttpRequest.GetPathType(webcamStreamUrl), "GET", {})
+            return OctoHttpRequest.MakeHttpCall(self.Logger, webcamStreamUrl, OctoHttpRequest.GetPathType(webcamStreamUrl), "GET", {}, allowRedirects=True)
 
         # If we can't get the webcam stream URL, return None to fail out the request.
         return None
@@ -191,8 +164,9 @@ class WebcamHelper:
             # Try to make a standard http call with this snapshot url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
             # Where to actually make the webcam request in terms of IP and port.
+            # We use the allow redirects flag to make the API more robust, since some webcam images might need that.
             self.Logger.debug("Trying to get a snapshot using url: %s", snapshotUrl)
-            octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, snapshotUrl, OctoHttpRequest.GetPathType(snapshotUrl), "GET", {})
+            octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, snapshotUrl, OctoHttpRequest.GetPathType(snapshotUrl), "GET", {}, allowRedirects=True)
             # If the result was successful, we are done.
             if octoHttpResult is not None and octoHttpResult.Result is not None and octoHttpResult.Result.status_code == 200:
                 return octoHttpResult
@@ -209,8 +183,9 @@ class WebcamHelper:
         try:
             # Try to connect the the mjpeg stream using the http helper class.
             # This is required because knowing the port to connect to might be tricky.
+            # We use the allow redirects flag to make the API more robust, since some webcam images might need that.
             self.Logger.debug("_GetSnapshotFromStream - Trying to get a snapshot using THE STREAM URL: %s", url)
-            octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, OctoHttpRequest.GetPathType(url), "GET", {})
+            octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, OctoHttpRequest.GetPathType(url), "GET", {}, allowRedirects=True)
             if octoHttpResult is None or octoHttpResult.Result is None:
                 self.Logger.debug("_GetSnapshotFromStream - Failed to make web request.")
                 return None
@@ -388,3 +363,66 @@ class WebcamHelper:
 
     def GetDevAddress(self):
         return OctoHttpRequest.GetLocalhostAddress()+":"+str(OctoHttpRequest.GetLocalOctoPrintPort())
+
+
+    # A static helper that provides common logic to detect urls for camera-streamer.
+    #
+    # Both OctoPrint and Klipper are using camera-streamer for WebRTC webcam streaming. If the system is going to be WebRTC based,
+    # it's going to be camera-streamer. There are a ton of other streaming types use commonly, the most common being jmpeg from server sources, as well as HLS, and more.
+    #
+    # This function is designed to detect the camera-streamer URLs and fix them up for our internal use. We support WebRTC via the Klipper or OctoPrint portals,
+    # but for all of our service related streaming we can't support WebRTC. For things like Live Links, WebRTC would expose the WAN IP of the user's device.
+    # Thus, for anything internally to OctoEverywhere, we convert camera-streamer's webrtc stream URL to jmpeg.
+    #
+    # If the camera-streamer webrtc stream URL is found, the correct camera-streamer jmpeg stream is returned.
+    # Otherwise None is returned.
+    @staticmethod
+    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str) -> str:
+        # try to find anything with /webrtc in it, which is a pretty unique signature for camera-streamer
+        streamUrlLower = streamUrl.lower()
+        webRtcLocation = streamUrlLower.find("/webrtc")
+        if webRtcLocation == -1:
+            return None
+
+        # Since just /webrtc is vague, make sure there's no more paths after the webrtc
+        forwardSlashAfterWebrtc = streamUrlLower.find('/', webRtcLocation + 1)
+        if forwardSlashAfterWebrtc != -1:
+            # If there's another / after the /webrtc chunk, this isn't camera streamer.
+            return None
+
+        # This is camera-streamer.
+        # We want to preserver the URL before the /webrtc, and only replace the /webrtc.
+        return streamUrl[:webRtcLocation] + "/stream"
+
+
+    # A static helper that provides common logic to detect webcam urls missing a directory slash.
+    # This works for any url that has the following format: '*webcam*?action=*'
+    #
+    # This is mostly a problem in Klipper, but if the webcam/?action=stream URL is formatted as 'webcam?action=stream' and the proxy was nginx, it will cause a redirect to 'webcam/?action=stream'.
+    # This is ok, but it causes an extra hop before the webcam can show. Also internally this used to break the Snapshot logic, as we didn't follow redirects, so getting
+    # a snapshot locally would break. We added the ability for non-proxy http calls to follow redirects, so this is no longer a problem.
+    #
+    # If the slash is detected to be missing, this function will return the URL with the slash added correctly.
+    # Otherwise, it returns None.
+    @staticmethod
+    def FixMissingSlashInWebcamUrlIfNeeded(logger:logging.Logger, webcamUrl:str) -> str:
+        # First, the stream must have webcam* and ?action= in it, otherwise, we don't care.
+        streamUrlLower = webcamUrl.lower()
+        webcamLocation = streamUrlLower.find("webcam")
+        actionLocation = streamUrlLower.find("?action=")
+        if webcamLocation == -1 or actionLocation == -1 and webcamLocation < actionLocation:
+            return None
+
+        # Next, we must we need to remember that some urls might be like 'webcam86?action=*', so we have to exclude the number.
+        # We know that if we found ?action= there must be a / before the ?
+        if actionLocation == 0:
+            # This shouldn't happen, but we should check.
+            return
+        if streamUrlLower[actionLocation-1] == '/':
+            # The URL is good we know that just before ?action= there is a /
+            return
+
+        # We know there is no slash before action, add it.
+        newWebcamUrl = webcamUrl[:actionLocation] + "/" +  webcamUrl[actionLocation:]
+        logger.info(f"Found incorrect webcam url, updating. [{webcamUrl}] -> [{newWebcamUrl}]")
+        return newWebcamUrl

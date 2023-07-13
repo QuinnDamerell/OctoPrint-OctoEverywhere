@@ -273,10 +273,16 @@ class MoonrakerWebcamHelper():
                 if webcamSettings.SnapshotUrl.find("://") == -1 and webcamSettings.SnapshotUrl.startswith("/") is False:
                     webcamSettings.SnapshotUrl = "/" + webcamSettings.SnapshotUrl
 
-            # This is a fix for a Fluidd bug. The UI defaults to /webcam?action... which results in nginx redirecting to /webcam/?action...
+            # This is a fix for a Fluidd bug or something a user might do. The Fluidd UI defaults to /webcam?action... which results in nginx redirecting to /webcam/?action...
             # That's ok, but it makes us take an entire extra trip for webcam calls. So if we see it, we will correct it.
-            if webcamSettings.StreamUrl.startswith("/webcam?action"):
-                webcamSettings.StreamUrl = webcamSettings.StreamUrl.replace("/webcam?action", "/webcam/?action")
+            # It also can break our local snapshot getting, if we don't follow redirects. (we didn't in the past but we do now.)
+            fixedStreamUrl = WebcamHelper.FixMissingSlashInWebcamUrlIfNeeded(self.Logger, webcamSettings.StreamUrl)
+            if fixedStreamUrl is not None:
+                webcamSettings.StreamUrl = fixedStreamUrl
+            if webcamSettings.SnapshotUrl is not None:
+                fixedSnapshotUrl = WebcamHelper.FixMissingSlashInWebcamUrlIfNeeded(self.Logger, webcamSettings.SnapshotUrl)
+                if fixedSnapshotUrl is not None:
+                    webcamSettings.SnapshotUrl = fixedSnapshotUrl
 
             # As of crowsnest 4.0, a common backend is camera-streamer, which supports WebRTC! This is a great choice because it's more efficient than jmpeg,
             # but it's impossible to stream via our backend.. For the full portal connection we try to allow WebRTC to work over the WAN, but for OE service things
