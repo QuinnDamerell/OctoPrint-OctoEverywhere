@@ -410,19 +410,19 @@ class WebcamHelper:
         streamUrlLower = webcamUrl.lower()
         webcamLocation = streamUrlLower.find("webcam")
         actionLocation = streamUrlLower.find("?action=")
-        if webcamLocation == -1 or actionLocation == -1 and webcamLocation < actionLocation:
+        if webcamLocation == -1 or actionLocation == -1:
             return None
 
         # Next, we must we need to remember that some urls might be like 'webcam86?action=*', so we have to exclude the number.
         # We know that if we found ?action= there must be a / before the ?
         if actionLocation == 0:
             # This shouldn't happen, but we should check.
-            return
+            return None
         if streamUrlLower[actionLocation-1] == '/':
             # The URL is good we know that just before ?action= there is a /
-            return
+            return None
 
         # We know there is no slash before action, add it.
-        newWebcamUrl = webcamUrl[:actionLocation] + "/" +  webcamUrl[actionLocation:]
+        newWebcamUrl = webcamUrl[:actionLocation] + "/" + webcamUrl[actionLocation:]
         logger.info(f"Found incorrect webcam url, updating. [{webcamUrl}] -> [{newWebcamUrl}]")
         return newWebcamUrl
