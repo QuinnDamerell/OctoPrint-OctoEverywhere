@@ -97,6 +97,10 @@ install_or_update_dependencies()
     # Now, ensure the virtual environment is created.
     ensure_py_venv
 
+    # Update pip if needed
+    log_info "Updating PIP if needed..."
+    "${OE_ENV}"/bin/python -m pip install --upgrade pip
+
     # Finally, ensure our plugin requirements are installed and updated.
     log_info "Installing or updating required python libs..."
     "${OE_ENV}"/bin/pip3 install -q -r "${OE_REPO_DIR}"/requirements.txt
