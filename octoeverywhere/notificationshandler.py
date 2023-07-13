@@ -616,6 +616,7 @@ class NotificationsHandler:
             flipH = WebcamHelper.Get().GetWebcamFlipH()
             flipV = WebcamHelper.Get().GetWebcamFlipV()
             rotation = WebcamHelper.Get().GetWebcamRotation()
+            flipH = True
             if rotation != 0 or flipH or flipV or snapshotResizeParams is not None:
                 try:
                     if Image is not None:
@@ -630,16 +631,28 @@ class NotificationsHandler:
                         except Exception as _:
                             pass
 
+                        # In pillow ~9.1.0 these constants moved.
+                        # pylint: disable=no-member
+                        OE_FLIP_LEFT_RIGHT = 0
+                        OE_FLIP_TOP_BOTTOM = 0
+                        try:
+                            OE_FLIP_LEFT_RIGHT = Image.FLIP_LEFT_RIGHT
+                            OE_FLIP_TOP_BOTTOM = Image.FLIP_TOP_BOTTOM
+                        except Exception:
+                            OE_FLIP_LEFT_RIGHT = Image.Transpose.FLIP_LEFT_RIGHT
+                            OE_FLIP_TOP_BOTTOM = Image.Transpose.FLIP_TOP_BOTTOM
+                        # pylint: enable=no-member
+
                         # Update the image
                         # Note the order of the flips and the rotates are important!
                         # If they are reordered, when multiple are applied the result will not be correct.
                         didWork = False
                         pilImage = Image.open(io.BytesIO(snapshot))
                         if flipH:
-                            pilImage = pilImage.transpose(Image.FLIP_LEFT_RIGHT)
+                            pilImage = pilImage.transpose(OE_FLIP_LEFT_RIGHT)
                             didWork = True
                         if flipV:
-                            pilImage = pilImage.transpose(Image.FLIP_TOP_BOTTOM)
+                            pilImage = pilImage.transpose(OE_FLIP_TOP_BOTTOM)
                             didWork = True
                         if rotation != 0:
                             # Our rotation is clockwise while PIL is counter clockwise.
