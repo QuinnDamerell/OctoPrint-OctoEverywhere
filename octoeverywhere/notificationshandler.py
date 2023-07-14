@@ -168,6 +168,11 @@ class NotificationsHandler:
             fsLocal.ReportPositiveExtrudeCommandSent()
 
 
+    # Hints at if we are tracking a print or not.
+    def IsTrackingPrint(self) -> bool:
+        return self._IsPingTimerRunning()
+
+
     # A special case used by moonraker to restore the state of an ongoing print that we don't know of.
     # What we want to do is check moonraker's current state and our current state, to see if there's anything that needs to be synced.
     # Remember that we might be syncing because our service restarted during a print, or moonraker restarted, so we might already have

@@ -766,6 +766,14 @@ class MoonrakerCompat:
         # Set the flag to false again, since we can't send any more notifications until we are reconnected and re-synced.
         self.IsReadyToProcessNotifications = False
 
+        # Only fire this error if we are tracking a print.
+        # The problem is this fires on Klipper setups whenever the printer is turned off, which can be common for scripts and plugins
+        # to do after a print. This notification is good if it happens while a print is running, because that would be bad. Otherwise, ignore it
+        # so it doesn't spam the user.
+        if self.NotificationHandler.IsTrackingPrint() is False:
+            self.Logger.info("Ignoring KlippyDisconnectedOrShutdown notification because we aren't tracking a print.")
+            return
+
         # Since we will get this disconnected error for anything, including intentional restarts,
         # we defer the notification for a few seconds and check if the system is still disconnected.
         # If it's still down, we fire the notification.
