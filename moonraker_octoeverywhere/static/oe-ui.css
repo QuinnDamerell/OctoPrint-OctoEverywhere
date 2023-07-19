@@ -1,0 +1,81 @@
+.oe-popup {
+    max-width:350px;
+    z-index:100;
+
+    display:flex;
+    flex-direction: column;
+
+    border-radius: 5px;
+    color: white;
+    font-family: Roboto, sans-serif;
+    background-color: #2A2C30;
+    box-shadow: 0 3px 1px -2px #0003,0 2px 2px #00000024,0 1px 5px #0000001f;
+
+    position:fixed;
+    right:20px;
+    top:60px; /* offset the top to be under the title bar */
+    margin-left: 20px;
+    margin-bottom: 20px;
+    visibility: collapse;
+}
+
+.oe-popup-title {
+    color: white;
+    font-size: 20px;
+    padding: 12px;
+    background-color: #43464F; /* This is the default color, but it can be overwritten by the notification type */
+    border-radius: 5px 5px 0px 0px;
+}
+
+.oe-popup-msg {
+    color: white;
+    font-size: 16px;
+    margin: 12px;
+}
+
+.oe-popup-msg a {
+    color: #81a7e5;
+}
+
+.oe-popup-msg a:hover {
+    color: #a8caff;
+}
+
+.oe-popup-button-container {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    margin: 12px;
+    margin-bottom: 0px; /* But button has bottom padding */
+
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+.oe-popup-button {
+    width: 100%;
+    align-self: last baseline;
+    text-align: center;
+    padding: 6px;
+    margin-bottom: 12px;
+
+    color: white;
+    background-color: #3F5682;
+    border-radius: 5px;
+    transition: 1s;
+}
+
+.oe-popup-button:hover {
+    background-color: #506da5;
+    color: white;
+    cursor: pointer;
+}
+
+.oe-popup-button-action {
+    background-color: #506da5;
+}
+
+.oe-popup-button-action:hover {
+    background-color: #738ec4;
+}

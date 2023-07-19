@@ -150,8 +150,7 @@ class MoonrakerWebcamHelper():
             result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
                 {
                     "namespace": "webcams",
-                },
-                forceSendIgnoreWsState=True # Use the force flag, so we can try to query even when klipper isn't connected.
+                }
             )
 
             # If we failed don't do anything.

@@ -77,7 +77,10 @@ class OctoSession:
             title = OctoStreamMsgBuilder.BytesToString(notificationMsg.Title())
             text = OctoStreamMsgBuilder.BytesToString(notificationMsg.Text())
             msgType = notificationMsg.Type()
-            autoHide = notificationMsg.AutoHide()
+            showForSec = notificationMsg.ShowForSec()
+            actionText = OctoStreamMsgBuilder.BytesToString(notificationMsg.ActionText())
+            actionLink = OctoStreamMsgBuilder.BytesToString(notificationMsg.ActionLink())
+            onlyShowIfLoadedViaOeBool = notificationMsg.ShowOnlyIfLoadedFromOe()
 
             # Validate
             if title is None or text is None or len(title) == 0 or len(text) == 0:
@@ -94,7 +97,7 @@ class OctoSession:
                 typeStr = "error"
 
             # Send it to the UI
-            self.UiPopupInvoker.ShowUiPopup(title, text, typeStr, autoHide)
+            self.UiPopupInvoker.ShowUiPopup(title, text, typeStr, actionText, actionLink, showForSec, onlyShowIfLoadedViaOeBool)
         except Exception as e:
             Sentry.Exception("Failed to handle octo notification message.", e)
 

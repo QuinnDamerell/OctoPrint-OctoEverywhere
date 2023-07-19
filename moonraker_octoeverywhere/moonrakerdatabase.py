@@ -8,9 +8,10 @@ from .moonrakerclient import MoonrakerClient
 # Implements logic that deals with the moonraker database.
 class MoonrakerDatabase:
 
-    def __init__(self, logger:logging.Logger, printerId:str) -> None:
+    def __init__(self, logger:logging.Logger, printerId:str, pluginVersion:str) -> None:
         self.Logger = logger
         self.PrinterId = printerId
+        self.PluginVersion = pluginVersion
 
 
     def EnsureOctoEverywhereDatabaseEntry(self):
@@ -18,7 +19,7 @@ class MoonrakerDatabase:
         # self._Debug_EnumerateDataBase()
 
         # We use a few database entries under our own name space to share information with apps and other plugins.
-        # Note that since these are used by 3rd party systems, they must never change.
+        # Note that since these are used by 3rd party systems, they must never change. We also use this for our frontend.
         result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.post_item",
         {
             "namespace": "octoeverywhere",
@@ -27,6 +28,15 @@ class MoonrakerDatabase:
         })
         if result.HasError():
             self.Logger.error("Ensure database entry item post failed. "+result.GetLoggingErrorStr())
+            return
+        result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.post_item",
+        {
+            "namespace": "octoeverywhere",
+            "key": "public.pluginVersion",
+            "value": self.PluginVersion
+        })
+        if result.HasError():
+            self.Logger.error("Ensure database entry item plugin version failed. "+result.GetLoggingErrorStr())
             return
         self.Logger.debug("Ensure database items posted successfully.")
 

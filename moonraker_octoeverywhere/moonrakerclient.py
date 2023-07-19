@@ -195,8 +195,7 @@ class MoonrakerClient:
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    # forceSendIgnoreWsState is only used to send the initial messages before the system is ready and for things like webcam to query when klipper isn't connected.
-    def SendJsonRpcRequest(self, method:str, paramsDict = None, forceSendIgnoreWsState = False) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict = None) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -223,7 +222,7 @@ class MoonrakerClient:
             # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
             jsonStr = json.dumps(obj, default=str)
             self.Logger.debug("Moonraker RPC Request - "+str(msgId)+" : "+method+" "+jsonStr)
-            if self._WebSocketSend(jsonStr, forceSendIgnoreWsState) is False:
+            if self._WebSocketSend(jsonStr) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
                 return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
 
@@ -268,14 +267,13 @@ class MoonrakerClient:
 
     # Sends a string to the connected websocket.
     # forceSend is used to send the initial messages before the system is ready.
-    def _WebSocketSend(self, jsonStr:str, forceSend = False) -> bool:
+    def _WebSocketSend(self, jsonStr:str) -> bool:
         # Only allow one send at a time, thus we do it under lock.
         with self.WebSocketLock:
-            if self.WebSocketConnected is False and forceSend is False:
+            # Note that in the past we waited for klippy ready, but that doesn't really make sense because a lot of apis like db and such don't care.
+            # Any api that needs klippy to be ready will fail with an error anyways.
+            if self.WebSocketConnected is False:
                 self.Logger.info("Moonraker client - tired to send a websocket message when the socket wasn't open.")
-                return False
-            if self.WebSocketKlippyReady is False and forceSend is False:
-                self.Logger.info("Moonraker client - tired to send a websocket message when the klippy init sequence wasn't done yet.")
                 return False
             localWs = self.WebSocket
             if localWs is None:
@@ -494,7 +492,7 @@ class MoonrakerClient:
                 params = {
                     "client_name": "OctoEverywhere",
                     "version": self.PluginVersionStr,
-                    "type": "other",
+                    "type": "agent", # We must be the agent type so that we can send agent-event, aka send messages to the UI.
                     "url": "https://octoeverywhere.com",
                 }
                 if self.MoonrakerApiKey is not None:
@@ -502,10 +500,14 @@ class MoonrakerClient:
                     params["api_key"] =  self.MoonrakerApiKey
                 # Since "server.info" already handles all of the error logic, we don't bother here,
                 # since server.info will get the same error anyways. (timeouts, unauthorized, etc.)
-                _ = self.SendJsonRpcRequest("server.connection.identify", params, True)
+                _ = self.SendJsonRpcRequest("server.connection.identify", params)
+
+                # Since sometimes the moonraker instances ins't connected to klippy, we still want to notify some systems
+                # When the websocket is established and we are authed, so they can use it.
+                self.ConnectionStatusHandler.OnMoonrakerWsOpenAndAuthed()
 
                 # Query the state, use the force flag to make sure we send even though klippy ready is not set.
-                result = self.SendJsonRpcRequest("server.info", None, True)
+                result = self.SendJsonRpcRequest("server.info", None)
 
                 # Check for error
                 if result.HasError():

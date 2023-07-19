@@ -43,13 +43,34 @@ class OctoNotification(object):
         return 0
 
     # OctoNotification
-    def AutoHide(self):
-        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
+    def ActionText(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # OctoNotification
+    def ActionLink(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
+    # OctoNotification
+    def ShowForSec(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Uint32Flags, o + self._tab.Pos)
+        return 5
+
+    # OctoNotification
+    def ShowOnlyIfLoadedFromOe(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
         if o != 0:
             return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
-        return False
+        return True
 
-def Start(builder): builder.StartObject(4)
+def Start(builder): builder.StartObject(8)
 def OctoNotificationStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -65,10 +86,22 @@ def AddType(builder, type): builder.PrependInt8Slot(2, type, 0)
 def OctoNotificationAddType(builder, type):
     """This method is deprecated. Please switch to AddType."""
     return AddType(builder, type)
-def AddAutoHide(builder, autoHide): builder.PrependBoolSlot(3, autoHide, 0)
-def OctoNotificationAddAutoHide(builder, autoHide):
-    """This method is deprecated. Please switch to AddAutoHide."""
-    return AddAutoHide(builder, autoHide)
+def AddActionText(builder, actionText): builder.PrependUOffsetTRelativeSlot(4, octoflatbuffers.number_types.UOffsetTFlags.py_type(actionText), 0)
+def OctoNotificationAddActionText(builder, actionText):
+    """This method is deprecated. Please switch to AddActionText."""
+    return AddActionText(builder, actionText)
+def AddActionLink(builder, actionLink): builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(actionLink), 0)
+def OctoNotificationAddActionLink(builder, actionLink):
+    """This method is deprecated. Please switch to AddActionLink."""
+    return AddActionLink(builder, actionLink)
+def AddShowForSec(builder, showForSec): builder.PrependUint32Slot(6, showForSec, 5)
+def OctoNotificationAddShowForSec(builder, showForSec):
+    """This method is deprecated. Please switch to AddShowForSec."""
+    return AddShowForSec(builder, showForSec)
+def AddShowOnlyIfLoadedFromOe(builder, showOnlyIfLoadedFromOe): builder.PrependBoolSlot(7, showOnlyIfLoadedFromOe, 1)
+def OctoNotificationAddShowOnlyIfLoadedFromOe(builder, showOnlyIfLoadedFromOe):
+    """This method is deprecated. Please switch to AddShowOnlyIfLoadedFromOe."""
+    return AddShowOnlyIfLoadedFromOe(builder, showOnlyIfLoadedFromOe)
 def End(builder): return builder.EndObject()
 def OctoNotificationEnd(builder):
     """This method is deprecated. Please switch to End."""

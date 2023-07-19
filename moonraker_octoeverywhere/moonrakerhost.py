@@ -27,6 +27,7 @@ from .webrequestresponsehandler import MoonrakerWebRequestResponseHandler
 from .moonrakerapirouter import MoonrakerApiRouter
 from .moonrakercredentailmanager import MoonrakerCredentialManager
 from .filemetadatacache import FileMetadataCache
+from .uiinjector import UiInjector
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -96,8 +97,11 @@ class MoonrakerHost:
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
 
+            # Allow the UI injector to run and do it's thing.
+            UiInjector.Init(self.Logger, repoRoot)
+
             # Setup the database helper
-            self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId)
+            self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId, pluginVersionStr)
 
             # Setup the credential manager.
             MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath)
@@ -258,12 +262,19 @@ class MoonrakerHost:
 
 
     #
-    # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and is ready to be used.
+    # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient every time the moonraker websocket is open and authed - BUT possibly not connected to klippy.
+    # At this point it's ok to query things in moonraker like db items, webcam info, and such. But API calls that have to do with the physical printer will fail, since klippy might not be ready yet.
     #
-    def OnMoonrakerClientConnected(self):
+    def OnMoonrakerWsOpenAndAuthed(self):
 
         # Kick off the webcam settings helper, to ensure it pulls fresh settings if desired.
         self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate()
 
         # Also allow the database logic to ensure our public keys exist and are updated.
         self.MoonrakerDatabase.EnsureOctoEverywhereDatabaseEntry()
+
+    #
+    # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and klippy is fully ready to use.
+    #
+    def OnMoonrakerClientConnected(self):
+        pass

@@ -35,6 +35,21 @@ $(function() {
             return url.indexOf(".octoeverywhere.com") != -1 || url.indexOf(".octoeverywhere.dev") != -1;
         }
 
+        function FormatNotificationMsg(text, actionText, actionLink)
+        {
+            // Wrap the message in a div, so we can add some spacing.
+            var msg = `<div style="margin-top:12px;">`+text+"</div>";
+
+            // If there's an action text and link, add the button.
+            if(actionText !== undefined && actionLink !== undefined && actionText != null && actionLink != null && typeof actionText === "string" && typeof actionLink === "string" && actionText.length > 0 && actionLink.length > 0)
+            {
+                // We use this octoprint button style for the action button.
+                // We force the button to be 100% width. We have to warp it in a flex div, otherwise the 100% width extends out of the right of the notification.
+                msg += `<div style="display:flex; margin-top:12px;"><a class="btn btn-primary" style="color:white;width:100%" target="_blank" href="${actionLink}">${actionText}</a></div>`
+            }
+            return msg;
+        }
+
         // Used by the wizard to get the printer id.
         self.onWizardDetails = function (response) {
             if (response.octoeverywhere.details.AddPrinterUrl){
@@ -45,17 +60,23 @@ $(function() {
         // Used by the py code to popup UI messages for various things.
         self.onDataUpdaterPluginMessage = function (plugin, data) {
             // check if it's for us.
-            if (plugin !== "octoeverywhere_ui_popup_msg"){
+            if (plugin !== "octoeverywhere_ui_popup_msg") {
                 return
             }
+
+            // Format the message the way we do for OctoPrint.
+            var msg = FormatNotificationMsg(data.text, data.actionText, data.actionLink)
+
             // Show a notification.
+            var showForMs = (data.showForSec * 1000)
             new PNotify({
                 'title': data.title,
-                'text':  data.text,
+                'text':  msg,
                 'type':  data.type,
-                'hide':  data.autoHide,
-                'delay': 10000,
-                'mouseReset' : true
+                'hide':  showForMs > 0 ? true : false,
+                'delay': showForMs,
+                'mouse_reset' : true,
+                'icon' : false /* disable since we will use our own */
             });
         }
 
@@ -396,6 +417,7 @@ $(function() {
             var payload = {
                 "PrinterId": printerId,
                 "PluginVersion": pluginVersion,
+                "ClientType" : 0, // Matches our server OctoClientTypes
                 "IsConnectedViaOctoEverywhere" : isConnectedViaOctoEverywhere
             };
 
@@ -417,13 +439,21 @@ $(function() {
                         // If there's a notification, fire it.
                         if(response.Result.Notification !== undefined && response.Result.Notification !== null)
                         {
+                            var note = response.Result.Notification;
+
+                            // Format the message the way we do for OctoPrint.
+                            var msg = FormatNotificationMsg(note.Message, note.ActionText, note.ActionLink);
+                            var showForMs = (note.ShowForSec * 1000);
+
+                            // Show a notification.
                             new PNotify({
-                                'title': response.Result.Notification.Title,
-                                'text':  response.Result.Notification.Message,
-                                'type':  response.Result.Notification.Type,
-                                'hide':  response.Result.Notification.AutoHide,
-                                'delay': response.Result.Notification.ShowForMs,
-                                'mouseReset' : response.Result.Notification.MouseReset
+                                'title': note.Title,
+                                'text':  msg,
+                                'type':  note.Type,
+                                'hide':  showForMs > 0 ? true : false,
+                                'delay': showForMs,
+                                'mouse_reset' : true,
+                                'icon' : false /* disable since we will use our own */
                             });
                         }
                         // If the printer name is returned and this session is connected via OctoEverywhere, update the title so it's easier for users to tell multiple printers apart.

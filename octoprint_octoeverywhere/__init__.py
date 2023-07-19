@@ -457,8 +457,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         pluginUpdateRequired = self.GetPluginUpdateRequired()
         if pluginUpdateRequired is True:
             title = "OctoEverywhere Disabled"
-            message = '<br/><strong>You need to update your OctoEverywhere plugin before you can continue using OctoEverywhere.</strong><br/><br/>We are always improving OctoEverywhere to make things faster and add features. Sometimes, that means we have to break things. If you need info about how to update your plugin, <a target="_blank" href="https://octoeverywhere.com/pluginupdate">check this out.</i></a>'
-            self.ShowUiPopup(title, message, "notice", True)
+            message = '<strong>You need to update your OctoEverywhere plugin before you can continue using OctoEverywhere.</strong><br/><br/>We are always improving OctoEverywhere to make things faster and add features. Sometimes, that means we have to break things.'
+            self.ShowUiPopup(title, message, "notice", "Learn How To Update", "https://octoeverywhere.com/pluginupdate", 0, False)
 
 
     def ShowSmartPausePopUpOnPortalLoad(self):
@@ -489,7 +489,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Show the notification, but don't auto hide it, to ensure the user sees it.
         title = "Smart Pause"
         message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause turned off your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
-        self.ShowUiPopup(title, message, "notice", False)
+        self.ShowUiPopup(title, message, "notice", None, None, 0, False)
 
 
     def ShowLinkAccountMessageIfNeeded(self):
@@ -549,8 +549,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
             # If not, show the message.
             title = "Complete Your Setup"
-            message = '<br/>You\'re <strong>only 15 seconds</strong> away from OctoEverywhere\'s free remote access to OctoPrint from anywhere!<br/><br/><a class="btn btn-primary" style="color:white" target="_blank" href="'+addPrinterUrl+'">Finish Your Setup Now!&nbsp;&nbsp;<i class="fa fa-external-link"></i></a>'
-            self.ShowUiPopup(title, message, "notice", True)
+            message = 'You\'re <strong>only 15 seconds</strong> away from OctoEverywhere\'s free remote access to OctoPrint from anywhere!'
+            self.ShowUiPopup(title, message, "notice", "Finish Your Setup Now", addPrinterUrl, 20, False)
 
         except Exception as e:
             Sentry.Exception("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
@@ -631,13 +631,16 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         except Exception:
             return False
 
-    # Sends a UI popup message for various uses.
+    # Interface function - Sends a UI popup message for various uses.
+    # Must stay in sync with the OctoPrint handler!
     # title - string, the title text.
     # text  - string, the message.
     # type  - string, [notice, info, success, error] the type of message shown.
-    # audioHide - bool, indicates if the message should auto hide.
-    def ShowUiPopup(self, title, text, msgType, autoHide):
-        data = {"title": title, "text": text, "type": msgType, "autoHide": autoHide}
+    # actionText - string, if not None or empty, this is the text to show on the action button or text link.
+    # actionLink - string, if not None or empty, this is the URL to show on the action button or text link.
+    # onlyShowIfLoadedViaOeBool - bool, if set, the message should only be shown on browsers loading the portal from OE.
+    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool):
+        data = {"title":title, "text":text, "type":msgType, "actionText":actionText, "actionLink":actionLink, "showForSec":showForSec, "onlyShowIfLoadedViaOeBool":onlyShowIfLoadedViaOeBool}
         self._plugin_manager.send_plugin_message("octoeverywhere_ui_popup_msg", data)
 
     # Fired when the connection to the primary server is established.

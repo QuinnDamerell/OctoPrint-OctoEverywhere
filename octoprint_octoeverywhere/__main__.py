@@ -55,8 +55,8 @@ class UiPopupInvokerStub():
     def __init__(self, logger):
         self.Logger = logger
 
-    def ShowUiPopup(self, title, text, msgType, autoHide):
-        self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; AutoHide:"+str(autoHide))
+    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool):
+        self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; showForSec:"+str(showForSec))
 
 
 
