@@ -477,34 +477,36 @@ class MoonrakerClient:
 
         logCounter = 0
         self.Logger.info("Moonraker client waiting for klippy ready...")
-        while True:
-            try:
+        try:
+            # Before we do anything, we need to identify ourselves.
+            # This is also how we authorize ourself with the API key, if needed.
+            # https://moonraker.readthedocs.io/en/latest/web_api/#identify-connection
+            self.Logger.info("Authenticating with moonraker...")
+            params = {
+                "client_name": "OctoEverywhere",
+                "version": self.PluginVersionStr,
+                "type": "agent", # We must be the agent type so that we can send agent-event, aka send messages to the UI.
+                "url": "https://octoeverywhere.com",
+            }
+            if self.MoonrakerApiKey is not None:
+                self.Logger.info("API key added to websocket identify message.")
+                params["api_key"] =  self.MoonrakerApiKey
+            # Since "server.info" already handles all of the error logic, we don't bother here,
+            # since server.info will get the same error anyways. (timeouts, unauthorized, etc.)
+            _ = self.SendJsonRpcRequest("server.connection.identify", params)
+
+            # Since sometimes the moonraker instances ins't connected to klippy, we still want to notify some systems
+            # When the websocket is established and we are authed, so they can use it.
+            self.ConnectionStatusHandler.OnMoonrakerWsOpenAndAuthed()
+
+            self.Logger.info("Moonraker client waiting for klippy ready...")
+            while True:
                 # Ensure we are still using the active websocket. We use this to know if the websocket we are
                 # trying to monitor is gone and the system has started a new one.
                 testWs = self.WebSocket
                 if testWs is None or testWs is not targetWsObjRef:
                     self.Logger.warn("The target websocket changed while waiting on klippy ready.")
                     return
-
-                # Before we do anything, we need to identify ourselves.
-                # This is also how we authorize ourself with the API key, if needed.
-                # https://moonraker.readthedocs.io/en/latest/web_api/#identify-connection
-                params = {
-                    "client_name": "OctoEverywhere",
-                    "version": self.PluginVersionStr,
-                    "type": "agent", # We must be the agent type so that we can send agent-event, aka send messages to the UI.
-                    "url": "https://octoeverywhere.com",
-                }
-                if self.MoonrakerApiKey is not None:
-                    self.Logger.info("API key added to websocket identify message.")
-                    params["api_key"] =  self.MoonrakerApiKey
-                # Since "server.info" already handles all of the error logic, we don't bother here,
-                # since server.info will get the same error anyways. (timeouts, unauthorized, etc.)
-                _ = self.SendJsonRpcRequest("server.connection.identify", params)
-
-                # Since sometimes the moonraker instances ins't connected to klippy, we still want to notify some systems
-                # When the websocket is established and we are authed, so they can use it.
-                self.ConnectionStatusHandler.OnMoonrakerWsOpenAndAuthed()
 
                 # Query the state, use the force flag to make sure we send even though klippy ready is not set.
                 result = self.SendJsonRpcRequest("server.info", None)
@@ -563,10 +565,10 @@ class MoonrakerClient:
                 self.Logger.error(f"Moonraker client is in an unknown klippy waiting state. state '{state}'")
                 raise Exception(f"Unknown klippy waiting state. {state}")
 
-            except Exception as e:
-                Sentry.Exception("Moonraker client exception in klippy waiting logic.", e)
-                # Shut down the websocket so we do the reconnect logic.
-                self._RestartWebsocket()
+        except Exception as e:
+            Sentry.Exception("Moonraker client exception in klippy waiting logic.", e)
+            # Shut down the websocket so we do the reconnect logic.
+            self._RestartWebsocket()
 
 
     # Kills the current websocket connection. Our logic will auto try to reconnect.
