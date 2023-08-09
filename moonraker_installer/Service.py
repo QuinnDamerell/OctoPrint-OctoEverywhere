@@ -64,6 +64,7 @@ class Service:
             Logger.Warn("Skipping service file creation, registration, and starting due to skip sudo actions flag.")
             return
 
+        Logger.Debug("Service config file contents to write: "+s)
         Logger.Info("Creating service file "+context.ServiceFilePath+"...")
         with open(context.ServiceFilePath, "w", encoding="utf-8") as serviceFile:
             serviceFile.write(s)
