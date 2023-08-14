@@ -178,6 +178,13 @@ class Linker:
                 Logger.Info("file contents:"+f.read())
             return None
 
+        # Print the raw config file for debugging issues with the config.
+        try:
+            with open(oeServiceConfigFilePath, 'r', encoding="utf-8") as f:
+                Logger.Debug("Service config contents:"+f.read())
+        except Exception:
+            pass
+
         # Look for these sections, but don't throw if they aren't there. The service first creates the file and then
         # adds these, so it might be the case that the service just hasn't created them yet.
         section = "server"
