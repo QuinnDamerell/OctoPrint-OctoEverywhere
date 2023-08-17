@@ -14,6 +14,7 @@ from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.compat import Compat
 
 from .config import Config
+from .secrets import Secrets
 from .version import Version
 from .logger import LoggerInit
 from .smartpause import SmartPause
@@ -36,6 +37,7 @@ class MoonrakerHost:
         # When we create our class, make sure all of our core requirements are created.
         self.MoonrakerWebcamHelper = None
         self.MoonrakerDatabase = None
+        self.Secrets = None
 
         # Let the compat system know this is an Moonraker host.
         Compat.SetIsMoonraker(True)
@@ -76,6 +78,10 @@ class MoonrakerHost:
             # because if this fails it will throw. We don't want to let the user complete the install setup if things
             # with the update aren't working.
             SystemConfigManager.EnsureUpdateManagerFilesSetup(self.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot)
+
+            # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
+            # As of 8/15/2023, we don't store any sensitive things in teh config file, since all config files are sometimes backed up publicly.
+            self.Secrets = Secrets(self.Logger, localStorageDir, self.Config)
 
             # Now, detect if this is a new instance and we need to init our global vars. If so, the setup script will be waiting on this.
             self.DoFirstTimeSetupIfNeeded(klipperConfigDir, serviceName)
@@ -185,7 +191,7 @@ class MoonrakerHost:
             printerId = HostCommon.GeneratePrinterId()
 
             # Save it
-            self.Config.SetStr(Config.ServerSection, Config.PrinterIdKey, printerId)
+            self.Secrets.SetPrinterId(printerId)
             self.Logger.info("New printer id created: %s", printerId)
 
         privateKey = self.GetPrivateKey()
@@ -199,7 +205,7 @@ class MoonrakerHost:
             privateKey = HostCommon.GeneratePrivateKey()
 
             # Save it
-            self.Config.SetStr(Config.ServerSection, Config.PrivateKeyKey, privateKey)
+            self.Secrets.SetPrivateKey(privateKey)
             self.Logger.info("New private key created.")
 
         # If this is the first run, do other stuff as well.
@@ -207,12 +213,14 @@ class MoonrakerHost:
             SystemConfigManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
 
 
+    # Returns None if no printer id has been set.
     def GetPrinterId(self):
-        return self.Config.GetStr(Config.ServerSection, Config.PrinterIdKey, None)
+        return self.Secrets.GetPrinterId()
 
 
+    # Returns None if no private id has been set.
     def GetPrivateKey(self):
-        return self.Config.GetStr(Config.ServerSection, Config.PrivateKeyKey, None)
+        return self.Secrets.GetPrivateKey()
 
 
     # Tries to load a dev config option as a string.

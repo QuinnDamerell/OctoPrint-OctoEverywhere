@@ -8,10 +8,7 @@ import configparser
 # settings are important, and not accessed much.
 class Config:
 
-    # These must stay the same because our installer script requires on the format being as is!
     ServerSection = "server"
-    PrinterIdKey = "printer_id"
-    PrivateKeyKey = "private_key"
 
     RelaySection = "relay"
     RelayFrontEndPortKey = "frontend_port"
@@ -34,8 +31,6 @@ class Config:
     # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
     # A string, which is the comment to be inserted.
     c_ConfigComments = [
-        { "Target": PrinterIdKey,  "Comment": "Uniquely identifies your printer. Don't change or will have to re-link your printer with the service."},
-        { "Target": PrivateKeyKey, "Comment": "A private key linked to your printer ID. NEVER share this and also don't change it."},
         { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value."},
         { "Target": LogLevelKey,  "Comment": "The active logging level. Valid values include: DEBUG, INFO, WARNING, or ERROR."},
         { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
@@ -82,7 +77,11 @@ class Config:
             # Check if the section and key exists
             if self.Config.has_section(section):
                 if key in self.Config[section].keys():
-                    return self.Config[section][key]
+                    # If the value of None was written, it was an accidental serialized None value to string.
+                    # Consider it not a valid value, and use the default value.
+                    value = self.Config[section][key]
+                    if value != "None":
+                        return value
         # The value wasn't set, create it using the default.
         self.SetStr(section, key, defaultValue)
         return defaultValue
@@ -150,9 +149,11 @@ class Config:
 
 
     # Sets the value into the config and saves it.
+    # Setting a value of None will delete the key from the config.
     def SetStr(self, section, key, value) -> None:
-        # Ensure the value is a string.
-        value = str(value)
+        # Ensure the value is a string, unless it's None
+        if value is not None:
+            value = str(value)
         with self.ConfigLock:
             self._LoadConfigIfNeeded_UnderLock()
             # Ensure the section exists

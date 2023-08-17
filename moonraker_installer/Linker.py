@@ -18,13 +18,13 @@ class Linker:
         # First, wait for the config file to be created and the printer ID to show up.
         printerId = None
         startTimeSec = time.time()
-        Logger.Info("Waiting for the plugin to produce a printer id...")
+        Logger.Info("Waiting for the plugin to produce a printer id... (this can take a few seconds)")
         while printerId is None:
             # Give the service time to start.
             time.sleep(0.1)
 
-            # Try to get the printer id from the config file
-            printerId = Linker.GetPrinterIdFromServiceConfigFile(context)
+            # Try to get the printer id from the secrets config file
+            printerId = Linker.GetPrinterIdFromServiceSecretsConfigFile(context)
 
             # If we failed, try to handle the case where the service might be having an error.
             if printerId is None:
@@ -155,11 +155,11 @@ class Linker:
         Logger.Header(self._GetAddPrinterUrl(printerId))
 
 
-    # Get's the printer id from the instances config file, if the config exists.
+    # Get's the printer id from the instances secrets config file, if the config exists.
     @staticmethod
-    def GetPrinterIdFromServiceConfigFile(context:Context) -> str or None:
+    def GetPrinterIdFromServiceSecretsConfigFile(context:Context) -> str or None:
         # This path and name must stay in sync with where the plugin will write the file.
-        oeServiceConfigFilePath = os.path.join(context.PrinterDataConfigFolder, "octoeverywhere.conf")
+        oeServiceConfigFilePath = os.path.join(context.LocalFileStorageFolder, "octoeverywhere.secrets")
 
         # Check if there is a file. If not, it means the service hasn't been run yet and this is a first time setup.
         if os.path.exists(oeServiceConfigFilePath) is False:
@@ -167,7 +167,7 @@ class Linker:
 
         # If the file exists, try to read it.
         # If this fails, let it throw, so the user knows something is wrong.
-        Logger.Info("Found existing OctoEverywhere service config.")
+        Logger.Debug("Found existing OctoEverywhere service secrets config.")
         try:
             config = configparser.ConfigParser(allow_no_value=True, strict=False)
             config.read(oeServiceConfigFilePath)
@@ -175,29 +175,30 @@ class Linker:
             # Print the file for Logger.Debugging.
             Logger.Info("Failed to read config file. "+str(e)+ ", trying again...")
             with open(oeServiceConfigFilePath, 'r', encoding="utf-8") as f:
-                Logger.Info("file contents:"+f.read())
+                Logger.Debug("file contents:"+f.read())
             return None
 
         # Print the raw config file for debugging issues with the config.
         try:
             with open(oeServiceConfigFilePath, 'r', encoding="utf-8") as f:
-                Logger.Debug("Service config contents:"+f.read())
+                Logger.Debug("Service secrets config contents:"+f.read())
         except Exception:
             pass
 
         # Look for these sections, but don't throw if they aren't there. The service first creates the file and then
         # adds these, so it might be the case that the service just hasn't created them yet.
-        section = "server"
+        # These must stay in sync with the vars defined in the secrets.py class in the main module.
+        section = "secrets"
         key = "printer_id"
         if config.has_section(section) is False:
-            Logger.Info("Server section not found in OE config.")
+            Logger.Debug("Server section not found in OE config.")
             return None
         if key not in config[section].keys():
-            Logger.Info("Printer id not found in OE config.")
+            Logger.Debug("Printer id not found in OE config.")
             return None
         printerId = config[section][key]
         if len(printerId) < Linker.c_MinPrinterIdLength:
-            Logger.Info("Printer ID found, but the length is less than "+str(Linker.c_MinPrinterIdLength)+" chars? value:`"+printerId+"`")
+            Logger.Debug("Printer ID found, but the length is less than "+str(Linker.c_MinPrinterIdLength)+" chars? value:`"+printerId+"`")
             return None
         return printerId
 

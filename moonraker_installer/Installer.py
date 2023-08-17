@@ -92,9 +92,9 @@ class Installer:
         # After configuration, gen 3 should be fully valid.
         context.Validate(3)
 
-        # Before we start the service, check if the config file already exists and if a printer id already exists.
+        # Before we start the service, check if the secrets config file already exists and if a printer id already exists.
         # This will indicate if this is a fresh install or not.
-        context.ExistingPrinterId = Linker.GetPrinterIdFromServiceConfigFile(context)
+        context.ExistingPrinterId = Linker.GetPrinterIdFromServiceSecretsConfigFile(context)
 
         # Final validation
         context.Validate(4)
