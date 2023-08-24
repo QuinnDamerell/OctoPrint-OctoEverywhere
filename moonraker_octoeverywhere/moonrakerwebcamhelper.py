@@ -146,7 +146,14 @@ class MoonrakerWebcamHelper():
         try:
             self.Logger.debug("Starting auto webcam settings update...")
 
-            # Try to query the common settings path.
+            # First, try to use the newer webcam API.
+            # It seems that even if the frontend still uses the older DB based entry, it will still showup in this new API.
+            if self._TryToFindWebcamFromApi():
+                # On success, we found the webcam we want, so we are done.
+                return
+
+            # Fallback to the old database system.
+            # TODO - This should eventually be removed.
             result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
                 {
                     "namespace": "webcams",
@@ -208,6 +215,55 @@ class MoonrakerWebcamHelper():
             Sentry.Exception("Webcam helper - _DoAutoSettingsUpdate exception. ", e)
 
 
+    def _TryToFindWebcamFromApi(self) -> bool:
+        # It seems that even if the frontend still uses the older DB based entry, it will still showup in this new API.
+        result = MoonrakerClient.Get().SendJsonRpcRequest("server.webcams.list")
+
+        # If we failed don't do anything.
+        if result.HasError():
+            self.Logger.warn("Moonraker webcam helper failed to query for webcams from API. "+result.GetLoggingErrorStr())
+            return False
+
+        res = result.GetResult()
+        if "webcams" not in res:
+            self.Logger.warn("Moonraker webcam helper failed to find webcams value in API result.")
+            return False
+
+        # To help debugging, log the result.
+        if self.Logger.isEnabledFor(logging.DEBUG):
+            self.Logger.debug("Moonraker WebCam API Result: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
+
+        webcamList = res["webcams"]
+        if len(webcamList) > 0:
+            # First, if the use specified a webcam name to select, try to find and validate it.
+            webcamNameToSelect = self.Config.GetStr(Config.WebcamSection, Config.WebcamNameToUseAsPrimary, MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary)
+            if webcamNameToSelect is not None and len(webcamNameToSelect) > 0 and webcamNameToSelect != MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary:
+                webcamNameToSelectLower = webcamNameToSelect.lower()
+                # For each current value...
+                for webcamSettingsObj in webcamList:
+                    if "name" in webcamSettingsObj:
+                        # If the name matches what we are looking for...
+                        if webcamSettingsObj["name"].lower() == webcamNameToSelectLower:
+                            # Check if the settings are valid...
+                            webcamSettings = self._TryToParseWebcamApiItem(webcamSettingsObj)
+                            if webcamSettings is not None:
+                                # We found it and it has valid settings!
+                                self._SetNewValues(webcamSettings)
+                                return True
+                self.Logger.warn(f"A non-default primary webcam name was set, but we didn't find a matching webcam config name in the moonraker webcam API. name:{webcamNameToSelectLower}")
+
+            # If we don't have a name to select or we failed to find it, just look for the first webcam settings that's valid.
+            for webcamSettingsObj in webcamList:
+                webcamSettings = self._TryToParseWebcamApiItem(webcamSettingsObj)
+                if webcamSettings is not None:
+                    # We found a valid one, set it and return!
+                    self._SetNewValues(webcamSettings)
+                    return True
+
+        # If we didn't find a webcam in the new API system, return false to fallback to the old DB system.
+        return False
+
+
     # Given a Moonraker webcam db entry, this will try to parse it.
     # If successful, this will return a valid AbstractWebcamSettings object.
     # If the parse fails or the params are wrong, this will return None
@@ -253,6 +309,42 @@ class MoonrakerWebcamHelper():
             return webcamSettings
         except Exception as e:
             Sentry.Exception("Webcam helper _TryToParseWebcamDbEntry exception. ", e)
+        return None
+
+
+    # Given a Moonraker webcam API result list item, this will try to parse it.
+    # If successful, this will return a valid AbstractWebcamSettings object.
+    # If the parse fails or the params are wrong, this will return None
+    def _TryToParseWebcamApiItem(self, webcamApiItem) -> AbstractWebcamSettings:
+        try:
+            # This new converged logic is amazing, see this doc for the full schema
+            # https://moonraker.readthedocs.io/en/latest/web_api/#webcam-apis
+
+            # Skip if it's not set to enabled.
+            if "enabled" in webcamApiItem and webcamApiItem["enabled"] is False:
+                return None
+
+            # Parse the settings.
+            webcamSettings = AbstractWebcamSettings()
+            if "stream_url" in webcamApiItem:
+                webcamSettings.StreamUrl = webcamApiItem["stream_url"]
+            if "snapshot_url" in webcamApiItem:
+                webcamSettings.SnapshotUrl = webcamApiItem["snapshot_url"]
+            if "flip_horizontal" in webcamApiItem:
+                webcamSettings.FlipH = webcamApiItem["flip_horizontal"]
+            if "flip_vertical" in webcamApiItem:
+                webcamSettings.FlipV = webcamApiItem["flip_vertical"]
+            if "rotation" in webcamApiItem:
+                webcamSettings.Rotation = webcamApiItem["rotation"]
+
+            # Validate and return if we found good settings.
+            if self._ValidateAndFixupWebCamSettings(webcamSettings) is False:
+                return None
+
+            # If the settings are validated, return success!
+            return webcamSettings
+        except Exception as e:
+            Sentry.Exception("Webcam helper _TryToParseWebcamApiItem exception. ", e)
         return None
 
 
