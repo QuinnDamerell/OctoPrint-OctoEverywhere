@@ -552,7 +552,7 @@ class MoonrakerClient:
                     # Done
                     return
 
-                if state == "startup" or state == "error" or state == "shutdown":
+                if state == "startup" or state == "error" or state == "shutdown" or state == "initializing":
                     logCounter += 1
                     # 2 seconds * 150 = one log every 5 minutes. We don't want to log a ton if the printer is offline for a long time.
                     if logCounter % 150 == 1:
