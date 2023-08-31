@@ -17,6 +17,7 @@
         "commandhandler",
         "Commonize",
         "comms",
+        "continuousprint",
         "creds",
         "crossorigin",
         "crowsnest",

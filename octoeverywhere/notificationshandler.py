@@ -245,21 +245,29 @@ class NotificationsHandler:
 
     # Only used for testing.
     def OnTest(self):
+        if self._shouldIgnoreEvent():
+            return
         self._sendEvent("test")
 
 
     # Only used for testing.
     def OnGadgetWarn(self):
+        if self._shouldIgnoreEvent():
+            return
         self._sendEvent("gadget-warning")
 
 
     # Only used for testing.
     def OnGadgetPaused(self):
+        if self._shouldIgnoreEvent():
+            return
         self._sendEvent("gadget-paused")
 
 
     # Fired when a print starts.
     def OnStarted(self, fileName:str, fileSizeKBytes:int, totalFilamentUsageMm:int):
+        if self._shouldIgnoreEvent(fileName):
+            return
         self.ResetForNewPrint(None)
         self._updateCurrentFileName(fileName)
         self.CurrentFileSizeInKBytes = fileSizeKBytes
@@ -271,6 +279,8 @@ class NotificationsHandler:
 
     # Fired when a print fails
     def OnFailed(self, fileName, durationSecStr, reason):
+        if self._shouldIgnoreEvent(fileName):
+            return
         self._updateCurrentFileName(fileName)
         self._updateToKnownDuration(durationSecStr)
         self.StopTimers()
@@ -280,6 +290,8 @@ class NotificationsHandler:
     # Fired when a print done
     # For moonraker, these vars aren't known, so they are None
     def OnDone(self, fileName_CanBeNone, durationSecStr_CanBeNone):
+        if self._shouldIgnoreEvent(fileName_CanBeNone):
+            return
         self._updateCurrentFileName(fileName_CanBeNone)
         self._updateToKnownDuration(durationSecStr_CanBeNone)
         self.StopTimers()
@@ -288,6 +300,9 @@ class NotificationsHandler:
 
     # Fired when a print is paused
     def OnPaused(self, fileName):
+        if self._shouldIgnoreEvent(fileName):
+            return
+
         # Always update the file name.
         self._updateCurrentFileName(fileName)
 
@@ -309,6 +324,8 @@ class NotificationsHandler:
 
     # Fired when a print is resumed
     def OnResume(self, fileName):
+        if self._shouldIgnoreEvent(fileName):
+            return
         self._updateCurrentFileName(fileName)
         self._sendEvent("resume")
 
@@ -321,6 +338,9 @@ class NotificationsHandler:
 
     # Fired when OctoPrint or the printer hits an error.
     def OnError(self, error):
+        if self._shouldIgnoreEvent():
+            return
+
         self.StopTimers()
 
         # This might be spammy from OctoPrint, so limit how often we bug the user with them.
@@ -332,8 +352,126 @@ class NotificationsHandler:
 
     # Fired when the waiting command is received from the printer.
     def OnWaiting(self):
+        if self._shouldIgnoreEvent():
+            return
         # Make this the same as the paused command.
         self.OnPaused(self.CurrentFileName)
+
+
+    # Fired when we get a M600 command from the printer to change the filament
+    def OnFilamentChange(self):
+        if self._shouldIgnoreEvent():
+            return
+        # This event might fire over and over or might be paired with a filament change event.
+        # In any case, we only want to fire it every so often.
+        # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
+        if self._shouldSendSpammyEvent("user-interaction-needed", 5.0) is False:
+            return
+
+        # Otherwise, send it.
+        self._sendEvent("filamentchange")
+
+
+    # Fired when the printer needs user interaction to continue
+    def OnUserInteractionNeeded(self):
+        if self._shouldIgnoreEvent():
+            return
+        # This event might fire over and over or might be paired with a filament change event.
+        # In any case, we only want to fire it every so often.
+        # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
+        if self._shouldSendSpammyEvent("user-interaction-needed", 5.0) is False:
+            return
+
+        # Otherwise, send it.
+        self._sendEvent("userinteractionneeded")
+
+
+    # Fired when a print is making progress.
+    def OnPrintProgress(self, octoPrintProgressInt, moonrakerProgressFloat):
+        if self._shouldIgnoreEvent():
+            return
+
+        # Always set the fallback progress, which will be used if something better can be found.
+        # For moonraker, make sure to set the reported float. See _getCurrentProgressFloat about why.
+        #
+        # Note that in moonraker this is called very frequently, so this logic must be fast!
+        #
+        if octoPrintProgressInt is not None:
+            self.FallbackProgressInt = octoPrintProgressInt
+        elif moonrakerProgressFloat is not None:
+            self.FallbackProgressInt = int(moonrakerProgressFloat)
+            self.MoonrakerReportedProgressFloat_CanBeNone = moonrakerProgressFloat
+        else:
+            self.Logger.error("OnPrintProgress called with no args!")
+            return
+
+        # Get the computed print progress value. (see _getCurrentProgressFloat about why)
+        computedProgressFloat = self._getCurrentProgressFloat()
+
+        # If we are near the end of the print, start the final snap image capture system, to ensure we get a good "done" image.
+        # This is a tricky number to set. For long prints, 1% can be very long, where as for quick prints we might not even see
+        # all of the % updates.
+        # First of all, don't bother unless the % complete is > 90% (this also guards from divide by 0)
+        if computedProgressFloat > 90.0 and self.FinalSnapObj is None:
+            currentTimeSec = self.GetCurrentDurationSecFloat()
+            estTimeRemainingSec = (self.GetCurrentDurationSecFloat() * 100.0) / computedProgressFloat
+            estTimeUntilCompleteSec = estTimeRemainingSec - currentTimeSec
+            # If we guess the print will be done in less than one minute, then start the final snap system.
+            if estTimeUntilCompleteSec < 60.0:
+                if self.FinalSnapObj is None:
+                    self.FinalSnapObj = FinalSnap(self.Logger, self)
+
+        # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
+        # It's possible we get duplicate ints or even progresses that goes back in time.
+        # To account for this, we will make sure we only send the update for each progress update once.
+        # We will also collapse many progress updates down to one event. For example, if the progress went from 5% -> 45%, we wil only report once for 10, 20, 30, and 40%.
+        # We keep track of the highest progress that hasn't been reported yet.
+        progressToSendFloat = 0.0
+        for item in self.ProgressCompletionReported:
+            # Keep going through the items until we find one that's over our current progress.
+            # At that point, we are done.
+            if item.Value() > computedProgressFloat:
+                break
+
+            # If we are over this value and it's not reported, we need to report.
+            # Since these items are in order, the largest progress will always be overwritten.
+            if item.Reported() is False:
+                progressToSendFloat = item.Value()
+
+            # Make sure this is marked reported.
+            item.SetReported(True)
+
+        # The first progress update after a restore won't fire any notifications. We use this update
+        # to clear out all progress points under the current progress, so we don't fire them.
+        # Do this before we check if we had something to send, so we always do this on the first tick
+        # after a restore.
+        if self.RestorePrintProgressPercentage:
+            self.RestorePrintProgressPercentage = False
+            return
+
+        # Return if there is nothing to do.
+        if progressToSendFloat < 0.1:
+            return
+
+        # It's important we send the "snapped" progress here (rounded to the tens place) because the service depends on it
+        # to filter out % increments the user didn't want to get notifications for.
+        self._sendEvent("progress", None, progressToSendFloat)
+
+
+    # Fired every hour while a print is running
+    def OnPrintTimerProgress(self):
+        if self._shouldIgnoreEvent():
+            return
+        # This event is fired by our internal timer only while prints are running.
+        # It will only fire every hour.
+
+        # We send a duration, but that duration is controlled by OctoPrint and can be changed.
+        # Since we allow the user to pick "every x hours" to be notified, it's easier for the server to
+        # keep track if we just send an int as well.
+        # Since this fires once an hour, every time it fires just add one.
+        self.PingTimerHoursReported += 1
+
+        self._sendEvent("timerprogress", { "HoursCount": str(self.PingTimerHoursReported) })
 
 
     #
@@ -464,114 +602,6 @@ class NotificationsHandler:
         # Otherwise, return false, to stop the timer, because we are done.
         isDone = self.HasSendFirstLayerDoneMessage is True and self.HasSendThirdLayerDoneMessage is True
         return isDone is False
-
-
-    # Fired when we get a M600 command from the printer to change the filament
-    def OnFilamentChange(self):
-        # This event might fire over and over or might be paired with a filament change event.
-        # In any case, we only want to fire it every so often.
-        # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
-        if self._shouldSendSpammyEvent("user-interaction-needed", 5.0) is False:
-            return
-
-        # Otherwise, send it.
-        self._sendEvent("filamentchange")
-
-
-    # Fired when the printer needs user interaction to continue
-    def OnUserInteractionNeeded(self):
-        # This event might fire over and over or might be paired with a filament change event.
-        # In any case, we only want to fire it every so often.
-        # It's important to use the same key to make sure we de-dup the possible OnUserInteractionNeeded that might fire second.
-        if self._shouldSendSpammyEvent("user-interaction-needed", 5.0) is False:
-            return
-
-        # Otherwise, send it.
-        self._sendEvent("userinteractionneeded")
-
-
-    # Fired when a print is making progress.
-    def OnPrintProgress(self, octoPrintProgressInt, moonrakerProgressFloat):
-
-        # Always set the fallback progress, which will be used if something better can be found.
-        # For moonraker, make sure to set the reported float. See _getCurrentProgressFloat about why.
-        #
-        # Note that in moonraker this is called very frequently, so this logic must be fast!
-        #
-        if octoPrintProgressInt is not None:
-            self.FallbackProgressInt = octoPrintProgressInt
-        elif moonrakerProgressFloat is not None:
-            self.FallbackProgressInt = int(moonrakerProgressFloat)
-            self.MoonrakerReportedProgressFloat_CanBeNone = moonrakerProgressFloat
-        else:
-            self.Logger.error("OnPrintProgress called with no args!")
-            return
-
-        # Get the computed print progress value. (see _getCurrentProgressFloat about why)
-        computedProgressFloat = self._getCurrentProgressFloat()
-
-        # If we are near the end of the print, start the final snap image capture system, to ensure we get a good "done" image.
-        # This is a tricky number to set. For long prints, 1% can be very long, where as for quick prints we might not even see
-        # all of the % updates.
-        # First of all, don't bother unless the % complete is > 90% (this also guards from divide by 0)
-        if computedProgressFloat > 90.0 and self.FinalSnapObj is None:
-            currentTimeSec = self.GetCurrentDurationSecFloat()
-            estTimeRemainingSec = (self.GetCurrentDurationSecFloat() * 100.0) / computedProgressFloat
-            estTimeUntilCompleteSec = estTimeRemainingSec - currentTimeSec
-            # If we guess the print will be done in less than one minute, then start the final snap system.
-            if estTimeUntilCompleteSec < 60.0:
-                if self.FinalSnapObj is None:
-                    self.FinalSnapObj = FinalSnap(self.Logger, self)
-
-        # Since we are computing the progress based on the ETA (see notes in _getCurrentProgressFloat)
-        # It's possible we get duplicate ints or even progresses that goes back in time.
-        # To account for this, we will make sure we only send the update for each progress update once.
-        # We will also collapse many progress updates down to one event. For example, if the progress went from 5% -> 45%, we wil only report once for 10, 20, 30, and 40%.
-        # We keep track of the highest progress that hasn't been reported yet.
-        progressToSendFloat = 0.0
-        for item in self.ProgressCompletionReported:
-            # Keep going through the items until we find one that's over our current progress.
-            # At that point, we are done.
-            if item.Value() > computedProgressFloat:
-                break
-
-            # If we are over this value and it's not reported, we need to report.
-            # Since these items are in order, the largest progress will always be overwritten.
-            if item.Reported() is False:
-                progressToSendFloat = item.Value()
-
-            # Make sure this is marked reported.
-            item.SetReported(True)
-
-        # The first progress update after a restore won't fire any notifications. We use this update
-        # to clear out all progress points under the current progress, so we don't fire them.
-        # Do this before we check if we had something to send, so we always do this on the first tick
-        # after a restore.
-        if self.RestorePrintProgressPercentage:
-            self.RestorePrintProgressPercentage = False
-            return
-
-        # Return if there is nothing to do.
-        if progressToSendFloat < 0.1:
-            return
-
-        # It's important we send the "snapped" progress here (rounded to the tens place) because the service depends on it
-        # to filter out % increments the user didn't want to get notifications for.
-        self._sendEvent("progress", None, progressToSendFloat)
-
-
-    # Fired every hour while a print is running
-    def OnPrintTimerProgress(self):
-        # This event is fired by our internal timer only while prints are running.
-        # It will only fire every hour.
-
-        # We send a duration, but that duration is controlled by OctoPrint and can be changed.
-        # Since we allow the user to pick "every x hours" to be notified, it's easier for the server to
-        # keep track if we just send an int as well.
-        # Since this fires once an hour, every time it fires just add one.
-        self.PingTimerHoursReported += 1
-
-        self._sendEvent("timerprogress", { "HoursCount": str(self.PingTimerHoursReported) })
 
 
     # If possible, gets a snapshot from the snapshot URL configured in OctoPrint.
@@ -1100,6 +1130,27 @@ class NotificationsHandler:
     def _clearSpammyEventContexts(self):
         with self.SpammyEventLock:
             self.SpammyEventTimeDict = {}
+
+
+    # Very rarely, we want to ignore some notifications based on different metrics.
+    # A filename can be passed to check, if not, the current file name will be used.
+    def _shouldIgnoreEvent(self, fileName:str = None) -> bool:
+        # Check if there was a file name passed, if so use it.
+        # If not, fall back to the current file name.
+        # If there is neither, dont ignore.
+        if fileName is None or len(fileName) == 0:
+            fileName = self.CurrentFileName
+            if fileName is None or len(fileName) == 0:
+                return False
+        # One case we want to ignore is when the continuous print plugin uses it's "placeholder" .gcode files.
+        # These files are used between prints to hold the printer before a new print starts.
+        # The events are listed here, and the file name will be 'continuousprint_finish.gcode' for example.
+        # https://github.com/smartin015/continuousprint/blob/bfb2c13da2ebbe0bfbfaa90f62a91db332c43b1b/continuousprint/data/__init__.py#L62
+        fileNameLower = fileName.lower()
+        if fileNameLower.startswith("continuousprint_"):
+            self.Logger.info("Ignoring notification because it's a continuous print place holder file. "+str(fileName))
+            return True
+        return False
 
 
 class SpammyEventContext:
