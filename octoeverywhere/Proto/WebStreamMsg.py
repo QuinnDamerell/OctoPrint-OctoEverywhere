@@ -157,7 +157,28 @@ class WebStreamMsg(object):
             return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
         return False
 
-def Start(builder): builder.StartObject(15)
+    # WebStreamMsg
+    def BodyReadTimeHighWaterMarkMs(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(34))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Uint16Flags, o + self._tab.Pos)
+        return 0
+
+    # WebStreamMsg
+    def SocketSendTimeHighWaterMarkMs(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(36))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Uint16Flags, o + self._tab.Pos)
+        return 0
+
+    # WebStreamMsg
+    def MultipartReadsPerSecond(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(38))
+        if o != 0:
+            return self._tab.Get(octoflatbuffers.number_types.Uint8Flags, o + self._tab.Pos)
+        return 0
+
+def Start(builder): builder.StartObject(18)
 def WebStreamMsgStart(builder):
     """This method is deprecated. Please switch to Start."""
     return Start(builder)
@@ -225,6 +246,18 @@ def AddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFa
 def WebStreamMsgAddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFailure):
     """This method is deprecated. Please switch to AddCloseDueToRequestConnectionFailure."""
     return AddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFailure)
+def AddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs): builder.PrependUint16Slot(15, bodyReadTimeHighWaterMarkMs, 0)
+def WebStreamMsgAddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs):
+    """This method is deprecated. Please switch to AddBodyReadTimeHighWaterMarkMs."""
+    return AddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs)
+def AddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs): builder.PrependUint16Slot(16, socketSendTimeHighWaterMarkMs, 0)
+def WebStreamMsgAddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs):
+    """This method is deprecated. Please switch to AddSocketSendTimeHighWaterMarkMs."""
+    return AddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs)
+def AddMultipartReadsPerSecond(builder, multipartReadsPerSecond): builder.PrependUint8Slot(17, multipartReadsPerSecond, 0)
+def WebStreamMsgAddMultipartReadsPerSecond(builder, multipartReadsPerSecond):
+    """This method is deprecated. Please switch to AddMultipartReadsPerSecond."""
+    return AddMultipartReadsPerSecond(builder, multipartReadsPerSecond)
 def End(builder): return builder.EndObject()
 def WebStreamMsgEnd(builder):
     """This method is deprecated. Please switch to End."""

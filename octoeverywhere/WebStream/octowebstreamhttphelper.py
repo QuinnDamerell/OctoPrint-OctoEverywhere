@@ -33,7 +33,7 @@ from ..Proto import OeAuthAllowed
 class OctoWebStreamHttpHelper:
 
     # Called by the main socket thread so this should be quick!
-    def __init__(self, streamId, logger, webStream, webStreamOpenMsg, openedTime):
+    def __init__(self, streamId, logger:logging.Logger, webStream, webStreamOpenMsg, openedTime):
         self.Id = streamId
         self.Logger = logger
         self.WebStream = webStream
@@ -59,6 +59,14 @@ class OctoWebStreamHttpHelper:
         # Perf stats
         self.BodyReadTimeSec = 0.0
         self.ServiceUploadTimeSec = 0.0
+        self.BodyReadTimeHighWaterMarkSec = 0.0
+        self.ServiceUploadTimeHighWaterMarkSec = 0.0
+
+        # Used to keep track of multipart read rates, aka webcam streaming fps.
+        # A value of 0 means there's no current read rate.
+        self.MultipartReadsPerSecond = 0
+        self.MultipartReadsPerSecondCounter = 0
+        self.MultipartReadTimestampSec = 0.0
 
         # In the open message, this value might exist, which would indicate
         # we know the full data size of the data that's being uploaded.
@@ -357,6 +365,28 @@ class OctoWebStreamHttpHelper:
                     # sent, indicate that the data stream is done and send the close message.
                     WebStreamMsg.AddIsDataTransmissionDone(builder, True)
                     WebStreamMsg.AddIsCloseMsg(builder, True)
+                if self.MultipartReadsPerSecond != 0:
+                    # If this is a multipart stream (webcam streaming), every 1 second a value will be dumped into MultipartReadsPerSecond
+                    # when it's there, we want to send it to the server for telemetry, and then zero it out.
+                    if self.Logger.isEnabledFor(logging.DEBUG):
+                        self.Logger.debug(f"Multipart Stats; reads per second: {str(self.MultipartReadsPerSecond)}, body read high water mark {str(format(self.BodyReadTimeHighWaterMarkSec*1000.0, '.2f'))}ms, socket write high water mark {str(format(self.ServiceUploadTimeHighWaterMarkSec*1000.0, '.2f'))}ms")
+                    if self.MultipartReadsPerSecond > 255 or self.MultipartReadsPerSecond < 0:
+                        self.Logger.warn("self.MultipartReadsPerSecond is larger than uint8. "+str(self.MultipartReadsPerSecond))
+                        self.MultipartReadsPerSecond  = 255
+                    WebStreamMsg.AddMultipartReadsPerSecond(builder, self.MultipartReadsPerSecond)
+                    self.MultipartReadsPerSecond = 0
+                    # Also attach the other stats.
+                    if self.BodyReadTimeHighWaterMarkSec > 65535.0 or self.BodyReadTimeHighWaterMarkSec < 0.0:
+                        self.Logger.warn("self.BodyReadTimeHighWaterMarkSec is larger than uint8. "+str(self.BodyReadTimeHighWaterMarkSec))
+                        self.BodyReadTimeHighWaterMarkSec  = 65535.0
+                    WebStreamMsg.AddBodyReadTimeHighWaterMarkMs(builder, int(self.BodyReadTimeHighWaterMarkSec * 1000.0))
+                    self.BodyReadTimeHighWaterMarkSec = 0.0
+                    if self.ServiceUploadTimeHighWaterMarkSec > 65535.0 or self.ServiceUploadTimeHighWaterMarkSec < 0.0:
+                        self.Logger.warn("self.ServiceUploadTimeHighWaterMarkSec is larger than uint8. "+str(self.ServiceUploadTimeHighWaterMarkSec))
+                        self.ServiceUploadTimeHighWaterMarkSec  = 65535.0
+                    WebStreamMsg.AddBodyReadTimeHighWaterMarkMs(builder, int(self.ServiceUploadTimeHighWaterMarkSec * 1000.0))
+                    self.ServiceUploadTimeHighWaterMarkSec = 0.0
+
                 webStreamMsgOffset = WebStreamMsg.End(builder)
 
                 # Wrap in the OctoStreamMsg and finalize.
@@ -366,7 +396,10 @@ class OctoWebStreamHttpHelper:
                 # If this is the last, we need to make sure to set that we have set the closed flag.
                 serviceSendStartSec = time.time()
                 self.WebStream.SendToOctoStream(outputBuf, isLastMessage, True)
-                self.ServiceUploadTimeSec += time.time() - serviceSendStartSec
+                thisServiceSendTimeSec = time.time() - serviceSendStartSec
+                self.ServiceUploadTimeSec += thisServiceSendTimeSec
+                if thisServiceSendTimeSec > self.ServiceUploadTimeHighWaterMarkSec:
+                    self.ServiceUploadTimeHighWaterMarkSec = thisServiceSendTimeSec
 
                 # Clear this flag
                 isFirstResponse = False
@@ -642,7 +675,10 @@ class OctoWebStreamHttpHelper:
                     finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
 
         # Keep track of read times.
-        self.BodyReadTimeSec += time.time() - bodyReadStartSec
+        thisBodyReadTimeSec = time.time() - bodyReadStartSec
+        self.BodyReadTimeSec += thisBodyReadTimeSec
+        if thisBodyReadTimeSec > self.BodyReadTimeHighWaterMarkSec:
+            self.BodyReadTimeHighWaterMarkSec = thisBodyReadTimeSec
 
         # If the final data buffer has been set to None, it means the body is not empty
         if finalDataBuffer is None:
@@ -866,6 +902,29 @@ class OctoWebStreamHttpHelper:
             self.BodyReadTempBuffer[tempBufferFilledSize:tempBufferFilledSize+len(data)] = data
             tempBufferFilledSize += len(data)
 
+        # Update our read rate. This is a metric we send along in the stream if the it's a multipart stream, to know how fast we are reading it.
+        # Basically for webcams streamed via http, it's the frame rate.
+        nowSec = time.time()
+        if self.MultipartReadTimestampSec == 0:
+            # This is the first read of the stream, so setup the timer.
+            self.MultipartReadTimestampSec = nowSec + 1.0
+
+        # Check if we have gone into the next time slice.
+        isFirstIncrement = True
+        while self.MultipartReadTimestampSec < nowSec:
+            # Increment by a fixed amount, to keep the FPS steady.
+            self.MultipartReadTimestampSec += 1.0
+            # Dump the counter value into the main stored value. This will be picked up by the message creation process and sent to the server.
+            # Note if this spins multiple times, it will be zeroed out. That would mean there's a more than 1s gap in reading.
+            if isFirstIncrement is False and self.MultipartReadsPerSecond == 0:
+                self.Logger.warn("Multipart read per second stats hit a period where 0 reads happened for more than second.")
+            self.MultipartReadsPerSecond = self.MissingBoundaryWarningCounter
+            self.MissingBoundaryWarningCounter = 0
+            isFirstIncrement = False
+
+        # Now increment our counter, to account for the frame we just processed.
+        self.MissingBoundaryWarningCounter += 1
+
         # Finally, return how much we put into the temp buffer!
         return tempBufferFilledSize
 
@@ -1017,3 +1076,7 @@ class OctoWebStreamHttpHelper:
             return
         # Otherwise, we want to block for a bit if there's a high pri stream processing.
         self.WebStream.BlockIfHighPriStreamActive()
+
+    # Formatting helper.
+    def _FormatFloat(self, value:float) -> str:
+        return str(format(value, '.3f'))
