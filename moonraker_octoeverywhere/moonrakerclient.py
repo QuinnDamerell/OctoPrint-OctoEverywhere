@@ -4,6 +4,7 @@ import time
 import json
 import queue
 import logging
+import math
 
 import configparser
 
@@ -930,6 +931,88 @@ class MoonrakerCompat:
         except Exception as e:
             Sentry.Exception("GetCurrentZOffset exception. ", e)
         return -1
+
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # If this platform DOESN'T support getting the layer info from the system, this returns (None, None)
+    # If the platform does support it...
+    #     If the current value is unknown, (0,0) is returned.
+    #     If the values are known, (currentLayer(int), totalLayers(int)) is returned.
+    #          Note that total layers will always be > 0, but current layer can be 0!
+    def GetCurrentLayerInfo(self):
+        try:
+            result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
+            {
+                "objects": {
+                    "print_stats": None,
+                    "gcode_move": None
+                }
+            })
+            if result.HasError():
+                self.Logger.error("GetCurrentLayerInfo failed to query toolhead objects: "+result.GetLoggingErrorStr())
+                return (0,0)
+
+            res = result.GetResult()
+            printStats = res["status"]["print_stats"]
+            gcodeMove = res["status"]["gcode_move"]
+
+            # Get the file name, required for looking up layer info.
+            if "filename" not in printStats:
+                self.Logger.error("GetCurrentLayerInfo failed to find a filename in prints stats.")
+                return (0,0)
+            fileName = printStats["filename"]
+            if fileName is None or len(fileName) == 0:
+                self.Logger.error("GetCurrentLayerInfo failed to find a filename in prints stats.")
+                return (0,0)
+
+            # Get the file's layer stats.
+            # Any of these can return -1.0 if they aren't known.
+            layerCount, layerHeight, firstLayerHeight, objectHeight = FileMetadataCache.Get().GetLayerInfo(fileName)
+
+            # First, try to get the total layer height
+            # Note these calculations are done similar to Moonraker and Fluidd, so that the values show the same for users on all interfaces.
+            totalLayers = 0
+            if "info" in printStats and "total_layer" in printStats["info"] and printStats["info"]["total_layer"] is not None:
+                totalLayers = int(printStats["info"]["total_layer"])
+            if totalLayers == 0 and layerCount > 0:
+                totalLayers = int(layerCount)
+            if totalLayers == 0 and firstLayerHeight > 0 and layerHeight > 0 and objectHeight > 0:
+                totalLayers = int(math.ceil(
+                    (objectHeight - firstLayerHeight) / layerHeight + 1)
+                )
+            if totalLayers == 0:
+                self.Logger.error("GetCurrentLayerInfo failed to get a total layer count.")
+                return (0,0)
+
+            # Next, try to get the current layer.
+            currentLayer = -1
+            if "info" in printStats and "current_layer" in printStats["info"] and printStats["info"]["current_layer"] is not None:
+                currentLayer = int(printStats["info"]["current_layer"])
+            if currentLayer == -1 and firstLayerHeight > 0 and layerHeight > 0 and "gcode_position" in gcodeMove and len(gcodeMove["gcode_position"]) > 2:
+                # Note that we need to check print_duration before checking this, because print duration will only start going after the hotend is in print position.
+                # If we take the zAxisPosition before that, the z axis might be up in a pre-print position, and we will get the wrong value.
+                if "print_duration" not in printStats:
+                    self.Logger.error("GetCurrentLayerInfo print_duration not found in print stats.")
+                    return (0,0)
+                if float(printStats["print_duration"]) > 0.0:
+                    zAxisPosition = gcodeMove["gcode_position"][2]
+                    currentLayer = int(math.ceil(
+                        (zAxisPosition - firstLayerHeight) / layerHeight + 1
+                    ))
+                else:
+                    # If the print hasn't started yet, the layer height is 0.
+                    currentLayer = 0
+            if currentLayer == -1:
+                self.Logger.error("GetCurrentLayerInfo failed to get a current layer count.")
+                return (0,0)
+
+            # Sanity check.
+            currentLayer = min(currentLayer, totalLayers)
+
+            return (currentLayer, totalLayers)
+        except Exception as e:
+            Sentry.Exception("GetCurrentLayerInfo exception. ", e)
+        return (0,0)
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.

@@ -81,6 +81,15 @@ class MockPrinterStateObject:
         # Failed to find it.
         return -1
 
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # If this platform DOESN'T support getting the layer info from the system, this returns (None, None)
+    # If the platform does support it...
+    #     If the current value is unknown, (0,0) is returned.
+    #     If the values are known, (currentLayer(int), totalLayers(int)) is returned.
+    #          Note that total layers will always be > 0, but current layer can be 0!
+    def GetCurrentLayerInfo(self):
+        return (None, None)
+
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # Returns True if the printing timers (notifications and gadget) should be running, which is only the printing state. (not even paused)

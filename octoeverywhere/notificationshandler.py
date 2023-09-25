@@ -503,6 +503,30 @@ class NotificationsHandler:
             self.HasSendThirdLayerDoneMessage = True
             return False
 
+        # We have two ways of computing the layer heights.
+        # 1) On some platforms (Moonraker) we can query the actual layer from the system, so we don't have to guess.
+        # 2) If the platform doesn't support getting the actual layer height, we can try to figure it out with z offsets.
+        currentLayer, totalLayers = self.PrinterStateInterface.GetCurrentLayerInfo()
+        if currentLayer is not None and totalLayers is not None:
+            # We have layer info from the system, use this to handle the events.
+            self.Logger.info(f"Layer info. current:{currentLayer} total: {totalLayers}")
+
+            # If we are over the first layer and haven't sent the notification, do it now.
+            if currentLayer > 1 and self.HasSendFirstLayerDoneMessage is False:
+                self.HasSendFirstLayerDoneMessage = True
+                self._sendEvent("firstlayerdone")
+            # If we are past the 3rd, layer, do the same.
+            if currentLayer > 3 and self.HasSendThirdLayerDoneMessage is False:
+                self.HasSendThirdLayerDoneMessage = True
+                self._sendEvent("thirdlayerdone")
+
+            # If we return true, the time will continue, otherwise it will stop.
+            isDone = self.HasSendFirstLayerDoneMessage is True and self.HasSendThirdLayerDoneMessage is True
+            return isDone is False
+
+        #
+        # We don't have a system provided layer info, use the second option with the z-offset.
+
         # Get the current zoffset value.
         currentZOffsetMM = self.PrinterStateInterface.GetCurrentZOffset()
 
@@ -983,6 +1007,13 @@ class NotificationsHandler:
         # Always include the ETA, note this will be -1 if the time is unknown.
         timeRemainEstStr =  str(self.PrinterStateInterface.GetPrintTimeRemainingEstimateInSeconds())
         args["TimeRemainingSec"] = timeRemainEstStr
+
+        # Always include the layer height, if it can be gotten from the platform.
+        currentLayer, totalLayers = self.PrinterStateInterface.GetCurrentLayerInfo()
+        if currentLayer is not None and totalLayers is not None:
+            # Note both of these values can be 0 if the layer counts aren't known yet!
+            args["CurrentLayer"] = str(currentLayer)
+            args["TotalLayers"] = str(totalLayers)
 
         # Always add the current progress
         # -> int to round -> to string for the API.

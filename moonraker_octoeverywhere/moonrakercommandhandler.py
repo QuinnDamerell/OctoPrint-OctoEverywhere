@@ -74,6 +74,18 @@ class MoonrakerCommandHandler:
         # TODO - If in an error state, set some context as to why.
         errorStr_CanBeNone = None
 
+        # Get current layer info
+        # None = The platform doesn't provide it.
+        # 0 = The platform provider it, but there's no info yet.
+        # # = The values
+        # Note this is similar to how we also do it for notifications.
+        currentLayerInt = None
+        totalLayersInt = None
+        currentLayerRaw, totalLayersRaw = MoonrakerClient.Get().GetMoonrakerCompat().GetCurrentLayerInfo()
+        if totalLayersRaw is not None and totalLayersRaw > 0 and currentLayerRaw is not None and currentLayerRaw >= 0:
+            currentLayerInt = int(currentLayerRaw)
+            totalLayersInt = int(totalLayersRaw)
+
         # Get duration and filename.
         durationSec = 0
         fileName = ""
@@ -131,6 +143,8 @@ class MoonrakerCommandHandler:
                 "TimeLeftSec" : timeLeftSec,
                 "FileName" : fileName,
                 "EstTotalFilUsedMm" : filamentUsageMm,
+                "CurrentLayer": currentLayerInt,
+                "TotalLayers": totalLayersInt,
                 "Temps": {
                     "BedActual": bedActual,
                     "BedTarget": bedTarget,

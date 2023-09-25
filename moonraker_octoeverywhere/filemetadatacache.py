@@ -22,6 +22,10 @@ class FileMetadataCache:
         self.EstimatedPrintTimeSec:float = -1.0
         self.EstimatedFilamentUsageMm:int = -1
         self.FileSizeKBytes:int = -1
+        self.LayerCount:float = -1.0
+        self.FirstLayerHeight:float = -1.0
+        self.LayerHeight:float = -1.0
+        self.ObjectHeight:float = -1.0
         self.ResetCache()
 
 
@@ -31,6 +35,10 @@ class FileMetadataCache:
         self.EstimatedPrintTimeSec = -1.0
         self.EstimatedFilamentUsageMm = -1
         self.FileSizeKBytes = -1
+        self.LayerCount = -1.0
+        self.FirstLayerHeight = -1.0
+        self.LayerHeight = -1.0
+        self.ObjectHeight = -1.0
 
 
     # If the estimated time for the print can be gotten from the file metadata, this will return it.
@@ -84,6 +92,23 @@ class FileMetadataCache:
         return self.FileSizeKBytes
 
 
+    # If the file size can be gotten from the file metadata, this will return it.
+    # Any of the values will return -1 if they are unknown.
+    def GetLayerInfo(self, filename:str):
+        # Check to see if we have checked for this file before.
+        if self.FileName is not None:
+            # Check if it's the same file, case sensitive.
+            if self.FileName == filename:
+                # Return the last result, this maybe valid or not.
+                return (self.LayerCount, self.LayerHeight, self.FirstLayerHeight, self.ObjectHeight)
+
+        # The filename changed or we don't have one at all, do a refresh now.
+        self._RefreshFileMetaDataCache(filename)
+
+        # Return the value, which could still be -1 if it failed.
+        return (self.LayerCount, self.LayerHeight, self.FirstLayerHeight, self.ObjectHeight)
+
+
     # Does a refresh of the file name metadata cache.
     def _RefreshFileMetaDataCache(self, filename:str) -> None:
 
@@ -119,5 +144,21 @@ class FileMetadataCache:
             value = int(res["filament_total"])
             if value > 0:
                 self.EstimatedFilamentUsageMm = value
+        if "layer_count" in res and res["layer_count"] is not None:
+            value = float(res["layer_count"])
+            if value > 0:
+                self.LayerCount = value
+        if "first_layer_height" in res and res["first_layer_height"] is not None:
+            value = float(res["first_layer_height"])
+            if value > 0:
+                self.FirstLayerHeight = value
+        if "layer_height" in res and res["layer_height"] is not None:
+            value = float(res["layer_height"])
+            if value > 0:
+                self.LayerHeight = value
+        if "object_height" in res and res["object_height"] is not None:
+            value = float(res["object_height"])
+            if value > 0:
+                self.ObjectHeight = value
 
         self.Logger.info(f"FileMetadataCache updated for file [{filename}]; est time: {str(self.EstimatedPrintTimeSec)}, size: {str(self.FileSizeKBytes)}, filament usage: {str(self.EstimatedFilamentUsageMm)}")

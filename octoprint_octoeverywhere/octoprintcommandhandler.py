@@ -126,6 +126,8 @@ class OctoPrintCommandHandler:
                     "TimeLeftSec" : timeLeftSec,
                     "FileName" : fileName,
                     "EstTotalFilUsedMm" : estTotalFilamentUsageMm,
+                    "CurrentLayer": None, # OctoPrint doesn't provide these.
+                    "TotalLayers": None,  # OctoPrint doesn't provide these.
                     "Temps": {
                         "BedActual": bedActual,
                         "BedTarget": bedTarget,
