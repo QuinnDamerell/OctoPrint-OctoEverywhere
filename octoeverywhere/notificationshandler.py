@@ -567,7 +567,7 @@ class NotificationsHandler:
         if self.zOffsetTrackingStartTimeSec < 0.1:
             self.Logger.debug("First Layer Logic - Starting delay timer.")
             self.zOffsetTrackingStartTimeSec = time.time()
-        if time.time() - self.zOffsetTrackingStartTimeSec < 10.0:
+        if time.time() - self.zOffsetTrackingStartTimeSec < 20.0:
             self.Logger.debug("First Layer Logic - Waiting delay time to expire.")
             return True
 
