@@ -73,6 +73,8 @@ class NotificationsHandler:
         self.HasSendThirdLayerDoneMessage = False
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
+        self.zOffsetHasSeenPositiveExtrude = False
+        self.zOffsetTrackingStartTimeSec = 0.0
         self.ProgressCompletionReported = []
         self.PrintId = "none"
         self.PrintStartTimeSec = 0
@@ -98,6 +100,8 @@ class NotificationsHandler:
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
+        self.zOffsetTrackingStartTimeSec = 0.0
+        self.zOffsetHasSeenPositiveExtrude = False
         self.RestorePrintProgressPercentage = False
 
         # Ensure there's no final snap running.
@@ -163,6 +167,7 @@ class NotificationsHandler:
 
 
     def ReportPositiveExtrudeCommandSent(self):
+        self.zOffsetHasSeenPositiveExtrude = True
         fsLocal = self.FinalSnapObj
         if fsLocal is not None:
             fsLocal.ReportPositiveExtrudeCommandSent()
@@ -533,6 +538,7 @@ class NotificationsHandler:
         # Make sure we know it.
         # If not, return True so we keep checking.
         if currentZOffsetMM == -1:
+            self.Logger.debug("First Layer Logic - Waiting for positive z axis measurement.")
             return True
 
         # If the value is 0.0, the printer is still warming up or getting ready. We can't print at 0.0, because that's the nozzle touching the plate.
@@ -540,6 +546,29 @@ class NotificationsHandler:
         # I'm not sure if OctoPrint does this, but moonraker will report the value of 0.0
         # In this case, return True so we keep checking.
         if currentZOffsetMM < 0.0001:
+            self.Logger.debug("First Layer Logic - Waiting for >0 z axis measurement.")
+            return True
+
+        # Wait to do any zAxis tracking until after we see a positive extrude.
+        # This prevents us from tracking the zAxis during some pre-print gcode marcos, like bed level probing and such.
+        # The only thing this doesn't really exclude is a purge line.
+        if self.zOffsetHasSeenPositiveExtrude is False:
+            self.Logger.debug("First Layer Logic - Waiting for the first extrude.")
+            return True
+
+        # Finally, before tracking the zAxisOffset, we need to wait for a possible purge line.
+        # Hopefully with the blocking logic above, like the warm up check and waiting to see an extrude, we will ignore any z-axis values
+        # from most pre-print macros.
+        # The final thing we need to exclude is a purge line, since the purge line's layer height might be less than the first layer height used
+        # for the actual print. That means our system will lock onto the purge line's layer height, instead of the print's first layer height.
+        #
+        # We choose 10 seconds as the time to wait. The trade off is that we want to wait longer than most purge line extrudes, but we don't want to miss the first layer
+        # being printed. Since we only start our time after the first extrude, this gives us ~10 seconds after the first extrude for the purge line to be done.
+        if self.zOffsetTrackingStartTimeSec < 0.1:
+            self.Logger.debug("First Layer Logic - Starting delay timer.")
+            self.zOffsetTrackingStartTimeSec = time.time()
+        if time.time() - self.zOffsetTrackingStartTimeSec < 10.0:
+            self.Logger.debug("First Layer Logic - Waiting delay time to expire.")
             return True
 
         # The trick here is how we do figure out when the first layer is done with out knowing the print layer height

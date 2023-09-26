@@ -304,7 +304,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # No need to use a thread since all events are handled on a new thread.
             self.NotificationHandler.OnFilamentChange()
 
-        # Look for positive extrude commands, so we can keep track of them for final snap.
+        # Look for positive extrude commands, so we can keep track of them for final snap and our first layer tracking logic.
         # Example cmd value: `G1 X112.979 Y93.81 E.03895`
         if self.NotificationHandler is not None and gcode and cmd and gcode == "G1":
             try:
