@@ -108,7 +108,7 @@ class UiInjector():
         #pylint: disable=consider-using-f-string
         self.StaticFileHash = "{0}".format(sha1.hexdigest())
         self.StaticFileHash = self.StaticFileHash[:10]
-        self.Logger.info("Static UI Files Hash: "+self.StaticFileHash)
+        self.Logger.debug("Static UI Files Hash: "+self.StaticFileHash)
 
 
     # Given a known static path, try to inject our UI files.
@@ -193,7 +193,7 @@ class UiInjector():
 
             # Ensure they are up-to-date
             if self.StaticFileHash == currentJsHash and self.StaticFileHash == currentCssHash:
-                self.Logger.info("Found existing ui tags and the hash matches the current files.")
+                self.Logger.debug("Found existing ui tags and the hash matches the current files.")
                 return True, False
 
             # We need to update the hash tags.
