@@ -378,6 +378,10 @@ class WebcamHelper:
     # Otherwise None is returned.
     @staticmethod
     def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str) -> str:
+        # Ensure there's something to work with
+        if streamUrl is None:
+            return None
+
         # try to find anything with /webrtc in it, which is a pretty unique signature for camera-streamer
         streamUrlLower = streamUrl.lower()
         webRtcLocation = streamUrlLower.find("/webrtc")
