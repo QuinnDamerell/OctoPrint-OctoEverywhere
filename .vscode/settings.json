@@ -134,6 +134,7 @@
         "routable",
         "sdcard",
         "serverauth",
+        "shotty",
         "skipsudoactions",
         "smartpause",
         "snapshotresizeparams",
