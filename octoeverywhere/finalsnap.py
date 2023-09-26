@@ -19,7 +19,7 @@ class FinalSnap:
     # Thus, the amount of time we will keep in our buffer is seconds = (c_snapshotBufferDepth * c_defaultSnapIntervalSec)
     # We must keep this buffer a little larger, for the extrude command logic to have enough buffer to operate in.
     # This buffer must also be large enough to have data for the c_onCompleteSnapDelaySec time.
-    c_snapshotBufferDepth = 30
+    c_snapshotBufferDepth = 40
 
     # When the on complete notification fires, this is how long we will try to go back in time to fetch a snapshot,
     # if we don't have a last extrude command sent time.
@@ -70,8 +70,8 @@ class FinalSnap:
                     targetTimeDeltaSec = float(FinalSnap.c_onCompleteSnapDelaySec)
 
                 # Compute our ideal image position in our buffer.
-                # In terms of rounding, round down, to prefer a later image then the exact time.
-                targetArrayIndex = int(math.floor(targetTimeDeltaSec / float(FinalSnap.c_defaultSnapIntervalSec)))
+                # In terms of rounding, round up, to prefer a later image then the exact time.
+                targetArrayIndex = int(math.ceil(targetTimeDeltaSec / float(FinalSnap.c_defaultSnapIntervalSec)))
 
                 if targetArrayIndex < 0:
                     self.Logger.error(f"FinalSnap target image index is less than 0? {targetArrayIndex}")
@@ -86,7 +86,7 @@ class FinalSnap:
                 # Clear the array to free up space of stored images, just incase this class leaks.
                 self.Logger.info(f"Stopping final snap and using snapshot from ~{targetTimeDeltaSec} sec ago, index slot {targetArrayIndex} / {len(self.SnapHistory)}")
                 snap = self.SnapHistory[targetArrayIndex]
-                self.SnapHistory = []
+                self.SnapHistory.clear()
                 return snap
 
         # If we don't have an image, just return None.
