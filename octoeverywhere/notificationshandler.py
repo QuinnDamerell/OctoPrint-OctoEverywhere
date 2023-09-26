@@ -514,7 +514,6 @@ class NotificationsHandler:
         currentLayer, totalLayers = self.PrinterStateInterface.GetCurrentLayerInfo()
         if currentLayer is not None and totalLayers is not None:
             # We have layer info from the system, use this to handle the events.
-            self.Logger.info(f"Layer info. current:{currentLayer} total: {totalLayers}")
 
             # If we are over the first layer and haven't sent the notification, do it now.
             if currentLayer > 1 and self.HasSendFirstLayerDoneMessage is False:
