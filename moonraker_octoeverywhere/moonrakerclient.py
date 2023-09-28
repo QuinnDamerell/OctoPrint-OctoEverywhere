@@ -958,11 +958,11 @@ class MoonrakerCompat:
 
             # Get the file name, required for looking up layer info.
             if "filename" not in printStats:
-                self.Logger.error("GetCurrentLayerInfo failed to find a filename in prints stats.")
+                # This happens when there's no file loaded, which is fine if nothing is printing.
                 return (0,0)
             fileName = printStats["filename"]
             if fileName is None or len(fileName) == 0:
-                self.Logger.error("GetCurrentLayerInfo failed to find a filename in prints stats.")
+                # This happens when there's no file loaded, which is fine if nothing is printing.
                 return (0,0)
 
             # Get the file's layer stats.

@@ -31,7 +31,7 @@ class Config:
     # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
     # A string, which is the comment to be inserted.
     c_ConfigComments = [
-        { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value."},
+        { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": LogLevelKey,  "Comment": "The active logging level. Valid values include: DEBUG, INFO, WARNING, or ERROR."},
         { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
         { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
@@ -41,6 +41,10 @@ class Config:
         { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
     ]
+
+    # The config lib we use doesn't support the % sign, even though it's valid .cfg syntax.
+    # Since we save URLs into the config for the webcam, it's valid syntax to use a %20 and such, thus we should support it.
+    PercentageStringReplaceString = "~~~PercentageSignPlaceholder~~~"
 
 
     def __init__(self, klipperConfigPath) -> None:
@@ -81,6 +85,8 @@ class Config:
                     # Consider it not a valid value, and use the default value.
                     value = self.Config[section][key]
                     if value != "None":
+                        # Reverse any possible string replaces we had to add.
+                        value = value.replace(Config.PercentageStringReplaceString, "%")
                         return value
         # The value wasn't set, create it using the default.
         self.SetStr(section, key, defaultValue)
@@ -154,6 +160,8 @@ class Config:
         # Ensure the value is a string, unless it's None
         if value is not None:
             value = str(value)
+            # The config library we use doesn't allow for % to be used in strings, even though it should be legal.
+            value = value.replace("%", Config.PercentageStringReplaceString)
         with self.ConfigLock:
             self._LoadConfigIfNeeded_UnderLock()
             # Ensure the section exists
