@@ -25,7 +25,7 @@ from .Proto import OctoSummon
 
 class OctoSession:
 
-    def __init__(self, octoStream, logger, printerId, privateKey, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion, serverHostType):
+    def __init__(self, octoStream, logger, printerId, privateKey, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion, serverHostType, isCompanion):
         self.ActiveWebStreams = {}
         self.ActiveWebStreamsLock = threading.Lock()
         self.IsAcceptingStreams = True
@@ -39,6 +39,7 @@ class OctoSession:
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
+        self.IsCompanion = isCompanion
 
         # Create our server auth helper.
         self.ServerAuth = ServerAuthHelper(self.Logger)
@@ -239,7 +240,7 @@ class OctoSession:
             # Build the message
             buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion)
 
             # Send!
             self.OctoStream.SendMsg(buf)

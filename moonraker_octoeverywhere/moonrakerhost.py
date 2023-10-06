@@ -29,6 +29,7 @@ from .moonrakerapirouter import MoonrakerApiRouter
 from .moonrakercredentailmanager import MoonrakerCredentialManager
 from .filemetadatacache import FileMetadataCache
 from .uiinjector import UiInjector
+from .observerconfigfile import ObserverConfigFile
 
 # This file is the main host for the moonraker service.
 class MoonrakerHost:
@@ -63,25 +64,36 @@ class MoonrakerHost:
             raise
 
 
-    def RunBlocking(self, klipperConfigDir, moonrakerConfigFilePath, localStorageDir, serviceName, pyVirtEnvRoot, repoRoot, devConfig_CanBeNone):
+    def RunBlocking(self, klipperConfigDir, isObserverMode, localStorageDir, serviceName, pyVirtEnvRoot, repoRoot,
+                    moonrakerConfigFilePath, # Will be None in Observer mode
+                    observerConfigFilePath, observerInstanceIdStr, # Will be None in NOT Observer mode
+                    devConfig_CanBeNone):
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("##################################")
             self.Logger.info("#### OctoEverywhere Starting #####")
             self.Logger.info("##################################")
 
+            # Set observer mode flag as soon as we know it.
+            Compat.SetIsObserverMode(isObserverMode)
+
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
 
-            # Before we do this first time setup, make sure our config files are in place. This is important
-            # because if this fails it will throw. We don't want to let the user complete the install setup if things
-            # with the update aren't working.
-            SystemConfigManager.EnsureUpdateManagerFilesSetup(self.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot)
+            # This logic only works if running locally.
+            if not isObserverMode:
+                # Before we do this first time setup, make sure our config files are in place. This is important
+                # because if this fails it will throw. We don't want to let the user complete the install setup if things
+                # with the update aren't working.
+                SystemConfigManager.EnsureUpdateManagerFilesSetup(self.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
             # As of 8/15/2023, we don't store any sensitive things in teh config file, since all config files are sometimes backed up publicly.
             self.Secrets = Secrets(self.Logger, localStorageDir, self.Config)
+
+            # Always init the observer config file class, even if we aren't in observer mode, it handles denying requests.
+            ObserverConfigFile.Init(self.Logger, observerConfigFilePath)
 
             # Now, detect if this is a new instance and we need to init our global vars. If so, the setup script will be waiting on this.
             self.DoFirstTimeSetupIfNeeded(klipperConfigDir, serviceName)
@@ -110,7 +122,7 @@ class MoonrakerHost:
             self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId, pluginVersionStr)
 
             # Setup the credential manager.
-            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath)
+            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath, isObserverMode)
 
             # Setup the http requester. We default to port 80 and assume the frontend can be found there.
             # TODO - parse nginx to see what front ends exist and make them switchable
@@ -120,6 +132,14 @@ class MoonrakerHost:
             OctoHttpRequest.SetLocalHttpProxyPort(frontendPort)
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
             OctoHttpRequest.SetLocalOctoPrintPort(frontendPort)
+
+            # If we are in observer mode, we need to update the local address to be the other local remote.
+            if isObserverMode:
+                (ipOrHostnameStr, portStr) = ObserverConfigFile.Get().TryToGetIpAndPortStr()
+                if ipOrHostnameStr is None or portStr is None:
+                    self.Logger.error("We are in observer mode but we can't get the ip and port from the observer config file.")
+                    raise Exception("Failed to read observer config file.")
+                OctoHttpRequest.SetLocalHostAddress(ipOrHostnameStr)
 
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
@@ -136,7 +156,7 @@ class MoonrakerHost:
             # When everything is setup, start the moonraker client object.
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
-            MoonrakerClient.Init(self.Logger, moonrakerConfigFilePath, printerId, self, pluginVersionStr)
+            MoonrakerClient.Init(self.Logger, isObserverMode, moonrakerConfigFilePath, observerConfigFilePath, printerId, self, pluginVersionStr)
 
             # Init our file meta data cache helper
             FileMetadataCache.Init(self.Logger, MoonrakerClient.Get())
@@ -159,7 +179,7 @@ class MoonrakerHost:
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker, isObserverMode)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("!! Exception thrown out of main host run function.", e)

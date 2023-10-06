@@ -42,11 +42,32 @@ class Context:
         # Generation 1 - Parsed from the command line args, if set, we shouldn't auto select the moonraker instance.
         self.DisableAutoMoonrakerInstanceSelection = False
 
-        # Generation 2 - This is the full file path to the moonraker config.
+        # Generation 1 - Parsed from the command line args, if set, this plugin should be installed as an observer.
+        self.IsObserverSetup = False
+
+        #
+        # Generation 2
+        #
+
+        # This is the full file path to the moonraker config.
         self.MoonrakerConfigFilePath = None
 
-        # Generation 2 -This is the file name of the moonraker service we are targeting.
+        # This is the file name of the moonraker service we are targeting.
         self.MoonrakerServiceFileName = None
+
+        ### - OR - ###
+        # These values will be filled out if this is an observer setup.
+
+        # The root folder where this plugin instance will setup it's data.
+        self.ObserverDataPath = None
+
+        # The observer instance id, so we can support multiple instances on one device.
+        self.ObserverInstanceId = None
+
+
+        #
+        # Generation 3
+        #
 
         # Generation 3 - This it the path to the printer data root folder.
         self.PrinterDataFolder = None
@@ -65,6 +86,13 @@ class Context:
 
         # Generation 3 - The path to where the local storage will be put for this instance.
         self.LocalFileStorageFolder = None
+
+        # Generation 3 - Only set if this is an observer setup
+        self.ObserverConfigFilePath = None
+
+        #
+        # Generation 4
+        #
 
         # Generation 4 - If the instance config file existed before we created the service, this will hold the printer id.
         self.ExistingPrinterId = None
@@ -101,14 +129,19 @@ class Context:
         self.CmdLineArgs = self.CmdLineArgs.strip()
 
         if generation >= 2:
-            self._ValidatePathAndExists(self.MoonrakerConfigFilePath, "Required config var Moonraker Config File Path was not found")
-            self._ValidateString(self.MoonrakerServiceFileName, "Required config var Moonraker Service File Name was not found")
-
-            # All systems assume this file ends in .service, so make sure it does.
-            self.MoonrakerConfigFilePath = self.MoonrakerConfigFilePath.strip()
-            self.MoonrakerServiceFileName = self.MoonrakerServiceFileName.strip()
-            if self.MoonrakerServiceFileName.lower().endswith(".service") is False:
-                self.MoonrakerServiceFileName += ".service"
+            if self.IsObserverSetup:
+                self._ValidatePathAndExists(self.ObserverDataPath, "Required config var Observer Data Path was not found")
+                self._ValidateString(self.ObserverInstanceId, "Required config var Observer Instance Id was not found")
+                self.ObserverDataPath = self.ObserverDataPath.strip()
+                self.ObserverInstanceId = self.ObserverInstanceId.strip()
+            else:
+                self._ValidatePathAndExists(self.MoonrakerConfigFilePath, "Required config var Moonraker Config File Path was not found")
+                self._ValidateString(self.MoonrakerServiceFileName, "Required config var Moonraker Service File Name was not found")
+                # All systems assume this file ends in .service, so make sure it does.
+                self.MoonrakerConfigFilePath = self.MoonrakerConfigFilePath.strip()
+                self.MoonrakerServiceFileName = self.MoonrakerServiceFileName.strip()
+                if self.MoonrakerServiceFileName.lower().endswith(".service") is False:
+                    self.MoonrakerServiceFileName += ".service"
 
         if generation >= 3:
             self._ValidatePathAndExists(self.PrinterDataFolder, "Required config var Printer Data Folder was not found")
@@ -119,6 +152,8 @@ class Context:
             # This path wont exist on the first install, because it won't be created until the end of the install.
             self._ValidateString(self.ServiceFilePath, "Required config var service file path was not found")
             self._ValidateString(self.ServiceName, "Required config var service name was not found")
+            if self.IsObserverSetup:
+                self._ValidatePathAndExists(self.ObserverConfigFilePath, "Required config var Observer Config File Path was not found")
 
         if generation >= 4:
             # The printer ID can be None, this means it didn't exist before we installed the service.
@@ -151,6 +186,9 @@ class Context:
                 elif rawArg.lower() == "noatuoselect":
                     Logger.Info("Disabling Moonraker instance auto selection.")
                     self.DisableAutoMoonrakerInstanceSelection = True
+                elif rawArg.lower() == "observer":
+                    Logger.Info("Setup running in observer plugin setup mode.")
+                    self.IsObserverSetup = True
                 else:
                     raise Exception("Unknown argument found. Use install.sh -help for options.")
 

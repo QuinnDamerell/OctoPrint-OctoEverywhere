@@ -8,7 +8,7 @@ from .Proto import OctoStreamMessage
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType):
+    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion):
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -31,6 +31,7 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddPluginVersion(builder, pluginVersionOffset)
         HandshakeSyn.AddSummonMethod(builder, summonMethod)
         HandshakeSyn.AddServerHost(builder, serverHostType)
+        HandshakeSyn.AddIsCompanion(builder, isCompanion)
         if localIpOffset is not None:
             HandshakeSyn.AddLocalDeviceIp(builder, localIpOffset)
         HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)

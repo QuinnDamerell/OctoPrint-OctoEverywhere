@@ -7,7 +7,6 @@ import time
 
 import configparser
 
-from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 
 # A class that handles trying to get user credentials from Moonraker if needed.
@@ -30,10 +29,10 @@ class MoonrakerCredentialManager:
     # The static instance.
     _Instance = None
 
+
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath):
-        MoonrakerCredentialManager._Instance = MoonrakerCredentialManager(logger, moonrakerConfigFilePath)
-        Compat.SetApiRouterHandler(MoonrakerCredentialManager._Instance)
+    def Init(logger, moonrakerConfigFilePath:str, isObserverMode:bool):
+        MoonrakerCredentialManager._Instance = MoonrakerCredentialManager(logger, moonrakerConfigFilePath, isObserverMode)
 
 
     @staticmethod
@@ -41,12 +40,18 @@ class MoonrakerCredentialManager:
         return MoonrakerCredentialManager._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str):
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, isObserverMode:bool):
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
+        self.IsObserverMode = isObserverMode
 
 
     def TryToGetApiKey(self) -> str or None:
+        # If this is an observer plugin, we dont' have the moonraker config file nor can we access the UNIX socket.
+        if self.IsObserverMode:
+            self.Logger.info("OctoEverywhere Companion Plugins dont' support Moonraker setups with auth.")
+            return None
+
         # First, we need to find the unix socket to connect to
         moonrakerSocketFilePath = self._TryToFindUnixSocket()
         if moonrakerSocketFilePath is None:

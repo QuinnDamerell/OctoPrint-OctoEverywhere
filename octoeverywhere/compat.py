@@ -6,6 +6,7 @@ class Compat:
 
     _IsOctoPrintHost = False
     _IsMoonrakerHost = False
+    _IsObserverMode = False
     @staticmethod
     def IsOctoPrint() -> bool:
         return Compat._IsOctoPrintHost
@@ -13,11 +14,17 @@ class Compat:
     def IsMoonraker() -> bool:
         return Compat._IsMoonrakerHost
     @staticmethod
+    def IsObserverMode() -> bool:
+        return Compat._IsObserverMode
+    @staticmethod
     def SetIsOctoPrint(b):
         Compat._IsOctoPrintHost = b
     @staticmethod
     def SetIsMoonraker(b):
         Compat._IsMoonrakerHost = b
+    @staticmethod
+    def SetIsObserverMode(b):
+        Compat._IsObserverMode = b
 
 
     _LocalAuthObj = None

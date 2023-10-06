@@ -33,13 +33,17 @@ if __name__ == '__main__':
         ServiceName = config["ServiceName"]
         VirtualEnvPath = config["VirtualEnvPath"]
         RepoRootFolder = config["RepoRootFolder"]
+        IsObserver = config["IsObserver"]
+        ObserverConfigFilePath = config["ObserverConfigFilePath"]
+        ObserverInstanceIdStr = config["ObserverInstanceIdStr"]
 
-        # Check paths exist.
+        # There are two modes, one is local running with moonraker the other is a remote observer
+        # If this is an observer, MoonrakerConfigFile will not exits.
+        IsObserver = bool(IsObserver)
+
+        # Check paths always exist.
         if os.path.exists(KlipperConfigFolder) is False:
             print("Error - KlipperConfigFolder path doesn't exist.")
-            sys.exit(1)
-        if os.path.exists(MoonrakerConfigFile) is False:
-            print("Error - MoonrakerConfigFile path doesn't exist.")
             sys.exit(1)
         if os.path.exists(KlipperLogFolder) is False:
             print("Error - KlipperLogFolder path doesn't exist.")
@@ -54,10 +58,31 @@ if __name__ == '__main__':
             print("Error - RepoRootFolder path doesn't exist.")
             sys.exit(1)
 
+        # These paths are dependent on the mode
+        if IsObserver:
+            # This will not be set.
+            MoonrakerConfigFile = None
+
+            # These are required.
+            if os.path.exists(ObserverConfigFilePath) is False:
+                print("Error - ObserverConfigFilePath path doesn't exist.")
+                sys.exit(1)
+            if ObserverInstanceIdStr is None or len(ObserverInstanceIdStr) == 0:
+                print("Error - ObserverInstanceIdStr doesn't exist.")
+                sys.exit(1)
+        else:
+            # These will not exist
+            ObserverConfigFilePath = None
+            ObserverInstanceIdStr = None
+
+            # This is required
+            if os.path.exists(MoonrakerConfigFile) is False:
+                print("Error - MoonrakerConfigFile path doesn't exist.")
+                sys.exit(1)
+
     except Exception as e:
         print("ERROR! - Exception while parsing service config. "+str(e))
         sys.exit(1)
-
 
     # For debugging, we also allow an optional dev object to be passed.
     devConfig_CanBeNone = None
@@ -70,7 +95,10 @@ if __name__ == '__main__':
 
     # Create and run the main host!
     host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone)
-    host.RunBlocking(KlipperConfigFolder, MoonrakerConfigFile, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, devConfig_CanBeNone)
+    host.RunBlocking(KlipperConfigFolder, IsObserver, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder,
+                     MoonrakerConfigFile,
+                     ObserverConfigFilePath, ObserverInstanceIdStr,
+                     devConfig_CanBeNone)
 
     # If we exit here, it's due to an error, since RunBlocking should be blocked forever.
     sys.exit(1)

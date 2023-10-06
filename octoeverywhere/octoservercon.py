@@ -48,7 +48,7 @@ class OctoServerCon:
     # We always add a random second count to the reconnect sleep to add variance. This is the max value.
     WsConnectRandomMaxSec = 10
 
-    def __init__(self, host, endpoint, isPrimaryConnection, shouldUseLowestLatencyServer, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, runForSeconds, summonMethod, serverHostType):
+    def __init__(self, host, endpoint, isPrimaryConnection, shouldUseLowestLatencyServer, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, runForSeconds, summonMethod, serverHostType, isCompanion):
         self.ProtocolVersion = 1
         self.OctoSession = None
         self.IsDisconnecting = False
@@ -67,6 +67,7 @@ class OctoServerCon:
         self.PluginVersion = pluginVersion
         self.SummonMethod = summonMethod
         self.ServerHostType = serverHostType
+        self.IsCompanion = isCompanion
 
         self.DefaultEndpoint = endpoint
         self.CurrentEndpoint = self.DefaultEndpoint
@@ -144,7 +145,7 @@ class OctoServerCon:
         self.IsDisconnecting = False
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion)
         self.OctoSession.StartHandshake(self.SummonMethod)
 
 

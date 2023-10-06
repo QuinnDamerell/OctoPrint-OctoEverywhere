@@ -22,7 +22,7 @@ class OctoEverywhere:
     # die but then a user tries to use it quickly, we will just summon the connection again.
     SecondaryConnectionRunForTimeSec = 60 * 15 # 15 minutes.
 
-    def __init__(self, endpoint, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, serverHostType):
+    def __init__(self, endpoint, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, serverHostType, isCompanion):
         self.Endpoint = endpoint
         self.PrinterId = printerId
         self.PrivateKey = privateKey
@@ -31,6 +31,7 @@ class OctoEverywhere:
         self.StatusChangeHandler = statusChangeHandler
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
+        self.IsCompanion = isCompanion
         self.SecondaryServerCons = {}
         self.SecondaryServerConsLock = threading.Lock()
 
@@ -97,4 +98,4 @@ class OctoEverywhere:
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 
     def createOctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, statusChangeHandler, runTime, summonMethod):
-        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType)
+        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType, self.IsCompanion)

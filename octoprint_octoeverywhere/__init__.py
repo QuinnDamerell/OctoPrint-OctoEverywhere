@@ -687,7 +687,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             OctoHttpRequest.SetLocalHttpProxyIsHttps(frontendIsHttps)
 
             # Run!
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version, ServerHost.OctoPrint)
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version, ServerHost.OctoPrint, False)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("Exception thrown out of main runner.", e)

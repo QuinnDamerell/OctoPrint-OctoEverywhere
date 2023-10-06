@@ -7,12 +7,14 @@ import logging
 import math
 
 import configparser
+from octoeverywhere.compat import Compat
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
 from .moonrakercredentailmanager import MoonrakerCredentialManager
 from .filemetadatacache import FileMetadataCache
+from .observerconfigfile import ObserverConfigFile
 
 # The response object for a json rpc request.
 # Contains information on the state, and if successful, the result.
@@ -61,8 +63,8 @@ class MoonrakerClient:
 
 
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr):
-        MoonrakerClient._Instance = MoonrakerClient(logger, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr)
+    def Init(logger, isObserverMode:bool, moonrakerConfigFilePath:str, observerConfigPath:str, printerId, connectionStatusHandler, pluginVersionStr):
+        MoonrakerClient._Instance = MoonrakerClient(logger, isObserverMode, moonrakerConfigFilePath, observerConfigPath, printerId, connectionStatusHandler, pluginVersionStr)
 
 
     @staticmethod
@@ -70,9 +72,11 @@ class MoonrakerClient:
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler, pluginVersionStr:str) -> None:
+    def __init__(self, logger:logging.Logger, isObserverMode:bool, moonrakerConfigFilePath:str, observerConfigPath:str, printerId:str, connectionStatusHandler, pluginVersionStr:str) -> None:
         self.Logger = logger
+        self.IsObserverMode = isObserverMode
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
+        self.ObserverConfigPath = observerConfigPath
         self.MoonrakerHostAndPort = "127.0.0.1:7125"
         self.PrinterId = printerId
         self.ConnectionStatusHandler = connectionStatusHandler
@@ -138,9 +142,14 @@ class MoonrakerClient:
     # This is so every http call doesn't have to read the file, but as long as the WS is connected, we know the address is correct.
     def _UpdateMoonrakerHostAndPort(self) -> None:
         # Ensure we have a file. For now, this is required.
-        if os.path.exists(self.MoonrakerConfigFilePath) is False:
-            self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
-            raise Exception("No config file found")
+        if self.IsObserverMode:
+            if os.path.exists(self.ObserverConfigPath) is False:
+                self.Logger.error("Moonraker client failed to find a observer config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
+                raise Exception("No observer config file found")
+        else:
+            if os.path.exists(self.MoonrakerConfigFilePath) is False:
+                self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
+                raise Exception("No config file found")
 
         # Get the values.
         (hostStr, portInt) = self.GetMoonrakerHostAndPortFromConfig()
@@ -156,6 +165,14 @@ class MoonrakerClient:
         currentPortInt = 7125
         currentHostStr = "0.0.0.0"
         try:
+            # If we are in observer mode, we need to use the observer config to find the remote moonraker details.
+            if Compat.IsObserverMode():
+                ip, portStr = ObserverConfigFile.Get().TryToGetIpAndPortStr()
+                if ip is None or portStr is None:
+                    self.Logger.error("Failed to get observer moonraker details from observer config.")
+                    return (currentHostStr, currentPortInt)
+                return (ip, int(portStr))
+
             # Ensure we have a file.
             if os.path.exists(self.MoonrakerConfigFilePath) is False:
                 self.Logger.error("GetMoonrakerHostAndPortFromConfig failed to find moonraker config file.")

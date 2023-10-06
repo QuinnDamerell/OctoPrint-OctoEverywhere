@@ -31,9 +31,11 @@ class MoonrakerApiRouter:
         self.MoonrakerPortStr = None
 
         # Get the moonraker port from the config.
-        (_, portInt) = MoonrakerClient.Get().GetMoonrakerHostAndPortFromConfig()
-        self.MoonrakerPortStr = str(portInt)
-        self.Logger.info("MoonrakerApiRouter using bound to moonraker at port "+self.MoonrakerPortStr)
+        (ipOrHostnameStr, portInt) = MoonrakerClient.Get().GetMoonrakerHostAndPortFromConfig()
+        if ipOrHostnameStr is None or portInt is None:
+            return
+        self.MoonrakerHostAndPortStr = f"{ipOrHostnameStr}:{str(portInt)}"
+        self.Logger.info("MoonrakerApiRouter using bound to moonraker at "+self.MoonrakerHostAndPortStr)
 
 
     # !! Interface Function !! This implementation must not change!
@@ -46,7 +48,7 @@ class MoonrakerApiRouter:
     # Note this will be used by both websockets and http calls.
     def MapRelativePathToAbsolutePathIfNeeded(self, relativeUrl, protocol):
         # If we have no port, do nothing.
-        if self.MoonrakerPortStr is None:
+        if self.MoonrakerHostAndPortStr is None:
             return None
         try:
             # Basically we need to map all of moonraker's APIs,
@@ -57,7 +59,7 @@ class MoonrakerApiRouter:
             # Remember that there can be whatever suffixes or ? arguments on the URLs
             relativeUrlLower = relativeUrl.lower()
             if relativeUrlLower.startswith("/websocket") or relativeUrlLower.startswith("/printer/") or relativeUrlLower.startswith("/api/") or relativeUrlLower.startswith("/access/") or relativeUrlLower.startswith("/machine/") or relativeUrlLower.startswith("/server/") or relativeUrlLower.startswith("/debug/"):
-                return protocol+"127.0.0.1:"+self.MoonrakerPortStr+relativeUrl
+                return protocol + self.MoonrakerHostAndPortStr + relativeUrl
         except Exception as e:
             Sentry.Exception("MoonrakerApiRouter exception while handling MapRelativePathToAbsolutePathIfNeeded.", e)
         return None

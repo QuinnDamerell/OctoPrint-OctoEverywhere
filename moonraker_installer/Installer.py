@@ -7,6 +7,7 @@ from .Logging import Logger
 from .Service import Service
 from .Context import Context
 from .Discovery import Discovery
+from .DiscoveryObserver import DiscoveryObserver
 from .Configure import Configure
 
 class Installer:
@@ -75,9 +76,14 @@ class Installer:
                 raise Exception("Script not ran as root.")
 
         # Next step is to discover and fill out the moonraker config file path and service file name.
+        # If we are doing an observer setup, we need the user to help us input the details to the external moonraker IP.
         # This is the hardest part of the setup, because it's highly dependent on the system and different moonraker setups.
-        discovery = Discovery()
-        discovery.FindTargetMoonrakerFiles(context)
+        if context.IsObserverSetup:
+            discovery = DiscoveryObserver()
+            discovery.ObserverDiscovery(context)
+        else:
+            discovery = Discovery()
+            discovery.FindTargetMoonrakerFiles(context)
 
         # Validate the response.
         # All generation 2 values must be set and valid.
@@ -145,6 +151,7 @@ class Installer:
         Logger.Info("  <moonraker config file path>  - optional - If supplied, the install will target this moonraker setup without asking or searching for others")
         Logger.Info("  <moonraker service name> - optional - If supplied, the install will target this moonraker service file without searching.")
         Logger.Info("       Used when multiple moonraker instances are ran on the same device. The service name is used to find the unique moonraker identifier. OctoEverywhere will follow the same naming convention. Typically the file name is something like `moonraker-1.service` or `moonraker-somename.service`")
+        Logger.Info("  -observer - optional flag - If passed, the plugin is setup as an observer, which is a plugin not running on the same device as moonraker. This is useful for built-in printer hardware where OctoEverywhere can't run, like the Sonic Pad or K1.")
         Logger.Blank()
         Logger.Warn("Other Optional Args:")
         Logger.Info("  -help            - Shows this message.")

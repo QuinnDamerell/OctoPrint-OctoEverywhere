@@ -21,6 +21,7 @@ class Service:
 
         # First, we create a json object that we use as arguments. Using a json object makes parsing and such more flexible.
         # We base64 encode the json string to prevent any arg passing issues with things like quotes, spaces, or other chars.
+        # Note some of these vars might be null, in the Observer Setup case
         argsJson = json.dumps({
             'KlipperConfigFolder': context.PrinterDataConfigFolder,
             'MoonrakerConfigFile': context.MoonrakerConfigFilePath,
@@ -29,6 +30,9 @@ class Service:
             'ServiceName': context.ServiceName,
             'VirtualEnvPath': context.VirtualEnvPath,
             'RepoRootFolder': context.RepoRootFolder,
+            'IsObserver' : context.IsObserverSetup,
+            'ObserverConfigFilePath' : context.ObserverConfigFilePath,
+            'ObserverInstanceIdStr' : context.ObserverInstanceId
         })
         # We have to convert to bytes -> encode -> back to string.
         argsJsonBase64 = base64.urlsafe_b64encode(bytes(argsJson, "utf-8")).decode("utf-8")
