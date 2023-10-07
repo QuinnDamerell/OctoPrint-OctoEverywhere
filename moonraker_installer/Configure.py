@@ -317,4 +317,3 @@ class Configure:
         finally:
             s.close()
         return ip
-
