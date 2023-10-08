@@ -11,7 +11,7 @@ class DiscoveryObserver:
 
     # This is the base data folder name that will be used, the plugin id suffix will be added to end of it.
     # The folders will always be in the user's home path.
-    c_ObserverPluginDataRootFolder_Lower = ".octoeverywhere-observer-"
+    c_ObserverPluginDataRootFolder_Lower = ".octoeverywhere-companion-"
 
     def ObserverDiscovery(self, context:Context):
         Logger.Debug("Starting observer discovery.")
