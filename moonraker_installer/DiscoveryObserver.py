@@ -68,8 +68,8 @@ class DiscoveryObserver:
                         responseInt = tempInt
                         break
                     Logger.Warn("Invalid number selection, try again.")
-                except Exception as e:
-                    Logger.Warn("Invalid input, try again. Logger.Error: "+str(e))
+                except Exception as _:
+                    Logger.Warn("Invalid input, try again.")
 
             # If there is a response, the user selected an instance.
             if responseInt != -1:
