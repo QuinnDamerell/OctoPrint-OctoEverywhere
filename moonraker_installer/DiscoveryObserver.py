@@ -101,8 +101,10 @@ class DiscoveryObserver:
 
     def _GetObserverIdFromFolderName(self, folderName:str):
         folderName_lower = folderName.lower()
-        if folderName_lower.startswith(DiscoveryObserver.c_ObserverPluginDataRootFolder_Lower) is False:
-            Logger.Error(f"We tried to get an observer id from a non-observer data folder. {folderName}")
-            raise Exception("We tried to get an observer id from a non-observer data folder")
-        # Return everything after the folder name, aka the id.
-        return folderName_lower[len(DiscoveryObserver.c_ObserverPluginDataRootFolder_Lower):]
+        # If we can find either of the names, return everything after the prefix, aka the instance id.
+        if folderName_lower.startswith(DiscoveryObserver.c_ObserverPluginDataRootFolder_Lower) is True:
+            return folderName_lower[len(DiscoveryObserver.c_ObserverPluginDataRootFolder_Lower):]
+        if folderName_lower.startswith(DiscoveryObserver.c_ObserverPluginDataRootFolder_old_Lower) is True:
+            return folderName_lower[len(DiscoveryObserver.c_ObserverPluginDataRootFolder_old_Lower):]
+        Logger.Error(f"We tried to get an observer id from a non-observer data folder. {folderName}")
+        raise Exception("We tried to get an observer id from a non-observer data folder")
