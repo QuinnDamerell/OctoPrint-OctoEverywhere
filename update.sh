@@ -47,8 +47,6 @@ latestTag=$(runAsRepoOwner "git describe --tags ${latestTaggedCommit}")
 currentGitStatus=$(runAsRepoOwner "git describe")
 echo "Latest git tag found ${latestTag}, current status ${currentGitStatus}"
 
-exit
-
 # Reset any local changes and pull to the tag.
 runAsRepoOwner "git reset --hard --quiet"
 runAsRepoOwner "git checkout ${latestTag} --quiet"
