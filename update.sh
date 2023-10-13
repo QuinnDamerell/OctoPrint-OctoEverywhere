@@ -38,7 +38,6 @@ runAsRepoOwner()
 
 # Pull the repo to get the top of master.
 echo "Updating repo and fetching the latest released tag..."
-runAsRepoOwner "git checkout master > /dev/null 2> /dev/null"
 runAsRepoOwner "git fetch --tags"
 
 # Find the latest tag, pull to that. We do this so we only get "released" master changes.
