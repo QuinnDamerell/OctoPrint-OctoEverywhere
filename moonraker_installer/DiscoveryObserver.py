@@ -11,7 +11,7 @@ class DiscoveryObserver:
 
     # This is the base data folder name that will be used, the plugin id suffix will be added to end of it.
     # The folders will always be in the user's home path.
-    c_ObserverPluginDataRootFolder_Lower = ".octoeverywhere-companion-"
+    c_ObserverPluginDataRootFolder_Lower = "octoeverywhere-companion-"
     # The legacy name, only used to find existing folders.
     c_ObserverPluginDataRootFolder_old_Lower = ".octoeverywhere-observer-"
 
