@@ -117,10 +117,13 @@ class Installer:
         service = Service()
         service.Install(context)
 
-        # Add the update script to the user home, to make updating the plugin easier
-        # TODO - should we place this for local installs? It's really just intended for companion scripts.
+        # Add our auto update logic.
         updater = Updater()
-        updater.PlaceUpdateScriptInRoot(context)
+        # If this is an observer, put the update script in the users root, so it's easy to find.
+        if context.IsObserverSetup:
+            updater.PlaceUpdateScriptInRoot(context)
+        # Also setup our cron updater if we can, so that the plugin will auto update.
+        updater.EnsureCronUpdateJob(context)
 
         # The service is ready! Now do the account linking process.
         linker = Linker()

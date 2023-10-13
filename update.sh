@@ -3,6 +3,7 @@
 #
 # OctoEverywhere for Klipper!
 # This script is used to UPDATE OctoEverywhere for Klipper.
+# Note this script is ran by the crontab updater, so it's name and location can't be moved!
 #
 # If you're trying to do a clean install, please run ./install.sh
 #
@@ -23,9 +24,18 @@ echo ""
 echo ""
 
 # Pull the repo to get the top of master.
-echo "Pulling the latest version..."
+echo "Updating repo and fetching the latest released tag..."
 git checkout master > /dev/null 2> /dev/null
-git pull --quiet > /dev/null
+git fetch
+
+# Find the latest tag, pull to that. We do this so we only get "released" master changes.
+latestTag=$(git describe --abbrev=0 --tags)
+currentGitStatus=$(git describe)
+echo "Latest git tag found ${latestTag}, current status ${currentGitStatus}"
+
+# Reset any local changes and pull to the tag.
+git reset --hard > /dev/null 2> /dev/null
+git checkout ${latestTag}
 
 # Our installer script has all of the logic to update system deps, py deps, and the py environment.
 # So we use it with a special flag to do updating.

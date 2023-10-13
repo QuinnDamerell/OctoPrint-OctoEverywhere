@@ -1,5 +1,6 @@
 import os
 import stat
+import subprocess
 
 from moonraker_octoeverywhere.version import Version
 
@@ -43,9 +44,9 @@ class Updater:
         Logger.Info("Restarting services...")
 
         for s in foundOeServices:
-            (returnCode, output) = Util.RunShellCommand("systemctl restart "+s)
+            (returnCode, output, errorOut) = Util.RunShellCommand("systemctl restart "+s)
             if returnCode != 0:
-                Logger.Warn(f"Service {s} might have failed to restart. Output: {output}")
+                Logger.Warn(f"Service {s} might have failed to restart. Output: {output} Error: {errorOut}")
 
         pluginVersionStr = "Unknown"
         try:
@@ -53,6 +54,8 @@ class Updater:
         except Exception as e:
             Logger.Warn("Failed to parse setup.py for plugin version. "+str(e))
 
+        # Try to update the crontab job if needed
+        self.EnsureCronUpdateJob(context.RepoRootFolder)
 
         Logger.Blank()
         Logger.Header("-------------------------------------------")
@@ -96,3 +99,56 @@ cd $startingDir
         except Exception as e:
             Logger.Error("Failed to write updater script to user home. "+str(e))
             return False
+
+
+    # We need to be running as sudo to make a sudo cron job.
+    # The cron job has to be sudo, so it can update system packages and restart the service.
+    def EnsureCronUpdateJob(self, oeRepoRoot:str):
+        try:
+            Logger.Debug("Ensuring cron job is setup.")
+
+            # First, get any current crontab jobs.
+            # Note it's important to use sudo, because we need to be in the sudo crontab to restart our service!
+            (returnCode, currentCronJobs, errorOut) = Util.RunShellCommand("sudo crontab -l", False)
+            # Check for failures.
+            if returnCode != 0:
+                # If there are no cron jobs, this will be the output.
+                if "no crontab for" not in errorOut.lower():
+                    raise Exception("Failed to get current cron jobs. "+errorOut)
+
+            # Go through the current cron jobs and try to find our cron job.
+            # If we find ours, filter it out, since we will re-add an updated one.
+            currentCronJobLines = currentCronJobs.split("\n")
+            newCronJobLines = []
+            for job in currentCronJobLines:
+                # Skip blank lines
+                if len(job) == 0:
+                    continue
+                jobLower = job.lower()
+                if oeRepoRoot.lower() in jobLower:
+                    Logger.Debug(f"Found our current crontab job: {job}")
+                else:
+                    Logger.Debug(f"Found other crontab line: {job}")
+                    newCronJobLines.append(job)
+
+            # We either didn't have a job or removed it, so add our new job.
+            # This is our current update time "At 23:59 on Sunday."
+            # https://crontab.guru/#59_23_*_*_7
+            updateScriptPath = os.path.join(oeRepoRoot, "update.sh")
+            newCronJobLines.append(f"59 23 * * 7 {updateScriptPath}")
+
+            # New output.
+            newInput = ""
+            for job in newCronJobLines:
+                newInput += job + "\n"
+            Logger.Debug(f"New crontab input: {newInput}")
+
+            # Set the new cron jobs.
+            # Note it's important to use sudo, because we need to be in the sudo crontab to restart our service!
+            result = subprocess.run("sudo crontab -", check=False, shell=True, capture_output=True, text=True, input=newInput)
+            if result.returncode != 0:
+                raise Exception("Failed to set new cron jobs. "+result.stderr)
+
+            Logger.Debug("Cron job setup successfully.")
+        except Exception as e:
+            Logger.Warn("Failed to setup cronjob for updates, skipping. "+str(e))
