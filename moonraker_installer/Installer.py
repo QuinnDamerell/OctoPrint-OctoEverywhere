@@ -9,6 +9,7 @@ from .Context import Context
 from .Discovery import Discovery
 from .DiscoveryObserver import DiscoveryObserver
 from .Configure import Configure
+from .Updater import Updater
 
 class Installer:
 
@@ -75,6 +76,14 @@ class Installer:
             else:
                 raise Exception("Script not ran as root.")
 
+        # Before discover, check if we are in update mode.
+        # In update mode we just enumerate all known local plugins and companions, update them, and then we are done.
+        context.IsUpdateMode = True #TODO remove
+        if context.IsUpdateMode:
+            update = Updater()
+            update.DoUpdate(context)
+            return
+
         # Next step is to discover and fill out the moonraker config file path and service file name.
         # If we are doing an observer setup, we need the user to help us input the details to the external moonraker IP.
         # This is the hardest part of the setup, because it's highly dependent on the system and different moonraker setups.
@@ -108,6 +117,11 @@ class Installer:
         # We are fully configured, create the service file and it's dependent files.
         service = Service()
         service.Install(context)
+
+        # Add the update script to the user home, to make updating the plugin easier
+        # TODO - should we place this for local installs? It's really just intended for companion scripts.
+        updater = Updater()
+        updater.PlaceUpdateScriptInRoot(context)
 
         # The service is ready! Now do the account linking process.
         linker = Linker()

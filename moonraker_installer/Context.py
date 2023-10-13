@@ -13,37 +13,45 @@ class Context:
 
     def __init__(self) -> None:
 
-        # Generation 1 - This is the repo root of OctoEverywhere. This is common for all instances.
+        #
+        # Generation 1
+        #
+
+        # This is the repo root of OctoEverywhere. This is common for all instances.
         self.RepoRootFolder = None
 
-        # Generation 1 -This is the path to the PY virtual env for OctoEverywhere. This is common for all instances.
+        # This is the path to the PY virtual env for OctoEverywhere. This is common for all instances.
         self.VirtualEnvPath = None
 
-        # Generation 1 -This is the user name of the user who launched the install script.
+        # This is the user name of the user who launched the install script.
         # Useful because this module is running as a sudo user.
         self.UserName = None
 
-        # Generation 1 -This is the user home path of the user who launched the install script.
+        # This is the user home path of the user who launched the install script.
         # Useful because this module is running as a sudo user.
         self.UserHomePath = None
 
-        # Generation 1 - A string containing all of the args the install script was launched with.
+        # A string containing all of the args the install script was launched with.
         self.CmdLineArgs = None
 
-        # Generation 1  -Parsed from the command line args, if debug should be enabled.
+        # Parsed from the command line args, if debug should be enabled.
         self.Debug = False
 
-        # Generation 1 - Parsed from the command line args, if we should show help.
+        # Parsed from the command line args, if we should show help.
         self.ShowHelp = False
 
-        # Generation 1 - Parsed from the command line args, if we should skip sudo actions for debugging.
+        # Parsed from the command line args, if we should skip sudo actions for debugging.
         self.SkipSudoActions = False
 
-        # Generation 1 - Parsed from the command line args, if set, we shouldn't auto select the moonraker instance.
+        # Parsed from the command line args, if set, we shouldn't auto select the moonraker instance.
         self.DisableAutoMoonrakerInstanceSelection = False
 
-        # Generation 1 - Parsed from the command line args, if set, this plugin should be installed as an observer.
+        # Parsed from the command line args, if set, this plugin should be installed as an observer.
         self.IsObserverSetup = False
+
+        # Parsed from the command line args, if set, the plugin install should be in update mode.
+        self.IsUpdateMode = False
+
 
         #
         # Generation 2
@@ -187,8 +195,15 @@ class Context:
                     Logger.Info("Disabling Moonraker instance auto selection.")
                     self.DisableAutoMoonrakerInstanceSelection = True
                 elif rawArg.lower() == "observer":
-                    Logger.Info("Setup running in observer plugin setup mode.")
+                    # This is the legacy flag
+                    Logger.Info("Setup running in companion setup mode.")
                     self.IsObserverSetup = True
+                elif rawArg.lower() == "companion":
+                    Logger.Info("Setup running in companion setup mode.")
+                    self.IsObserverSetup = True
+                elif rawArg.lower() == "update":
+                    Logger.Info("Setup running in update mode.")
+                    self.IsUpdateMode = True
                 else:
                     raise Exception("Unknown argument found. Use install.sh -help for options.")
 

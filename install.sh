@@ -1,5 +1,23 @@
 #!/bin/bash
 
+
+#
+# OctoEverywhere for Klipper!
+# This script is used to install both the plugin and companion versions of OctoEverywhere.
+#
+# For a normal plugin install, where Moonraker is running locally, no arguments are required.
+# For a companion install, use the -companion argument.
+#
+# Beyond that, simply run ./install from this directory to get started!
+#
+#
+# If you need help, feel free to contact us at support@octoeverywhere.com
+#
+
+
+
+
+
 #
 # The responsibility of this script is to bootstrap the setup by installing the required system libs,
 # virtual environment, and py requirements. The core of the setup logic is done by the PY install script.

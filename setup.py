@@ -1,5 +1,21 @@
 # coding=utf-8
 
+
+#
+# This is not an installer script!
+# If you're trying to install OctoEverywhere for Klipper, you want to use the ./install.sh script!
+#
+# This PY script is required for the OctoPrint plugin install process.
+#
+# If you need help, feel free to contact us at support@octoeverywhere.com
+#
+
+
+
+
+
+
+
 from setuptools import setup
 
 # The plugin's identifier, has to be unique
@@ -14,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this is also parsed by the moonraker module to pull the version, so the string and format must remain the same!
-plugin_version = "2.7.23"
+plugin_version = "2.7.24"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module

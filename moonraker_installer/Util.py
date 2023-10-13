@@ -19,13 +19,13 @@ class Util:
 
 
     # Runs a command as shell and returns the output.
-    # If the command doesn't return a successful status code, this function throws.
+    # Returns (return_code:int, output:str)
     @staticmethod
-    def RunShellCommand(cmd:str) -> str:
+    def RunShellCommand(cmd:str):
         # Check=true means if the process returns non-zero, an exception is thrown.
         # Shell=True is required so non absolute commands like "systemctl restart ..." work
         result = subprocess.run(cmd, check=True, shell=True, capture_output=True, text=True)
-        return result.stdout
+        return (result.returncode, result.stdout)
 
 
     # Ensures a folder exists, and optionally, it has permissions set correctly.
@@ -70,8 +70,8 @@ class Util:
             Logger.Warn("Can't print service logs, there's no service name.")
             return
         try:
-            result = Util.RunShellCommand("sudo journalctl -u "+context.ServiceName+" -n 20 --no-pager")
+            (_, output) = Util.RunShellCommand("sudo journalctl -u "+context.ServiceName+" -n 20 --no-pager")
             # Use the logger to print the logs, so they are captured in the log file as well.
-            Logger.Info(result)
+            Logger.Info(output)
         except Exception as e:
             Logger.Error("Failed to print service logs. "+str(e))

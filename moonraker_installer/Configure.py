@@ -12,6 +12,11 @@ from .ObserverConfigFile import ObserverConfigFile
 # The goal of this class is the take the context object from the Discovery Gen2 phase to the Phase 3.
 class Configure:
 
+    # This is the common service prefix we use for all of our service file names.
+    # This MUST be used for all instances running on this device, both local plugins and companions.
+    # This also MUST NOT CHANGE, as it's used by the Updater logic to find all of the locally running services.
+    c_ServiceCommonNamePrefix = "octoeverywhere"
+
     def Run(self, context:Context):
 
         Logger.Header("Starting configuration...")
@@ -41,7 +46,7 @@ class Configure:
         if context.IsObserverSetup:
             # For observers, we use the observer id, with a unique prefix to separate it from any possible local moonraker installs
             # Note that the moonraker service suffix can be numbers or letters, so we use the same rules.
-            serviceSuffixStr = f"-observer{context.ObserverInstanceId}"
+            serviceSuffixStr = f"-companion{context.ObserverInstanceId}"
         else:
             # Now we need to figure out the instance suffix we need to use.
             # To keep with Kiauh style installs, each moonraker instances will be named moonraker-<number or name>.service.
@@ -54,7 +59,7 @@ class Configure:
 
         # This is the name of our service we create. If the port is the default port, use the default name.
         # Otherwise, add the port to keep services unique.
-        context.ServiceName = "octoeverywhere"+serviceSuffixStr
+        context.ServiceName = Configure.c_ServiceCommonNamePrefix + serviceSuffixStr
         context.ServiceFilePath = os.path.join(Util.SystemdServiceFilePath, context.ServiceName+".service")
 
         # Since the moonraker config folder is unique to the moonraker instance, we will put our storage in it.
