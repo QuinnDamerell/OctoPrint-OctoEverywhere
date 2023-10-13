@@ -78,7 +78,6 @@ class Installer:
 
         # Before discover, check if we are in update mode.
         # In update mode we just enumerate all known local plugins and companions, update them, and then we are done.
-        context.IsUpdateMode = True #TODO remove
         if context.IsUpdateMode:
             update = Updater()
             update.DoUpdate(context)
