@@ -57,7 +57,7 @@ class Updater:
         Logger.Blank()
         Logger.Header("-------------------------------------------")
         Logger.Info(  "    OctoEverywhere Update Successful")
-        Logger.Info( f"       New Version: {pluginVersionStr}")
+        Logger.Info( f"          New Version: {pluginVersionStr}")
         Logger.Purple("            Happy Printing!")
         Logger.Header("-------------------------------------------")
         Logger.Blank()
