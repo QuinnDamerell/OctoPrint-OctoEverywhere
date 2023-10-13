@@ -34,8 +34,8 @@ currentGitStatus=$(git describe)
 echo "Latest git tag found ${latestTag}, current status ${currentGitStatus}"
 
 # Reset any local changes and pull to the tag.
-git reset --hard > /dev/null 2> /dev/null
-git checkout ${latestTag}
+git reset --hard --quiet
+git checkout ${latestTag} --quiet
 
 # Our installer script has all of the logic to update system deps, py deps, and the py environment.
 # So we use it with a special flag to do updating.
