@@ -136,8 +136,11 @@ cd $startingDir
             # https://crontab.guru/#59_23_*_*_7
             # We need to cd into the repo root, since that's where the update script is expected to be ran.
             # We send logs out to a file, so we can capture them is needed.
-            updateScriptPath = os.path.join(oeRepoRoot, "update.sh")
-            newCronJobLines.append(f"59 23 * * 7 cd {oeRepoRoot} && {updateScriptPath} 1> /var/log/oe-cron.log 2> /var/log/oe-cron-error.log")
+            # updateScriptPath = os.path.join(oeRepoRoot, "update.sh")
+            # This is disabled right now due to issues running as root, but needing to be in the user's context for the install.sh script.
+            # The problem is we need basically "pi user with the sudo command" but the cron tab runs as the sudo user. In this case, things like the USER and HOME env
+            # vars aren't defined.
+            #newCronJobLines.append(f"59 23 * * 7 cd {oeRepoRoot} && {updateScriptPath} 1> /var/log/oe-cron.log 2> /var/log/oe-cron-error.log")
 
             # New output.
             newInput = ""
