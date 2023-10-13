@@ -31,7 +31,8 @@ runAsRepoOwner()
     if [[ $(whoami) == *${updateScriptOwner}* ]]; then
         eval $1
     else
-        sudo su - ${updateScriptOwner} -c "$1"
+        repoDir=$(realpath $(dirname "$0"))
+        sudo su - ${updateScriptOwner} -c "cd ${repoDir} && $1"
     fi
 }
 
@@ -53,7 +54,3 @@ runAsRepoOwner "git checkout ${latestTag} --quiet"
 # So we use it with a special flag to do updating.
 echo "Running the update..."
 ./install.sh -update
-
-if $needsToExitUserSu ; then
-    exit
-fi
