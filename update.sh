@@ -39,12 +39,15 @@ runAsRepoOwner()
 # Pull the repo to get the top of master.
 echo "Updating repo and fetching the latest released tag..."
 runAsRepoOwner "git checkout master > /dev/null 2> /dev/null"
-runAsRepoOwner "git fetch"
+runAsRepoOwner "git fetch --tags"
 
 # Find the latest tag, pull to that. We do this so we only get "released" master changes.
-latestTag=$(runAsRepoOwner "git describe --abbrev=0 --tags")
+latestTaggedCommit=$(runAsRepoOwner "git rev-list --tags --max-count=1")
+latestTag=$(runAsRepoOwner "git describe --tags ${latestTaggedCommit}")
 currentGitStatus=$(runAsRepoOwner "git describe")
 echo "Latest git tag found ${latestTag}, current status ${currentGitStatus}"
+
+exit
 
 # Reset any local changes and pull to the tag.
 runAsRepoOwner "git reset --hard --quiet"
