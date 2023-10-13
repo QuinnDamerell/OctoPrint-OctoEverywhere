@@ -134,8 +134,10 @@ cd $startingDir
             # We either didn't have a job or removed it, so add our new job.
             # This is our current update time "At 23:59 on Sunday."
             # https://crontab.guru/#59_23_*_*_7
+            # We need to cd into the repo root, since that's where the update script is expected to be ran.
+            # We send logs out to a file, so we can capture them is needed.
             updateScriptPath = os.path.join(oeRepoRoot, "update.sh")
-            newCronJobLines.append(f"59 23 * * 7 {updateScriptPath}")
+            newCronJobLines.append(f"59 23 * * 7 cd {oeRepoRoot} && {updateScriptPath} 2> /var/log/oe-cron-error.log")
 
             # New output.
             newInput = ""

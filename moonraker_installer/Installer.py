@@ -123,7 +123,7 @@ class Installer:
         if context.IsObserverSetup:
             updater.PlaceUpdateScriptInRoot(context)
         # Also setup our cron updater if we can, so that the plugin will auto update.
-        updater.EnsureCronUpdateJob(context)
+        updater.EnsureCronUpdateJob(context.RepoRootFolder)
 
         # The service is ready! Now do the account linking process.
         linker = Linker()
