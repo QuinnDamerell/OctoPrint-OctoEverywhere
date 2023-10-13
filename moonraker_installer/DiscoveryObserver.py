@@ -12,6 +12,8 @@ class DiscoveryObserver:
     # This is the base data folder name that will be used, the plugin id suffix will be added to end of it.
     # The folders will always be in the user's home path.
     c_ObserverPluginDataRootFolder_Lower = ".octoeverywhere-companion-"
+    # The legacy name, only used to find existing folders.
+    c_ObserverPluginDataRootFolder_old_Lower = ".octoeverywhere-observer-"
 
     def ObserverDiscovery(self, context:Context):
         Logger.Debug("Starting observer discovery.")
@@ -21,7 +23,7 @@ class DiscoveryObserver:
         # Sort so the folder we find are ordered from 1-... This makes the selection process nicer, since the ID == selection.
         fileAndDirList = sorted(os.listdir(context.UserHomePath))
         for fileOrDirName in fileAndDirList:
-            if fileOrDirName.lower().startswith(DiscoveryObserver.c_ObserverPluginDataRootFolder_Lower):
+            if fileOrDirName.lower().startswith(DiscoveryObserver.c_ObserverPluginDataRootFolder_Lower) or fileOrDirName.lower().startswith(DiscoveryObserver.c_ObserverPluginDataRootFolder_old_Lower):
                 existingObserverFolders.append(fileOrDirName)
                 Logger.Debug(f"Found existing data folder: {fileOrDirName}")
 

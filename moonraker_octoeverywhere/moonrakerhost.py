@@ -11,6 +11,7 @@ from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.ServerHost import ServerHost
+from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.compat import Compat
 
 from .config import Config
@@ -140,6 +141,8 @@ class MoonrakerHost:
                     self.Logger.error("We are in observer mode but we can't get the ip and port from the observer config file.")
                     raise Exception("Failed to read observer config file.")
                 OctoHttpRequest.SetLocalHostAddress(ipOrHostnameStr)
+                # TODO - this could be an host name, not an IP. That might be a problem?
+                LocalIpHelper.SetLocalIpOverride(ipOrHostnameStr)
 
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
