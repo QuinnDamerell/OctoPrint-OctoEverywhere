@@ -109,14 +109,18 @@ class Context:
     @staticmethod
     def LoadFromArgString(argString:str):
         Logger.Debug("Found config: "+argString)
-        argObj = json.loads(argString)
-        context = Context()
-        context.RepoRootFolder = argObj["OE_REPO_DIR"]
-        context.VirtualEnvPath = argObj["OE_ENV"]
-        context.UserName = argObj["USERNAME"]
-        context.UserHomePath = argObj["USER_HOME"]
-        context.CmdLineArgs = argObj["CMD_LINE_ARGS"]
-        return context
+        try:
+            argObj = json.loads(argString)
+            context = Context()
+            context.RepoRootFolder = argObj["OE_REPO_DIR"]
+            context.VirtualEnvPath = argObj["OE_ENV"]
+            context.UserName = argObj["USERNAME"]
+            context.UserHomePath = argObj["USER_HOME"]
+            context.CmdLineArgs = argObj["CMD_LINE_ARGS"]
+            return context
+        except Exception as e:
+            Logger.Error(f"Failed to parse bootstrap json args. args string: `{argString}`")
+            raise e
 
 
     def Validate(self, generation = 1) -> None:

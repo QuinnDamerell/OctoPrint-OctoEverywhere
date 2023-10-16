@@ -142,10 +142,19 @@ class Installer:
 
 
     def GetArgumentObjectStr(self) -> str:
+        # We want to skip arguments until we find the json string and then concat all args after that together.
+        # The reason is the PY args logic will split the entire command line string by space, so any spaces in the json get broken
+        # up into different args. This only really happens in the case of the CMD_LINE_ARGS, since it can be like "-companion -debug -whatever"
+        jsonStr = None
         for arg in sys.argv:
+            # Find the json start.
             if len(arg) > 0 and arg[0] == '{':
-                return arg
-        return None
+                jsonStr = arg
+            # Once we have started a json string, keep building it.
+            elif jsonStr is not None:
+                # We need to add the space back to make up for the space removed during the args split.
+                jsonStr += " " + arg
+        return jsonStr
 
 
     def PrintHelp(self):

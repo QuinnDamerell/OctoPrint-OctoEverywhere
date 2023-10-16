@@ -14,7 +14,7 @@ class BashColors:
 
 class Logger:
 
-    IsDebugEnabled = False
+    IsDebugEnabled = True
     OutputFile = None
 
 

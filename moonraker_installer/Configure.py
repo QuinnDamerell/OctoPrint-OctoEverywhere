@@ -214,9 +214,12 @@ class Configure:
         lock = threading.Lock()
         result = {}
 
+        # Create the URL
+        url = f"ws://{ip}:{port}/websocket"
+
         # Setup the callback functions
         def OnOpened(ws):
-            pass
+            Logger.Debug(f"Test [{url}] - WS Opened")
         def OnMsg(ws, msg):
             with lock:
                 if "success" in result:
@@ -224,21 +227,25 @@ class Configure:
                 try:
                     # Try to see if the message looks like one of the first moonraker messages.
                     msgStr = msg.decode('utf-8')
+                    Logger.Debug(f"Test [{url}] - WS message `{msgStr}`")
                     if "moonraker" in msgStr.lower():
+                        Logger.Debug(f"Test [{url}] - Found Moonraker message, success!")
                         result["success"] = True
                         doneEvent.set()
                 except Exception:
                     pass
         def OnClosed(ws):
+            Logger.Debug(f"Test [{url}] - Closed")
             doneEvent.set()
         def OnError(ws, exception):
+            Logger.Debug(f"Test [{url}] - Error: {str(exception)}")
             with lock:
                 result["exception"] = exception
             doneEvent.set()
 
         # Create the websocket
-        url = f"ws://{ip}:{port}"
-        ws = Client(f"{url}/websocket", onWsOpen=OnOpened, onWsMsg=OnMsg, onWsError=OnError, onWsClose=OnClosed)
+        Logger.Debug(f"Checking for moonraker using the address: `{url}`")
+        ws = Client(url, onWsOpen=OnOpened, onWsMsg=OnMsg, onWsError=OnError, onWsClose=OnClosed)
         ws.RunAsync()
 
         # Wait for the event or a timeout.
