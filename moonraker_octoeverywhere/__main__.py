@@ -33,13 +33,18 @@ if __name__ == '__main__':
         ServiceName = config["ServiceName"]
         VirtualEnvPath = config["VirtualEnvPath"]
         RepoRootFolder = config["RepoRootFolder"]
-        IsObserver = config["IsObserver"]
-        ObserverConfigFilePath = config["ObserverConfigFilePath"]
-        ObserverInstanceIdStr = config["ObserverInstanceIdStr"]
 
-        # There are two modes, one is local running with moonraker the other is a remote observer
+        # There are two modes, one is local running with moonraker the other is a remote observer.
         # If this is an observer, MoonrakerConfigFile will not exits.
+        IsObserver = False
+        ObserverConfigFilePath = None
+        ObserverInstanceIdStr = None
+        if "IsObserver" in config:
+            IsObserver = config["IsObserver"]
         IsObserver = bool(IsObserver)
+        if IsObserver:
+            ObserverConfigFilePath = config["ObserverConfigFilePath"]
+            ObserverInstanceIdStr = config["ObserverInstanceIdStr"]
 
         # Check paths always exist.
         if os.path.exists(KlipperConfigFolder) is False:
