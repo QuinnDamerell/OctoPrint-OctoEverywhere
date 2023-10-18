@@ -1,4 +1,3 @@
-import os
 import sys
 import traceback
 
@@ -10,6 +9,7 @@ from .Discovery import Discovery
 from .DiscoveryObserver import DiscoveryObserver
 from .Configure import Configure
 from .Updater import Updater
+from .Permissions import Permissions
 
 class Installer:
 
@@ -34,7 +34,11 @@ class Installer:
 
 
     def _RunInternal(self):
-        # Next, we must handle the program args.
+
+        #
+        # Setup Phase
+        #
+
         # The installer script passes a json object to us, which contains all of the args.
         # But it might not be the first arg.
         argObjectStr = self.GetArgumentObjectStr()
@@ -47,37 +51,43 @@ class Installer:
         # As soon as we have the user home make the log file.
         Logger.InitFile(context.UserHomePath)
 
-        # Validate we have the required args, but not the moonraker values yet, since they are optional.
-        Logger.Debug("Validating args")
-        # All generation 1 vars must exist and be valid.
-        context.Validate(1)
-
         # Parse the original CmdLineArgs
         Logger.Debug("Parsing script cmd line args.")
         context.ParseCmdLineArgs()
 
+        # Print this again now that the debug cmd flag is parsed, since it might be useful.
         if context.Debug:
-            # Print this again, since it might be useful.
             Logger.Debug("Found config: "+argObjectStr)
 
+        # Before we do the first validation, make sure the User var is setup correctly and update if needed.
+        permissions = Permissions()
+        permissions.CheckUserAndCorrectIfRequired_RanBeforeFirstContextValidation(context)
+
+        # Validate we have the required args, but not the moonraker values yet, since they are optional.
+        # All generation 1 vars must exist and be valid.
+        Logger.Debug("Validating args")
+        context.Validate(1)
+
+        #
+        # Run Phase
+        #
+
+        # If the help flag is set, do that now and exit.
         if context.ShowHelp:
             # If we should show help, do it now and return.
             self.PrintHelp()
             return
 
-        #
-        # Ready to go!
+        # Ensure the script at least has sudo permissions.
+        # It's required to set file permission and to write / restart the service.
+        # See comments in the function for details.
+        permissions.EnsureRunningAsRootOrSudo(context)
 
-        # First, ensure we are launched as root.
-        # pylint: disable=no-member # Linux only
-        if os.geteuid() != 0:
-            if context.Debug:
-                Logger.Warn("Not running as root, but ignoring since we are in debug.")
-            else:
-                raise Exception("Script not ran as root.")
+        # Ensure that the repo is owned by the user this script is running as.
+        # See comments in the function for details.
+        permissions.EnsureRepoPermissions(context)
 
-        # Before discover, check if we are in update mode.
-        # In update mode we just enumerate all known local plugins and companions, update them, and then we are done.
+        # If we are in update mode, do the update logic and exit.
         if context.IsUpdateMode:
             update = Updater()
             update.DoUpdate(context)

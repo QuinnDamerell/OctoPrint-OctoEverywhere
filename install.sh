@@ -38,7 +38,11 @@ OE_ENV="${HOME}/octoeverywhere-env"
 # On update THIS SCRIPT ISN'T RAN, only this line is parsed out and used to install / update system packages.
 # For python packages, the `requirements.txt` package is used on update.
 # This var name MUST BE `PKGLIST`!!
-PKGLIST="python3 python3-pip virtualenv"
+#
+# The python requirements are for the installer and plugin
+# The virtualenv is for our virtual package env we create
+# The curl requirement is for some things in this bootstrap script.
+PKGLIST="python3 python3-pip virtualenv curl"
 
 #
 # Console Write Helpers
@@ -99,9 +103,9 @@ ensure_py_venv()
 }
 
 #
-# Logic to make sure all of our required system and PY libs are installed
+# Logic to make sure all of our required system packages are installed.
 #
-install_or_update_dependencies()
+install_or_update_system_dependencies()
 {
     log_header "Checking required system packages are installed..."
     log_important "You might be asked for your system password - this is required to install the required system packages."
@@ -110,6 +114,7 @@ install_or_update_dependencies()
     # getting packages and other downstream things. We will will use our HTTP API to set the current UTC time.
     # Note that since cloudflare will auto force http -> https, we use https, but ignore cert errors, that could be
     # caused by an incorrect date.
+    # Note some companion systems don't have curl installed, so this will fail.
     sudo date -s `curl --insecure 'https://octoeverywhere.com/api/util/date' 2>/dev/null` || true
 
     # These we require to be installed in the OS.
@@ -125,7 +130,13 @@ install_or_update_dependencies()
     log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
     sudo apt install --yes zlib1g-dev 2> /dev/null || true
     sudo apt install --yes zlib-devel 2> /dev/null || true
+}
 
+#
+# Logic to install or update the virtual env and all of our required packages.
+#
+install_or_update_python_env()
+{
     # Now, ensure the virtual environment is created.
     ensure_py_venv
 
@@ -198,14 +209,16 @@ log_info      "  - And so much more"
 log_blank
 log_blank
 
-# Before we do anything, check that OctoPrint isn't found. If it is, we want to check with the user to make sure they are
+# Before we do anything, make sure our required system packages are installed.
+# These are required for other actions in this script, so it must be done first.
+install_or_update_system_dependencies
+
+# Check that OctoPrint isn't found. If it is, we want to check with the user to make sure they are
 # not trying to setup OE for OctoPrint.
 check_for_octoprint
 
-# The first thing we need to do is install or updated packages and ensure our virtual environment is setup.
-# Since we need to make sure PY is installed, then create the virtual env, then update the PY libs, all of this
-# is handled by one function.
-install_or_update_dependencies
+# Now make sure the virtual env exists, is updated, and all of our currently required PY packages are updated.
+install_or_update_python_env
 
 # Clean up any old bite code that might exist from the past, before we added the -B argument to the installer.
 # TODO - Remove at some point.
@@ -213,12 +226,14 @@ sudo rm -fdr "${OE_REPO_DIR}/moonraker_installer/__pycache__/"
 
 # Before launching our PY script, set any vars it needs to know
 # Pass all of the command line args, so they can be handled by the PY script.
+# Note that USER can be empty string on some systems when running as root. This is fixed in the PY installer.
 USERNAME=${USER}
 USER_HOME=${HOME}
 CMD_LINE_ARGS=${@}
 PY_LAUNCH_JSON="{\"OE_REPO_DIR\":\"${OE_REPO_DIR}\",\"OE_ENV\":\"${OE_ENV}\",\"USERNAME\":\"${USERNAME}\",\"USER_HOME\":\"${USER_HOME}\",\"CMD_LINE_ARGS\":\"${CMD_LINE_ARGS}\"}"
 
 log_info "Bootstrap done. Starting python installer..."
+
 # Now launch into our py setup script, that does everything else required.
 # Since we use a module for file includes, we need to set the path to the root of the module
 # so python will find it.

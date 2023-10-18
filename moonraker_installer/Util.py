@@ -49,6 +49,21 @@ class Util:
         Logger.Info("Directory setup successfully.")
 
 
+    # Ensures that all files and dirs down stream of this root dir path are owned by the requested user.
+    @staticmethod
+    def SetFileOwnerRecursive(dirPath:str, userName:str):
+        Logger.Info("Checking git repo permissions...")
+        uid = pwd.getpwnam(userName).pw_uid
+        gid = pwd.getpwnam(userName).pw_gid
+        # pylint: disable=no-member # Linux only
+        os.chown(dirPath, uid, gid)
+        for root, dirs, files in os.walk(dirPath):
+            for d in dirs:
+                os.chown(os.path.join(root, d), uid, gid)
+            for f in files:
+                os.chown(os.path.join(root, f), uid, gid)
+
+
     # Helper to ask the user a question.
     @staticmethod
     def AskYesOrNoQuestion(question:str) -> bool:

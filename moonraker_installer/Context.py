@@ -18,39 +18,39 @@ class Context:
         #
 
         # This is the repo root of OctoEverywhere. This is common for all instances.
-        self.RepoRootFolder = None
+        self.RepoRootFolder:str = None
 
         # This is the path to the PY virtual env for OctoEverywhere. This is common for all instances.
-        self.VirtualEnvPath = None
+        self.VirtualEnvPath:str = None
 
         # This is the user name of the user who launched the install script.
         # Useful because this module is running as a sudo user.
-        self.UserName = None
+        self.UserName:str = None
 
         # This is the user home path of the user who launched the install script.
         # Useful because this module is running as a sudo user.
-        self.UserHomePath = None
+        self.UserHomePath:str = None
 
         # A string containing all of the args the install script was launched with.
-        self.CmdLineArgs = None
+        self.CmdLineArgs:str = None
 
         # Parsed from the command line args, if debug should be enabled.
-        self.Debug = False
+        self.Debug:bool = False
 
         # Parsed from the command line args, if we should show help.
-        self.ShowHelp = False
+        self.ShowHelp:bool = False
 
         # Parsed from the command line args, if we should skip sudo actions for debugging.
-        self.SkipSudoActions = False
+        self.SkipSudoActions:bool = False
 
         # Parsed from the command line args, if set, we shouldn't auto select the moonraker instance.
-        self.DisableAutoMoonrakerInstanceSelection = False
+        self.DisableAutoMoonrakerInstanceSelection:bool = False
 
         # Parsed from the command line args, if set, this plugin should be installed as an observer.
-        self.IsObserverSetup = False
+        self.IsObserverSetup:bool = False
 
         # Parsed from the command line args, if set, the plugin install should be in update mode.
-        self.IsUpdateMode = False
+        self.IsUpdateMode:bool = False
 
 
         #
@@ -58,19 +58,19 @@ class Context:
         #
 
         # This is the full file path to the moonraker config.
-        self.MoonrakerConfigFilePath = None
+        self.MoonrakerConfigFilePath:str = None
 
         # This is the file name of the moonraker service we are targeting.
-        self.MoonrakerServiceFileName = None
+        self.MoonrakerServiceFileName:str = None
 
         ### - OR - ###
         # These values will be filled out if this is an observer setup.
 
         # The root folder where this plugin instance will setup it's data.
-        self.ObserverDataPath = None
+        self.ObserverDataPath:str = None
 
         # The observer instance id, so we can support multiple instances on one device.
-        self.ObserverInstanceId = None
+        self.ObserverInstanceId:str = None
 
 
         #
@@ -78,32 +78,32 @@ class Context:
         #
 
         # Generation 3 - This it the path to the printer data root folder.
-        self.PrinterDataFolder = None
+        self.PrinterDataFolder:str = None
 
         # Generation 3 - This it the path to the printer data config folder.
-        self.PrinterDataConfigFolder = None
+        self.PrinterDataConfigFolder:str = None
 
         # Generation 3 - This it the path to the printer data logs folder.
-        self.PrinterDataLogsFolder = None
+        self.PrinterDataLogsFolder:str = None
 
         # Generation 3 - This is the name of this OctoEverywhere instance's service.
-        self.ServiceName = None
+        self.ServiceName:str = None
 
         # Generation 3 - The full file path and file name of this instance's service file.
-        self.ServiceFilePath = None
+        self.ServiceFilePath:str = None
 
         # Generation 3 - The path to where the local storage will be put for this instance.
-        self.LocalFileStorageFolder = None
+        self.LocalFileStorageFolder:str = None
 
         # Generation 3 - Only set if this is an observer setup
-        self.ObserverConfigFilePath = None
+        self.ObserverConfigFilePath:str = None
 
         #
         # Generation 4
         #
 
         # Generation 4 - If the instance config file existed before we created the service, this will hold the printer id.
-        self.ExistingPrinterId = None
+        self.ExistingPrinterId:str = None
 
 
     @staticmethod
@@ -127,7 +127,6 @@ class Context:
         self._ValidatePathAndExists(self.RepoRootFolder, "Required Env Var OE_REPO_DIR was not found; make sure to run the install.sh script to begin the installation process")
         self._ValidatePathAndExists(self.VirtualEnvPath, "Required Env Var OE_ENV was not found; make sure to run the install.sh script to begin the installation process")
         self._ValidatePathAndExists(self.UserHomePath, "Required Env Var USER_HOME was not found; make sure to run the install.sh script to begin the installation process")
-        self._ValidateString(self.UserName, "Required Env Var USERNAME was not found; make sure to run the install.sh script to begin the installation process")
         self._ValidateString(self.UserName, "Required Env Var USERNAME was not found; make sure to run the install.sh script to begin the installation process")
         # Can be an empty string, but not None.
         if self.CmdLineArgs is None:
@@ -173,6 +172,11 @@ class Context:
 
 
     def ParseCmdLineArgs(self):
+        # We must have a string, indicating the ./install script passed the var.
+        # But it can be an empty string, that's fine.
+        if self.CmdLineArgs is None:
+            raise Exception("Required Env Var CMD_LINE_ARGS was not found; make sure to run the install.sh script to begin the installation process")
+
         # Handle the original cmdline args.
         # The format is <moonraker config file path> <moonraker service file path> -other -args
         # Where both file paths are optional, but if only one is given, it's assumed to be the config file path.
