@@ -51,12 +51,13 @@ class Util:
 
     # Ensures that all files and dirs down stream of this root dir path are owned by the requested user.
     @staticmethod
-    def SetFileOwnerRecursive(dirPath:str, userName:str):
+    def SetFileOwnerRecursive(dirOrFilePath:str, userName:str):
         uid = pwd.getpwnam(userName).pw_uid
         gid = pwd.getpwnam(userName).pw_gid
         # pylint: disable=no-member # Linux only
-        os.chown(dirPath, uid, gid)
-        for root, dirs, files in os.walk(dirPath):
+        os.chown(dirOrFilePath, uid, gid)
+        # For file paths, this walk will do nothing
+        for root, dirs, files in os.walk(dirOrFilePath):
             for d in dirs:
                 os.chown(os.path.join(root, d), uid, gid)
             for f in files:

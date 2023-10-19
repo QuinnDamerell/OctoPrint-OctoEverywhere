@@ -3,6 +3,8 @@ import os
 from .Context import Context
 from .Logging import Logger
 from .Util import Util
+from .Frontend import Frontend
+
 
 class Permissions:
     # Must be lower case.
@@ -42,9 +44,31 @@ class Permissions:
                 raise Exception("Script not ran as root or using sudo. This is required to integrate into Moonraker.")
 
 
-    # For all setups, make sure the entire repo is owned by the user who launched the script.
-    # This is required, in case the user accidentally used the wrong user at first and some part of the git repo is owned by the root user.
-    # If Moonraker is running locally and this is owned by root for example, the Moonraker Updater can't access it, and will show errors.
-    def EnsureRepoPermissions(self, context:Context) -> None:
-        Logger.Info("Checking git repo permissions...")
+    # Called at the end of the setup process, just before the service is restarted or updated.
+    # The point of this is to ensure we have permissions set correctly on all of our files,
+    # so the plugin can access them.
+    #
+    # We always set the permissions for all of the files we touch, to ensure if something in the setup process
+    # did it wrong, a user changed them, or some other service changed them, they are all correct.
+    def EnsureFinalPermissions(self, context:Context):
+
+        # A helper to set file permissions.
+        # We try to set permissions to all paths and files in the context, some might be null
+        # due to the setup mode. We don't care to difference the setup mode here, because the context
+        # validation will do that for us already. Thus if a field is None, its ok.
+        def SetPermissions(path:str):
+            if path is not None and len(path) != 0:
+                Util.SetFileOwnerRecursive(path, context.UserName)
+
+        # For all setups, make sure the entire repo is owned by the user who launched the script.
+        # This is required, in case the user accidentally used the wrong user at first and some part of the git repo is owned by the root user.
+        # If Moonraker is running locally and this is owned by root for example, the Moonraker Updater can't access it, and will show errors.
         Util.SetFileOwnerRecursive(context.RepoRootFolder, context.UserName)
+
+        # These following files or folders must be owned by the user the service is running under.
+        f = Frontend()
+        SetPermissions(f.GetOctoEverywhereServiceConfigFilePath(context))
+        SetPermissions(context.MoonrakerConfigFilePath)
+        SetPermissions(context.ObserverDataPath)
+        SetPermissions(context.LocalFileStorageFolder)
+        SetPermissions(context.ObserverConfigFilePath)

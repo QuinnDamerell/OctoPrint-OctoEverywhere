@@ -84,12 +84,12 @@ class Installer:
         # See comments in the function for details.
         permissions.EnsureRunningAsRootOrSudo(context)
 
-        # Ensure that the repo is owned by the user this script is running as.
-        # See comments in the function for details.
-        permissions.EnsureRepoPermissions(context)
-
         # If we are in update mode, do the update logic and exit.
         if context.IsUpdateMode:
+            # Before the update, make sure all permissions are set
+            # correctly.
+            permissions.EnsureFinalPermissions(context)
+            # Do the update logic.
             update = Updater()
             update.DoUpdate(context)
             return
@@ -127,6 +127,9 @@ class Installer:
 
         # Final validation
         context.Validate(4)
+
+        # Just before we start (or restart) the service, ensure all of the permission are set correctly
+        permissions.EnsureFinalPermissions(context)
 
         # We are fully configured, create the service file and it's dependent files.
         service = Service()

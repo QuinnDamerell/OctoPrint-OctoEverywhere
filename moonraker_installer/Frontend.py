@@ -263,7 +263,7 @@ class Frontend:
     # (portStr:str, frontendHint:str (can be None))
     # Returns (None, None) if the file can't be found.
     def _TryToReadCurrentFrontendSetup(self, context:Context):
-        filePath = self._GetOctoEverywhereServiceConfigFilePath(context)
+        filePath = self.GetOctoEverywhereServiceConfigFilePath(context)
         # Don't try catch, let this throw if there's a problem reading the config,
         # That would be bad.
         if os.path.exists(filePath) is False:
@@ -286,7 +286,7 @@ class Frontend:
     # We use the main config file, since it's already there, and we don't want to have overlapping settings in different places.
     # If the service hasn't ran yet, the file won't exist, in which case we will create it.
     def _WriteFrontendSetup(self, context:Context, portStr:str, frontendHint_CanBeNone:str):
-        filePath = self._GetOctoEverywhereServiceConfigFilePath(context)
+        filePath = self.GetOctoEverywhereServiceConfigFilePath(context)
 
         # Read the current config if there is one, this is important.
         config = configparser.ConfigParser()
@@ -305,6 +305,10 @@ class Frontend:
         with open(filePath, 'w', encoding="utf-8") as f:
             config.write(f)
 
+        # Important! If we were the first ones to create this file, it will be owned by root and the service
+        # won't have permission to open it. Thus we need to make sure it's owned correctly when we are done.
+        Util.SetFileOwnerRecursive(filePath, context.UserName)
 
-    def _GetOctoEverywhereServiceConfigFilePath(self, context:Context) -> str:
+
+    def GetOctoEverywhereServiceConfigFilePath(self, context:Context) -> str:
         return os.path.join(context.PrinterDataConfigFolder, Config.ConfigFileName)
