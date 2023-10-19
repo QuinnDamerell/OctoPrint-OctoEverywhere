@@ -1,3 +1,4 @@
+cd ..
 echo "Testing OctoEverywhere Module..."
 pylint ./octoeverywhere/
 echo "Testing OctoPrint Module..."

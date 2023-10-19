@@ -8,10 +8,14 @@ import configparser
 # settings are important, and not accessed much.
 class Config:
 
+    # This can't change or all past plugins will fail. It's also used by the installer.
+    ConfigFileName = "octoeverywhere.conf"
+
     ServerSection = "server"
 
     RelaySection = "relay"
-    RelayFrontEndPortKey = "frontend_port"
+    RelayFrontEndPortKey = "frontend_port"            # This field is shared with the installer, the installer can write this value. It the name can't change!
+    RelayFrontEndTypeHintKey = "frontend_type_hint"   # This field is shared with the installer, the installer can write this value. It the name can't change!
 
     LoggingSection = "logging"
     LogLevelKey = "log_level"
@@ -32,6 +36,7 @@ class Config:
     # A string, which is the comment to be inserted.
     c_ConfigComments = [
         { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
+        { "Target": RelayFrontEndTypeHintKey,  "Comment": "A string only used by the UI to hint at what web interface this port is."},
         { "Target": LogLevelKey,  "Comment": "The active logging level. Valid values include: DEBUG, INFO, WARNING, or ERROR."},
         { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
         { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
@@ -51,7 +56,7 @@ class Config:
         self.Logger = None
         # Define our config path
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
-        self.OeConfigFilePath = os.path.join(klipperConfigPath, "octoeverywhere.conf")
+        self.OeConfigFilePath = os.path.join(klipperConfigPath, Config.ConfigFileName)
         # A lock to keep file access super safe
         self.ConfigLock = threading.Lock()
         self.Config = None

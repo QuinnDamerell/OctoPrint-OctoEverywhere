@@ -10,6 +10,7 @@ from .DiscoveryObserver import DiscoveryObserver
 from .Configure import Configure
 from .Updater import Updater
 from .Permissions import Permissions
+from .Frontend import Frontend
 
 class Installer:
 
@@ -115,6 +116,10 @@ class Installer:
 
         # After configuration, gen 3 should be fully valid.
         context.Validate(3)
+
+        # For all types, do the frontend setup now.
+        frontend = Frontend()
+        frontend.DoFrontendSetup(context)
 
         # Before we start the service, check if the secrets config file already exists and if a printer id already exists.
         # This will indicate if this is a fresh install or not.

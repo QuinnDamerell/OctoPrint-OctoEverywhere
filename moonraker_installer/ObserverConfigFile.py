@@ -45,6 +45,7 @@ class ObserverConfigFile:
                 Logger.Debug(f"Failed to parse plugin observer config: {configPath}; " + str(e))
         return (None, None)
 
+
     # Creates or uses an existing config, updates the ip and port.
     @staticmethod
     def WriteIpAndPort(context:Context, configPath:str, ip:str, port:str):
