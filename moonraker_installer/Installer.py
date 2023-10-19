@@ -89,6 +89,7 @@ class Installer:
             # Before the update, make sure all permissions are set
             # correctly.
             permissions.EnsureFinalPermissions(context)
+
             # Do the update logic.
             update = Updater()
             update.DoUpdate(context)

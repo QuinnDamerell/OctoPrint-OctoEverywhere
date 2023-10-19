@@ -311,4 +311,7 @@ class Frontend:
 
 
     def GetOctoEverywhereServiceConfigFilePath(self, context:Context) -> str:
+        # Don't do the join if there is no path, otherwise the result will just be a file name.
+        if context.PrinterDataConfigFolder is None or len(context.PrinterDataConfigFolder) == 0:
+            return None
         return os.path.join(context.PrinterDataConfigFolder, Config.ConfigFileName)
