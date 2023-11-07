@@ -232,7 +232,7 @@ class OctoWebStreamHttpHelper:
                 # message is unpacked.
                 fullContentBufferSize = len(octoHttpResult.FullBodyBuffer)
                 if octoHttpResult.IsBodyBufferZlibCompressed:
-                    fullContentBufferSize = octoHttpResult.BodyBufferPreCompressSize()
+                    fullContentBufferSize = octoHttpResult.BodyBufferPreCompressSize
 
                 # See what the current header is (if there is one). If it's set, it should match.
                 if c_contentLengthHeaderKeyLower in response.headers:
