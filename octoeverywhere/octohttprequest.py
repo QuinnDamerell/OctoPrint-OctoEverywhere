@@ -59,11 +59,11 @@ class OctoHttpRequest:
     class Result():
         def __init__(self, result, url, didFallback, fullBodyBuffer=None):
             self.result = result
-            self.url = url
-            self.didFallback = didFallback
+            self.url:str = url
+            self.didFallback:bool = didFallback
             self.fullBodyBuffer = fullBodyBuffer
-            self.isZlibCompressed = False
-            self.fullBodyBufferPreCompressedSize = 0
+            self.isZlibCompressed:bool = False
+            self.fullBodyBufferPreCompressedSize:int = 0
 
         @property
         def Result(self):
@@ -94,10 +94,14 @@ class OctoHttpRequest:
                 return 0
             return self.fullBodyBufferPreCompressedSize
 
-        def SetFullBodyBuffer(self, buffer, isZlibCompressed, preCompressedSize):
+        # Note the buffer can be bytes or bytearray object!
+        # A bytes object is more efficient, but bytearray can be edited.
+        def SetFullBodyBuffer(self, buffer, isZlibCompressed:bool = False, preCompressedSize:int = 0):
             self.fullBodyBuffer = buffer
             self.isZlibCompressed = isZlibCompressed
             self.fullBodyBufferPreCompressedSize = preCompressedSize
+            if isZlibCompressed and preCompressedSize <= 0:
+                raise Exception("The pre-compression full size must be set if the buffer is compressed.")
 
     # Handles making all http calls out of the plugin to OctoPrint or other services running locally on the device or
     # even on other devices on the LAN.

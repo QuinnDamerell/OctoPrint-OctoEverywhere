@@ -9,7 +9,6 @@ import logging
 import requests
 
 from .gadget import Gadget
-from .requestsutils import RequestsUtils
 from .sentry import Sentry
 from .compat import Compat
 from .snapshotresizeparams import SnapshotResizeParams
@@ -679,17 +678,10 @@ class NotificationsHandler:
             if octoHttpResponse is None or octoHttpResponse.Result is None or octoHttpResponse.Result.status_code != 200:
                 return None
 
-            # There are two options here for a result buffer, either
-            #   1) it will be already read for us
-            #   2) we need to read it out of the http response.
-            snapshot = None
-            if octoHttpResponse.FullBodyBuffer is not None:
-                snapshot = octoHttpResponse.FullBodyBuffer
-            else:
-                # Since we use Stream=True, we have to wait for the full body to download before getting it
-                snapshot = RequestsUtils.ReadAllContentFromStreamResponse(octoHttpResponse.Result)
+            # GetSnapshot will always return the full result already read.
+            snapshot = octoHttpResponse.FullBodyBuffer
             if snapshot is None:
-                self.Logger.error("Notification snapshot failed, snapshot is None")
+                self.Logger.error("WebcamHelper.Get().GetSnapshot() returned a web response but no FullBodyBuffer")
                 return None
 
             # Ensure the snapshot is a reasonable size. If it's not, try to resize it if there's not another resize planned.

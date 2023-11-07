@@ -1156,6 +1156,10 @@ class MoonrakerCompat:
                 self.Logger.error("GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult passed a result with missing objects")
                 return -1
 
+            # If nothing is printing or in the queue, sometimes these values won't be there.
+            if "print_duration" not in res["print_stats"] or "filename" not in res["print_stats"] or "progress" not in res["virtual_sdcard"] or "speed_factor" not in res["gcode_move"]:
+                return -1
+
             # Try to get the vars we need.
             # Use the print duration, since that's only the time spent printing (excluding warming up and pause time.)
             printDurationSec = res["print_stats"]["print_duration"]

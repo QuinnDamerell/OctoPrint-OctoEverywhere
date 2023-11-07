@@ -2,7 +2,6 @@
 
 import time
 import zlib
-import sys
 import logging
 
 import requests
@@ -46,6 +45,7 @@ class OctoWebStreamHttpHelper:
         self.ChunkedBodyHasNoContentLengthHeaders = False
         self.CompressionTimeSec = -1
         self.MissingBoundaryWarningCounter = 0
+        self.IsUsingFullBodyBuffer = False
 
         # If this doesn't not equal None, it means we know how much data to expect.
         self.KnownFullStreamUploadSizeBytes = None
@@ -215,6 +215,35 @@ class OctoWebStreamHttpHelper:
             # This function will check if we want to do a 304 return and update the request correctly.
             self.checkForNotModifiedCacheAndUpdateResponseIfSo(sendHeaders, response)
 
+
+            # Before we check the headers, check if we are using a full body buffer.
+            # If we are using a full body buffer, we need to ensure the content header is set. This will do a few things:
+            #   - It will make the request more efficient since we can allocate the fully know buffer size.
+            #   - It will make the send loop more efficient, since we know we are only sending one big chunk of data.
+            c_contentLengthHeaderKeyLower = "content-length"
+            if octoHttpResult.FullBodyBuffer is not None:
+                # We set this flag so other parts of this class that need to know if we are using it or not
+                # this way we only have one check that enables or disables it.
+                self.IsUsingFullBodyBuffer = True
+
+                # Figure out the size of the fully body buffer.
+                # Note that if the buffer is compressed, we need to use the OG size of the buffer, which is stored in the result.
+                # The FULL buffer size must be set in the content-length, not the compressed size, since the compression is just for our link, it's decompressed when the
+                # message is unpacked.
+                fullContentBufferSize = len(octoHttpResult.FullBodyBuffer)
+                if octoHttpResult.IsBodyBufferZlibCompressed:
+                    fullContentBufferSize = octoHttpResult.BodyBufferPreCompressSize()
+
+                # See what the current header is (if there is one). If it's set, it should match.
+                if c_contentLengthHeaderKeyLower in response.headers:
+                    curHeaderLen = int(response.headers[c_contentLengthHeaderKeyLower])
+                    if curHeaderLen != fullContentBufferSize:
+                        self.Logger.error(f"Request {uri} had a content length set ({curHeaderLen}) but its different from the full body length size: {fullContentBufferSize}")
+
+                # Ensure the header is set to the current buffer size.
+                response.headers[c_contentLengthHeaderKeyLower] = str(fullContentBufferSize)
+
+
             # Look at the headers to see what kind of response we are dealing with.
             # See if we find a content length, for http request that are streams, there is no content length.
             contentLength = None
@@ -226,7 +255,7 @@ class OctoWebStreamHttpHelper:
             for name in response.headers:
                 nameLower = name.lower()
 
-                if nameLower == "content-length":
+                if nameLower == c_contentLengthHeaderKeyLower:
                     contentLength = int(response.headers[name])
 
                 elif nameLower == "content-type":
@@ -637,13 +666,10 @@ class OctoWebStreamHttpHelper:
         if shouldCompress:
             defaultBodyReadSizeBytes = defaultBodyReadSizeBytes * 4
 
-        # Special requests (like snapshots due to the fallback logic) might already have a fully read body. In this case
-        # we use the existing body buffer instead of reading from the body.
-        # Note it's the creator of the FullBodyBuffer's responsibly to make sure the buffer matches the content length,
-        # otherwise this octoHttpResult.Result read loop will do bad things.
+        # Some requests like snapshot requests will already have a fully read body. In this case we use the existing body buffer instead of reading from the body.
         finalDataBuffer = None
         bodyReadStartSec = time.time()
-        if octoHttpResult.FullBodyBuffer is not None:
+        if self.IsUsingFullBodyBuffer:
             finalDataBuffer = octoHttpResult.FullBodyBuffer
         else:
             # If the boundary string exist and is not empty, we will use it to try to read the data.
@@ -758,14 +784,6 @@ class OctoWebStreamHttpHelper:
             #2021-12-17 22:45:06,447 - octoprint.plugins.octoeverywhere - INFO - brotli level: 9 time:33.3149433136 size: 4989 og:13503
             #2021-12-17 22:45:06,499 - octoprint.plugins.octoeverywhere - INFO - brotli level: 10 time:50.5220890045 size: 4609 og:13503
             #2021-12-17 22:45:06,636 - octoprint.plugins.octoeverywhere - INFO - brotli level: 11 time:135.287046432 size: 4503 og:13503
-
-            # PY2 zlib.compress can't accept a bytearray, which will be used for octoHttpResult.FullBodyBuffer or self.readStreamChunk, so
-            # we must convert them before compressing. Since most things that use self.readStreamChunk don't use compression, this isn't a big deal.
-            # Right now only the Slipstream cached Index pages have to do this.
-            if sys.version_info[0] < 3:
-                if isinstance(finalDataBuffer, bytearray):
-                    self.Logger.debug("PY2 bytearray->bytes conversion applied.")
-                    finalDataBuffer = bytes(finalDataBuffer)
 
             start = time.time()
             finalDataBuffer = zlib.compress(finalDataBuffer, 3)

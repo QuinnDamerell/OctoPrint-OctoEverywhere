@@ -2,6 +2,7 @@ import logging
 
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
+from .requestsutils import RequestsUtils
 
 # A platform agnostic definition of a webcam stream.
 #
@@ -110,7 +111,7 @@ class WebcamHelper:
     # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
     # It's important that this function returns a OctoHttpRequest that's very similar to what the default MakeHttpCall function
     # returns, to ensure the rest of the octostream http logic can handle the response.
-    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders, uploadBuffer):
+    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders, uploadBuffer) -> OctoHttpRequest.Result:
         if self.IsSnapshotOracleRequest(sendHeaders):
             return self.GetSnapshot()
         elif self.IsWebcamStreamOracleRequest(sendHeaders):
@@ -124,12 +125,12 @@ class WebcamHelper:
     #
     # On failure, this returns None. Returning None will fail out the request.
     # On success, this will return a valid OctoHttpRequest.
-    def GetWebcamStream(self):
+    def GetWebcamStream(self) -> OctoHttpRequest.Result:
         # Wrap the entire result in the add transform function, so on success the header gets added.
         return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal())
 
 
-    def _GetWebcamStreamInternal(self):
+    def _GetWebcamStreamInternal(self) -> OctoHttpRequest.Result:
         # Try to get the URL from the settings.
         webcamStreamUrl = self.GetWebcamStreamUrl()
         if webcamStreamUrl is not None:
@@ -149,15 +150,14 @@ class WebcamHelper:
     # Returns a OctoHttpResult on success and None on failure.
     #
     # On failure, this returns None. Returning None will fail out the request.
-    # On success, this will return a valid OctoHttpRequest that's fully filled out. It most likely will also set the FullBodyBuffer
-    # variable in the OctoHttpRequest class. Note that if a requests result is returned, Stream=True was used and the body must be read
-    # using: RequestsUtils.ReadAllContentFromStreamResponse()
-    def GetSnapshot(self):
+    # On success, this will return a valid OctoHttpRequest that's fully filled out. The stream will always already be fully read, and will be FullBodyBuffer var.
+    def GetSnapshot(self) -> OctoHttpRequest.Result:
+        # Wrap the entire result in the _EnsureJpegHeaderInfo function, so ensure the returned snapshot can be used by all image processing libs.
         # Wrap the entire result in the add transform function, so on success the header gets added.
-        return self._AddOeWebcamTransformHeader(self._GetSnapshotInternal())
+        return self._AddOeWebcamTransformHeader(self._EnsureJpegHeaderInfo(self._GetSnapshotInternal()))
 
 
-    def _GetSnapshotInternal(self):
+    def _GetSnapshotInternal(self) -> OctoHttpRequest.Result:
         # First, try to get the snapshot using the string defined in settings.
         snapshotUrl = self.GetSnapshotUrl()
         if snapshotUrl is not None:
@@ -179,7 +179,7 @@ class WebcamHelper:
         return self._GetSnapshotFromStream(streamUrl)
 
 
-    def _GetSnapshotFromStream(self, url):
+    def _GetSnapshotFromStream(self, url) -> OctoHttpRequest.Result:
         try:
             # Try to connect the the mjpeg stream using the http helper class.
             # This is required because knowing the port to connect to might be tricky.
@@ -358,6 +358,113 @@ class WebcamHelper:
 
         # Set the header
         octoHttpResult.Result.headers[WebcamHelper.c_OeWebcamTransformHeaderKey] = transformStr
+        return octoHttpResult
+
+
+    # Checks if the result was success and if so checks if the image is a jpeg and if the header info is set correctly.
+    # For some webcam servers, we have seen them return jpegs that have incomplete jpeg binary header data, which breaks some image processing libs.
+    # This seems to break ImageSharp and it also breaks whatever Telegram uses on it's server side for processing.
+    # To combat this, we will check if the image is a jpeg, and if so, ensure the header is set correctly.
+    #
+    # Returns the octoHttpResult, so the function is chainable
+    def _EnsureJpegHeaderInfo(self, octoHttpResult: OctoHttpRequest.Result):
+        # Ensure we got a result.
+        if octoHttpResult is None or octoHttpResult.Result is None:
+            return octoHttpResult
+
+        # The GetSnapshot API will always return the fully buffered snapshot.
+        buf = RequestsUtils.ReadAllContentFromStreamResponse(octoHttpResult.Result)
+        if buf is None:
+            self.Logger.error("_EnsureJpegHeaderInfo got a null body read from ReadAllContentFromStreamResponse")
+            return None
+        # Set the buffer now, incase of early returns.
+        octoHttpResult.SetFullBodyBuffer(buf)
+
+        # Handle the buffer.
+        # In a nutshell, all jpeg images have a lot of header segments, but they must have the app0 header.
+        # This header defines what sub type of image the jpeg is. It seems the app0 header is always there, but some
+        # webcam servers don't set the identifier bits, which should be JFIF\0 or something like that.
+        # We need to find the app0 header, and if we do, ensure the identifier is set.
+        # This has to be efficient so it can run on low power hardware!
+        try:
+
+            # Check if this is a jpeg, it must start with FF D8
+            bufLen = len(buf)
+            if bufLen < 2 or buf[0] != 0xFF or buf[1] != 0xD8:
+                return octoHttpResult
+
+            # Search the headers for the APP0
+            pos = 2
+            while pos < bufLen:
+                # Ensure we have room and sanity check the buffer headers.
+                if pos + 1 >= bufLen:
+                    self.Logger.warn("Ran out of buffer before we found a jpeg APP0 header")
+                    return octoHttpResult
+                if buf[pos] != 0xFF:
+                    self.Logger.error("jpeg segment header didn't start with 0xff")
+                    return octoHttpResult
+
+                # The first byte is always FF, so we only care about the second.
+                segmentType = buf[pos+1]
+                if segmentType == 0xDA:
+                    # This is the start of the image, the headers are over.
+                    self.Logger.debug("We found the start of the jpeg image before we found the APP0 header.")
+                    return octoHttpResult
+                elif segmentType == 0xE0:
+                    # This is the APP0 header.
+                    # Skip past the segment header and size bytes
+                    pos += 4
+
+                    # If these next bytes aren't set, we will set them to the default of "JFIF\0"
+                    # Note that the last byte should be 0!
+                    needsChanges = buf[pos] == 0 or buf[pos+1] == 0 or buf[pos+2] == 0 or buf[pos+3] == 0 or buf[pos+4] == 0 or buf[pos+5] != 0
+
+                    # If we don't need changes, we are done.
+                    # No need to process more headers.
+                    if needsChanges is False:
+                        return octoHttpResult
+
+                    # To edit the byte array, we need a bytearray.
+                    # This adds overhead, but it's required because bytes objects aren't editable.
+                    bufArray = bytearray(buf)
+                    if bufArray[pos] == 0:
+                        bufArray[pos] = 0x4a # J
+                    pos += 1
+                    if bufArray[pos] == 0:
+                        bufArray[pos] = 0x46 # F
+                    pos += 1
+                    if bufArray[pos] == 0:
+                        bufArray[pos] = 0x49 # I
+                    pos += 1
+                    if bufArray[pos] == 0:
+                        bufArray[pos] = 0x46 # F
+                    pos += 1
+                    # This should be 0.
+                    if bufArray[pos] != 0:
+                        bufArray[pos] = 0 # /0
+                    pos += 1
+
+                    # We need to set the buffer again, since it's a new bytearray object now.
+                    octoHttpResult.SetFullBodyBuffer(bufArray)
+
+                    # Done, No need to process more headers.
+                    return octoHttpResult
+                else:
+                    # This is some other header, skip it's length.
+                    # First skip past the type two bytes.
+                    pos += 2
+                    # Now read the length, two bytes
+                    segLen = (buf[pos] << 8) + buf[pos+1]
+                    # Now skip past the segment length (the two length bytes are included in the length size)
+                    pos += segLen
+
+        except Exception as e:
+            Sentry.Exception("WebcamHelper _EnsureJpegHeaderInfo failed to handle jpeg buffer", e)
+            # On a failure, return the original result, since it's still good.
+            return octoHttpResult
+
+        # If we fall out of the while loop,
+        self.Logger.debug("_EnsureJpegHeaderInfo excited the while loop without finding the app0 header.")
         return octoHttpResult
 
 
