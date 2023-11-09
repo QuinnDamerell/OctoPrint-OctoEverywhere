@@ -6,6 +6,9 @@ import random
 import string
 
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.ostypeidentifier import OsTypeIdentifier
+
+from octoeverywhere.Proto import OsType
 
 # A class to handle getting our UI into common front ends.
 class UiInjector():
@@ -62,15 +65,21 @@ class UiInjector():
             self._FindStaticFilesAndGetHash()
 
             # Try to find the possible front ends.
-            userHome = self.GetParentDirectory(self.OeRepoRoot)
+            searchRootDir = self.GetParentDirectory(self.OeRepoRoot)
+
+            # If we are running on the sonic pad or the k1, the path we want to search is different.
+            osType =OsTypeIdentifier.DetectOsType()
+            if osType == OsType.OsType.CrealitySonicPad or osType == OsType.OsType.CrealityK1:
+                searchRootDir = "/usr/share/"
 
             # The list of possible front ends we expect to find.
-            possibleFrontEndDirs = ["mainsail", "fluidd"]
+            # fluidd-pad if found on the sonic pad.
+            possibleFrontEndDirs = ["mainsail", "fluidd", "fluidd-pad"]
 
             # For each possible frontend, try to set it up.
             for frontEnd in possibleFrontEndDirs:
                 # Build the possible root.
-                htmlStaticRoot = os.path.join(userHome, frontEnd)
+                htmlStaticRoot = os.path.join(searchRootDir, frontEnd)
                 # See if it exists.
                 if os.path.exists(htmlStaticRoot):
                     # If so, try to find the html file and inject it if needed.

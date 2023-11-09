@@ -204,7 +204,8 @@ class Frontend:
             4408, # On the K1, this is the Fluidd port.
             80,   # On most devices, this is the port the frontend is on. But note on the K1, this is Creality's own special frontend, most users don't want.
             81,   # A common port for an secondary frontend to run on, like Fluidd or Mainsail.
-            443.  # Not ideal, but https might be here.
+            443,  # Not ideal, but https might be here.
+            8819  # Sonic Pad Mainsail port.
         ]
 
         # Try to find what we can.

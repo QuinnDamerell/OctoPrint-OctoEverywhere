@@ -129,23 +129,8 @@ start_service() {{
         Logger.Info("Making the service executable...")
         Util.RunShellCommand(f"chmod +x {context.ServiceFilePath}")
 
-        # The way this works is that we use the /etc/rc.d/ folder to register S and K files, which are
-        # links to the service file.
-        # The names of the files indicates the order which they should be started or killed.
-        # Use the service name to allow multiples.
-        startFilePath = f"/etc/rc.d/S{startNumberStr}{context.ServiceName}"
-        killFilePath = f"/etc/rc.d/K1{context.ServiceName}"
-
-        Logger.Info("Removing old service registrations...")
-        Util.RunShellCommand(f"rm -f {startFilePath}")
-        Util.RunShellCommand(f"rm -f {killFilePath}")
-
-        Logger.Info("Creating new service registrations...")
-        Util.RunShellCommand(f"ln -s {context.ServiceFilePath} {startFilePath}")
-        Util.RunShellCommand(f"ln -s {context.ServiceFilePath} {killFilePath}")
-
         Logger.Info("Starting the service...")
-        # These some times fail depending on the state of the service.
+        # These some times fail depending on the state of the service, which is fine.
         Util.RunShellCommand(f"{context.ServiceFilePath} stop", False)
         Util.RunShellCommand(f"{context.ServiceFilePath} reload", False)
         Util.RunShellCommand(f"{context.ServiceFilePath} enable" , False)

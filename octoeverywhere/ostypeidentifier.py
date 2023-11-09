@@ -20,7 +20,7 @@ class OsTypeIdentifier:
     CrealityOsUserDataPath_K1 = "/usr/data"
 
     @staticmethod
-    def DetectOsType() -> OsType.OsType:
+    def DetectOsType() -> OsType:
         # Do a quick check for windows first.
         # This is only possible on OctoPrint right now.
         if platform.system().lower == "windows":
@@ -34,10 +34,10 @@ class OsTypeIdentifier:
             # Now we need to detect if it's a Sonic Pad or a K1
             if os.path.exists(OsTypeIdentifier.CrealityOsUserDataPath_SonicPad):
                 # Note that this type implies that the system can't self update.
-                return OsType.OsType.SonicPad
+                return OsType.OsType.CrealitySonicPad
             if os.path.exists(OsTypeIdentifier.CrealityOsUserDataPath_K1):
                 # Note that this type implies that the system can't self update.
-                return OsType.OsType.K1
+                return OsType.OsType.CrealityK1
             return OsType.OsType.Unknown
 
         # The OS is debian

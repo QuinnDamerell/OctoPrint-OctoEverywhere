@@ -74,7 +74,7 @@ class Discovery:
         Logger.Warn("An instance of OctoEverywhere must be installed for every Moonraker instance, so this installer must be ran for each instance individually.")
         Logger.Blank()
         if context.IsCrealityOs():
-            Logger.Header("Creality Users - If you only have one printer setup, use moonraker instance #1.")
+            Logger.Header("Creality Users - If you only have one printer setup, select 1) moonraker_service")
             Logger.Blank()
 
         # Print the config files found.

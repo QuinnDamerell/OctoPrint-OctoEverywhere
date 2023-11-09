@@ -119,6 +119,7 @@
         "opkg",
         "oprint",
         "ostype",
+        "ostypeidentifier",
         "peasy",
         "permissioned",
         "PKGLIST",

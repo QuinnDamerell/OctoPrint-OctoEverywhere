@@ -91,6 +91,9 @@ class MoonrakerWebRequestResponseHandler:
             # Set mainsail and be sure to clear our any instances.
             mainsailConfig["instancesDB"] = "moonraker"
             mainsailConfig["instances"] = []
+            # Older versions struggle to connect to the websocket if we don't set this port as well
+            # We can always set it to 443, because we will always have SSL.
+            mainsailConfig["port"] = 443
         return json.dumps(mainsailConfig, indent=4).encode("utf8")
 
 

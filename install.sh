@@ -195,8 +195,8 @@ install_or_update_python_env()
     # Now, ensure the virtual environment is created.
     ensure_py_venv
 
-    # Update pip if needed
-    log_info "Updating PIP if needed..."
+    # Update pip if needed - we added a note because this takes a while on the sonic pad.
+    log_info "Updating PIP if needed... (this can take a few seconds or so)"
     "${OE_ENV}"/bin/python -m pip install --upgrade pip
 
     # Finally, ensure our plugin requirements are installed and updated.

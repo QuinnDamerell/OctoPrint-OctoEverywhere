@@ -14,7 +14,7 @@ from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
 from .sentry import Sentry
-from .ostype import OsTypeIdentifier
+from .ostypeidentifier import OsTypeIdentifier
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
