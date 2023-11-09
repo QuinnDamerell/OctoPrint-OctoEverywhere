@@ -3,12 +3,13 @@ import octoflatbuffers
 from .Proto import MessageContext
 from .Proto import HandshakeSyn
 from .Proto import OctoStreamMessage
+from .Proto import OsType
 
 # A helper class that builds our OctoStream messages as flatbuffers.
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion):
+    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion, osType:OsType.OsType):
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -37,10 +38,7 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)
         HandshakeSyn.AddRsaChallenge(builder, rasChallengeOffset)
         HandshakeSyn.AddRasChallengeVersion(builder, rasKeyVersionInt)
-        # These are deprecated and we don't send them anymore.
-        # HandshakeSyn.AddWebcamFlipH(builder, webcamFlipH)
-        # HandshakeSyn.AddWebcamFlipV(builder, webcamFlipV)
-        # HandshakeSyn.AddWebcamFlipRotate90(builder, webcamRotate90)
+        HandshakeSyn.AddOsType(builder, osType)
         synOffset = HandshakeSyn.End(builder)
 
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)

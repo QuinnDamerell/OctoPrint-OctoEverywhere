@@ -5,8 +5,10 @@ import socket
 from octoeverywhere.websocketimpl import Client
 
 from .Util import Util
+from .Paths import Paths
 from .Logging import Logger
 from .Context import Context
+from .Context import OsTypes
 from .ObserverConfigFile import ObserverConfigFile
 
 # The goal of this class is the take the context object from the Discovery Gen2 phase to the Phase 3.
@@ -21,6 +23,27 @@ class Configure:
 
         Logger.Header("Starting configuration...")
 
+        serviceSuffixStr = ""
+        if context.IsObserverSetup:
+            # For observers, we use the observer id, with a unique prefix to separate it from any possible local moonraker installs
+            # Note that the moonraker service suffix can be numbers or letters, so we use the same rules.
+            serviceSuffixStr = f"-companion{context.ObserverInstanceId}"
+        elif context.IsCrealityOs():
+            # For Creality OS, we know the format of the service file is a bit different.
+            # It is moonraker_service or moonraker_service.<number>
+            if "." in context.MoonrakerServiceFileName:
+                serviceSuffixStr = context.MoonrakerServiceFileName.split(".")[1]
+        else:
+            # Now we need to figure out the instance suffix we need to use.
+            # To keep with Kiauh style installs, each moonraker instances will be named moonraker-<number or name>.service.
+            # If there is only one moonraker instance, the name is moonraker.service.
+            # Default to empty string, which means there's no suffix and only one instance.
+            serviceFileNameNoExtension = context.MoonrakerServiceFileName.split('.')[0]
+            if '-' in serviceFileNameNoExtension:
+                moonrakerServiceSuffix = serviceFileNameNoExtension.split('-')
+                serviceSuffixStr = "-" + moonrakerServiceSuffix[1]
+        Logger.Debug(f"Moonraker Service File Name: {context.MoonrakerServiceFileName}, Suffix: '{serviceSuffixStr}'")
+
         if context.IsObserverSetup:
             # For observer setups, there is no local moonraker config file, so things are setup differently.
             # The plugin data folder, which is normally the root printer data folder for that instance, becomes our per instance
@@ -33,6 +56,16 @@ class Configure:
             context.ObserverConfigFilePath = ObserverConfigFile.GetConfigFilePathFromDataPath(context.PrinterDataFolder)
             # Make a logs folder, so it's found bellow
             Util.EnsureDirExists(os.path.join(context.PrinterDataFolder, "logs"), context, True)
+        elif context.OsType == OsTypes.SonicPad:
+            # ONLY FOR THE SONIC PAD, we know the folder setup is different.
+            # The user data folder will have /mnt/UDISK/printer_config<number> where the config files are and /mnt/UDISK/printer_logs<number> for logs.
+            # Use the normal folder for the config files.
+            context.PrinterDataConfigFolder = Util.GetParentDirectory(context.MoonrakerConfigFilePath)
+
+            # There really is no printer data folder, so make one that's unique per instance.
+            # So based on the config folder, go to the root of it, and them make the folder "octoeverywhere_data"
+            context.PrinterDataFolder = os.path.join(Util.GetParentDirectory(context.PrinterDataConfigFolder), f"octoeverywhere_data{serviceSuffixStr}")
+            Util.EnsureDirExists(context.PrinterDataFolder, context, True)
         else:
             # For now we assume the folder structure is the standard Klipper folder config,
             # thus the full moonraker config path will be .../something_data/config/moonraker.conf
@@ -42,25 +75,22 @@ class Configure:
             Logger.Debug("Printer data folder: "+context.PrinterDataFolder)
 
 
-        serviceSuffixStr = ""
-        if context.IsObserverSetup:
-            # For observers, we use the observer id, with a unique prefix to separate it from any possible local moonraker installs
-            # Note that the moonraker service suffix can be numbers or letters, so we use the same rules.
-            serviceSuffixStr = f"-companion{context.ObserverInstanceId}"
-        else:
-            # Now we need to figure out the instance suffix we need to use.
-            # To keep with Kiauh style installs, each moonraker instances will be named moonraker-<number or name>.service.
-            # If there is only one moonraker instance, the name is moonraker.service.
-            # Default to empty string, which means there's no suffix and only one instance.
-            serviceFileNameNoExtension = context.MoonrakerServiceFileName.split('.')[0]
-            if '-' in serviceFileNameNoExtension:
-                moonrakerServiceSuffix = serviceFileNameNoExtension.split('-')
-                serviceSuffixStr = "-" + moonrakerServiceSuffix[1]
-
         # This is the name of our service we create. If the port is the default port, use the default name.
         # Otherwise, add the port to keep services unique.
-        context.ServiceName = Configure.c_ServiceCommonNamePrefix + serviceSuffixStr
-        context.ServiceFilePath = os.path.join(Util.SystemdServiceFilePath, context.ServiceName+".service")
+        if context.IsCrealityOs():
+            # For creality os, since the service is setup differently, follow the conventions of it.
+            # Both the service name and the service file name must match.
+            # The format is <name>_service<number>
+            # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
+            context.ServiceName = Configure.c_ServiceCommonNamePrefix + "_service"
+            if len(serviceSuffixStr) != 0:
+                context.ServiceName= context.ServiceName + "." + serviceSuffixStr
+            context.ServiceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, context.ServiceName)
+        else:
+            # For normal setups, use the convention that Klipper users
+            # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
+            context.ServiceName = Configure.c_ServiceCommonNamePrefix + serviceSuffixStr
+            context.ServiceFilePath = os.path.join(Paths.SystemdServiceFilePath, context.ServiceName+".service")
 
         # Since the moonraker config folder is unique to the moonraker instance, we will put our storage in it.
         # This also prevents the user from messing with it accidentally.
@@ -78,10 +108,13 @@ class Configure:
             # Try an older path
             context.PrinterDataLogsFolder = os.path.join(context.PrinterDataFolder, "klipper_logs")
             if os.path.exists(context.PrinterDataLogsFolder) is False:
-                # Failed, make a folder in the printer data root.
-                context.PrinterDataLogsFolder = os.path.join(context.PrinterDataFolder, "octoeverywhere-logs")
-                # Create the folder and force the permissions so our service can write to it.
-                Util.EnsureDirExists(context.PrinterDataLogsFolder, context, True)
+                # Try the path Creality OS uses, something like /mnt/UDISK/printer_logs<number>
+                context.PrinterDataLogsFolder = os.path.join(Util.GetParentDirectory(context.PrinterDataConfigFolder), f"printer_logs{serviceSuffixStr}")
+                if os.path.exists(context.PrinterDataLogsFolder) is False:
+                    # Failed, make a folder in the printer data root.
+                    context.PrinterDataLogsFolder = os.path.join(context.PrinterDataFolder, "octoeverywhere-logs")
+                    # Create the folder and force the permissions so our service can write to it.
+                    Util.EnsureDirExists(context.PrinterDataLogsFolder, context, True)
 
         # Finally, if this is an observer setup, we need the user to tell us where moonraker is installed
         # and need to write the observer config file.

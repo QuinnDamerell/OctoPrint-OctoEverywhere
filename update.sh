@@ -1,14 +1,25 @@
 #!/bin/bash
 
+
+
 #
 # OctoEverywhere for Klipper!
-# This script is used to UPDATE OctoEverywhere for Klipper.
-# Note this script is ran by the crontab updater, so it's name and location can't be moved!
 #
-# If you're trying to do a clean install, please run ./install.sh
+# This script works for any setup of OctoEverywhere, the normal plugin install, companion install, or a Creality install.
+# The script will automatically find all OctoEverywhere instances on this device and update them.
 #
 # If you need help, feel free to contact us at support@octoeverywhere.com
 #
+
+
+
+# Set if we are running the Creality OS or not.
+# We use the presence of opkg as they key
+IS_CREALITY_OS=false
+if command -v opkg &> /dev/null
+then
+    IS_CREALITY_OS=true
+fi
 
 c_default=$(echo -en "\e[39m")
 c_green=$(echo -en "\e[92m")
@@ -19,7 +30,7 @@ c_cyan=$(echo -en "\e[96m")
 
 echo ""
 echo ""
-echo -e "${c_yellow}Starting an OctoEverywhere plugin or companion update!${c_default}"
+echo -e "${c_yellow}Starting an OctoEverywhere update!${c_default}"
 echo ""
 echo ""
 
@@ -27,6 +38,14 @@ echo ""
 # when we run the git commands, we need to make sure we are the right user.
 runAsRepoOwner()
 {
+    # For Creality OS, we can't use stat or whoami, but there's only one user anyways, root.
+    # So always just run it.
+    if $IS_CREALITY_OS
+    then
+        eval $1
+        return
+    fi
+
     updateScriptOwner=$(stat -c %U update.sh)
     if [[ $(whoami) == *${updateScriptOwner}* ]]; then
         eval $1

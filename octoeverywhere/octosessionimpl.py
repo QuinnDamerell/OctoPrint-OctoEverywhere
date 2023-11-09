@@ -14,6 +14,7 @@ from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
 from .sentry import Sentry
+from .ostype import OsTypeIdentifier
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
@@ -240,7 +241,7 @@ class OctoSession:
             # Build the message
             buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType())
 
             # Send!
             self.OctoStream.SendMsg(buf)

@@ -1,7 +1,18 @@
 import os
 import json
+import subprocess
+from enum import Enum
 
 from .Logging import Logger
+from .Paths import Paths
+
+
+# Indicates the OS type this installer is running on.
+class OsTypes(Enum):
+    Debian = 1
+    SonicPad = 2
+    K1 = 2 # Both the K1 and K1 Max
+
 
 # This class holds the context of the installer, meaning all of the target vars and paths
 # that this instance is using.
@@ -33,6 +44,9 @@ class Context:
 
         # A string containing all of the args the install script was launched with.
         self.CmdLineArgs:str = None
+
+        # Detected in this installer as we are starting, this indicates what type of OS we are running on.
+        self.OsType:OsTypes = OsTypes.Debian
 
         # Parsed from the command line args, if debug should be enabled.
         self.Debug:bool = False
@@ -106,6 +120,11 @@ class Context:
         self.ExistingPrinterId:str = None
 
 
+    # Returns true if the OS is Creality OS, aka K1 or Sonic Pad
+    def IsCrealityOs(self) -> bool:
+        return self.OsType == OsTypes.SonicPad or self.OsType == OsTypes.K1
+
+
     @staticmethod
     def LoadFromArgString(argString:str):
         Logger.Debug("Found config: "+argString)
@@ -145,14 +164,13 @@ class Context:
                 self._ValidateString(self.ObserverInstanceId, "Required config var Observer Instance Id was not found")
                 self.ObserverDataPath = self.ObserverDataPath.strip()
                 self.ObserverInstanceId = self.ObserverInstanceId.strip()
+                if self.OsType != OsTypes.Debian:
+                    raise Exception("The OctoEverywhere companion can only be installed on Debian based operating systems.")
             else:
                 self._ValidatePathAndExists(self.MoonrakerConfigFilePath, "Required config var Moonraker Config File Path was not found")
                 self._ValidateString(self.MoonrakerServiceFileName, "Required config var Moonraker Service File Name was not found")
-                # All systems assume this file ends in .service, so make sure it does.
                 self.MoonrakerConfigFilePath = self.MoonrakerConfigFilePath.strip()
                 self.MoonrakerServiceFileName = self.MoonrakerServiceFileName.strip()
-                if self.MoonrakerServiceFileName.lower().endswith(".service") is False:
-                    self.MoonrakerServiceFileName += ".service"
 
         if generation >= 3:
             self._ValidatePathAndExists(self.PrinterDataFolder, "Required config var Printer Data Folder was not found")
@@ -235,3 +253,26 @@ class Context:
     def _ValidateString(self, s:str, error:str):
         if s is None or isinstance(s, str) is False or len(s) == 0:
             raise Exception(error)
+
+
+    def DetectOsType(self):
+        #
+        # Note! This should closely resemble the ostype.py class in the plugin.
+        #
+        # We use the presence of opkg to figure out if we are running no Creality OS
+        # This is the same thing we do in the install and update scripts.
+        result = subprocess.run("command -v opkg", check=False, shell=True, capture_output=True, text=True)
+        if result.returncode == 0:
+            # This is a Creality OS.
+            # Now we need to detect if it's a Sonic Pad or a K1
+            if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
+                self.OsType = OsTypes.SonicPad
+                return
+            if os.path.exists(Paths.CrealityOsUserDataPath_K1):
+                self.OsType = OsTypes.K1
+                return
+            raise Exception("We detected a Creality OS, but can't determine the device type. Please contact support.")
+
+        # The OS is debian
+        self.OsType = OsTypes.Debian
+        return

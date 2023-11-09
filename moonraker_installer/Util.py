@@ -8,10 +8,6 @@ from .Context import Context
 
 class Util:
 
-    # The systemd path where we expect to find moonraker service files
-    # AND where we will put our service file.
-    SystemdServiceFilePath = "/etc/systemd/system"
-
     # Returns the parent directory of the passed directory or file path.
     @staticmethod
     def GetParentDirectory(path):

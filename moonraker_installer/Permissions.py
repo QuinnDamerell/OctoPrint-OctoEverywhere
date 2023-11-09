@@ -31,7 +31,8 @@ class Permissions:
         # IT'S NOT OK TO INSTALL AS ROOT for the normal klipper setup.
         # This is because the moonraker updater system needs to get able to access the .git repo.
         # If the repo is owned by the root, it can't do that.
-        if context.IsObserverSetup is False:
+        # For the Creality OS setup, the only user is root, so it's ok.
+        if context.IsObserverSetup is False and context.IsCrealityOs() is False:
             if context.UserName.lower() == Permissions.c_RootUserName:
                 raise Exception("The installer was ran under the root user, this will cause problems with Moonraker. Please run the installer script as a non-root user, usually that's the `pi` user.")
 

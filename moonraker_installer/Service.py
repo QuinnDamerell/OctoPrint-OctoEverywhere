@@ -5,6 +5,7 @@ import base64
 from .Util import Util
 from .Logging import Logger
 from .Context import Context
+from .Context import OsTypes
 
 
 # Responsible for creating, running, and ensuring the service is installed and running.
@@ -37,13 +38,18 @@ class Service:
         # We have to convert to bytes -> encode -> back to string.
         argsJsonBase64 = base64.urlsafe_b64encode(bytes(argsJson, "utf-8")).decode("utf-8")
 
-        d = {
-            'RepoRootFolder': context.RepoRootFolder,
-            'UserName': context.UserName,
-            'VirtualEnvPath': context.VirtualEnvPath,
-            'ServiceBase64JsonArgs': argsJsonBase64
-        }
-        s = '''\
+        # Base on the OS type, install the service differently
+        if context.OsType == OsTypes.Debian:
+            self._InstallDebian(context, argsJsonBase64)
+        elif context.OsType == OsTypes.SonicPad:
+            self._InstallSonicPad(context, argsJsonBase64)
+        else:
+            raise Exception("Service install is not supported for this OS type yet. Contact support!")
+
+
+    # Install for debian setups
+    def _InstallDebian(self, context:Context, argsJsonBase64):
+        s = f'''\
     # OctoEverywhere For Moonraker Service
     [Unit]
     Description=OctoEverywhere For Moonraker
@@ -56,14 +62,13 @@ class Service:
     # Simple service, targeting the user that was used to install the service, simply running our moonraker py host script.
     [Service]
     Type=simple
-    User={UserName}
-    WorkingDirectory={RepoRootFolder}
-    ExecStart={VirtualEnvPath}/bin/python3 -m moonraker_octoeverywhere "{ServiceBase64JsonArgs}"
+    User={context.UserName}
+    WorkingDirectory={context.RepoRootFolder}
+    ExecStart={context.VirtualEnvPath}/bin/python3 -m moonraker_octoeverywhere "{argsJsonBase64}"
     Restart=always
     # Since we will only restart on a fatal Logger.Error, set the restart time to be a bit higher, so we don't spin and spam.
     RestartSec=10
-    '''.format(**d)
-
+'''
         if context.SkipSudoActions:
             Logger.Warn("Skipping service file creation, registration, and starting due to skip sudo actions flag.")
             return
@@ -81,5 +86,69 @@ class Service:
         Logger.Info("Starting service...")
         Util.RunShellCommand("systemctl stop "+context.ServiceName)
         Util.RunShellCommand("systemctl start "+context.ServiceName)
+
+        Logger.Info("Service setup and start complete!")
+
+
+    # Install for sonic pad setups.
+    def _InstallSonicPad(self, context:Context, argsJsonBase64):
+        # First, write the service file
+        # Notes:
+        #   Set start to be 66, so we start after Moonraker.
+        #   OOM_ADJ=-17 prevents us from being killed in an OOM
+        startNumberStr = "66"
+        s = f'''\
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2006-2011 OpenWrt.org
+
+START={startNumberStr}
+STOP=1
+DEPEND=moonraker_service
+USE_PROCD=1
+OOM_ADJ=-17
+
+start_service() {{
+    procd_open_instance
+    procd_set_param env HOME=/root
+    procd_set_param env PYTHONPATH={context.RepoRootFolder}
+    procd_set_param oom_adj $OOM_ADJ
+    procd_set_param command {context.VirtualEnvPath}/bin/python3 -m moonraker_octoeverywhere "{argsJsonBase64}"
+    procd_close_instance
+}}
+'''
+        if context.SkipSudoActions:
+            Logger.Warn("Skipping service file creation, registration, and starting due to skip sudo actions flag.")
+            return
+
+        Logger.Debug("Service config file contents to write: "+s)
+        Logger.Info("Creating service file "+context.ServiceFilePath+"...")
+        with open(context.ServiceFilePath, "w", encoding="utf-8") as serviceFile:
+            serviceFile.write(s)
+
+        # Make the script executable.
+        Logger.Info("Making the service executable...")
+        Util.RunShellCommand(f"chmod +x {context.ServiceFilePath}")
+
+        # The way this works is that we use the /etc/rc.d/ folder to register S and K files, which are
+        # links to the service file.
+        # The names of the files indicates the order which they should be started or killed.
+        # Use the service name to allow multiples.
+        startFilePath = f"/etc/rc.d/S{startNumberStr}{context.ServiceName}"
+        killFilePath = f"/etc/rc.d/K1{context.ServiceName}"
+
+        Logger.Info("Removing old service registrations...")
+        Util.RunShellCommand(f"rm -f {startFilePath}")
+        Util.RunShellCommand(f"rm -f {killFilePath}")
+
+        Logger.Info("Creating new service registrations...")
+        Util.RunShellCommand(f"ln -s {context.ServiceFilePath} {startFilePath}")
+        Util.RunShellCommand(f"ln -s {context.ServiceFilePath} {killFilePath}")
+
+        Logger.Info("Starting the service...")
+        # These some times fail depending on the state of the service.
+        Util.RunShellCommand(f"{context.ServiceFilePath} stop", False)
+        Util.RunShellCommand(f"{context.ServiceFilePath} reload", False)
+        Util.RunShellCommand(f"{context.ServiceFilePath} enable" , False)
+        Util.RunShellCommand(f"{context.ServiceFilePath} start")
 
         Logger.Info("Service setup and start complete!")

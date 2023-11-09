@@ -56,6 +56,11 @@ class Installer:
         Logger.Debug("Parsing script cmd line args.")
         context.ParseCmdLineArgs()
 
+        # Figure out the OS type we are installing on.
+        # This can be a normal debian device, Sonic Pad, K1, or others.
+        context.DetectOsType()
+        Logger.Info(f"Os Type Detected: {context.OsType}")
+
         # Print this again now that the debug cmd flag is parsed, since it might be useful.
         if context.Debug:
             Logger.Debug("Found config: "+argObjectStr)
@@ -138,8 +143,8 @@ class Installer:
 
         # Add our auto update logic.
         updater = Updater()
-        # If this is an observer, put the update script in the users root, so it's easy to find.
-        if context.IsObserverSetup:
+        # If this is an observer or a Creality OS install, put the update script in the users root, so it's easy to find.
+        if context.IsObserverSetup or context.IsCrealityOs():
             updater.PlaceUpdateScriptInRoot(context)
         # Also setup our cron updater if we can, so that the plugin will auto update.
         updater.EnsureCronUpdateJob(context.RepoRootFolder)

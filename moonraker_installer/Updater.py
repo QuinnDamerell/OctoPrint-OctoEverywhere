@@ -4,9 +4,11 @@ import stat
 from moonraker_octoeverywhere.version import Version
 
 from .Context import Context
+from .Context import OsTypes
 from .Logging import Logger
 from .Configure import Configure
 from .Util import Util
+from .Paths import Paths
 
 #
 # This class is responsible for doing updates for all plugins and companions on this local system.
@@ -15,6 +17,7 @@ from .Util import Util
 #
 # However, this is quite easy, for a few reasons.
 #    1) All plugins and companions will use the same ~/octoeverywhere/ git repo.
+#          All Creality based installs will use /usr/shared/octoeverywhere
 #    2) We always run the ./install.sh script before launching the PY installer, which handles updating system packages and PIP packages.
 #
 # So all we really need to do is find and restart all of the services.
@@ -23,10 +26,12 @@ class Updater:
 
     def DoUpdate(self, context:Context):
         Logger.Header("Starting Update Logic")
-        # Enumerate all service file to find any local plugins and companion service files.
+
+        # Enumerate all service file to find any local plugins, Creality OS, and companion service files, since all service files use the same common prefix.
+        # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
         foundOeServices = []
-        fileAndDirList = sorted(os.listdir(Util.SystemdServiceFilePath))
+        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f" Searching for OE services to update, found: {fileOrDirName}")
             if fileOrDirName.lower().startswith(Configure.c_ServiceCommonNamePrefix):
@@ -41,11 +46,18 @@ class Updater:
             Logger.Info(f"  {s}")
 
         Logger.Info("Restarting services...")
-
         for s in foundOeServices:
-            (returnCode, output, errorOut) = Util.RunShellCommand("systemctl restart "+s)
-            if returnCode != 0:
-                Logger.Warn(f"Service {s} might have failed to restart. Output: {output} Error: {errorOut}")
+            if context.OsType == OsTypes.SonicPad:
+                # We need to build the fill name path
+                serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, s)
+                Logger.Debug(f"Full service path: {serviceFilePath}")
+                Util.RunShellCommand(f"{serviceFilePath} restart")
+            elif context.OsType == OsTypes.Debian:
+                (returnCode, output, errorOut) = Util.RunShellCommand("systemctl restart "+s)
+                if returnCode != 0:
+                    Logger.Warn(f"Service {s} might have failed to restart. Output: {output} Error: {errorOut}")
+            else:
+                raise Exception("This OS type doesn't support updating at this time.")
 
         pluginVersionStr = "Unknown"
         try:
@@ -74,9 +86,9 @@ class Updater:
 #!/bin/bash
 
 #
-# This script will update all of the OctoEverywhere for Klipper instances on this device!
+# Run this script to update all OctoEverywhere instances on this device!
 #
-# This works for both the normal plugin install (where Klipper is running on this device) and Companion plugins.
+# This works for all install types, normal plugins, Creality OS, and companion installs.
 #
 # If you need help, feel free to contact us at support@octoeverywhere.com
 #
@@ -88,9 +100,17 @@ cd {context.RepoRootFolder}
 ./update.sh
 cd $startingDir
             '''
-            updateFilePath = os.path.join(context.UserHomePath, "update-octoeverywhere.sh")
+            # Target the user home unless this is a Creality install.
+            # For Creality OS the user home will be set differently, but we want to put this script where the user logs in, aka root.
+            targetPath = context.UserHomePath
+            if context.IsCrealityOs():
+                targetPath="/root"
+
+            # Create the file.
+            updateFilePath = os.path.join(targetPath, "update-octoeverywhere.sh")
             with open(updateFilePath, 'w', encoding="utf-8") as f:
                 f.write(s)
+
             # Make sure to make it executable
             st = os.stat(updateFilePath)
             os.chmod(updateFilePath, st.st_mode | stat.S_IEXEC)

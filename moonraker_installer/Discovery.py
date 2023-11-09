@@ -3,6 +3,8 @@ import os
 from .Util import Util
 from .Logging import Logger
 from .Context import Context
+from .Context import OsTypes
+from .Paths import Paths
 
 
 class ServiceFileConfigPathPair:
@@ -34,10 +36,14 @@ class Discovery:
                     return
 
         # If we are here, we either have no service file name but a config path, or neither.
-        # To start, we will enumerate all moonraker service files we can find and their possible
-        # moonraker config parings.
-        # For details about why we need these, read the readme.py file in this module.
-        pairList = self._FindAllServiceFilesAndPairings()
+        pairList = []
+        if context.IsCrealityOs():
+            # For the Creality OS, we know exactly where the files are, so we don't need to do a lot of searching.
+            pairList = self._CrealityOsFindAllServiceFilesAndPairings(context)
+        else:
+            # To start, we will enumerate all moonraker service files we can find and their possible moonraker config parings.
+            # For details about why we need these, read the readme.py file in this module.
+            pairList = self._FindAllServiceFilesAndPairings()
 
         # Ensure we found something.
         if pairList is None or len(pairList) == 0:
@@ -67,11 +73,15 @@ class Discovery:
         Logger.Warn("Multiple Moonraker instances found.")
         Logger.Warn("An instance of OctoEverywhere must be installed for every Moonraker instance, so this installer must be ran for each instance individually.")
         Logger.Blank()
+        if context.IsCrealityOs():
+            Logger.Header("Creality Users - If you only have one printer setup, use moonraker instance #1.")
+            Logger.Blank()
+
         # Print the config files found.
         count = 0
         for p in pairList:
             count += 1
-            Logger.Info(F"  {str(count)} {p.ServiceFileName} [{p.MoonrakerConfigFilePath}]")
+            Logger.Info(F"  {str(count)}) {p.ServiceFileName} [{p.MoonrakerConfigFilePath}]")
         Logger.Blank()
 
         # Ask the user which number they want.
@@ -101,11 +111,12 @@ class Discovery:
         return
 
 
+    # Note this must return the same result list as _CrealityOsFindAllServiceFilesAndPairings
     def _FindAllServiceFilesAndPairings(self) -> list:
         # Look for any service file that matches moonraker*.service.
         # For simple installs, there will be one file called moonraker.service.
         # For more complex setups, we assume it will use the kiauh naming system, of moonraker-<name or number>.service
-        serviceFiles = self._FindAllFiles(Util.SystemdServiceFilePath, "moonraker", ".service")
+        serviceFiles = self._FindAllFiles(Paths.SystemdServiceFilePath, "moonraker", ".service")
 
         # Based on the possible service files, see what moonraker config files we can match.
         results = []
@@ -129,29 +140,37 @@ class Discovery:
         return results
 
 
-    def _FindAllFiles(self, path:str, prefix:str = None, suffix:str = None, depth:int = 0):
+    # A special function for Creality OS installs, since the location of the printer data is much more well known.
+    # Note this must return the same result list as _FindAllServiceFilesAndPairings
+    def _CrealityOsFindAllServiceFilesAndPairings(self, context:Context):
+        # For the Creality OS, we know the name of the service files and the path.
+        # They will be named moonraker_service and moonraker_service.*
+        serviceFiles = self._FindAllFiles(Paths.CrealityOsServiceFilePath, "moonraker_service")
+
+        # Based on the possible service files, see what moonraker config files we can match.
         results = []
-        if depth > 10:
-            return results
-        # Use sorted, so the results are in a nice user presentable order.
-        fileAndDirList = sorted(os.listdir(path))
-        for fileOrDirName in fileAndDirList:
-            fullFileOrDirPath = os.path.join(path, fileOrDirName)
-            # Search sub folders
-            if os.path.isdir(fullFileOrDirPath):
-                tmp = self._FindAllFiles(fullFileOrDirPath, prefix, suffix, depth + 1)
-                if tmp is not None:
-                    for t in tmp:
-                        results.append(t)
-            # Only accept files that aren't links, since there are a lot of those in the service files.
-            elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
-                include = True
-                if prefix is not None:
-                    include = fileOrDirName.lower().startswith(prefix)
-                if include is True and suffix is not None:
-                    include = fileOrDirName.lower().endswith(suffix)
-                if include:
-                    results.append(fullFileOrDirPath)
+        for moonrakerServiceFilePath in serviceFiles:
+            # Parse out the service number for each file. We know the exact file format.
+            # If it has a ., it's .<number>. No . means it's the base printer.
+            moonrakerServiceFileName = os.path.basename(moonrakerServiceFilePath)
+            numberSuffix = ""
+            if "." in moonrakerServiceFileName:
+                numberSuffix = moonrakerServiceFileName.split(".")[1]
+
+            # Figure out the possible path by the OS type.
+            moonrakerConfigFilePath = ""
+            if context.OsType == OsTypes.SonicPad:
+                moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_SonicPad}/printer_config{numberSuffix}/moonraker.conf"
+            elif context.OsType == OsTypes.K1:
+                # Check for the file using the k1 path.
+                moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_K1}/printer_data{numberSuffix}/config/moonraker.conf"
+
+            if os.path.exists(moonrakerConfigFilePath):
+                Logger.Debug(f"Found moonraker config file {moonrakerConfigFilePath}")
+                results.append(ServiceFileConfigPathPair(moonrakerServiceFileName, moonrakerConfigFilePath))
+            else:
+                # Since we should find these, warn if we don't.
+                Logger.Warn(f"Failed to find moonraker config file {moonrakerConfigFilePath}")
         return results
 
 
@@ -313,18 +332,51 @@ class Discovery:
         return None
 
 
+    def _FindAllFiles(self, path:str, prefix:str = None, suffix:str = None, depth:int = 0):
+        results = []
+        if depth > 10:
+            return results
+        # Use sorted, so the results are in a nice user presentable order.
+        fileAndDirList = sorted(os.listdir(path))
+        for fileOrDirName in fileAndDirList:
+            fullFileOrDirPath = os.path.join(path, fileOrDirName)
+            # Search sub folders
+            if os.path.isdir(fullFileOrDirPath):
+                tmp = self._FindAllFiles(fullFileOrDirPath, prefix, suffix, depth + 1)
+                if tmp is not None:
+                    for t in tmp:
+                        results.append(t)
+            # Only accept files that aren't links, since there are a lot of those in the service files.
+            elif os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
+                include = True
+                if prefix is not None:
+                    include = fileOrDirName.lower().startswith(prefix)
+                if include is True and suffix is not None:
+                    include = fileOrDirName.lower().endswith(suffix)
+                if include:
+                    results.append(fullFileOrDirPath)
+        return results
+
+
     def _PrintDebugPaths(self, context:Context):
         # Print all service files.
         Logger.Debug("Discovery - Service Files")
-        self._PrintAllFilesAndSubFolders(Util.SystemdServiceFilePath, ".service")
+        self._PrintAllFilesAndSubFolders(Paths.GetServiceFileFolderPath(context))
 
         # We want to print files that might be printer data folders or names of other folders on other systems.
         Logger.Blank()
         Logger.Debug("Discovery - Config Files In Home Path")
-        self._PrintAllFilesAndSubFolders(context.UserHomePath, ".conf")
+        if context.IsCrealityOs():
+            if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
+                self._PrintAllFilesAndSubFolders(Paths.CrealityOsUserDataPath_SonicPad, ".conf")
+            if os.path.exists(Paths.CrealityOsUserDataPath_K1):
+                self._PrintAllFilesAndSubFolders(Paths.CrealityOsUserDataPath_K1, ".conf")
+        else:
+            self._PrintAllFilesAndSubFolders(context.UserHomePath, ".conf")
 
 
-    def _PrintAllFilesAndSubFolders(self, path:str, targetSuffix:str, depth = 0, depthStr = " "):
+
+    def _PrintAllFilesAndSubFolders(self, path:str, targetSuffix:str = None, depth = 0, depthStr = " "):
         if depth > 5:
             return
         # Use sorted, so the results are in a nice user presentable order.
@@ -332,7 +384,7 @@ class Discovery:
         for fileOrDirName in fileAndDirList:
             fullFileOrDirPath = os.path.join(path, fileOrDirName)
             # Print the file or folder if it starts with the target suffix.
-            if fileOrDirName.lower().endswith(targetSuffix):
+            if targetSuffix is None or fileOrDirName.lower().endswith(targetSuffix):
                 Logger.Debug(f"{depthStr}{fullFileOrDirPath}")
             # Look through child folders.
             if os.path.isdir(fullFileOrDirPath):
