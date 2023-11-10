@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this is also parsed by the moonraker module to pull the version, so the string and format must remain the same!
-plugin_version = "2.9.1"
+plugin_version = "2.9.2"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -68,7 +68,7 @@ plugin_license = "AGPLv3"
 #   urllib3 - There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
-plugin_requires = ["websocket_client>=1.6.0,<1.6.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2022.12.7", "rsa>=4.0", "dnspython>=2.3.0", "httpx==0.24.0", "urllib3>=1.26.15,<1.27.0" ]
+plugin_requires = ["websocket_client>=1.6.0,<1.6.99", "requests>=2.24.0", "octoflatbuffers==2.0.5", "pillow", "certifi>=2023.7.22", "rsa>=4.9", "dnspython>=2.3.0", "httpx==0.24.0", "urllib3>=1.26.15,<1.27.0" ]
 
 ### --------------------------------------------------------------------------------------------------------------------
 ### More advanced options that you usually shouldn't have to touch follow after this point

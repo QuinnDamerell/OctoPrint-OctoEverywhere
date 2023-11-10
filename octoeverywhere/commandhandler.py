@@ -3,6 +3,7 @@ import json
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .octohttprequest import OctoHttpRequest
 from .octohttprequest import PathTypes
+from .webcamhelper import WebcamHelper
 from .sentry import Sentry
 
 #
@@ -158,6 +159,30 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
+    def ListWebcams(self):
+        # Get all of the known webcams
+        webcamSettingsItems = WebcamHelper.Get().ListWebcams()
+        if webcamSettingsItems is None:
+            webcamSettingsItems = []
+        # We need to convert the objects into a dic to seralize.
+        webcams = []
+        for i in webcamSettingsItems:
+            wc = {}
+            wc["Name"] = i.Name
+            wc["SnapshotUrl"] = i.SnapshotUrl
+            wc["StreamUrl"] = i.StreamUrl
+            wc["FlipH"] = i.FlipH
+            wc["FlipV"] = i.FlipV
+            wc["Rotation"] = i.Rotation
+            webcams.append(wc)
+        # Build the response
+        responseObj = {
+            "Webcams" : webcams
+        }
+        return CommandResponse.Success(responseObj)
+
+
+    # Must return a CommandResponse
     def Pause(self, jsonObjData_CanBeNone):
 
         # Defaults.
@@ -299,12 +324,15 @@ class CommandHandler:
             return CommandResponse.Success({"Message":"Pong"})
         elif commandPathLower.startswith("status"):
             return self.GetStatus()
+        elif commandPathLower.startswith("list-webcam"):
+            return self.ListWebcams()
         elif commandPathLower.startswith("pause"):
             return self.Pause(jsonObj_CanBeNone)
         elif commandPathLower.startswith("resume"):
             return self.Resume()
         elif commandPathLower.startswith("cancel"):
             return self.Cancel()
+
 
         return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
 

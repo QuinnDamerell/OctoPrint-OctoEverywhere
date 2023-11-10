@@ -420,6 +420,10 @@ class MoonrakerClient:
             if progressFloat_CanBeNone is not None:
                 self.MoonrakerCompat.OnPrintProgress(progressFloat_CanBeNone)
 
+        # When the webcams change, kick the webcam helper.
+        if method == "notify_webcams_changed":
+            self.ConnectionStatusHandler.OnWebcamSettingsChanged()
+
 
     # If the message has a progress contained in the virtual_sdcard, this returns it. The progress is a float from 0.0->1.0
     # Otherwise None

@@ -10,16 +10,7 @@ from octoeverywhere.webcamhelper import WebcamSettingItem, WebcamHelper
 
 from .config import Config
 from .moonrakerclient import MoonrakerClient
-
-
-# A helper object that abstracts webcam settings away from different types of settings providers.
-class AbstractWebcamSettings:
-    def __init__(self) -> None:
-        self.StreamUrl:str = None
-        self.SnapshotUrl:str = None
-        self.FlipH:bool = False
-        self.FlipV:bool = False
-        self.Rotation:int = 0
+from .moonrakerclient import JsonRpcResponse
 
 
 # This class implements the webcam platform helper interface for moonraker.
@@ -27,7 +18,12 @@ class MoonrakerWebcamHelper():
 
     # The amount of time we will wait between settings checks.
     # These are also invoked when there's webcam activity, so we don't need to check too frequently.
-    c_DelayBetweenAutoSettingsCheckSec = 30 * 60
+    # Note that we get push notifications from moonraker if the settings change.
+    c_DelayBetweenAutoSettingsCheckSec = 60 * 60 * 12
+
+    # The min time between checks when there's webcam activity.
+    # Note that we get push notifications from moonraker if the settings change.
+    c_MinTimeBetweenWebcamActivityInvokesSec = 60 * 60 * 1
 
     # When the plugin starts, this is the delay we use before checking.
     # We want this to be shorter, so if something changed or this is the first install, we pickup the webcam settings quickly
@@ -35,8 +31,6 @@ class MoonrakerWebcamHelper():
     # Give the system just enough time to start up, then run.
     c_DelayForFirstRunAutoSettingsCheckSec = 5
 
-    # The min time between checks when there's webcam activity.
-    c_MinTimeBetweenWebcamActivityInvokesSec = 60
 
     # Default settings.
     c_DefaultAutoSettings = True
@@ -48,31 +42,39 @@ class MoonrakerWebcamHelper():
     c_DefaultFlipV = False
     c_DefaultRotation = 0
 
+
     def __init__(self, logger:logging.Logger, config : Config) -> None:
         self.Logger = logger
         self.Config = config
 
-        # Get this so it sets the default primary webcam name.
-        self.Config.GetStr(Config.WebcamSection, Config.WebcamNameToUseAsPrimary, MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary)
-
-        # Get this so it sets the default, if it's not set or is an incorrect value.
-        self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, True)
-
-        # Get the current config values, and also write the defaults if they aren't there.
-        self.StreamUrl = self.Config.GetStr(Config.WebcamSection, Config.WebcamStreamUrl, MoonrakerWebcamHelper.c_DefaultStreamUrl)
-        self.SnapshotUrl = self.Config.GetStr(Config.WebcamSection, Config.WebcamSnapshotUrl, MoonrakerWebcamHelper.c_DefaultSnapshotUrl)
-        self.FlipH = self.Config.GetBool(Config.WebcamSection, Config.WebcamFlipH, MoonrakerWebcamHelper.c_DefaultFlipH)
-        self.FlipV = self.Config.GetBool(Config.WebcamSection, Config.WebcamFlipV, MoonrakerWebcamHelper.c_DefaultFlipV)
-        self.Rotation = self.Config.GetInt(Config.WebcamSection, Config.WebcamRotation, MoonrakerWebcamHelper.c_DefaultRotation)
-        if self.Rotation != 0 and self.Rotation != 180 and self.Rotation != 270:
-            self.Logger.error("MoonrakerWebcamHelper has an invalid rotation value "+str(self.Rotation)+", resetting the default.")
-            self.Config.SetStr(Config.WebcamSection, Config.WebcamRotation, 0)
+        # Locks the cached results and local settings.
+        # If auto settings are enabled, AutoSettingsResults will hold all webcams we could discover in the system.
+        self.ResultsLock = threading.Lock()
+        self.AutoSettingsResults = []
 
         # Set this to 0, so when the moonraker client will wake us up when the websocket is connected, and we don't want to miss it.
         self.AutoSettingsLastWake = 0
 
         # Always start the auto update thread, since this also monitors the auto settings state.
         self.AutoSettingsWorkerEvent = threading.Event()
+
+        # Get this so it sets the default primary webcam name.
+        self.Config.GetStr(Config.WebcamSection, Config.WebcamNameToUseAsPrimary, MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary)
+
+        # Get this so it sets the default, if it's not set or is an incorrect value.
+        self.EnableAutoSettings = self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings)
+
+        # Setup the manual values in the class and read what's currently in the config file.
+        # This will also set the defaults into the file if they aren't there.
+        # These will always be set. If auto settings is enabled, these will be set to the currently found auto settings.
+        # Otherwise, these will be the user set values or the defaults.
+        self.StreamUrl:str = MoonrakerWebcamHelper.c_DefaultStreamUrl
+        self.SnapshotUrl:str = MoonrakerWebcamHelper.c_DefaultSnapshotUrl
+        self.FlipH:bool = MoonrakerWebcamHelper.c_DefaultFlipH
+        self.FlipV:bool = MoonrakerWebcamHelper.c_DefaultFlipV
+        self.Rotation:int = MoonrakerWebcamHelper.c_DefaultRotation
+        self._ReadManuallySetValues()
+
         t = threading.Thread(target=self._WebcamSettingsUpdateWorker)
         t.daemon = True
         t.start()
@@ -81,33 +83,56 @@ class MoonrakerWebcamHelper():
     # !! Interface Function !!
     # This must return an array of WebcamSettingItems.
     # Index 0 is used as the default webcam.
+    # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
     def GetWebcamConfig(self):
 
         # Kick the settings worker since the webcam was accessed.
         self.KickOffWebcamSettingsUpdate()
 
-        # Return the current values.
-        return [
-            WebcamSettingItem(self.SnapshotUrl, self.StreamUrl, self.FlipH, self.FlipV, self.Rotation)
-        ]
+        # Grab the lock to see what we should be returning.
+        with self.ResultsLock:
+            # If auto settings are enabled, return any cached auto settings that we found.
+            # If we have anything, make a copy of the array and return it.
+            if self.EnableAutoSettings:
+                if len(self.AutoSettingsResults) != 0:
+                    results = []
+                    for i in self.AutoSettingsResults:
+                        results.append(i)
+                    return results
+            # If we don't have auto settings enabled or we don't have any results, return what we have in memory.
+            # This will either be the default values or a values that the user has set.
+            item = WebcamSettingItem("Default", self.SnapshotUrl, self.StreamUrl, self.FlipH, self.FlipV, self.Rotation)
+            # Validate the settings, but always return them.
+            item.Validate(self.Logger)
+            return [
+                item
+            ]
 
 
     # Wakes up the auto settings worker.
     # Called by moonrakerclient when the websocket is connected, to ensure we pull settings on moonraker connections.
-    def KickOffWebcamSettingsUpdate(self):
+    def KickOffWebcamSettingsUpdate(self, forceUpdate = False):
         # Always kick off the thread, so if auto settings changes, we read it.
         timeSinceLastWakeSec = time.time() - self.AutoSettingsLastWake
-        if timeSinceLastWakeSec > MoonrakerWebcamHelper.c_MinTimeBetweenWebcamActivityInvokesSec:
+        # Determine if we are still waiting to get auto settings.
+        # When we first try to get the settings, we might not have a Moonraker connection and thus wont get settings.
+        # In that case, we want to keep trying, since we will get kicked when the moonraker connection becomes valid.
+        # If auto settings are enabled and we don't have results, we should try again.
+        needToFindAutoSettings = False
+        if self.EnableAutoSettings:
+            with self.ResultsLock:
+                needToFindAutoSettings = len(self.AutoSettingsResults) == 0
+
+        if forceUpdate or needToFindAutoSettings or timeSinceLastWakeSec > MoonrakerWebcamHelper.c_MinTimeBetweenWebcamActivityInvokesSec:
             self.AutoSettingsLastWake = time.time()
             self.AutoSettingsWorkerEvent.set()
 
 
     # This is the main worker thread that keeps track of webcam settings.
     # This also keeps checking the auto settings option in the config, so we know if the user changes it.
-    # TODO - right now we use a poll based system, which is kind of shitty. Ideally we would figure out a way to make this push based.
+    # Note that there's a moonraker command `notify_webcams_changed` we listen for. When it first we will force this update loop to run.
     def _WebcamSettingsUpdateWorker(self):
-        lastAutoSettingsValue = True
         isFirstRun = True
         while True:
             try:
@@ -125,20 +150,38 @@ class MoonrakerWebcamHelper():
 
                 # Force a config reload, so if the user changed this setting, we respect it.
                 self.Config.ReloadFromFile()
-                autoSettings = self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, True)
+                newAutoSettings = self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings)
 
                 # Log if the value changed.
-                if lastAutoSettingsValue != autoSettings:
-                    self.Logger.info("Webcam auto settings detection value updated: "+str(autoSettings))
-                    lastAutoSettingsValue = autoSettings
+                if self.EnableAutoSettings != newAutoSettings:
+                    self.Logger.info("Webcam auto settings detection value updated: "+str(newAutoSettings))
+                    self.EnableAutoSettings = newAutoSettings
 
                 # Do an update if we should.
-                if autoSettings:
+                if self.EnableAutoSettings:
                     self._DoAutoSettingsUpdate()
+                else:
+                    # Otherwise, update our in memory values with what's in the config.
+                    self._ReadManuallySetValues()
 
             except Exception as e:
                 Sentry.Exception("Webcam helper - _WebcamSettingsUpdateWorker exception. ", e)
 
+
+    # Reads the values currently set in the config and sets them into our local settings.
+    def _ReadManuallySetValues(self):
+        # Read these under lock, so we don't get conflicts with them changing while being queried.
+        with self.ResultsLock:
+            self.EnableAutoSettings = self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings)
+            self.StreamUrl = self.Config.GetStr(Config.WebcamSection, Config.WebcamStreamUrl, MoonrakerWebcamHelper.c_DefaultStreamUrl)
+            self.SnapshotUrl = self.Config.GetStr(Config.WebcamSection, Config.WebcamSnapshotUrl, MoonrakerWebcamHelper.c_DefaultSnapshotUrl)
+            self.FlipH = self.Config.GetBool(Config.WebcamSection, Config.WebcamFlipH, MoonrakerWebcamHelper.c_DefaultFlipH)
+            self.FlipV = self.Config.GetBool(Config.WebcamSection, Config.WebcamFlipV, MoonrakerWebcamHelper.c_DefaultFlipV)
+            self.Rotation = self.Config.GetInt(Config.WebcamSection, Config.WebcamRotation, MoonrakerWebcamHelper.c_DefaultRotation)
+            if self.Rotation != 0 and self.Rotation != 180 and self.Rotation != 270:
+                self.Logger.error("MoonrakerWebcamHelper has an invalid rotation value "+str(self.Rotation)+", resetting the default.")
+                self.Config.SetStr(Config.WebcamSection, Config.WebcamRotation, 0)
+                self.Rotation = 0
 
 
     # Does the settings update.
@@ -180,32 +223,18 @@ class MoonrakerWebcamHelper():
 
             value = res["value"]
             if len(value) > 0:
-                # First, if the use specified a webcam name to select, try to find and validate it.
-                webcamNameToSelect = self.Config.GetStr(Config.WebcamSection, Config.WebcamNameToUseAsPrimary, MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary)
-                if webcamNameToSelect is not None and len(webcamNameToSelect) > 0 and webcamNameToSelect != MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary:
-                    webcamNameToSelectLower = webcamNameToSelect.lower()
-                    # For each current value...
-                    for guid in value:
-                        webcamSettingsObj = value[guid]
-                        if "name" in webcamSettingsObj:
-                            # If the name matches what we are looking for...
-                            if webcamSettingsObj["name"].lower() == webcamNameToSelectLower:
-                                # Check if the settings are valid...
-                                webcamSettings = self._TryToParseWebcamDbEntry(webcamSettingsObj)
-                                if webcamSettings is not None:
-                                    # We found it and it has valid settings!
-                                    self._SetNewValues(webcamSettings)
-                                    return
-                    self.Logger.warn(f"A non-default primary webcam name was set, but we didn't find a matching webcam config name in the moonraker DB. name:{webcamNameToSelectLower}")
-
-                # If we don't have a name to select or we failed to find it, just look for the first webcam settings that's valid.
+                # Parse everything we got back.
+                webcamSettingItems = []
                 for guid in value:
                     webcamSettingsObj = value[guid]
                     webcamSettings = self._TryToParseWebcamDbEntry(webcamSettingsObj)
                     if webcamSettings is not None:
-                        # We found a valid one, set it and return!
-                        self._SetNewValues(webcamSettings)
-                        return
+                        webcamSettingItems.append(webcamSettings)
+
+                # If we found anything, set them!
+                if len(webcamSettingItems) > 0:
+                    self._SetNewValues(webcamSettingItems)
+                    return
 
             # We failed to find a webcam in the list that's valid or there are no webcams in the list.
             # Revert to defaults
@@ -221,6 +250,13 @@ class MoonrakerWebcamHelper():
 
         # If we failed don't do anything.
         if result.HasError():
+            # If the error is that there's no websocket connected, we don't want to auto logic to continue, so it doesn't
+            # pull results from the old api if the WS becomes connected. So in this case, return True, so the auto logic will stop.
+            # We have logic in KickOffWebcamSettingsUpdate that will always kick an update if there are no auto results and auto is enabled.
+            # So when the websocket connects, KickOffWebcamSettingsUpdate will be called, and we will run again.
+            if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                self.Logger.info("Moonraker webcam helper failed to query for webcams from API, no websocket is connected.")
+                return True
             self.Logger.warn("Moonraker webcam helper failed to query for webcams from API. "+result.GetLoggingErrorStr())
             return False
 
@@ -234,40 +270,31 @@ class MoonrakerWebcamHelper():
             self.Logger.debug("Moonraker WebCam API Result: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
 
         webcamList = res["webcams"]
-        if len(webcamList) > 0:
-            # First, if the use specified a webcam name to select, try to find and validate it.
-            webcamNameToSelect = self.Config.GetStr(Config.WebcamSection, Config.WebcamNameToUseAsPrimary, MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary)
-            if webcamNameToSelect is not None and len(webcamNameToSelect) > 0 and webcamNameToSelect != MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary:
-                webcamNameToSelectLower = webcamNameToSelect.lower()
-                # For each current value...
-                for webcamSettingsObj in webcamList:
-                    if "name" in webcamSettingsObj:
-                        # If the name matches what we are looking for...
-                        if webcamSettingsObj["name"].lower() == webcamNameToSelectLower:
-                            # Check if the settings are valid...
-                            webcamSettings = self._TryToParseWebcamApiItem(webcamSettingsObj)
-                            if webcamSettings is not None:
-                                # We found it and it has valid settings!
-                                self._SetNewValues(webcamSettings)
-                                return True
-                self.Logger.warn(f"A non-default primary webcam name was set, but we didn't find a matching webcam config name in the moonraker webcam API. name:{webcamNameToSelectLower}")
+        if len(webcamList) == 0:
+            return False
 
-            # If we don't have a name to select or we failed to find it, just look for the first webcam settings that's valid.
-            for webcamSettingsObj in webcamList:
-                webcamSettings = self._TryToParseWebcamApiItem(webcamSettingsObj)
-                if webcamSettings is not None:
-                    # We found a valid one, set it and return!
-                    self._SetNewValues(webcamSettings)
-                    return True
+        # Parse all webcam we can find.
+        webcamSettingsItemResults = []
+        for webcamSettingsObj in webcamList:
+            webcamSettings = self._TryToParseWebcamApiItem(webcamSettingsObj)
+            if webcamSettings is not None:
+                webcamSettingsItemResults.append(webcamSettings)
 
-        # If we didn't find a webcam in the new API system, return false to fallback to the old DB system.
-        return False
+        # If we didn't get anything, return false.
+        if len(webcamSettingsItemResults) == 0:
+            return False
+
+        # Set whatever we found.
+        self._SetNewValues(webcamSettingsItemResults)
+
+        # Return success.
+        return True
 
 
     # Given a Moonraker webcam db entry, this will try to parse it.
-    # If successful, this will return a valid AbstractWebcamSettings object.
+    # If successful, this will return a valid WebcamSettingItem object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseWebcamDbEntry(self, webcamSettingsObj) -> AbstractWebcamSettings:
+    def _TryToParseWebcamDbEntry(self, webcamSettingsObj) -> WebcamSettingItem:
         try:
             # Skip if it's not set to enabled.
             if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:
@@ -277,7 +304,10 @@ class MoonrakerWebcamHelper():
             # The biggest problem is some of these values can go stale, for example Fluidd doesn't update or show the urlSnapshot value in the UI.
 
             # It seems they both always set streamUrl, which is good, because our snapshot logic can fallback to it.
-            webcamSettings = AbstractWebcamSettings()
+            webcamSettings = WebcamSettingItem()
+            if "name" in webcamSettingsObj:
+                webcamSettings.Name = webcamSettingsObj["name"]
+
             if "urlStream" in webcamSettingsObj:
                 webcamSettings.StreamUrl = webcamSettingsObj["urlStream"]
 
@@ -315,7 +345,7 @@ class MoonrakerWebcamHelper():
     # Given a Moonraker webcam API result list item, this will try to parse it.
     # If successful, this will return a valid AbstractWebcamSettings object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseWebcamApiItem(self, webcamApiItem) -> AbstractWebcamSettings:
+    def _TryToParseWebcamApiItem(self, webcamApiItem) -> WebcamSettingItem:
         try:
             # This new converged logic is amazing, see this doc for the full schema
             # https://moonraker.readthedocs.io/en/latest/web_api/#webcam-apis
@@ -325,7 +355,9 @@ class MoonrakerWebcamHelper():
                 return None
 
             # Parse the settings.
-            webcamSettings = AbstractWebcamSettings()
+            webcamSettings = WebcamSettingItem()
+            if "name" in webcamApiItem:
+                webcamSettings.Name = webcamApiItem["name"]
             if "stream_url" in webcamApiItem:
                 webcamSettings.StreamUrl = webcamApiItem["stream_url"]
             if "snapshot_url" in webcamApiItem:
@@ -350,7 +382,7 @@ class MoonrakerWebcamHelper():
 
     # Validates if webcam abstract settings are valid and also will edit special logic we need to apply.
     # Returns True if the settings are valid, otherwise False.
-    def _ValidateAndFixupWebCamSettings(self, webcamSettings:AbstractWebcamSettings) -> bool:
+    def _ValidateAndFixupWebCamSettings(self, webcamSettings:WebcamSettingItem) -> bool:
         try:
             # Stream URL is required.
             if webcamSettings.StreamUrl is None or len(webcamSettings.StreamUrl) == 0:
@@ -398,8 +430,8 @@ class MoonrakerWebcamHelper():
                 self.Logger.warn("Webcam helper found an invalid rotation, resetting to 0")
                 webcamSettings.Rotation = 0
 
-            # The data is valid, return true.
-            return True
+            # Finally, do the standard webcam settings validation.
+            return webcamSettings.Validate(self.Logger)
         except Exception as e:
             Sentry.Exception("Webcam helper _ValidatePossibleWebCamSettings exception. ", e)
         return False
@@ -455,35 +487,68 @@ class MoonrakerWebcamHelper():
     # If called, this should force the settings to the defaults, if auto settings are on.
     def _ResetValuesToDefaults(self):
         self.Logger.debug("Resetting the webcam settings to the defaults.")
-        webcamSettings = AbstractWebcamSettings()
+        webcamSettings = WebcamSettingItem("Default")
         webcamSettings.StreamUrl = MoonrakerWebcamHelper.c_DefaultStreamUrl
         webcamSettings.SnapshotUrl = MoonrakerWebcamHelper.c_DefaultSnapshotUrl
         webcamSettings.FlipH = MoonrakerWebcamHelper.c_DefaultFlipH
         webcamSettings.FlipV = MoonrakerWebcamHelper.c_DefaultFlipV
         webcamSettings.Rotation = MoonrakerWebcamHelper.c_DefaultRotation
-        self._SetNewValues(webcamSettings)
+        webcamSettings.Validate(self.Logger)
+        self._SetNewValues([webcamSettings])
 
 
     # Updates the values, if they are different from the current.
-    def _SetNewValues(self, webcamSettings:AbstractWebcamSettings):
+    def _SetNewValues(self, webcamSettingsItemResults):
 
         # Check that we are using auto config.
-        if self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings) is False:
+        if self.EnableAutoSettings is False:
             return
 
-        # Found valid config
-        self.Logger.debug(f'Webcam helper found settings. streamUrl: {self.StreamUrl}, snapshotUrl: {self.SnapshotUrl}, flipH: {self.FlipH}, FlipV: {self.FlipV}, rotation: {self.Rotation}')
+        # Ensure we got something, this shouldn't happen.
+        if len(webcamSettingsItemResults) == 0:
+            self.Logger.error("Webcam helper _SetNewValues got an empty list. Resetting to defaults.")
+            self._ResetValuesToDefaults()
+            return
 
+        # We get a list of results, we need to respect the user's selection of a default camera if they set one.
+        # In that case, the default camera should be first in the list.
+        webcamNameToSelect = self.Config.GetStr(Config.WebcamSection, Config.WebcamNameToUseAsPrimary, MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary)
+        if webcamNameToSelect is not None and len(webcamNameToSelect) > 0 and webcamNameToSelect != MoonrakerWebcamHelper.c_DefaultWebcamNameToUseAsPrimary:
+            webcamNameToSelectLower = webcamNameToSelect.lower()
+            i = 0
+            while i < len(webcamSettingsItemResults):
+                item = webcamSettingsItemResults[i]
+                if item.Name.lower() == webcamNameToSelectLower:
+                    # If we find it, delete it from it's current position and move it to the front.
+                    del webcamSettingsItemResults[i]
+                    webcamSettingsItemResults.insert(0, item)
+                    break
+                i += 1
+            if i == len(webcamSettingsItemResults):
+                self.Logger.warn(f"A non-default primary webcam name was set, but we didn't find a matching webcam config. name:{webcamNameToSelectLower}")
+
+        # Print for debugging.
+        for i in webcamSettingsItemResults:
+            self.Logger.debug(f'Webcam helper found settings. name: {i.Name}, streamUrl: {i.StreamUrl}, snapshotUrl: {i.SnapshotUrl}, flipH: {i.FlipH}, FlipV: {i.FlipV}, rotation: {i.Rotation}')
+            i.Validate(self.Logger)
+
+        # We want to use this list of results, so set them now.
+        # After these are set, if auto is enabled, these will be used.
+        with self.ResultsLock:
+            self.AutoSettingsResults = webcamSettingsItemResults
+
+        # We also need to update the manual and config set values if auto is enabled. We always use the index 0, aka the default.
         # Make sure there's a difference
-        if webcamSettings.StreamUrl == self.StreamUrl and webcamSettings.SnapshotUrl == self.SnapshotUrl and webcamSettings.FlipH == self.FlipH and webcamSettings.FlipV == self.FlipV and webcamSettings.Rotation == self.Rotation:
+        item = webcamSettingsItemResults[0]
+        if item.StreamUrl == self.StreamUrl and item.SnapshotUrl == self.SnapshotUrl and item.FlipH == self.FlipH and item.FlipV == self.FlipV and item.Rotation == self.Rotation:
             return
 
         # Set the values.
-        self.StreamUrl = webcamSettings.StreamUrl
-        self.SnapshotUrl = webcamSettings.SnapshotUrl
-        self.FlipH = webcamSettings.FlipH
-        self.FlipV = webcamSettings.FlipV
-        self.Rotation = webcamSettings.Rotation
+        self.StreamUrl = item.StreamUrl
+        self.SnapshotUrl = item.SnapshotUrl
+        self.FlipH = item.FlipH
+        self.FlipV = item.FlipV
+        self.Rotation = item.Rotation
         self.Config.SetStr(Config.WebcamSection, Config.WebcamStreamUrl, self.StreamUrl)
         self.Config.SetStr(Config.WebcamSection, Config.WebcamSnapshotUrl, self.SnapshotUrl)
         self.Config.SetStr(Config.WebcamSection, Config.WebcamFlipH, self.FlipH)

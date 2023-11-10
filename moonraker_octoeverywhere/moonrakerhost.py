@@ -305,6 +305,13 @@ class MoonrakerHost:
         self.MoonrakerDatabase.EnsureOctoEverywhereDatabaseEntry()
 
     #
+    # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when it gets a message that the webcam settings have changed.
+    #
+    def OnWebcamSettingsChanged(self):
+        # Set the force flag to true, since we know the settings just changed.
+        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate(True)
+
+    #
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and klippy is fully ready to use.
     #
     def OnMoonrakerClientConnected(self):
