@@ -11,8 +11,8 @@ websocket_client>=1.6.0,<1.6.99
 requests>=2.24.0
 octoflatbuffers==2.0.5
 pillow
-certifi>=2022.12.7
-rsa>=4.0
+certifi>=2023.7.22
+rsa>=4.9
 dnspython>=2.3.0
 httpx==0.24.0
 urllib3>=1.26.15,<1.27.0

@@ -11,6 +11,7 @@ from .Configure import Configure
 from .Updater import Updater
 from .Permissions import Permissions
 from .Frontend import Frontend
+from .Uninstall import Uninstall
 
 class Installer:
 
@@ -98,6 +99,12 @@ class Installer:
             # Do the update logic.
             update = Updater()
             update.DoUpdate(context)
+            return
+
+        # If we are running as an uninstaller, run that logic and exit.
+        if context.IsUninstallMode:
+            uninstall = Uninstall()
+            uninstall.DoUninstall(context)
             return
 
         # Next step is to discover and fill out the moonraker config file path and service file name.

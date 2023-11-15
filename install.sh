@@ -29,7 +29,7 @@ set -e
 #
 # First things first, we need to detect what kind of OS we are running on. The script works by default with all
 # Debian OSs, but some printers with embedded computers run strange embedded OSs, that have a lot of restrictions.
-# These must stay in sync with update.sh!
+# These must stay in sync with update.sh and uninstall.sh!
 #
 
 # The K1 and K1 Max run an OS called Buildroot. We detect that by looking at the os-release file.

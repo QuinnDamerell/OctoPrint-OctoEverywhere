@@ -65,6 +65,9 @@ class Context:
         # Parsed from the command line args, if set, the plugin install should be in update mode.
         self.IsUpdateMode:bool = False
 
+        # Parsed from the command line args, if set, the plugin install should be in uninstall mode.
+        self.IsUninstallMode:bool = False
+
 
         #
         # Generation 2
@@ -229,6 +232,9 @@ class Context:
                 elif rawArg.lower() == "update":
                     Logger.Info("Setup running in update mode.")
                     self.IsUpdateMode = True
+                elif rawArg.lower() == "uninstall":
+                    Logger.Info("Setup running in uninstall mode.")
+                    self.IsUninstallMode = True
                 else:
                     raise Exception("Unknown argument found. Use install.sh -help for options.")
 
