@@ -65,27 +65,34 @@ class UiInjector():
             self._FindStaticFilesAndGetHash()
 
             # Try to find the possible front ends.
-            searchRootDir = self.GetParentDirectory(self.OeRepoRoot)
+            # First, we might have a few places to search.
+            searchRootDirs = [ self.GetParentDirectory(self.OeRepoRoot) ]
 
             # If we are running on the sonic pad or the k1, the path we want to search is different.
-            osType =OsTypeIdentifier.DetectOsType()
+            osType = OsTypeIdentifier.DetectOsType()
             if osType == OsType.OsType.CrealitySonicPad or osType == OsType.OsType.CrealityK1:
-                searchRootDir = "/usr/share/"
+                # On the sonic pad, Creality installs mainsail into /usr/share
+                searchRootDirs.append("/usr/share/")
+                # On the K1, the 3rd party script install fluidd and/or mainsail to /usr/data.
+                searchRootDirs.append("/usr/data/")
 
             # The list of possible front ends we expect to find.
             # fluidd-pad if found on the sonic pad.
-            possibleFrontEndDirs = ["mainsail", "fluidd", "fluidd-pad"]
+            # On the k1, the default creality frontend is called "frontend" in the /usr/share/ dir (it's a fork of fluidd)
+            possibleFrontEndDirs = ["mainsail", "fluidd", "fluidd-pad", "frontend"]
 
-            # For each possible frontend, try to set it up.
-            for frontEnd in possibleFrontEndDirs:
-                # Build the possible root.
-                htmlStaticRoot = os.path.join(searchRootDir, frontEnd)
-                # See if it exists.
-                if os.path.exists(htmlStaticRoot):
-                    # If so, try to find the html file and inject it if needed.
-                    if self._DoInject(htmlStaticRoot):
-                        # If successful, make sure our latest js and css files are also there.
-                        self._UpdateStaticFilesIntoRootIfNeeded(htmlStaticRoot)
+            # For each possible path
+            for d in searchRootDirs:
+                # For each possible frontend, try to set it up.
+                for frontEnd in possibleFrontEndDirs:
+                    # Build the possible root.
+                    htmlStaticRoot = os.path.join(d, frontEnd)
+                    # See if it exists.
+                    if os.path.exists(htmlStaticRoot):
+                        # If so, try to find the html file and inject it if needed.
+                        if self._DoInject(htmlStaticRoot):
+                            # If successful, make sure our latest js and css files are also there.
+                            self._UpdateStaticFilesIntoRootIfNeeded(htmlStaticRoot)
         except Exception as e:
             Sentry.Exception("UiInjector _ExecuteInjectAndUpdate.", e)
 
@@ -276,7 +283,9 @@ class UiInjector():
         # to anything new, makes the service worker update the index, and will make it pull again.
         swJsFilePath = os.path.join(staticHtmlRootPath, "sw.js")
         if os.path.exists(swJsFilePath) is False:
-            self.Logger.warn(f"Failed to find sw.js at {swJsFilePath}")
+            # For the "Creality" frontend "in a folder called frontend" this js file won't be found.
+            if "frontend" not in swJsFilePath:
+                self.Logger.warn(f"Failed to find sw.js at {swJsFilePath}")
             return
         try:
             # Read the entire file.

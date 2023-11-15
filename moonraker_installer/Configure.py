@@ -14,10 +14,10 @@ from .ObserverConfigFile import ObserverConfigFile
 # The goal of this class is the take the context object from the Discovery Gen2 phase to the Phase 3.
 class Configure:
 
-    # This is the common service prefix we use for all of our service file names.
+    # This is the common service prefix (or word used in the file name) we use for all of our service file names.
     # This MUST be used for all instances running on this device, both local plugins and companions.
     # This also MUST NOT CHANGE, as it's used by the Updater logic to find all of the locally running services.
-    c_ServiceCommonNamePrefix = "octoeverywhere"
+    c_ServiceCommonName = "octoeverywhere"
 
     def Run(self, context:Context):
 
@@ -28,11 +28,14 @@ class Configure:
             # For observers, we use the observer id, with a unique prefix to separate it from any possible local moonraker installs
             # Note that the moonraker service suffix can be numbers or letters, so we use the same rules.
             serviceSuffixStr = f"-companion{context.ObserverInstanceId}"
-        elif context.IsCrealityOs():
-            # For Creality OS, we know the format of the service file is a bit different.
-            # It is moonraker_service or moonraker_service.<number>
+        elif context.OsType == OsTypes.SonicPad:
+            # For Sonic Pad, we know the format of the service file is a bit different.
+            # For the SonicIt is moonraker_service or moonraker_service.<number>
             if "." in context.MoonrakerServiceFileName:
                 serviceSuffixStr = context.MoonrakerServiceFileName.split(".")[1]
+        elif context.OsType == OsTypes.K1:
+            # For the k1, there's only every one moonraker instance, so this isn't needed.
+            pass
         else:
             # Now we need to figure out the instance suffix we need to use.
             # To keep with Kiauh style installs, each moonraker instances will be named moonraker-<number or name>.service.
@@ -70,6 +73,7 @@ class Configure:
             # For now we assume the folder structure is the standard Klipper folder config,
             # thus the full moonraker config path will be .../something_data/config/moonraker.conf
             # Based on that, we will define the config folder and the printer data root folder.
+            # Note that the K1 uses this standard folder layout as well.
             context.PrinterDataConfigFolder = Util.GetParentDirectory(context.MoonrakerConfigFilePath)
             context.PrinterDataFolder = Util.GetParentDirectory(context.PrinterDataConfigFolder)
             Logger.Debug("Printer data folder: "+context.PrinterDataFolder)
@@ -77,19 +81,24 @@ class Configure:
 
         # This is the name of our service we create. If the port is the default port, use the default name.
         # Otherwise, add the port to keep services unique.
-        if context.IsCrealityOs():
-            # For creality os, since the service is setup differently, follow the conventions of it.
+        if context.OsType == OsTypes.SonicPad:
+            # For Sonic Pad, since the service is setup differently, follow the conventions of it.
             # Both the service name and the service file name must match.
             # The format is <name>_service<number>
             # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
-            context.ServiceName = Configure.c_ServiceCommonNamePrefix + "_service"
+            context.ServiceName = Configure.c_ServiceCommonName + "_service"
             if len(serviceSuffixStr) != 0:
                 context.ServiceName= context.ServiceName + "." + serviceSuffixStr
+            context.ServiceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, context.ServiceName)
+        elif context.OsType == OsTypes.K1:
+            # For the k1, there's only ever one moonraker and we know the exact service naming convention.
+            # Note we use 66 to ensure we start after moonraker.
+            context.ServiceName = f"S66{Configure.c_ServiceCommonName}_service"
             context.ServiceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, context.ServiceName)
         else:
             # For normal setups, use the convention that Klipper users
             # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
-            context.ServiceName = Configure.c_ServiceCommonNamePrefix + serviceSuffixStr
+            context.ServiceName = Configure.c_ServiceCommonName + serviceSuffixStr
             context.ServiceFilePath = os.path.join(Paths.SystemdServiceFilePath, context.ServiceName+".service")
 
         # Since the moonraker config folder is unique to the moonraker instance, we will put our storage in it.

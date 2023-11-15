@@ -37,9 +37,12 @@ class Discovery:
 
         # If we are here, we either have no service file name but a config path, or neither.
         pairList = []
-        if context.IsCrealityOs():
-            # For the Creality OS, we know exactly where the files are, so we don't need to do a lot of searching.
-            pairList = self._CrealityOsFindAllServiceFilesAndPairings(context)
+        if context.OsType == OsTypes.SonicPad:
+            # For the Sonic Pad, we know exactly where the files are, so we don't need to do a lot of searching.
+            pairList = self._SonicPadFindAllServiceFilesAndPairings(context)
+        elif context.OsType == OsTypes.K1:
+            # For the K1 and K1 max, we know exactly where the files are, so we don't need to do a lot of searching.
+            pairList = self._K1FindAllServiceFilesAndPairings(context)
         else:
             # To start, we will enumerate all moonraker service files we can find and their possible moonraker config parings.
             # For details about why we need these, read the readme.py file in this module.
@@ -74,7 +77,7 @@ class Discovery:
         Logger.Warn("An instance of OctoEverywhere must be installed for every Moonraker instance, so this installer must be ran for each instance individually.")
         Logger.Blank()
         if context.IsCrealityOs():
-            Logger.Header("Creality Users - If you only have one printer setup, select 1) moonraker_service")
+            Logger.Header("Sonic Pad Users - If you're only using one printer, select number 1")
             Logger.Blank()
 
         # Print the config files found.
@@ -140,10 +143,10 @@ class Discovery:
         return results
 
 
-    # A special function for Creality OS installs, since the location of the printer data is much more well known.
+    # A special function for Sonic Pad installs, since the location of the printer data is much more well known.
     # Note this must return the same result list as _FindAllServiceFilesAndPairings
-    def _CrealityOsFindAllServiceFilesAndPairings(self, context:Context):
-        # For the Creality OS, we know the name of the service files and the path.
+    def _SonicPadFindAllServiceFilesAndPairings(self, context:Context):
+        # For the Sonic Pad, we know the name of the service files and the path.
         # They will be named moonraker_service and moonraker_service.*
         serviceFiles = self._FindAllFiles(Paths.CrealityOsServiceFilePath, "moonraker_service")
 
@@ -158,13 +161,7 @@ class Discovery:
                 numberSuffix = moonrakerServiceFileName.split(".")[1]
 
             # Figure out the possible path by the OS type.
-            moonrakerConfigFilePath = ""
-            if context.OsType == OsTypes.SonicPad:
-                moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_SonicPad}/printer_config{numberSuffix}/moonraker.conf"
-            elif context.OsType == OsTypes.K1:
-                # Check for the file using the k1 path.
-                moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_K1}/printer_data{numberSuffix}/config/moonraker.conf"
-
+            moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_SonicPad}/printer_config{numberSuffix}/moonraker.conf"
             if os.path.exists(moonrakerConfigFilePath):
                 Logger.Debug(f"Found moonraker config file {moonrakerConfigFilePath}")
                 results.append(ServiceFileConfigPathPair(moonrakerServiceFileName, moonrakerConfigFilePath))
@@ -172,6 +169,53 @@ class Discovery:
                 # Since we should find these, warn if we don't.
                 Logger.Warn(f"Failed to find moonraker config file {moonrakerConfigFilePath}")
         return results
+
+
+    # A special function for K1 and K1 max installs.
+    # Note this must return the same result list as _FindAllServiceFilesAndPairings
+    def _K1FindAllServiceFilesAndPairings(self, context:Context):
+
+        # The K1 doesn't have moonraker by default, but most users use a 3rd party script to install it.
+        # For now we will just assume the setup that the script produces.
+        moonrakerServiceFileName = None
+        moonrakerConfigFilePath = None
+
+        # The service file should be something like this "/etc/init.d/S56moonraker_service"
+        for fileOrDirName in os.listdir(Paths.CrealityOsServiceFilePath):
+            fullFileOrDirPath = os.path.join(Paths.CrealityOsServiceFilePath, fileOrDirName)
+            if os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
+                if "moonraker" in fileOrDirName.lower():
+                    Logger.Debug(f"Found service file: {fullFileOrDirPath}")
+                    moonrakerServiceFileName = fileOrDirName
+                    break
+
+        # The moonraker config file should be here: "/usr/data/printer_data/config/moonraker.conf"
+        moonrakerConfigFilePath = "/usr/data/printer_data/config/moonraker.conf"
+        if os.path.isfile(moonrakerConfigFilePath):
+            Logger.Debug(f"Found moonraker config file: {moonrakerConfigFilePath}")
+        else:
+            moonrakerConfigFilePath = None
+
+        # Check if we are missing either. If so, the user most likely didn't install Moonraker.
+        if moonrakerConfigFilePath is None or moonrakerServiceFileName is None:
+            Logger.Blank()
+            Logger.Blank()
+            Logger.Blank()
+            Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            Logger.Error( "                               Moonraker Not Found!                                 ")
+            Logger.Warn(  "   The K1 and K1 Max don't have Moonraker or a web frontend installed by default.   ")
+            Logger.Warn(  "  Moonraker and a frontend like Fluidd or Mainsail are required for OctoEverywhere. ")
+            Logger.Blank()
+            Logger.Purple("        We have a step-by-step tutorial on how to install them in 30 seconds.       ")
+            Logger.Purple("                         Follow this link: https://oe.ink/s/k1                      ")
+            Logger.Blank()
+            Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            Logger.Blank()
+            Logger.Blank()
+            Logger.Blank()
+            raise Exception("Moonraker isn't installed on this K1 or K1 Max. Use the guide on this link to install it: https://oe.ink/s/k1")
+
+        return [ ServiceFileConfigPathPair(moonrakerServiceFileName, moonrakerConfigFilePath) ]
 
 
     def _TryToFindMatchingMoonrakerConfig(self, serviceFilePath:str) -> str or None:

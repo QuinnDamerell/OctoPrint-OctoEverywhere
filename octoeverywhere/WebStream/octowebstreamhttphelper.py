@@ -697,7 +697,13 @@ class OctoWebStreamHttpHelper:
 
                     # If this request will be handled by the a response handler, we need to load the full body into one buffer.
                     if responseHandlerContext:
-                        defaultBodyReadSizeBytes = 99999999999999
+                        # We have to be careful with the size, because on some platforms (like the K1) whatever size we pass it will try to allocate
+                        # into one buffer. If we know the context length, us it. Otherwise, set something that's reasonably large.
+                        if contentLength_NoneIfNotKnown is not None:
+                            defaultBodyReadSizeBytes = contentLength_NoneIfNotKnown
+                        else:
+                            # Use a 2mb buffer.
+                            defaultBodyReadSizeBytes = 1024 * 1024 * 1024 * 2
                     finalDataBuffer = self.doBodyRead(response, defaultBodyReadSizeBytes)
 
         # Keep track of read times.

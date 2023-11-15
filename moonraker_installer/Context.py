@@ -1,6 +1,5 @@
 import os
 import json
-import subprocess
 from enum import Enum
 
 from .Logging import Logger
@@ -11,7 +10,7 @@ from .Paths import Paths
 class OsTypes(Enum):
     Debian = 1
     SonicPad = 2
-    K1 = 2 # Both the K1 and K1 Max
+    K1 = 3 # Both the K1 and K1 Max
 
 
 # This class holds the context of the installer, meaning all of the target vars and paths
@@ -257,21 +256,32 @@ class Context:
 
     def DetectOsType(self):
         #
-        # Note! This should closely resemble the ostype.py class in the plugin.
+        # Note! This should closely resemble the ostype.py class in the plugin and the logic in the ./install.sh script!
         #
-        # We use the presence of opkg to figure out if we are running no Creality OS
-        # This is the same thing we do in the install and update scripts.
-        result = subprocess.run("command -v opkg", check=False, shell=True, capture_output=True, text=True)
-        if result.returncode == 0:
-            # This is a Creality OS.
-            # Now we need to detect if it's a Sonic Pad or a K1
-            if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
-                self.OsType = OsTypes.SonicPad
-                return
-            if os.path.exists(Paths.CrealityOsUserDataPath_K1):
-                self.OsType = OsTypes.K1
-                return
-            raise Exception("We detected a Creality OS, but can't determine the device type. Please contact support.")
+
+        # For the k1 and k1 max, we look for the "buildroot" OS.
+        if os.path.exists("/etc/os-release"):
+            with open("/etc/os-release", "r", encoding="utf-8") as osInfo:
+                lines = osInfo.readlines()
+                for l in lines:
+                    if "ID=buildroot" in l:
+                        # If we find it, make sure the user data path is where we expect it to be, and we are good.
+                        if os.path.exists(Paths.CrealityOsUserDataPath_K1):
+                            self.OsType = OsTypes.K1
+                            return
+                        raise Exception("We detected a K1 or K1 Max OS, but can't determine the data path. Please contact support.")
+
+        # For the Sonic Pad, we look for the openwrt os
+        if os.path.exists("/etc/openwrt_release"):
+            with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
+                lines = osInfo.readlines()
+                for l in lines:
+                    if "sonic" in l:
+                        # If we find it, make sure the user data path is where we expect it to be, and we are good.
+                        if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
+                            self.OsType = OsTypes.SonicPad
+                            return
+                        raise Exception("We detected a Sonic Pad, but can't determine the data path. Please contact support.")
 
         # The OS is debian
         self.OsType = OsTypes.Debian

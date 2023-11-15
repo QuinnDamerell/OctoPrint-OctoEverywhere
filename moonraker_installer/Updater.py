@@ -7,8 +7,8 @@ from .Context import Context
 from .Context import OsTypes
 from .Logging import Logger
 from .Configure import Configure
-from .Util import Util
 from .Paths import Paths
+from .Service import Service
 
 #
 # This class is responsible for doing updates for all plugins and companions on this local system.
@@ -27,14 +27,14 @@ class Updater:
     def DoUpdate(self, context:Context):
         Logger.Header("Starting Update Logic")
 
-        # Enumerate all service file to find any local plugins, Creality OS, and companion service files, since all service files use the same common prefix.
+        # Enumerate all service file to find any local plugins, Sonic Pad plugins, and companion service files, since all service files contain this name.
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
         foundOeServices = []
         fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f" Searching for OE services to update, found: {fileOrDirName}")
-            if fileOrDirName.lower().startswith(Configure.c_ServiceCommonNamePrefix):
+            if Configure.c_ServiceCommonName in fileOrDirName.lower():
                 foundOeServices.append(fileOrDirName)
 
         if len(foundOeServices) == 0:
@@ -51,11 +51,14 @@ class Updater:
                 # We need to build the fill name path
                 serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, s)
                 Logger.Debug(f"Full service path: {serviceFilePath}")
-                Util.RunShellCommand(f"{serviceFilePath} restart")
+                Service.RestartSonicPadService(serviceFilePath, False)
+            elif context.OsType == OsTypes.K1:
+                # We need to build the fill name path
+                serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, s)
+                Logger.Debug(f"Full service path: {serviceFilePath}")
+                Service.RestartK1Service(serviceFilePath, False)
             elif context.OsType == OsTypes.Debian:
-                (returnCode, output, errorOut) = Util.RunShellCommand("systemctl restart "+s)
-                if returnCode != 0:
-                    Logger.Warn(f"Service {s} might have failed to restart. Output: {output} Error: {errorOut}")
+                Service.RestartDebianService(s, False)
             else:
                 raise Exception("This OS type doesn't support updating at this time.")
 
@@ -82,6 +85,12 @@ class Updater:
     def PlaceUpdateScriptInRoot(self, context:Context) -> bool:
         try:
             # Create the script file with any optional args we might need.
+
+            # For the k1, we need to use the prefix sh for the script run
+            updateCmdPrefix = ""
+            if context.OsType == OsTypes.K1:
+                updateCmdPrefix = "sh "
+
             s = f'''\
 #!/bin/bash
 
@@ -97,11 +106,11 @@ class Updater:
 # So just cd and execute our update script! Easy peasy!
 startingDir=$(pwd)
 cd {context.RepoRootFolder}
-./update.sh
+{updateCmdPrefix}./update.sh
 cd $startingDir
             '''
             # Target the user home unless this is a Creality install.
-            # For Creality OS the user home will be set differently, but we want to put this script where the user logs in, aka root.
+            # For Sonic Pad and K1 the user home will be set differently, but we want to put this script where the user logs in, aka root.
             targetPath = context.UserHomePath
             if context.IsCrealityOs():
                 targetPath="/root"

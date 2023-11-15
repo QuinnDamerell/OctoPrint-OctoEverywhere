@@ -15,6 +15,7 @@ class KnownFrontends(Enum):
     Unknown  = 1
     Mainsail = 2
     Fluidd   = 3
+    Creality = 4 # This is Creality's K1 default web interface (not nearly as good as the others)
 
     # Makes to str() cast not to include the class name.
     def __str__(self):
@@ -200,8 +201,8 @@ class Frontend:
         # We can't scan all ports, it will take to long. Instead we will scan known ports used by known common setups.
         # Note these ports are in order of importance, where ports near the top are more likely to be what the user wants.
         knownFrontendPorts = [
-            4409, # On the K1, this is the mainsail port.
-            4408, # On the K1, this is the Fluidd port.
+            4408, # On the K1, this is the Fluidd port. (This is set by the install script from GitHub Guilouz/Creality-K1-and-K1-Max)
+            4409, # On the K1, this is the mainsail port. (This is set by the install script from GitHub Guilouz/Creality-K1-and-K1-Max)
             80,   # On most devices, this is the port the frontend is on. But note on the K1, this is Creality's own special frontend, most users don't want.
             81,   # A common port for an secondary frontend to run on, like Fluidd or Mainsail.
             443,  # Not ideal, but https might be here.
@@ -246,6 +247,8 @@ class Frontend:
                     frontend = KnownFrontends.Mainsail
                 elif "fluidd" in htmlLower:
                     frontend = KnownFrontends.Fluidd
+                elif "creality" in htmlLower:
+                    frontend = KnownFrontends.Creality
                 else:
                     Logger.Debug(f"Unknown frontend type. html: {result.text}")
             except Exception as e:

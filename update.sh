@@ -12,13 +12,16 @@
 #
 
 
-
-# Set if we are running the Creality OS or not.
-# We use the presence of opkg as they key
-IS_CREALITY_OS=false
-if command -v opkg &> /dev/null
+# These must stay in sync with ./install.sh!
+IS_K1_OS=0
+if grep -Fqs "ID=buildroot" /etc/os-release
 then
-    IS_CREALITY_OS=true
+    IS_K1_OS=1
+fi
+IS_SONIC_PAD_OS=0
+if grep -Fqs "sonic" /etc/openwrt_release
+then
+    IS_SONIC_PAD_OS=1
 fi
 
 c_default=$(echo -en "\e[39m")
@@ -38,9 +41,9 @@ echo ""
 # when we run the git commands, we need to make sure we are the right user.
 runAsRepoOwner()
 {
-    # For Creality OS, we can't use stat or whoami, but there's only one user anyways, root.
+    # For the sonic pad and k1, we can't use stat or whoami, but there's only one user anyways, root.
     # So always just run it.
-    if $IS_CREALITY_OS
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
     then
         eval $1
         return
@@ -75,4 +78,9 @@ runAsRepoOwner "git pull --quiet"
 # Our installer script has all of the logic to update system deps, py deps, and the py environment.
 # So we use it with a special flag to do updating.
 echo "Running the update..."
-./install.sh -update
+if [[ $IS_K1_OS -eq 1 ]]
+then
+    sh ./install.sh -update
+else
+    ./install.sh -update
+fi
