@@ -210,7 +210,7 @@ if __name__ == '__main__':
     # Setup the command handler
 
     # Setup the snapshot helper
-    WebcamHelper.Init(logger, OctoPrintWebcamHelper(logger, None))
+    WebcamHelper.Init(logger, OctoPrintWebcamHelper(logger, None), PluginFilePathRoot)
 
     # These 3 classes are OctoPrint specific!
     # The order matters, LocalAuth needs to be init before Slipstream.

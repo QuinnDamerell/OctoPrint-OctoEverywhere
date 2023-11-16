@@ -151,7 +151,7 @@ class MoonrakerHost:
 
             # Setup the snapshot helper
             self.MoonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)
-            WebcamHelper.Init(self.Logger, self.MoonrakerWebcamHelper)
+            WebcamHelper.Init(self.Logger, self.MoonrakerWebcamHelper, localStorageDir)
 
             # Setup our smart pause helper
             SmartPause.Init(self.Logger)

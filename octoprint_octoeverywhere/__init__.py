@@ -167,7 +167,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         LocalAuth.Init(self._logger, self._user_manager)
 
         # Init the static snapshot helper
-        WebcamHelper.Init(self._logger, OctoPrintWebcamHelper(self._logger, self._settings))
+        WebcamHelper.Init(self._logger, OctoPrintWebcamHelper(self._logger, self._settings), self.get_plugin_data_folder())
 
         # Init the ping helper
         OctoPingPong.Init(self._logger, self.get_plugin_data_folder(), printerId)

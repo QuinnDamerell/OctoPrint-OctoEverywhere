@@ -1,4 +1,6 @@
 import logging
+import os
+import json
 
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
@@ -57,8 +59,8 @@ class WebcamHelper:
 
 
     @staticmethod
-    def Init(logger:logging.Logger, webcamPlatformHelperInterface):
-        WebcamHelper._Instance = WebcamHelper(logger, webcamPlatformHelperInterface)
+    def Init(logger:logging.Logger, webcamPlatformHelperInterface, pluginDataFolderPath):
+        WebcamHelper._Instance = WebcamHelper(logger, webcamPlatformHelperInterface, pluginDataFolderPath)
 
 
     @staticmethod
@@ -66,9 +68,12 @@ class WebcamHelper:
         return WebcamHelper._Instance
 
 
-    def __init__(self, logger:logging.Logger, webcamPlatformHelperInterface):
+    def __init__(self, logger:logging.Logger, webcamPlatformHelperInterface, pluginDataFolderPath:str):
         self.Logger = logger
         self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
+        self.SettingsFilePath = os.path.join(pluginDataFolderPath, "webcam-settings.json")
+        self.DefaultCameraName = None
+        self._LoadDefaultCameraName()
 
 
     # Returns the snapshot URL from the settings.
@@ -358,13 +363,17 @@ class WebcamHelper:
             a = self.ListWebcams()
             if a is None or len(a) == 0:
                 return None
-            # If we have a target camera name, find it.
-            if cameraName is not None and len(cameraName) != 0:
+            # If a camera name wasn't passed, see if there's a default.
+            if cameraName is None or len(cameraName) == 0:
+                cameraName = self.GetDefaultCameraName()
+            # If we have a target name, see if we can find it.
+            if cameraName is not None:
                 cameraNameLower = cameraName.lower()
                 for i in a:
                     if i.Name.lower() == cameraNameLower:
                         return i
                 self.Logger.warn(f"_GetWebcamSettingObj asked for {cameraName} but we didn't find it.")
+            # Otherwise, default to the first entry.
             return a[0]
         except Exception as e:
             Sentry.Exception("WebcamHelper _GetWebcamSettingObj exception.", e)
@@ -586,3 +595,49 @@ class WebcamHelper:
         newWebcamUrl = webcamUrl[:actionLocation] + "/" + webcamUrl[actionLocation:]
         logger.info(f"Found incorrect webcam url, updating. [{webcamUrl}] -> [{newWebcamUrl}]")
         return newWebcamUrl
+
+
+    #
+    # Default camera name logic.
+    #
+
+    # Sets the default camera name and writes it to the settings file.
+    def SetDefaultCameraName(self, name:str) -> None:
+        name = name.lower()
+        self.DefaultCameraName = name
+        try:
+            settings = {
+                "DefaultWebcamName" : self.DefaultCameraName
+            }
+            with open(self.SettingsFilePath, encoding="utf-8", mode="w") as f:
+                f.write(json.dumps(settings))
+        except Exception as e:
+            self.Logger.error("SetDefaultCameraName failed "+str(e))
+
+
+    # Returns the default camera name or None
+    def GetDefaultCameraName(self) -> str:
+        return self.DefaultCameraName
+
+
+    # Loads the current name from our settings file.
+    def _LoadDefaultCameraName(self) -> None:
+        try:
+            # Default the setting.
+            self.DefaultCameraName = None
+
+            # First check if there's a file.
+            if os.path.exists(self.SettingsFilePath) is False:
+                return
+
+            # Try to open it and get the key. Any failure will null out the key.
+            with open(self.SettingsFilePath, encoding="utf-8") as f:
+                data = json.load(f)
+
+            name = data["DefaultWebcamName"]
+            if name is None or len(name) == 0:
+                return
+            self.DefaultCameraName = name
+            self.Logger.info(f"Webcam settings loaded. Default camera name: {self.DefaultCameraName}")
+        except Exception as e:
+            self.Logger.error("_LoadDefaultCameraName failed "+str(e))

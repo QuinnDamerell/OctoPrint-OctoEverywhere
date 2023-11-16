@@ -177,9 +177,28 @@ class CommandHandler:
             webcams.append(wc)
         # Build the response
         responseObj = {
-            "Webcams" : webcams
+            "Webcams" : webcams,
+            "DefaultName" : WebcamHelper.Get().GetDefaultCameraName()
         }
         return CommandResponse.Success(responseObj)
+
+
+    # Must return a CommandResponse
+    def SetDefaultCameraName(self, jsonObjData_CanBeNone):
+        name = None
+        if jsonObjData_CanBeNone is not None:
+            try:
+                if "Name" in jsonObjData_CanBeNone:
+                    name = jsonObjData_CanBeNone["Name"]
+            except Exception as e:
+                Sentry.Exception("Failed to SetDefaultCameraName, bad args.", e)
+                return CommandResponse.Error(400, "Failed to parse args")
+        if name is None:
+            return CommandResponse.Error(400, "No name passed")
+        # Set the name
+        WebcamHelper.Get().SetDefaultCameraName(name)
+        # Return success
+        return CommandResponse.Success({})
 
 
     # Must return a CommandResponse
@@ -326,6 +345,8 @@ class CommandHandler:
             return self.GetStatus()
         elif commandPathLower.startswith("list-webcam"):
             return self.ListWebcams()
+        elif commandPathLower.startswith("set-default-webcam"):
+            return self.SetDefaultCameraName(jsonObj_CanBeNone)
         elif commandPathLower.startswith("pause"):
             return self.Pause(jsonObj_CanBeNone)
         elif commandPathLower.startswith("resume"):
