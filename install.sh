@@ -39,6 +39,10 @@ IS_K1_OS=0
 if grep -Fqs "ID=buildroot" /etc/os-release
 then
     IS_K1_OS=1
+    # On the K1, we always want the path to be /usr/bin
+    # /usr/share has very limited space, so we don't want to use it.
+    # This is also where the github script installs moonraker and everything.
+    HOME="/usr/bin"
 fi
 
 # Next, we try to detect if this OS is the Sonic Pad OS.
@@ -47,13 +51,10 @@ IS_SONIC_PAD_OS=0
 if grep -Fqs "sonic" /etc/openwrt_release
 then
     IS_SONIC_PAD_OS=1
-fi
-
-# If we are running on the sonic pad or K1, we set the home path to be where we want to install everything.
-if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
-then
+    # On the K1, we always want the path to be /usr/share, this is where the rest of the klipper stuff is.
     HOME="/usr/share"
 fi
+
 
 # Get the root path of the repo, aka, where this script is executing
 OE_REPO_DIR=$(readlink -f $(dirname "$0"))
@@ -115,25 +116,25 @@ log_blank()
 }
 
 #
-# It's important for consistency that the repo root is in /usr/share for the K1 and Sonic Pad
+# It's important for consistency that the repo root is in set $HOME for the K1 and Sonic Pad
 # To enforce that, we will move the repo where it should be.
 ensure_creality_os_right_repo_path()
 {
-    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
+    # TODO - re-enable this for the  || [[ $IS_K1_OS -eq 1 ]] after the github script updates.
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]]
     then
         # Due to the K1 shell, we have to use grep rather than any bash string contains syntax.
-        EXPECT='/usr/share/'
-        if echo $OE_REPO_DIR |grep "$EXPECT" - > /dev/null
+        if echo $OE_REPO_DIR |grep "$HOME" - > /dev/null
         then
             return
         else
             log_info "Current path $OE_REPO_DIR"
-            log_error "For the Creality devices the OctoEverywhere repo must be cloned into /usr/share/octoeverywhere"
+            log_error "For the Creality devices the OctoEverywhere repo must be cloned into $HOME/octoeverywhere"
             log_important "Moving the repo and running the install again..."
-            cd /usr/share
+            cd $HOME
             # Send errors to null, if the folder already exists this will fail.
             git clone https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere octoeverywhere 2>/dev/null || true
-            cd /usr/share/octoeverywhere
+            cd $HOME/octoeverywhere
             # Ensure state
             git reset --hard
             git checkout master
@@ -149,7 +150,7 @@ ensure_creality_os_right_repo_path()
             # Delete this folder.
             rm -fr $OE_REPO_DIR
             # Take the user back to the new install folder.
-            cd /usr/share/
+            cd $HOME
             # Exit.
             exit $installExit
         fi

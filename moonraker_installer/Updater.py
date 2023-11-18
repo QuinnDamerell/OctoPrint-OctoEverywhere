@@ -17,7 +17,8 @@ from .Service import Service
 #
 # However, this is quite easy, for a few reasons.
 #    1) All plugins and companions will use the same ~/octoeverywhere/ git repo.
-#          All Creality based installs will use /usr/shared/octoeverywhere
+#          All Sonic Pad based installs will use /usr/shared/octoeverywhere
+#          All K1 based installs will use /usr/data/octoeverywhere
 #    2) We always run the ./install.sh script before launching the PY installer, which handles updating system packages and PIP packages.
 #
 # So all we really need to do is find and restart all of the services.
