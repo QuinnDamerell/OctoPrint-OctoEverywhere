@@ -39,10 +39,10 @@ IS_K1_OS=0
 if grep -Fqs "ID=buildroot" /etc/os-release
 then
     IS_K1_OS=1
-    # On the K1, we always want the path to be /usr/bin
+    # On the K1, we always want the path to be /usr/data
     # /usr/share has very limited space, so we don't want to use it.
     # This is also where the github script installs moonraker and everything.
-    HOME="/usr/bin"
+    HOME="/usr/data"
 fi
 
 # Next, we try to detect if this OS is the Sonic Pad OS.
