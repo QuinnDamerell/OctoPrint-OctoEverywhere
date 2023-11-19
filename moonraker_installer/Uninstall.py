@@ -11,6 +11,20 @@ from .Util import Util
 class Uninstall:
 
     def DoUninstall(self, context:Context):
+
+        Logger.Blank()
+        Logger.Blank()
+        Logger.Header("You're about to uninstall OctoEverywhere.")
+        Logger.Info  ("This printer ID will be deleted, but you can always reinstall the plugin and re-add this printer.")
+        Logger.Blank()
+        r =     input("Are you want to uninstall? [y/n]")
+        r = r.lower().strip()
+        if r != "y":
+            Logger.Info("Uninstall canceled.")
+            Logger.Blank()
+            return
+        Logger.Blank()
+        Logger.Blank()
         Logger.Header("Starting OctoEverywhere uninstall")
 
         # Since all service names must use the same identifier in them, we can find any services using the same search.
