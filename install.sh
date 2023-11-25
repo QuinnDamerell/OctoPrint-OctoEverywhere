@@ -309,8 +309,8 @@ cat << EOF
       @@@@@@@@@@@@@@@,,,,,,,,,,,,,,,,,,,,,@@@@@@@@@@@@@@
 EOF
 log_blank
-log_header "                  OctoEverywhere For Klipper"
-log_blue   " The 3D Printing Communities #1 Remote Access And AI Cloud Service"
+log_important "                  OctoEverywhere For Klipper"
+log_blue      " The 3D Printing Communities #1 Remote Access And AI Cloud Service"
 log_blank
 log_blank
 log_important "OctoEverywhere empowers the worldwide maker community with..."
