@@ -75,7 +75,8 @@ OE_ENV="${HOME}/octoeverywhere-env"
 PKGLIST="python3 python3-pip virtualenv curl"
 # For the Creality OS, we only need to install these.
 # We don't override the default name, since that's used by the Moonraker installer
-SONIC_PAD_PKGLIST="python3 python3-pip"
+# Note that we DON'T want to use the same name as above (not even in this comment) because some parsers might find it.
+SONIC_PAD_DEP_LIST="python3 python3-pip"
 
 
 #
@@ -208,7 +209,7 @@ install_or_update_system_dependencies()
     elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
     then
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
-        opkg install ${SONIC_PAD_PKGLIST}
+        opkg install ${SONIC_PAD_DEP_LIST}
         pip3 install virtualenv
     else
         log_important "You might be asked for your system password - this is required to install the required system packages."
