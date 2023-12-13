@@ -8,7 +8,7 @@ from .sentry import Sentry
 # This class gives a bit of an abstraction over the normal ws
 class Client:
 
-    def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers = None):
+    def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers:dict = None, subProtocolList:list = None):
 
         # Since we also fire onWsError if there is a send error, we need to capture
         # the callback and have some vars to ensure it only gets fired once.
@@ -53,7 +53,8 @@ class Client:
                                   on_close = OnClosed,
                                   on_error = OnError,
                                   on_data = OnData,
-                                  header = headers
+                                  header = headers,
+                                  subprotocols = subProtocolList
         )
 
 

@@ -275,7 +275,7 @@ class OctoWebStreamHttpHelper:
                 elif nameLower == "location":
                     # We have noticed that some proxy servers aren't setup correctly to forward the x-forwarded-for and such headers.
                     # So when the web server responds back with a 301 or 302, the location header might not have the correct hostname, instead an ip like 127.0.0.1.
-                    response.headers[name] = HeaderHelper.CorrectLocationResponseHeaderIfNeeded(self.Logger, response.headers[name], sendHeaders)
+                    response.headers[name] = HeaderHelper.CorrectLocationResponseHeaderIfNeeded(self.Logger, uri, response.headers[name], sendHeaders)
 
             # We also look at the content-type to determine if we should add compression to this request or not.
             # general rule of thumb is that compression is quite cheap but really helps with text, so we should compress when we
