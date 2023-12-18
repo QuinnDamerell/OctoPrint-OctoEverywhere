@@ -57,8 +57,10 @@ plugin_license = "AGPLv3"
 # 	Version 1.4.0 also has an SSL error in it. https://github.com/websocket-client/websocket-client/issues/857
 #	Update: We also found a bug where the ping timer doesn't get cleaned up: https://github.com/websocket-client/websocket-client/pull/918
 #   Thus we need version 1.6.0 or higher.
+#   The sonic pad runs python 3.7.8 as of 12/18/2023 and websocket_client>=1.7 doesn't support it. So we must keep our version at 1.6 at least for now.
 # dnspython
 #	We depend on a feature that was released with 2.3.0, so we need to require at least that.
+#   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
 #
 # Other lib version notes:
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
@@ -69,13 +71,13 @@ plugin_license = "AGPLv3"
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
-    "websocket_client>=1.7.0,<1.7.99",
+    "websocket_client>=1.6.0,<1.7.99",
     "requests>=2.31.0",
     "octoflatbuffers==2.0.5",
     "pillow",
     "certifi>=2023.11.17",
     "rsa>=4.9",
-    "dnspython>=2.4.0",
+    "dnspython>=2.3.0",
     "httpx>=0.25.0,<0.26.0",
     "urllib3>=2.1.0"
     ]

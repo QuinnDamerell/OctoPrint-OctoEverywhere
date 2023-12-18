@@ -219,11 +219,13 @@ install_or_update_system_dependencies()
         # Note that since cloudflare will auto force http -> https, we use https, but ignore cert errors, that could be
         # caused by an incorrect date.
         # Note some companion systems don't have curl installed, so this will fail.
+        log_info "Ensuring the system date and time is correct..."
         sudo date -s `curl --insecure 'https://octoeverywhere.com/api/util/date' 2>/dev/null` || true
 
         # These we require to be installed in the OS.
         # Note we need to do this before we create our virtual environment
-        sudo apt update
+        log_info "Installing required system packages..."
+        sudo apt update 1>/dev/null` 2>/dev/null` || true
         sudo apt install --yes ${PKGLIST}
 
         # The PY lib Pillow depends on some system packages that change names depending on the OS.

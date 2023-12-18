@@ -7,13 +7,13 @@
 #
 # For comments on package lock versions, see the comments in the setup.py file.
 #
-websocket_client>=1.7.0,<1.7.99
+websocket_client>=1.6.0,<1.7.99
 requests>=2.31.0
 octoflatbuffers==2.0.5
 pillow
 certifi>=2023.11.17
 rsa>=4.9
-dnspython>=2.4.0
+dnspython>=2.3.0
 httpx>=0.25.0,<0.26.0
 urllib3>=2.1.0
 # The following are required only for Moonraker
