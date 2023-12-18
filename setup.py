@@ -63,7 +63,7 @@ plugin_license = "AGPLv3"
 #   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
 # urllib3
 #   There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
-#   Must include > 2.0.7 due to the sonic pad being on python 3.7.8.
+#   This must be less than 2.0.0, because 2.0.0 requires open ssl 1.1.1+, which the sonic pad doesn't have.
 #
 # Other lib version notes:
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
@@ -81,7 +81,7 @@ plugin_requires = [
     "rsa>=4.9",
     "dnspython>=2.3.0",
     "httpx>=0.24.1,<0.26.0",
-    "urllib3>=2.0.7"
+    "urllib3>=1.26.18<2.0.0"
     ]
 
 ### --------------------------------------------------------------------------------------------------------------------
