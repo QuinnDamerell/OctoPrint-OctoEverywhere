@@ -61,13 +61,15 @@ plugin_license = "AGPLv3"
 # dnspython
 #	We depend on a feature that was released with 2.3.0, so we need to require at least that.
 #   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
+# urllib3
+#   There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
+#   Must include > 2.0.7 due to the sonic pad being on python 3.7.8.
 #
 # Other lib version notes:
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
 #   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
 #   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
 #   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it. We had a user having an issue that updated to 0.24.0, and it resolved the issue.
-#   urllib3 - There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
@@ -79,7 +81,7 @@ plugin_requires = [
     "rsa>=4.9",
     "dnspython>=2.3.0",
     "httpx>=0.24.1,<0.26.0",
-    "urllib3>=2.1.0"
+    "urllib3>=2.0.7"
     ]
 
 ### --------------------------------------------------------------------------------------------------------------------
