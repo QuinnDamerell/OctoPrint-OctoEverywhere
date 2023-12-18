@@ -78,7 +78,7 @@ plugin_requires = [
     "certifi>=2023.11.17",
     "rsa>=4.9",
     "dnspython>=2.3.0",
-    "httpx>=0.25.0,<0.26.0",
+    "httpx>=0.24.1,<0.26.0",
     "urllib3>=2.1.0"
     ]
 

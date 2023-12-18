@@ -212,8 +212,6 @@ install_or_update_system_dependencies()
         opkg install ${SONIC_PAD_DEP_LIST}
         pip3 install virtualenv
     else
-        log_important "You might be asked for your system password - this is required to install the required system packages."
-
         # It seems a lot of printer control systems don't have the date and time set correctly, and then the fail
         # getting packages and other downstream things. We will will use our HTTP API to set the current UTC time.
         # Note that since cloudflare will auto force http -> https, we use https, but ignore cert errors, that could be
@@ -224,6 +222,7 @@ install_or_update_system_dependencies()
 
         # These we require to be installed in the OS.
         # Note we need to do this before we create our virtual environment
+        log_important "You might be asked for your system password - this is required to install the required system packages."
         log_info "Installing required system packages..."
         sudo apt update 1>/dev/null` 2>/dev/null` || true
         sudo apt install --yes ${PKGLIST}
