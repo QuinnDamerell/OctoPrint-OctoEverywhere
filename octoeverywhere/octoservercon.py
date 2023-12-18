@@ -7,6 +7,7 @@ from .websocketimpl import Client
 from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer
 from .octopingpong import OctoPingPong
+from .threaddebug import ThreadDebug
 
 #
 # This class is responsible for connecting and maintaining a connection to a server.
@@ -239,6 +240,8 @@ class OctoServerCon:
                 Sentry.Exception("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
         else:
             self.Logger.info("OctoServerCon Disconnect was called, but we are skipping the CloseAllWebStreamsAndDisable because it has already been done.")
+            # TODO - Remove this after we figure out this websocket lib dead lock bug.
+            ThreadDebug.DoThreadDumpLogout(self.Logger)
 
         # On every disconnect call, try to disconnect the websocket. We do this because we have seen that for some reason calling Close doesn't seem
         # to always actually cause the websocket to close and cause RunUntilClosed to return. Thus we hope if we keep trying to close it, maybe it will.
