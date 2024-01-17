@@ -185,9 +185,11 @@ ensure_py_venv()
     if [[ $IS_K1_OS -eq 1 ]]
     then
         # The K1 requires we setup the virtualenv like this.
-        python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 "${OE_ENV}"
+        # --system-site-packages is important for the K1, since it doesn't have much disk space.
+        python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 --system-site-packages "${OE_ENV}"
     else
         # Everything else can use this more modern style command.
+        # We don't want to use --system-site-packages, so we don't consume whatever packages are on the system.
         virtualenv -p /usr/bin/python3 "${OE_ENV}"
     fi
 }
