@@ -91,8 +91,9 @@ class Client:
             # ignore any exceptions.
             try:
                 self.Ws.close()
-            except Exception as _ :
-                pass
+            except Exception as ex :
+                Sentry.Exception("Websocket fireWsErrorCallbackThread close exception", ex)
+
         except Exception as e :
             Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
 
@@ -136,8 +137,8 @@ class Client:
         # Always try to call close, even if we have already done it.
         try:
             self.Ws.close()
-        except Exception:
-            pass
+        except Exception as e:
+            Sentry.Exception("Websocket close exception", e)
 
 
     def Send(self, msgBytes, isData):

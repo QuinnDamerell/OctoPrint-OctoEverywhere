@@ -92,16 +92,6 @@ class OctoServerCon:
         self.CreationTime = datetime.now()
         self.LastUserActivityTime = self.CreationTime
 
-        # Start the RunFor time checker.
-        self.RunForTimeChecker = RepeatTimer(self.Logger, self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
-        self.RunForTimeChecker.start()
-
-
-    def Cleanup(self):
-        # Stop the RunFor time checker if we have one.
-        if self.RunForTimeChecker is not None:
-            self.RunForTimeChecker.Stop()
-
 
     # Returns a printable string that says the endpoint and the active session id.
     def GetConnectionString(self):
@@ -299,70 +289,79 @@ class OctoServerCon:
 
 
     def RunBlocking(self):
-        while 1:
-            # Since we want to run forever, we want to make sure any exceptions get caught but then we try again.
-            try:
-                # Clear the disconnecting flag.
-                # We do this just before connects, because this flag weeds out all of the error noise
-                # that might happen while we are performing a disconnect. But at this time, all of that should be
-                # 100% done now.
-                self.IsDisconnecting = False
+        runForTimeChecker = None
+        try:
+            # Start the RunFor time checker.
+            # This will always be stopped in the finally before we exit this function.
+            runForTimeChecker = RepeatTimer(self.Logger, self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
+            runForTimeChecker.start()
 
-                # Set the connecting flag, so we know if we are in the middle of a ws connect.
-                # This is set to false when the websocket is established.
-                self.IsWsConnecting = True
+            while 1:
+                # Since we want to run forever, we want to make sure any exceptions get caught but then we try again.
+                try:
+                    # Clear the disconnecting flag.
+                    # We do this just before connects, because this flag weeds out all of the error noise
+                    # that might happen while we are performing a disconnect. But at this time, all of that should be
+                    # 100% done now.
+                    self.IsDisconnecting = False
 
-                # Since there can be old pending actions from old sessions (session == one websocket connection).
-                # We will keep track of the current session, so old errors from sessions don't effect the new one.
-                self.ActiveSessionId += 1
+                    # Set the connecting flag, so we know if we are in the middle of a ws connect.
+                    # This is set to false when the websocket is established.
+                    self.IsWsConnecting = True
 
-                # Get the new endpoint. This will either be the default endpoint or the lowest latency endpoint.
-                endpoint = self.GetEndpoint()
+                    # Since there can be old pending actions from old sessions (session == one websocket connection).
+                    # We will keep track of the current session, so old errors from sessions don't effect the new one.
+                    self.ActiveSessionId += 1
 
-                # Connect to the service.
-                self.Ws = Client(endpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
-                self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString() + " wsId:"+self.GetWsId(self.Ws))
-                self.Ws.RunUntilClosed()
+                    # Get the new endpoint. This will either be the default endpoint or the lowest latency endpoint.
+                    endpoint = self.GetEndpoint()
 
-                # Handle disconnects
-                self.Logger.info("Disconnected from OctoEverywhere, server con "+self.GetConnectionString())
+                    # Connect to the service.
+                    self.Ws = Client(endpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
+                    self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString() + " wsId:"+self.GetWsId(self.Ws))
+                    self.Ws.RunUntilClosed()
 
-                # Ensure all proxy sockets are closed.
-                if self.OctoSession:
-                    self.OctoSession.CloseAllWebStreamsAndDisable()
+                    # Handle disconnects
+                    self.Logger.info("Disconnected from OctoEverywhere, server con "+self.GetConnectionString())
 
-            except Exception as e:
-                self.TempDisableLowestLatencyEndpoint = True
-                Sentry.Exception("Exception in OctoEverywhere's main RunBlocking function. server con:"+self.GetConnectionString()+".", e)
-                time.sleep(20)
+                    # Ensure all proxy sockets are closed.
+                    if self.OctoSession:
+                        self.OctoSession.CloseAllWebStreamsAndDisable()
 
-            # On each disconnect, check if the RunFor time is now done.
-            if self.IsRunForTimeComplete():
-                # If our run for time expired, cleanup and return.
-                self.Cleanup()
-                self.Logger.info("Server con "+self.GetConnectionString()+" RunFor is complete, disconnected, and exiting the main thread.")
-                # Exit the main run blocking loop.
-                return
+                except Exception as e:
+                    self.TempDisableLowestLatencyEndpoint = True
+                    Sentry.Exception("Exception in OctoEverywhere's main RunBlocking function. server con:"+self.GetConnectionString()+".", e)
+                    time.sleep(20)
 
-            # We have a back off time, but always add some random noise as well so not all clients try to use the exact same time.
-            # Note this applies to all reconnects, even for errors in the system and not server connection loss.
-            self.WsConnectBackOffSec += random.randint(self.WsConnectRandomMinSec, self.WsConnectRandomMaxSec)
+                # On each disconnect, check if the RunFor time is now done.
+                if self.IsRunForTimeComplete():
+                    self.Logger.info("Server con "+self.GetConnectionString()+" RunFor is complete, disconnected, and exiting the main thread.")
+                    # Exit the main run blocking loop.
+                    return
 
-            # Don't sleep if we want to NoWaitReconnect
-            if self.NoWaitReconnect:
-                self.NoWaitReconnect = False
-                self.Logger.info("Skipping reconnect delay due to instant reconnect request.")
-            else:
-                self.Logger.info("Sleeping for " + str(self.WsConnectBackOffSec) + " seconds before trying again.")
-                time.sleep(self.WsConnectBackOffSec)
+                # We have a back off time, but always add some random noise as well so not all clients try to use the exact same time.
+                # Note this applies to all reconnects, even for errors in the system and not server connection loss.
+                self.WsConnectBackOffSec += random.randint(self.WsConnectRandomMinSec, self.WsConnectRandomMaxSec)
 
-            # Increment the back off time.
-            self.WsConnectBackOffSec *= 2
-            if self.WsConnectBackOffSec > 180 :
-                self.WsConnectBackOffSec = 180
-                # If we have failed and are waiting over 3 minutes, we will return which will check the server
-                # protocol again, since it might have changed.
-                return
+                # Don't sleep if we want to NoWaitReconnect
+                if self.NoWaitReconnect:
+                    self.NoWaitReconnect = False
+                    self.Logger.info("Skipping reconnect delay due to instant reconnect request.")
+                else:
+                    self.Logger.info("Sleeping for " + str(self.WsConnectBackOffSec) + " seconds before trying again.")
+                    time.sleep(self.WsConnectBackOffSec)
+
+                # Increment the back off time.
+                self.WsConnectBackOffSec *= 2
+                if self.WsConnectBackOffSec > 180 :
+                    self.WsConnectBackOffSec = 180
+                    # If we have failed and are waiting over 3 minutes, we will return which will check the server
+                    # protocol again, since it might have changed.
+                    return
+        finally:
+            # Before we exit this function, we need to always stop the repeat timer we started.
+            if runForTimeChecker is not None:
+                runForTimeChecker.Stop()
 
 
     def SendMsg(self, msgBytes):

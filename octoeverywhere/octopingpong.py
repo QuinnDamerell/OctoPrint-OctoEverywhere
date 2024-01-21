@@ -133,6 +133,7 @@ class OctoPingPong:
                     callback = self.PluginFirstRunLatencyCompleteCallback
                     if callback is not None:
                         self.PluginFirstRunLatencyCompleteCallback()
+                        callback = None
 
             except Exception as e:
                 Sentry.Exception("Exception in OctoPingPong thread.", e)
