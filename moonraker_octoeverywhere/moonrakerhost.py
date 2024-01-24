@@ -299,7 +299,9 @@ class MoonrakerHost:
     def OnMoonrakerWsOpenAndAuthed(self):
 
         # Kick off the webcam settings helper, to ensure it pulls fresh settings if desired.
-        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate()
+        # Use force, because the websocket might not open for some time and the first auto get might fail.
+        # When when moonraker connects, for the settings get, so ensure we are in sync with the system.
+        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate(forceUpdate=True)
 
         # Also allow the database logic to ensure our public keys exist and are updated.
         self.MoonrakerDatabase.EnsureOctoEverywhereDatabaseEntry()
@@ -309,7 +311,7 @@ class MoonrakerHost:
     #
     def OnWebcamSettingsChanged(self):
         # Set the force flag to true, since we know the settings just changed.
-        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate(True)
+        self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate(forceUpdate=True)
 
     #
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and klippy is fully ready to use.
