@@ -34,7 +34,7 @@ class Permissions:
         # For the Sonic Pad and K1 setup, the only user is root, so it's ok.
         if context.IsObserverSetup is False and context.IsCrealityOs() is False:
             if context.UserName.lower() == Permissions.c_RootUserName:
-                raise Exception("The installer was ran under the root user, this will cause problems with Moonraker. Please run the installer script as a non-root user, usually that's the `pi` user.")
+                raise Exception("The installer was ran under the root user, this will cause problems with Moonraker. Please run the installer script as a non-root user, usually that's the `pi` user or 'mks' for MKS PI.")
 
         # But regardless of the user, we must have sudo permissions.
         # pylint: disable=no-member # Linux only
