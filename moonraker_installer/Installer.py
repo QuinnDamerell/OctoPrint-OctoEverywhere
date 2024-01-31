@@ -10,6 +10,7 @@ from .DiscoveryObserver import DiscoveryObserver
 from .Configure import Configure
 from .Updater import Updater
 from .Permissions import Permissions
+from .TimeSync import TimeSync
 from .Frontend import Frontend
 from .Uninstall import Uninstall
 
@@ -84,6 +85,11 @@ class Installer:
             # If we should show help, do it now and return.
             self.PrintHelp()
             return
+
+        # Ensure that the system clock sync is enabled. For some MKS PI systems the OS time is wrong and sync is disabled.
+        # The user would of had to manually correct the time to get this installer running, but we will ensure that the
+        # time sync systemd service is enabled to keep the clock in sync after reboots, otherwise it will cause SSL errors.
+        TimeSync.EnsureNtpSyncEnabled()
 
         # Ensure the script at least has sudo permissions.
         # It's required to set file permission and to write / restart the service.
