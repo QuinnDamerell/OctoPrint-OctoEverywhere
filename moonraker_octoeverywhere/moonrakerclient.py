@@ -61,6 +61,8 @@ class MoonrakerClient:
     # Logic for a static singleton
     _Instance = None
 
+    # If enabled, this prints all of the websocket messages sent and received.
+    WebSocketMessageDebugging = False
 
     @staticmethod
     def Init(logger, isObserverMode:bool, moonrakerConfigFilePath:str, observerConfigPath:str, printerId, connectionStatusHandler, pluginVersionStr):
@@ -299,7 +301,8 @@ class MoonrakerClient:
                 return False
 
             # Print for debugging.
-            self.Logger.debug("Ws ->: "+jsonStr)
+            if MoonrakerClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug("Ws ->: %s",+jsonStr)
 
             # Send under lock.
             try:
@@ -628,7 +631,7 @@ class MoonrakerClient:
                 method_CanBeNone = msgObj["method"]
 
             # Print for debugging
-            if self.Logger.isEnabledFor(logging.DEBUG):
+            if MoonrakerClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
                 # Exclude this really chatty message.
                 msgStr = msgBytes.decode(encoding="utf-8")
                 if "moonraker_stats" not in msgStr:
