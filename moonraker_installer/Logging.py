@@ -16,13 +16,15 @@ class Logger:
 
     IsDebugEnabled = False
     OutputFile = None
+    OutputFilePath = None
 
 
     @staticmethod
     def InitFile(userHomePath):
         try:
+            Logger.OutputFilePath = os.path.join(userHomePath, "octoeverywhere-installer.log")
             # pylint: disable=consider-using-with
-            Logger.OutputFile = open(os.path.join(userHomePath, "octoeverywhere-installer.log"), "w", encoding="utf-8")
+            Logger.OutputFile = open(Logger.OutputFilePath, "w", encoding="utf-8")
         except Exception as e:
             print("Failed to make log file. "+str(e))
 
@@ -32,6 +34,15 @@ class Logger:
         try:
             Logger.OutputFile.flush()
             Logger.OutputFile.close()
+        except Exception:
+            pass
+
+
+    @staticmethod
+    def DeleteLogFile():
+        try:
+            Logger.Finalize()
+            os.remove(Logger.OutputFilePath)
         except Exception:
             pass
 

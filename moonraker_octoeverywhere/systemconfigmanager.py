@@ -12,6 +12,11 @@ class SystemConfigManager:
     @staticmethod
     def EnsureUpdateManagerFilesSetup(logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot):
 
+        # Special case for K1 and K1 max setups. If the service file name is the special init.d name, we can just use
+        # the started "octoeverywhere" and the update manager will find the right service to manage.
+        if serviceName.startswith("S66"):
+            serviceName = "octoeverywhere"
+
         # Create the expected update config contents
         # Note that the update_manager extension name and the managed_services names must match, and the must match the systemd service file name.
         d = {
@@ -26,8 +31,12 @@ type: git_repo
 channel: beta
 path: {RepoRootFolder}
 origin: https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere.git
+# env is deprecated, but we must keep it around for now, for older installs.
 env: {pyVirtEnvRoot}/bin/python
+virtualenv: {pyVirtEnvRoot}
 requirements: requirements.txt
+# system_dependencies is newer and replaces install_script for the list of system deps. But for now we need both for older installs.
+system_dependencies: moonraker-system-dependencies.json
 install_script: install.sh
 managed_services:
   {ServiceName}

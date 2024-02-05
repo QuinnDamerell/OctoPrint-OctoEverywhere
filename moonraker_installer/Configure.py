@@ -93,6 +93,8 @@ class Configure:
         elif context.OsType == OsTypes.K1:
             # For the k1, there's only ever one moonraker and we know the exact service naming convention.
             # Note we use 66 to ensure we start after moonraker.
+            # This is page for details on the file name: https://docs.oracle.com/cd/E36784_01/html/E36882/init.d-4.html
+            # Note the 'S66' string is looked for in the plugin's EnsureUpdateManagerFilesSetup function. So it must not change!
             context.ServiceName = f"S66{Configure.c_ServiceCommonName}_service"
             context.ServiceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, context.ServiceName)
         else:

@@ -69,14 +69,18 @@ OE_ENV="${HOME}/octoeverywhere-env"
 # For python packages, the `requirements.txt` package is used on update.
 # This var name MUST BE `PKGLIST`!!
 #
+# Note! This was deprecated in newer versions of moonraker, instead the deps are in the moonraker-system-dependencies.json file.
+# For now we will keep both around AND IN SYNC so we can support older versions of moonraker.
+#
 # The python requirements are for the installer and plugin
 # The virtualenv is for our virtual package env we create
 # The curl requirement is for some things in this bootstrap script.
-PKGLIST="python3 python3-pip virtualenv curl"
+# python3-venv is required for teh virtualenv command to fully work.
+PKGLIST="python3 python3-pip virtualenv python3-venv curl"
 # For the Creality OS, we only need to install these.
 # We don't override the default name, since that's used by the Moonraker installer
 # Note that we DON'T want to use the same name as above (not even in this comment) because some parsers might find it.
-SONIC_PAD_DEP_LIST="python3 python3-pip"
+SONIC_PAD_DEP_LIST="python3 python3-pip python3-venv"
 
 
 #
@@ -187,6 +191,10 @@ ensure_py_venv()
         # The K1 requires we setup the virtualenv like this.
         # --system-site-packages is important for the K1, since it doesn't have much disk space.
         python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 --system-site-packages "${OE_ENV}"
+        # For the K1, we can't install `python3-venv` which is needed to fully support the virtualenv command.
+        # Without it, sometimes the .../bin/activate file doesn't exist, which moonraker expects to exist.
+        # Luckily moonraker doesn't actually do anything with the activate file, so we can just create it.
+        touch "${OE_ENV}/bin/activate"
     else
         # Everything else can use this more modern style command.
         # We don't want to use --system-site-packages, so we don't consume whatever packages are on the system.

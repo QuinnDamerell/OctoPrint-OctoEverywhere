@@ -4,7 +4,7 @@ import traceback
 from .Linker import Linker
 from .Logging import Logger
 from .Service import Service
-from .Context import Context
+from .Context import Context, OsTypes
 from .Discovery import Discovery
 from .DiscoveryObserver import DiscoveryObserver
 from .Configure import Configure
@@ -176,6 +176,11 @@ class Installer:
         Logger.Error( "                            <3                               ")
         Logger.Blank()
         Logger.Blank()
+
+        # At the end on success, for OSs that don't have very much disk space, clean up the installer log file, since it's probably not needed.
+        # If we need the log file for some reason, we should add a flag to the context to keep it.
+        if context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K1:
+            Logger.DeleteLogFile()
 
 
     def GetArgumentObjectStr(self) -> str:

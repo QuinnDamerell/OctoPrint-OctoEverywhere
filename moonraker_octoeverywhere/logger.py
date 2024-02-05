@@ -40,8 +40,8 @@ class LoggerInit:
         logger.addHandler(std)
 
         # Setup the file logger
-        maxFileSizeBytes = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxSizeMbKey, 5, 1, 5000) * 1024 * 1024
-        maxFileCount = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxCountKey, 3, 1, 50)
+        maxFileSizeBytes = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxSizeMbKey, 3, 1, 5000) * 1024 * 1024
+        maxFileCount = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxCountKey, 1, 1, 50)
         file = logging.handlers.RotatingFileHandler(
             os.path.join(klipperLogDir, "octoeverywhere.log"),
             maxBytes=maxFileSizeBytes, backupCount=maxFileCount)

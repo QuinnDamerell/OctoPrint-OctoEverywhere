@@ -1,0 +1,10 @@
+{
+    "_comment": "These must stay in sync with the install.sh PKGLIST until the deprecated list is removed!",
+    "debian": [
+        "python3",
+        "python3-pip",
+        "virtualenv",
+        "python3-venv",
+        "curl"
+    ]
+}
