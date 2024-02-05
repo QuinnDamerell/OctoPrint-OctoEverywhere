@@ -15,6 +15,7 @@ class SystemConfigManager:
 
         # Special case for K1 and K1 max setups. If the service file name is the special init.d name, we can just use
         # the started "octoeverywhere" and the update manager will find the right service to manage.
+        # This was tested, and both the UI to control services and the update manager worked with this setup.
         if serviceName.startswith("S66"):
             serviceName = "octoeverywhere"
 
