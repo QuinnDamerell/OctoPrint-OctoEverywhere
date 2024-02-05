@@ -1,5 +1,6 @@
 import os
 import subprocess
+import logging
 
 class SystemConfigManager:
 
@@ -10,15 +11,30 @@ class SystemConfigManager:
     # This also write a block that's used to allow the announcement system to show updates from our repo.
     # This function ensures they exist and are up to date. If not, they are fixed.
     @staticmethod
-    def EnsureUpdateManagerFilesSetup(logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot):
+    def EnsureUpdateManagerFilesSetup(logger:logging.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot):
 
         # Special case for K1 and K1 max setups. If the service file name is the special init.d name, we can just use
         # the started "octoeverywhere" and the update manager will find the right service to manage.
         if serviceName.startswith("S66"):
             serviceName = "octoeverywhere"
 
+        # Some setups, (it seems mostly like on the K1 and K1 max) don't fully setup the virtual env, but it's setup enough things work.
+        # However the Moonraker update manager checks for ./bin/activate to be there and it must be a file. Luckily it doesn't use the activate script, it only uses
+        # the python and pip executables. So we can make an dummy file to make Moonraker happy.
+        try:
+            activateFilePath = os.path.join(pyVirtEnvRoot, "bin", "activate")
+            if os.path.exists(activateFilePath) is False:
+                logger.warn("No virtual env active script was found, we are creating a dummy file.")
+                with open(activateFilePath, "w", encoding="utf-8") as file:
+                    file.write("echo 'This is a dummy file created by the OctoEverywhere plugin to make Moonraker happy.'")
+        except Exception as e:
+            logger.error("Failed to create the virtual env dummy activate file. "+str(e))
+
         # Create the expected update config contents
         # Note that the update_manager extension name and the managed_services names must match, and the must match the systemd service file name.
+        #
+        # Note about deprecated options. We have the new option but it's commented out, because if we include both the new and old options moonraker warns about unparsed vars (the old options)
+        # So for now, we use the old ones, until moonraker drops support for them and we have to move. The problem is then the plugin will not work on older installs after that.
         d = {
             'RepoRootFolder': repoRoot,
             'ServiceName' : serviceName,
@@ -31,12 +47,12 @@ type: git_repo
 channel: beta
 path: {RepoRootFolder}
 origin: https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere.git
-# env is deprecated, but we must keep it around for now, for older installs.
+# env is deprecated for virtualenv, but for now we can only use one and must use the older option for compat.
 env: {pyVirtEnvRoot}/bin/python
-virtualenv: {pyVirtEnvRoot}
+#virtualenv: {pyVirtEnvRoot}
+# requirements is deprecated for system_dependencies, but for now we can only use one and must use the older option for compat.
 requirements: requirements.txt
-# system_dependencies is newer and replaces install_script for the list of system deps. But for now we need both for older installs.
-system_dependencies: moonraker-system-dependencies.json
+# system_dependencies: moonraker-system-dependencies.json
 install_script: install.sh
 managed_services:
   {ServiceName}
