@@ -172,7 +172,10 @@ class OctoSession:
                 if webStreamMsg.IsOpenMsg() is False:
                     # TODO - Handle messages that arrive for just closed streams better.
                     isCloseMessage = webStreamMsg.IsCloseMsg()
-                    self.Logger.warn("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
+                    if isCloseMessage:
+                        self.Logger.debug("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
+                    else:
+                        self.Logger.warn("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
                     # Don't throw, because this message maybe be coming in from the server as the local side closed.
                     return
 
