@@ -191,10 +191,6 @@ ensure_py_venv()
         # The K1 requires we setup the virtualenv like this.
         # --system-site-packages is important for the K1, since it doesn't have much disk space.
         python3 /usr/lib/python3.8/site-packages/virtualenv.py -p /usr/bin/python3 --system-site-packages "${OE_ENV}"
-        # For the K1, we can't install `python3-venv` which is needed to fully support the virtualenv command.
-        # Without it, sometimes the .../bin/activate file doesn't exist, which moonraker expects to exist.
-        # Luckily moonraker doesn't actually do anything with the activate file, so we can just create it.
-        touch "${OE_ENV}/bin/activate"
     else
         # Everything else can use this more modern style command.
         # We don't want to use --system-site-packages, so we don't consume whatever packages are on the system.
