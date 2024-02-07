@@ -80,7 +80,8 @@ PKGLIST="python3 python3-pip virtualenv python3-venv curl"
 # For the Creality OS, we only need to install these.
 # We don't override the default name, since that's used by the Moonraker installer
 # Note that we DON'T want to use the same name as above (not even in this comment) because some parsers might find it.
-SONIC_PAD_DEP_LIST="python3 python3-pip python3-venv"
+# Note we exclude virtualenv python3-venv curl because they can't be installed on the sonic pad via the package manager.
+SONIC_PAD_DEP_LIST="python3 python3-pip"
 
 
 #
