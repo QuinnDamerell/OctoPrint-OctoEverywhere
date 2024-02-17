@@ -74,6 +74,8 @@ class NotificationsHandler:
         self.zOffsetNotAtLowestCount = 0
         self.zOffsetHasSeenPositiveExtrude = False
         self.zOffsetTrackingStartTimeSec = 0.0
+        self.FirstLayerDoneSince = 0.0
+        self.ThirdLayerDoneSince = 0.0
         self.ProgressCompletionReported = []
         self.PrintId = "none"
         self.PrintStartTimeSec = 0
@@ -96,6 +98,8 @@ class NotificationsHandler:
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
         self.HasSendThirdLayerDoneMessage = False
+        self.FirstLayerDoneSince = 0.0
+        self.ThirdLayerDoneSince = 0.0
         # The following values are used to figure out when the first layer is done.
         self.zOffsetLowestSeenMM = 1337.0
         self.zOffsetNotAtLowestCount = 0
@@ -514,14 +518,39 @@ class NotificationsHandler:
         if currentLayer is not None and totalLayers is not None:
             # We have layer info from the system, use this to handle the events.
 
-            # If we are over the first layer and haven't sent the notification, do it now.
+            # If we are over the first layer and haven't sent the notification, start the timer.
+            # We use this time to make sure that the print is still in the first layer complete state and it's not a zhop or something.
             if currentLayer > 1 and self.HasSendFirstLayerDoneMessage is False:
-                self.HasSendFirstLayerDoneMessage = True
-                self._sendEvent("firstlayerdone")
+                if self.FirstLayerDoneSince < 0.1:
+                    self.Logger.debug("First Layer Logic - Starting delay timer.")
+                    self.FirstLayerDoneSince = time.time()
+                elif time.time() - self.FirstLayerDoneSince < 10.0:
+                    self.Logger.debug("First Layer Logic - Waiting delay time to expire.")
+                else:
+                    self.Logger.debug("First Layer Logic - Done.")
+                    self.HasSendFirstLayerDoneMessage = True
+                    self._sendEvent("firstlayerdone")
+
+            # If we fall out of the delay timer wait, reset the timer.
+            if currentLayer <= 1 and self.FirstLayerDoneSince > 0.0:
+                self.Logger.debug("First Layer Logic - Reset.")
+                self.FirstLayerDoneSince = 0.0
+
             # If we are past the 3rd, layer, do the same.
             if currentLayer > 3 and self.HasSendThirdLayerDoneMessage is False:
-                self.HasSendThirdLayerDoneMessage = True
-                self._sendEvent("thirdlayerdone")
+                if self.ThirdLayerDoneSince < 0.1:
+                    self.Logger.debug( "Third Layer Logic - Starting delay timer.")
+                    self.ThirdLayerDoneSince = time.time()
+                elif time.time() - self.ThirdLayerDoneSince < 10.0:
+                    self.Logger.debug( "Third Layer Logic - Waiting delay time to expire.")
+                else:
+                    self.Logger.debug( "Third Layer Logic - Done.")
+                    self.HasSendThirdLayerDoneMessage = True
+                    self._sendEvent("thirdlayerdone")
+
+            if currentLayer <= 3 and self.ThirdLayerDoneSince > 0.0:
+                self.Logger.debug("Third Layer Logic - Reset.")
+                self.ThirdLayerDoneSince = 0.0
 
             # If we return true, the time will continue, otherwise it will stop.
             isDone = self.HasSendFirstLayerDoneMessage is True and self.HasSendThirdLayerDoneMessage is True

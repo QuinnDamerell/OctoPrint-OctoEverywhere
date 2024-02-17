@@ -198,6 +198,7 @@
         "websockets",
         "webstream",
         "zchange",
+        "zhop",
         "zhops",
         "zmoves",
         "zoffset",
