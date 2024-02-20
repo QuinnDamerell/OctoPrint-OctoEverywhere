@@ -71,11 +71,12 @@ class OctoPrintWebcamHelper():
                     # Log for debugging.
                     if self.Logger.isEnabledFor(logging.DEBUG):
                         self.Logger.debug(f"OctoPrint Webcam Config Found: Name: {webcamName}, Can Snapshot: {webcam.canSnapshot}, Webcam Snapshot: \"{webcam.snapshotDisplay}\", Extras: {json.dumps(webcam.extras)}")
+
+                    # Some times this bool seems to be reported incorrectly so for now we don't skip the camera if it's set.
                     # Since the snapshot is critical for Gadget and others, only allow webcams that have snapshot (for now)
                     # Also note the webcam system has a fallback for stream url only webcams, we could rely on that?
                     if webcam.canSnapshot is False:
-                        self.Logger.info(f"We found a webcam {webcamName} but it doesn't support snapshots, so we are ignoring it.")
-                        continue
+                        self.Logger.info(f"We found a webcam {webcamName} but it doesn't support snapshots, we will try to detect the snapshot URL for ourselves.")
 
                     # Make an empty webcam settings item to fill.
                     webSettingsItem = WebcamSettingItem(webcamName)
