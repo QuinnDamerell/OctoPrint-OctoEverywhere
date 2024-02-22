@@ -1,5 +1,7 @@
 import os
 from datetime import datetime
+# pylint: disable=import-error # Only exists on linux
+import pwd
 
 #
 # Output Helpers
@@ -20,11 +22,19 @@ class Logger:
 
 
     @staticmethod
-    def InitFile(userHomePath):
+    def InitFile(userHomePath:str, userName:str):
         try:
             Logger.OutputFilePath = os.path.join(userHomePath, "octoeverywhere-installer.log")
+
             # pylint: disable=consider-using-with
             Logger.OutputFile = open(Logger.OutputFilePath, "w", encoding="utf-8")
+
+            # Ensure the file is permission to the user who ran the script.
+            # Note we can't ref Util since it depends on the Logger.
+            uid = pwd.getpwnam(userName).pw_uid
+            gid = pwd.getpwnam(userName).pw_gid
+            # pylint: disable=no-member # Linux only
+            os.chown(Logger.OutputFilePath, uid, gid)
         except Exception as e:
             print("Failed to make log file. "+str(e))
 

@@ -78,8 +78,14 @@ class Frontend:
 
         # If we found something, ask the user if they want to use one.
         if len(foundFrontends) > 0:
+            # A lot of users seem to be confused by this frontend setup, so if there's only one interface, we will just use it.
+            if len(foundFrontends) == 1:
+                item = foundFrontends[0]
+                Logger.Info(f"Only one frontend was found [{str(item.Frontend)} - {str(item.Port)}] so we will use it for remote access.")
+                return (item.Port, str(item.Frontend))
+
             Logger.Blank()
-            Logger.Info("The following web interfaces were automatically discovered:")
+            Logger.Info("The following web interfaces were discovered:")
             count = 0
             # List them in the order we found them, since we order the port list in by priority.
             for f in foundFrontends:
@@ -87,7 +93,7 @@ class Frontend:
                 Logger.Info(f"  {count}) {str(f.Frontend).ljust(8)} - Port {str(f.Port)}")
             Logger.Blank()
             while True:
-                response = input("Enter the number next to the web interface you would like to use, or enter `m` to manually setup the web interface: ")
+                response = input("From the list above, enter the number of the web interface you would like to use for remote access; or enter `m` to manually setup the web interface: ")
                 response = response.lower().strip()
                 if response == "m":
                     # Break to fall through to the manual setup.

@@ -9,6 +9,7 @@ from .Logging import Logger
 from .Configure import Configure
 from .Paths import Paths
 from .Service import Service
+from .Util import Util
 
 #
 # This class is responsible for doing updates for all plugins and companions on this local system.
@@ -124,6 +125,10 @@ cd $startingDir
             # Make sure to make it executable
             st = os.stat(updateFilePath)
             os.chmod(updateFilePath, st.st_mode | stat.S_IEXEC)
+
+            # Ensure the user who launched the installer script has permissions to run it.
+            Util.SetFileOwnerRecursive(updateFilePath, context.UserName)
+
             return True
         except Exception as e:
             Logger.Error("Failed to write updater script to user home. "+str(e))

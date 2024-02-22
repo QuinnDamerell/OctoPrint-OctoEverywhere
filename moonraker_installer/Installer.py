@@ -52,7 +52,7 @@ class Installer:
         context = Context.LoadFromArgString(argObjectStr)
 
         # As soon as we have the user home make the log file.
-        Logger.InitFile(context.UserHomePath)
+        Logger.InitFile(context.UserHomePath, context.UserName)
 
         # Parse the original CmdLineArgs
         Logger.Debug("Parsing script cmd line args.")
