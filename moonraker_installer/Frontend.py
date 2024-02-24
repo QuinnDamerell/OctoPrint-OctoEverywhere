@@ -279,17 +279,22 @@ class Frontend:
         if os.path.exists(filePath) is False:
             return (None, None)
 
-        config = configparser.ConfigParser()
-        config.read(filePath)
-        if config.has_section(Config.RelaySection) is False:
+        try:
+            config = configparser.ConfigParser()
+            config.read(filePath)
+            if config.has_section(Config.RelaySection) is False:
+                return (None, None)
+            if Config.RelayFrontEndPortKey not in config[Config.RelaySection]:
+                return (None, None)
+            portStr = config[Config.RelaySection][Config.RelayFrontEndPortKey]
+            frontendHint = None
+            if Config.RelayFrontEndTypeHintKey in config[Config.RelaySection]:
+                frontendHint = config[Config.RelaySection][Config.RelayFrontEndTypeHintKey]
+            return (portStr, frontendHint)
+        except Exception as e:
+            # There have been a few reports of this file being corrupt, so if it is, we will just fail and rewrite it.
+            Logger.Warn(f"Failed to read the frontend setup from the config file. {str(e)}")
             return (None, None)
-        if Config.RelayFrontEndPortKey not in config[Config.RelaySection]:
-            return (None, None)
-        portStr = config[Config.RelaySection][Config.RelayFrontEndPortKey]
-        frontendHint = None
-        if Config.RelayFrontEndTypeHintKey in config[Config.RelaySection]:
-            frontendHint = config[Config.RelaySection][Config.RelayFrontEndTypeHintKey]
-        return (portStr, frontendHint)
 
 
     # Writes the current frontend setup into the main OE service config
