@@ -22,6 +22,8 @@ disable=
     R1702, # Too many nested blocks
     R0801, # duplicate-code
     R0916, # Too many booleans in one if statment.
+    R1730, # consider-using-min-builtin
+    R1731, # consider-using-max-builtin
 
 
 # A comma-separated list of package or module names from where C extensions may

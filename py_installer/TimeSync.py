@@ -1,6 +1,8 @@
 from .Util import Util
 from .Logging import Logger
 
+from .Context import Context
+
 # This helper class ensures that the system's ntp clock sync service is enabled and active.
 # We found some MKS PI systems didn't have it on, and would be years out of sync on reboot.
 # This is a problem because SSL will fail if the date is too far out of sync.
@@ -10,7 +12,10 @@ from .Logging import Logger
 class TimeSync:
 
     @staticmethod
-    def EnsureNtpSyncEnabled():
+    def EnsureNtpSyncEnabled(context:Context):
+        if context.SkipSudoActions:
+            Logger.Warn("Skipping time sync since we are skipping sudo actions.")
+            return
         Logger.Info("Ensuring that time sync is enabled...")
 
         # Ensure that NTP is uninstalled, since this conflicts with timesyncd

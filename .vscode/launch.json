@@ -5,35 +5,59 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Moonraker Dev Module",
-            "type": "python",
+            "name": "Moonraker - PI - Single Instance",
+            "type": "debugpy",
             "request": "launch",
             "module": "moonraker_octoeverywhere",
             "justMyCode": false,
             "args": [
-                // The module requires these aregs to be passed. These are examples of a typical default setup.
-                // This is obviously linux depdent, and is expected to be ran out of an installed repo with moonraker running.
+                // These args reflect the correct setup for a pi installed single instance of OctoEverywhere connecting to a local Moonraker.
                 // The string is a urlBase64 encoded string of json. We base64 encode it to prevent any issues with command line args.
                 //
-                // This is the single instance setup
                 "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfZGF0YS9jb25maWciLCAiTW9vbnJha2VyQ29uZmlnRmlsZSI6ICIvaG9tZS9waS9wcmludGVyX2RhdGEvY29uZmlnL21vb25yYWtlci5jb25mIiwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL29jdG9ldmVyeXdoZXJlLXN0b3JlIiwgIlNlcnZpY2VOYW1lIjogIm9jdG9ldmVyeXdoZXJlIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSJ9",
                 //
-                // This is the multi instance seutp
-                //"eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZyIsICJNb29ucmFrZXJDb25maWdGaWxlIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZy9tb29ucmFrZXIuY29uZiIsICJLbGlwcGVyTG9nRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl8xX2RhdGEvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtMSIsICJWaXJ0dWFsRW52UGF0aCI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUifQ==",
                 // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
         },
         {
-            "name": "Moonraker Dev Module - Observer Mode",
-            "type": "python",
+            "name": "Moonraker - PI - Multi Instance",
+            "type": "debugpy",
             "request": "launch",
             "module": "moonraker_octoeverywhere",
             "justMyCode": false,
             "args": [
-                // The module requires these aregs to be passed. These are examples of a typical default setup.
-                // This is obviously linux depdent, and is expected to be ran out of an installed repo with moonraker running.
+                // These args reflect the correct setup for a pi installed multiple instances of OctoEverywhere connecting to a local Moonraker. These args target the first instance.
                 // The string is a urlBase64 encoded string of json. We base64 encode it to prevent any issues with command line args.
+                //
+                "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZyIsICJNb29ucmFrZXJDb25maWdGaWxlIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZy9tb29ucmFrZXIuY29uZiIsICJLbGlwcGVyTG9nRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl8xX2RhdGEvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtMSIsICJWaXJ0dWFsRW52UGF0aCI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUifQ==",
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
+        {
+            "name": "Bambu Connect - PI - Instnace 1",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "bambu_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Bambu Connect version of the plugin. These args target the first instance.
+                //
+                // { "ServiceName": "octoeverywhere-bambu", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-bambu/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-bambu/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-bambu/", "InstanceStr":"1" }
+                "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtYmFtYnUiLCAiVmlydHVhbEVudlBhdGgiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS8iLCAiTG9nRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1L2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtYmFtYnUvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1LyIsICJJbnN0YW5jZVN0ciI6IjEiIH0=",
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
+        {
+            "name": "Companion - PI - Instnace 1",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "moonraker_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Companion version of the plugin. These args target the first instance.
                 //
                 // This is the single instance setup
                 "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1vYnNlcnZlci0xL2NvbmZpZyIsICJNb29ucmFrZXJDb25maWdGaWxlIjogbnVsbCwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLW9ic2VydmVyLTEvbG9ncyIsICJMb2NhbEZpbGVTdG9yYWdlUGF0aCI6ICIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtb2JzZXJ2ZXItMS9vY3RvZXZlcnl3aGVyZS1zdG9yZSIsICJTZXJ2aWNlTmFtZSI6ICJvY3RvZXZlcnl3aGVyZS1vYnNlcnZlcjEiLCAiVmlydHVhbEVudlBhdGgiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUtZW52IiwgIlJlcG9Sb290Rm9sZGVyIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlIiwgIklzT2JzZXJ2ZXIiOiB0cnVlLCAiT2JzZXJ2ZXJDb25maWdGaWxlUGF0aCI6ICIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtb2JzZXJ2ZXItMS9jb25maWcvb2N0b2V2ZXJ5d2hlcmUtb2JzZXJ2ZXIuY2ZnIiwgIk9ic2VydmVySW5zdGFuY2VJZFN0ciI6ICIxIn0=",
@@ -45,10 +69,10 @@
             ]
         },
         {
-            "name": "Moonraker Installer Module",
-            "type": "python",
+            "name": "Installer - Local Moonraker",
+            "type": "debugpy",
             "request": "launch",
-            "module": "moonraker_installer",
+            "module": "py_installer",
             "justMyCode": false,
             "args": [
                 // The module requires this json object to be passed.
@@ -58,21 +82,34 @@
             ]
         },
         {
-            "name": "Moonraker Installer Module - Observer",
-            "type": "python",
+            "name": "Installer - Companion",
+            "type": "debugpy",
             "request": "launch",
-            "module": "moonraker_installer",
+            "module": "py_installer",
             "justMyCode": false,
             "args": [
                 // The module requires this json object to be passed.
                 // Normally the install.sh script runs, ensure everything is installed, creates a virtural env, and then runs this modlue giving it these args.
                 // But for debugging, we can skip that assuming it's already been ran.
-                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-debug -skipsudoactions -observer\"}"
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-debug -skipsudoactions -companion\"}"
+            ]
+        },
+        {
+            "name": "Installer - Bambu Connect",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "py_installer",
+            "justMyCode": false,
+            "args": [
+                // The module requires this json object to be passed.
+                // Normally the install.sh script runs, ensure everything is installed, creates a virtural env, and then runs this modlue giving it these args.
+                // But for debugging, we can skip that assuming it's already been ran.
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-debug -skipsudoactions -bambu\"}"
             ]
         },
         {
             "name": "OctoPrint Dev Module",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "octoprint_octoeverywhere",
             "justMyCode": true

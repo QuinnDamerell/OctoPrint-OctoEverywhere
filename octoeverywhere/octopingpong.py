@@ -212,8 +212,7 @@ class OctoPingPong:
                 c += 1
 
             # Keep track of which server we have the lowest result counts for.
-            if c < smallestBucketStatCount:
-                smallestBucketStatCount = c
+            smallestBucketStatCount = min(smallestBucketStatCount, c)
 
             # Prevent divide by zero
             if c == 0:

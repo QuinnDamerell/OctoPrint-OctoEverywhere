@@ -6,7 +6,7 @@ from .Logging import Logger
 from .Service import Service
 from .Context import Context, OsTypes
 from .Discovery import Discovery
-from .DiscoveryObserver import DiscoveryObserver
+from .DiscoveryCompanionAndBambu import DiscoveryCompanionAndBambu
 from .Configure import Configure
 from .Updater import Updater
 from .Permissions import Permissions
@@ -89,7 +89,7 @@ class Installer:
         # Ensure that the system clock sync is enabled. For some MKS PI systems the OS time is wrong and sync is disabled.
         # The user would of had to manually correct the time to get this installer running, but we will ensure that the
         # time sync systemd service is enabled to keep the clock in sync after reboots, otherwise it will cause SSL errors.
-        TimeSync.EnsureNtpSyncEnabled()
+        TimeSync.EnsureNtpSyncEnabled(context)
 
         # Ensure the script at least has sudo permissions.
         # It's required to set file permission and to write / restart the service.
@@ -98,8 +98,7 @@ class Installer:
 
         # If we are in update mode, do the update logic and exit.
         if context.IsUpdateMode:
-            # Before the update, make sure all permissions are set
-            # correctly.
+            # Before the update, make sure all permissions are set correctly.
             permissions.EnsureFinalPermissions(context)
 
             # Do the update logic.
@@ -114,11 +113,11 @@ class Installer:
             return
 
         # Next step is to discover and fill out the moonraker config file path and service file name.
-        # If we are doing an observer setup, we need the user to help us input the details to the external moonraker IP.
+        # If we are doing an companion or bambu setup, we need the user to help us input the details to the external moonraker IP or bambu printer.
         # This is the hardest part of the setup, because it's highly dependent on the system and different moonraker setups.
-        if context.IsObserverSetup:
-            discovery = DiscoveryObserver()
-            discovery.ObserverDiscovery(context)
+        if context.IsCompanionOrBambu():
+            discovery = DiscoveryCompanionAndBambu()
+            discovery.Discovery(context)
         else:
             discovery = Discovery()
             discovery.FindTargetMoonrakerFiles(context)
@@ -156,8 +155,8 @@ class Installer:
 
         # Add our auto update logic.
         updater = Updater()
-        # If this is an observer or a Creality OS install, put the update script in the users root, so it's easy to find.
-        if context.IsObserverSetup or context.IsCrealityOs():
+        # If this is an companion or a Creality OS install, put the update script in the users root, so it's easy to find.
+        if context.IsCompanionOrBambu() or context.IsCrealityOs():
             updater.PlaceUpdateScriptInRoot(context)
         # Also setup our cron updater if we can, so that the plugin will auto update.
         updater.EnsureCronUpdateJob(context.RepoRootFolder)
@@ -170,7 +169,7 @@ class Installer:
         Logger.Blank()
         Logger.Blank()
         Logger.Blank()
-        Logger.Purple("        ~~~ OctoEverywhere For Klipper Setup Complete ~~~    ")
+        Logger.Purple("            ~~~ OctoEverywhere Setup Complete ~~~            ")
         Logger.Warn(  "  You Can Access Your Printer Anytime From OctoEverywhere.com")
         Logger.Header("                   Welcome To Our Community                  ")
         Logger.Error( "                            <3                               ")
@@ -204,12 +203,18 @@ class Installer:
         Logger.Blank()
         Logger.Blank()
         Logger.Blank()
-        Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-        Logger.Header("    OctoEverywhere For Klipper      ")
-        Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        Logger.Header("    OctoEverywhere For Klipper And Bambu Connect    ")
+        Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         Logger.Blank()
-        Logger.Info("This installer script is used for installing the OctoEverywhere plugin on Klipper/Moonraker/Mainsail/Fluidd setups. It is NOT used for OctoPrint setups.")
-        Logger.Info("If you want to install OctoEverywhere for OctoPrint, use the plugin manager in OctoPrint's settings to install the plugin.")
+        Logger.Info("This installer can be used for:")
+        Logger.Info("   - OctoEverywhere for Klipper - Where Moonraker is running on this device.")
+        Logger.Info("   - OctoEverywhere for Creality - Where this device is a Creality device (Sonic Pad, K1, Ender v3, etc)")
+        Logger.Info("   - OctoEverywhere Companion - Where this plugin will connect to Moonraker running on a different device on the same LAN.")
+        Logger.Info("   - OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu Labs printer on the same LAN.")
+        Logger.Blank()
+        Logger.Warn("This installer is NOT for:")
+        Logger.Info("   - OctoPrint or OctoKlipper - If you're using OctoPrint, install OctoEverywhere directly in OctoPrint from the plugin manager.")
         Logger.Blank()
         Logger.Warn("Command line format:")
         Logger.Info("  <moonraker config file path> <moonraker service file path> -other -args")
@@ -218,10 +223,12 @@ class Installer:
         Logger.Info("  <moonraker config file path>  - optional - If supplied, the install will target this moonraker setup without asking or searching for others")
         Logger.Info("  <moonraker service name> - optional - If supplied, the install will target this moonraker service file without searching.")
         Logger.Info("       Used when multiple moonraker instances are ran on the same device. The service name is used to find the unique moonraker identifier. OctoEverywhere will follow the same naming convention. Typically the file name is something like `moonraker-1.service` or `moonraker-somename.service`")
-        Logger.Info("  -observer - optional flag - If passed, the plugin is setup as an observer, which is a plugin not running on the same device as moonraker. This is useful for built-in printer hardware where OctoEverywhere can't run, like the Sonic Pad or K1.")
         Logger.Blank()
         Logger.Warn("Other Optional Args:")
         Logger.Info("  -help            - Shows this message.")
+        Logger.Info("  -update          - The installer will update all OctoEverywhere plugins on this device of any type.")
+        Logger.Info("  -companion       - Makes the setup target a OctoEverywhere Companion plugin setup.")
+        Logger.Info("  -bambu           - Makes the setup target a OctoEverywhere Bambu Connect plugin setup.")
         Logger.Info("  -noatuoselect    - Disables auto selecting a moonraker instance, allowing the user to always choose.")
         Logger.Info("  -debug           - Enable debug logging to the console.")
         Logger.Info("  -skipsudoactions - Skips sudo required actions. This is useful for debugging, but will make the install not fully work.")

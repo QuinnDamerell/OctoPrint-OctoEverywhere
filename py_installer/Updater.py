@@ -1,7 +1,7 @@
 import os
 import stat
 
-from moonraker_octoeverywhere.version import Version
+from linux_host.version import Version
 
 from .Context import Context
 from .Context import OsTypes
@@ -12,7 +12,7 @@ from .Service import Service
 from .Util import Util
 
 #
-# This class is responsible for doing updates for all plugins and companions on this local system.
+# This class is responsible for doing updates for all local, companions, and bambu connect plugins on this local system.
 # This update logic is mostly for companion plugins, since normal plugins will be updated via the moonraker update system.
 # But it does work for both.
 #
@@ -29,19 +29,19 @@ class Updater:
     def DoUpdate(self, context:Context):
         Logger.Header("Starting Update Logic")
 
-        # Enumerate all service file to find any local plugins, Sonic Pad plugins, and companion service files, since all service files contain this name.
+        # Enumerate all service file to find any local plugins, Sonic Pad plugins, companion service files, and bambu service files, since all service files contain this name.
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
         foundOeServices = []
         fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
         for fileOrDirName in fileAndDirList:
-            Logger.Debug(f" Searching for OE services to update, found: {fileOrDirName}")
+            Logger.Debug(f"Searching for OE services to update, found: {fileOrDirName}")
             if Configure.c_ServiceCommonName in fileOrDirName.lower():
                 foundOeServices.append(fileOrDirName)
 
         if len(foundOeServices) == 0:
-            Logger.Warn("No local plugins or companions were found.")
-            raise Exception("No local plugins or companions were found.")
+            Logger.Warn("No local, companion, or Bambu Connect plugins were found on this device.")
+            raise Exception("No local, companion, or Bambu Connect plugins were found on this device.")
 
         Logger.Info("We found the following plugins to update:")
         for s in foundOeServices:
@@ -97,9 +97,9 @@ class Updater:
 #!/bin/bash
 
 #
-# Run this script to update all OctoEverywhere instances on this device!
+# Run this script to update all OctoEverywhere plugins on this device!
 #
-# This works for all install types, normal plugins, Creality OS, and companion installs.
+# This works for all plugin types, such as local Klipper, Creality OS, Companion, and Bambu Connect.
 #
 # If you need help, feel free to contact us at support@octoeverywhere.com
 #

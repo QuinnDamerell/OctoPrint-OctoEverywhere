@@ -164,7 +164,7 @@ class CommandHandler:
         webcamSettingsItems = WebcamHelper.Get().ListWebcams()
         if webcamSettingsItems is None:
             webcamSettingsItems = []
-        # We need to convert the objects into a dic to seralize.
+        # We need to convert the objects into a dic to serialize.
         webcams = []
         for i in webcamSettingsItems:
             wc = {}

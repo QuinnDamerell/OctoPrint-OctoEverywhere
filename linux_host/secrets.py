@@ -4,10 +4,8 @@ import logging
 
 import configparser
 
-from .config import Config
-
-# This class is very similar to the config class, but since the klipper config files are often backup
-# in public places, the secrets are stored else where.
+# This class is very similar to the config class, but since the klipper config files are often backup in public places, the secrets are stored else where.
+# This is also used for the companion and the bambu host.
 class Secrets:
 
     # These must stay the same because our installer script requires on the format being as is!
@@ -25,7 +23,7 @@ class Secrets:
     ]
 
 
-    def __init__(self, logger:logging.Logger, octoeverywhereStoragePath:str, config:Config) -> None:
+    def __init__(self, logger:logging.Logger, octoeverywhereStoragePath:str, moonrakerConfig = None) -> None:
         self.Logger = logger
 
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
@@ -41,7 +39,8 @@ class Secrets:
 
         # As of the creation of this class, 8/15/2023, we might need to migrate the printer id and private key to this file.
         # Do that before anything else is done.
-        self._DoConfigMigrationIfNeeded(config)
+        if moonrakerConfig is not None:
+            self._DoConfigMigrationIfNeeded(moonrakerConfig)
 
 
     # Returns the printer id if one exists, otherwise None.
@@ -66,7 +65,7 @@ class Secrets:
 
     # Migrates any old secrets from the config to the new location, if needed.
     # This must be called before the printer id or private key are accessed!
-    def _DoConfigMigrationIfNeeded(self, config:Config):
+    def _DoConfigMigrationIfNeeded(self, config):
         # Try to get the old values, if they exist.
         # We keep the old strings here, incase they ever change in new config updates.
         configServerSection = "server"

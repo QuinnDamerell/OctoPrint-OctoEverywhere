@@ -8,7 +8,8 @@ import requests
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.webcamhelper import WebcamSettingItem, WebcamHelper
 
-from .config import Config
+from linux_host.config import Config
+
 from .moonrakerclient import MoonrakerClient
 from .moonrakerclient import JsonRpcResponse
 

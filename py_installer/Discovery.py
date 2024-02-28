@@ -96,7 +96,7 @@ class Discovery:
                     isFirstPrint = False
                 else:
                     Logger.Warn( "If you need help, contact us! https://octoeverywhere.com/support")
-                response = input("Enter the number for the config you would like to setup now: ")
+                response = input("Enter the number from above for the Moonraker you would like to setup now: ")
                 response = response.lower().strip()
                 # Parse the input and -1 it, so it aligns with the array length.
                 tempInt = int(response.lower().strip()) - 1

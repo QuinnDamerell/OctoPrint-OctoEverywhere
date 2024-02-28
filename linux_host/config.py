@@ -4,24 +4,34 @@ import threading
 import configparser
 
 # This is what we use as our important settings config.
+# This single config class is used for all of the plugin types, but not all of the values are used for each type.
 # It's a bit heavy handed with the lock and aggressive saving, but these
 # settings are important, and not accessed much.
 class Config:
 
-    # This can't change or all past plugins will fail. It's also used by the installer.
+    # This can't change or all past plugins will fail.
     ConfigFileName = "octoeverywhere.conf"
 
-    ServerSection = "server"
-
-    RelaySection = "relay"
-    RelayFrontEndPortKey = "frontend_port"            # This field is shared with the installer, the installer can write this value. It the name can't change!
-    RelayFrontEndTypeHintKey = "frontend_type_hint"   # This field is shared with the installer, the installer can write this value. It the name can't change!
-
+    #
+    # Common To All Plugins
+    #
     LoggingSection = "logging"
     LogLevelKey = "log_level"
     LogFileMaxSizeMbKey = "max_file_size_mb"
     LogFileMaxCountKey = "max_file_count"
 
+
+    #
+    # Used for the local Moonraker plugin and companions.
+    #
+    RelaySection = "relay"
+    RelayFrontEndPortKey = "frontend_port"            # This field is shared with the installer, the installer can write this value. It the name can't change!
+    RelayFrontEndTypeHintKey = "frontend_type_hint"   # This field is shared with the installer, the installer can write this value. It the name can't change!
+
+
+    #
+    # Used for the local Moonraker plugin and companions.
+    #
     WebcamSection = "webcam"
     WebcamAutoSettings = "auto_settings_detection"
     WebcamNameToUseAsPrimary = "webcam_name_to_use_as_primary"
@@ -31,6 +41,23 @@ class Config:
     WebcamFlipV = "flip_vertically"
     WebcamRotation = "rotate"
 
+
+    #
+    # Used for both the companion and bambu connect plugins
+    #
+    SectionCompanion = "companion"
+    CompanionKeyIpOrHostname = "ip_or_hostname"
+    CompanionKeyPort = "port"
+
+
+    #
+    # Used only for Bambu Connect
+    #
+    SectionBambu = "bambu"
+    BambuAccessToken = "access_token"
+    BambuPrinterSn = "printer_serial_number"
+
+
     # This allows us to add comments into our config.
     # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
     # A string, which is the comment to be inserted.
@@ -38,6 +65,10 @@ class Config:
         { "Target": RelayFrontEndPortKey,  "Comment": "The port used for http relay. If your desired frontend runs on a different port, change this value. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": RelayFrontEndTypeHintKey,  "Comment": "A string only used by the UI to hint at what web interface this port is."},
         { "Target": LogLevelKey,  "Comment": "The active logging level. Valid values include: DEBUG, INFO, WARNING, or ERROR."},
+        { "Target": CompanionKeyIpOrHostname,  "Comment": "The IP or hostname this companion plugin will use to connect to Moonraker. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
+        { "Target": CompanionKeyPort,  "Comment": "The port this companion plugin will use to connect to Moonraker. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
+        { "Target": BambuAccessToken,  "Comment": "The access token to the Bambu printer. It can be found using the LCD screen on the printer, in the settings. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
+        { "Target": BambuPrinterSn,    "Comment": "The serial number of your Bambu printer. It can be found using this guide: https://wiki.bambulab.com/en/general/find-sn  The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
         { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
         { "Target": WebcamStreamUrl,  "Comment": "Webcam streaming URL. This can be a local relative path (ex: /webcam/?action=stream) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=stream or http://webcam.local/webcam/?action=stream)"},
@@ -47,22 +78,29 @@ class Config:
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
     ]
 
+
     # The config lib we use doesn't support the % sign, even though it's valid .cfg syntax.
     # Since we save URLs into the config for the webcam, it's valid syntax to use a %20 and such, thus we should support it.
     PercentageStringReplaceString = "~~~PercentageSignPlaceholder~~~"
 
 
-    def __init__(self, klipperConfigPath) -> None:
+    def __init__(self, configDirPath:str) -> None:
         self.Logger = None
         # Define our config path
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
-        self.OeConfigFilePath = os.path.join(klipperConfigPath, Config.ConfigFileName)
+        self.OeConfigFilePath = Config.GetConfigFilePath(configDirPath)
         # A lock to keep file access super safe
         self.ConfigLock = threading.Lock()
         self.Config = None
         # Load the config on init, to ensure it exists.
         # This will throw if there's an error reading the config.
         self._LoadConfigIfNeeded_UnderLock()
+
+
+    # Returns the config file path given the config folder
+    @staticmethod
+    def GetConfigFilePath(configDirPath:str) -> str:
+        return os.path.join(configDirPath, Config.ConfigFileName)
 
 
     # Allows the logger to be set when it's created.
@@ -79,6 +117,7 @@ class Config:
 
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
+    # If the default value is None, the default will not be written into the config.
     def GetStr(self, section, key, defaultValue) -> str:
         with self.ConfigLock:
             # Ensure we have the config.
@@ -100,10 +139,20 @@ class Config:
 
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
-    def GetInt(self, section, key, defaultValue) -> int:
+    # If the default value is None, the default will not be written into the config.
+    def GetInt(self, section:str, key:str, defaultValue) -> int:
         # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
         try:
-            return int(self.GetStr(section, key, str(defaultValue)))
+            # If None is passed as the default, don't str it.
+            if defaultValue is not None:
+                defaultValue = str(defaultValue)
+
+            result = self.GetStr(section, key, defaultValue)
+            # If None is returned, don't int it, return None.
+            if result is None:
+                return None
+
+            return int(str)
         except Exception as e:
             self.Logger.error("Config settings error! "+key+" failed to get as int. Resetting to default. "+str(e))
             self.SetStr(section, key, str(defaultValue))
@@ -112,10 +161,21 @@ class Config:
 
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
+    # If the default value is None, the default will not be written into the config.
     def GetBool(self, section, key, defaultValue) -> bool:
         # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
         try:
-            strValue = self.GetStr(section, key, str(defaultValue)).lower()
+            # If None is passed as the default, don't str it.
+            if defaultValue is not None:
+                defaultValue = str(defaultValue)
+            strValue = self.GetStr(section, key, defaultValue)
+
+            # If None is returned, don't bool it, return None.
+            if strValue is None:
+                return None
+
+            # Match it to a bool value.
+            strValue = strValue.lower()
             if strValue == "false":
                 return False
             elif strValue == "true":
@@ -131,11 +191,13 @@ class Config:
     # acceptable value list. If it's not, the default value is used.
     def GetStrIfInAcceptableList(self, section, key, defaultValue, acceptableValueList) -> str:
         existing = self.GetStr(section, key, defaultValue)
-        # Check the acceptable values
-        for v in acceptableValueList:
-            # If we match, this is a good value, return it.
-            if v.lower() == existing.lower():
-                return existing
+
+        if existing is not None:
+            # Check the acceptable values
+            for v in acceptableValueList:
+                # If we match, this is a good value, return it.
+                if v.lower() == existing.lower():
+                    return existing
 
         # The acceptable was not found. Set they key back to default.
         self.SetStr(section, key, defaultValue)
@@ -144,8 +206,11 @@ class Config:
 
     # The same as Get, but it makes sure the value is in a range.
     def GetIntIfInRange(self, section, key, defaultValue, lowerBoundInclusive, upperBoundInclusive) -> int:
-        existingStr = self.GetStr(section, key, str(defaultValue))
+        # A default value of None is not allowed here.
+        if defaultValue is None:
+            raise Exception(f"A default value of none is not valid for int ranges. {section}:{key}")
 
+        existingStr = self.GetStr(section, key, str(defaultValue))
         # Make sure the value is in range.
         try:
             existing = int(existingStr)

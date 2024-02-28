@@ -21,6 +21,11 @@ class OsTypes(Enum):
 # Generation 3 - Must exist after the configure phase.
 class Context:
 
+    # For companions or bambu connect plugins, the primary instance is a little special.
+    # It will have an instance ID of 1, but when we use the id we want to exclude the suffix.
+    # This is so the first instance will have a normal name like "octoeverywhere-bambu" instead of "octoeverywhere-bambu-1"
+    CompanionPrimaryInstanceId = "1"
+
     def __init__(self) -> None:
 
         #
@@ -59,8 +64,11 @@ class Context:
         # Parsed from the command line args, if set, we shouldn't auto select the moonraker instance.
         self.DisableAutoMoonrakerInstanceSelection:bool = False
 
-        # Parsed from the command line args, if set, this plugin should be installed as an observer.
-        self.IsObserverSetup:bool = False
+        # Parsed from the command line args, if set, this plugin should be installed as an companion.
+        self.IsCompanionSetup:bool = False
+
+        # Parsed from the command line args, if set, this plugin should be installed as an bambu connect (similar to the companion).
+        self.IsBambuSetup:bool = False
 
         # Parsed from the command line args, if set, the plugin install should be in update mode.
         self.IsUpdateMode:bool = False
@@ -80,39 +88,40 @@ class Context:
         self.MoonrakerServiceFileName:str = None
 
         ### - OR - ###
-        # These values will be filled out if this is an observer setup.
+        # These values will be filled out if this is a companion OR Bambu connect setup.
 
-        # The root folder where this plugin instance will setup it's data.
-        self.ObserverDataPath:str = None
+        # The root folder where the companion or Bambu plugin data lives.
+        self.CompanionDataRoot:str = None
 
-        # The observer instance id, so we can support multiple instances on one device.
-        self.ObserverInstanceId:str = None
+        # The companion or bambu instance id, so we can support multiple instances on one device.
+        # Note that a id of "1" is special, and you can use IsPrimaryCompanionOrBambu to detect it.
+        self.CompanionInstanceId:str = None
 
 
         #
         # Generation 3
         #
 
-        # Generation 3 - This it the path to the printer data root folder.
-        self.PrinterDataFolder:str = None
+        # For local plugin configs, this is the printer data folder root.
+        # For companion or bambu plugins, this is the same as self.CompanionDataRoot
+        self.RootFolder:str = None
 
-        # Generation 3 - This it the path to the printer data config folder.
-        self.PrinterDataConfigFolder:str = None
+        # This the folder where our main plugin config is or will be.
+        # For local plugin configs, this is the Moonraker config folder.
+        # For companion or bambu plugins, this is the same as self.CompanionDataRoot
+        self.ConfigFolder:str = None
 
-        # Generation 3 - This it the path to the printer data logs folder.
-        self.PrinterDataLogsFolder:str = None
+        # This is the folder where the plugin logs will go.
+        self.LogsFolder:str = None
 
-        # Generation 3 - This is the name of this OctoEverywhere instance's service.
-        self.ServiceName:str = None
-
-        # Generation 3 - The full file path and file name of this instance's service file.
-        self.ServiceFilePath:str = None
-
-        # Generation 3 - The path to where the local storage will be put for this instance.
+        # The path to where the local storage will be put for this instance.
         self.LocalFileStorageFolder:str = None
 
-        # Generation 3 - Only set if this is an observer setup
-        self.ObserverConfigFilePath:str = None
+        # This is the name of this OctoEverywhere instance's service.
+        self.ServiceName:str = None
+
+        # The full file path and file name of this instance's service file.
+        self.ServiceFilePath:str = None
 
         #
         # Generation 4
@@ -125,6 +134,18 @@ class Context:
     # Returns true if the OS is Creality OS, aka K1 or Sonic Pad
     def IsCrealityOs(self) -> bool:
         return self.OsType == OsTypes.SonicPad or self.OsType == OsTypes.K1
+
+
+    # Returns true if the target is a companion or bambu connect setup.
+    def IsCompanionOrBambu(self) -> bool:
+        return self.IsCompanionSetup or self.IsBambuSetup
+
+
+    # Returns true if this is a bambu or companion plugin and it's the primary, aka it has an instance ID of 1.
+    def IsPrimaryCompanionOrBambu(self) -> bool:
+        if self.IsCompanionOrBambu() is False:
+            raise Exception("IsPrimaryCompanionOrBambu was called for a non companion or bambu context.")
+        return self.CompanionInstanceId == Context.CompanionPrimaryInstanceId
 
 
     @staticmethod
@@ -161,11 +182,11 @@ class Context:
         self.CmdLineArgs = self.CmdLineArgs.strip()
 
         if generation >= 2:
-            if self.IsObserverSetup:
-                self._ValidatePathAndExists(self.ObserverDataPath, "Required config var Observer Data Path was not found")
-                self._ValidateString(self.ObserverInstanceId, "Required config var Observer Instance Id was not found")
-                self.ObserverDataPath = self.ObserverDataPath.strip()
-                self.ObserverInstanceId = self.ObserverInstanceId.strip()
+            if self.IsCompanionOrBambu():
+                self._ValidatePathAndExists(self.CompanionDataRoot, "Required config var Companion Data Path was not found")
+                self._ValidateString(self.CompanionInstanceId, "Required config var Companion Instance Id was not found")
+                self.CompanionDataRoot = self.CompanionDataRoot.strip()
+                self.CompanionInstanceId = self.CompanionInstanceId.strip()
                 if self.OsType != OsTypes.Debian:
                     raise Exception("The OctoEverywhere companion can only be installed on Debian based operating systems.")
             else:
@@ -175,16 +196,13 @@ class Context:
                 self.MoonrakerServiceFileName = self.MoonrakerServiceFileName.strip()
 
         if generation >= 3:
-            self._ValidatePathAndExists(self.PrinterDataFolder, "Required config var Printer Data Folder was not found")
-            self._ValidatePathAndExists(self.PrinterDataConfigFolder, "Required config var Printer Data Config Folder was not found")
-            self._ValidatePathAndExists(self.PrinterDataLogsFolder, "Required config var Printer Data Logs Folder was not found")
-            self._ValidatePathAndExists(self.PrinterDataLogsFolder, "Required config var Printer Data Logs Folder was not found")
+            self._ValidatePathAndExists(self.RootFolder, "Required config var Root Folder was not found")
+            self._ValidatePathAndExists(self.ConfigFolder, "Required config var Config Folder was not found")
+            self._ValidatePathAndExists(self.LogsFolder, "Required config var Logs Folder was not found")
             self._ValidatePathAndExists(self.LocalFileStorageFolder, "Required config var local storage folder was not found")
             # This path wont exist on the first install, because it won't be created until the end of the install.
             self._ValidateString(self.ServiceFilePath, "Required config var service file path was not found")
             self._ValidateString(self.ServiceName, "Required config var service name was not found")
-            if self.IsObserverSetup:
-                self._ValidatePathAndExists(self.ObserverConfigFilePath, "Required config var Observer Config File Path was not found")
 
         if generation >= 4:
             # The printer ID can be None, this means it didn't exist before we installed the service.
@@ -225,10 +243,13 @@ class Context:
                 elif rawArg.lower() == "observer":
                     # This is the legacy flag
                     Logger.Info("Setup running in companion setup mode.")
-                    self.IsObserverSetup = True
+                    self.IsCompanionSetup = True
                 elif rawArg.lower() == "companion":
                     Logger.Info("Setup running in companion setup mode.")
-                    self.IsObserverSetup = True
+                    self.IsCompanionSetup = True
+                elif rawArg.lower() == "bambu":
+                    Logger.Info("Setup running in Bambu Connect setup mode.")
+                    self.IsBambuSetup = True
                 elif rawArg.lower() == "update":
                     Logger.Info("Setup running in update mode.")
                     self.IsUpdateMode = True

@@ -1,14 +1,10 @@
-import os
 from enum import Enum
-import configparser
 import requests
 
-from moonraker_octoeverywhere.config import Config
-
+from .Util import Util
 from .Logging import Logger
 from .Context import Context
-from .ObserverConfigFile import ObserverConfigFile
-from .Util import Util
+from .ConfigHelper import ConfigHelper
 
 # Frontends that are known.
 class KnownFrontends(Enum):
@@ -34,10 +30,16 @@ class Frontend:
     # If called, this will walk the user though picking a frontend for the targeted device (local or remote for companion).
     # The frontend will be saved into the OE config, so this should be done before the service starts, if this is a first time run.
     def DoFrontendSetup(self, context:Context):
+
+        # There's no frontend for bambu connect.
+        if context.IsBambuSetup:
+            Logger.Debug("Skipping frontend setup, there's no frontend for bambu connect.")
+            return
+
         Logger.Header("Starting Web Interface Setup")
 
         # Try to get the existing configured port.
-        (currentPort, frontendHint_CanBeNone) = self._TryToReadCurrentFrontendSetup(context)
+        (currentPort, frontendHint_CanBeNone) = ConfigHelper.TryToGetFrontendDetails(context)
         if currentPort is not None:
             # There is already a config with a port setup.
             # Ask if the user wants to keep the current setup.
@@ -59,7 +61,7 @@ class Frontend:
         (portInt, frontendHint_CanBeNone) = self._GetDesiredFrontend(context)
 
         # We got a port, save it.
-        self._WriteFrontendSetup(context, str(portInt), frontendHint_CanBeNone)
+        ConfigHelper.WriteFrontendDetails(context, str(portInt), frontendHint_CanBeNone)
 
 
     # Returns the (port (int), frontendNameHint:str or None) of the frontend the user wants to use.
@@ -67,8 +69,8 @@ class Frontend:
         # Find the target. If this is a local install, the target is local.
         # Otherwise, it's whatever the companion target is.
         targetIpOrHostname = "127.0.0.1"
-        if context.IsObserverSetup:
-            (ip, _) = ObserverConfigFile.TryToParseConfig(context.ObserverConfigFilePath)
+        if context.IsCompanionOrBambu():
+            (ip, _) = ConfigHelper.TryToGetCompanionDetails(context)
             if ip is None or len(ip) == 0:
                 raise Exception("Frontend setup failed to find companion ip from companion config file.")
             targetIpOrHostname = ip
@@ -267,66 +269,3 @@ class Frontend:
             Logger.Debug(f"Frontend check failed. {ipOrHostname}:{portStr} {str(e)}")
         # Return failed.
         return (False, False, KnownFrontends.Unknown)
-
-
-    # Returns the current configured port and frontend name hint.
-    # (portStr:str, frontendHint:str (can be None))
-    # Returns (None, None) if the file can't be found.
-    def _TryToReadCurrentFrontendSetup(self, context:Context):
-        filePath = self.GetOctoEverywhereServiceConfigFilePath(context)
-        # Don't try catch, let this throw if there's a problem reading the config,
-        # That would be bad.
-        if os.path.exists(filePath) is False:
-            return (None, None)
-
-        try:
-            config = configparser.ConfigParser()
-            config.read(filePath)
-            if config.has_section(Config.RelaySection) is False:
-                return (None, None)
-            if Config.RelayFrontEndPortKey not in config[Config.RelaySection]:
-                return (None, None)
-            portStr = config[Config.RelaySection][Config.RelayFrontEndPortKey]
-            frontendHint = None
-            if Config.RelayFrontEndTypeHintKey in config[Config.RelaySection]:
-                frontendHint = config[Config.RelaySection][Config.RelayFrontEndTypeHintKey]
-            return (portStr, frontendHint)
-        except Exception as e:
-            # There have been a few reports of this file being corrupt, so if it is, we will just fail and rewrite it.
-            Logger.Warn(f"Failed to read the frontend setup from the config file. {str(e)}")
-            return (None, None)
-
-
-    # Writes the current frontend setup into the main OE service config
-    # We use the main config file, since it's already there, and we don't want to have overlapping settings in different places.
-    # If the service hasn't ran yet, the file won't exist, in which case we will create it.
-    def _WriteFrontendSetup(self, context:Context, portStr:str, frontendHint_CanBeNone:str):
-        filePath = self.GetOctoEverywhereServiceConfigFilePath(context)
-
-        # Read the current config if there is one, this is important.
-        config = configparser.ConfigParser()
-        if os.path.exists(filePath):
-            config.read(filePath)
-        # Add the vars
-        if config.has_section(Config.RelaySection) is False:
-            config.add_section(Config.RelaySection)
-        config[Config.RelaySection][Config.RelayFrontEndPortKey] = portStr
-        if frontendHint_CanBeNone is None:
-            if Config.RelayFrontEndTypeHintKey in config[Config.RelaySection]:
-                del config[Config.RelaySection][Config.RelayFrontEndTypeHintKey]
-        else:
-            config[Config.RelaySection][Config.RelayFrontEndTypeHintKey] = frontendHint_CanBeNone
-        # Write the file back or make a new one.
-        with open(filePath, 'w', encoding="utf-8") as f:
-            config.write(f)
-
-        # Important! If we were the first ones to create this file, it will be owned by root and the service
-        # won't have permission to open it. Thus we need to make sure it's owned correctly when we are done.
-        Util.SetFileOwnerRecursive(filePath, context.UserName)
-
-
-    def GetOctoEverywhereServiceConfigFilePath(self, context:Context) -> str:
-        # Don't do the join if there is no path, otherwise the result will just be a file name.
-        if context.PrinterDataConfigFolder is None or len(context.PrinterDataConfigFolder) == 0:
-            return None
-        return os.path.join(context.PrinterDataConfigFolder, Config.ConfigFileName)

@@ -31,8 +31,8 @@ class MoonrakerCredentialManager:
 
 
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath:str, isObserverMode:bool):
-        MoonrakerCredentialManager._Instance = MoonrakerCredentialManager(logger, moonrakerConfigFilePath, isObserverMode)
+    def Init(logger, moonrakerConfigFilePath:str, isCompanionMode:bool):
+        MoonrakerCredentialManager._Instance = MoonrakerCredentialManager(logger, moonrakerConfigFilePath, isCompanionMode)
 
 
     @staticmethod
@@ -40,16 +40,16 @@ class MoonrakerCredentialManager:
         return MoonrakerCredentialManager._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, isObserverMode:bool):
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, isCompanionMode:bool):
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
-        self.IsObserverMode = isObserverMode
+        self.IsCompanionMode = isCompanionMode
 
 
     def TryToGetApiKey(self) -> str or None:
-        # If this is an observer plugin, we dont' have the moonraker config file nor can we access the UNIX socket.
-        if self.IsObserverMode:
-            self.Logger.info("OctoEverywhere Companion Plugins dont' support Moonraker setups with auth.")
+        # If this is an companion plugin, we dont' have the moonraker config file nor can we access the UNIX socket.
+        if self.IsCompanionMode:
+            self.Logger.info("OctoEverywhere Companion Plugins don't support Moonraker setups with auth.")
             return None
 
         # First, we need to find the unix socket to connect to

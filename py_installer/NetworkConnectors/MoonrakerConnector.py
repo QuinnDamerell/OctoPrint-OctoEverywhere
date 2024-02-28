@@ -1,150 +1,26 @@
-import os
 import threading
 import socket
 
 from octoeverywhere.websocketimpl import Client
 
-from .Util import Util
-from .Paths import Paths
-from .Logging import Logger
-from .Context import Context
-from .Context import OsTypes
-from .ObserverConfigFile import ObserverConfigFile
-
-# The goal of this class is the take the context object from the Discovery Gen2 phase to the Phase 3.
-class Configure:
-
-    # This is the common service prefix (or word used in the file name) we use for all of our service file names.
-    # This MUST be used for all instances running on this device, both local plugins and companions.
-    # This also MUST NOT CHANGE, as it's used by the Updater logic to find all of the locally running services.
-    c_ServiceCommonName = "octoeverywhere"
-
-    def Run(self, context:Context):
-
-        Logger.Header("Starting configuration...")
-
-        serviceSuffixStr = ""
-        if context.IsObserverSetup:
-            # For observers, we use the observer id, with a unique prefix to separate it from any possible local moonraker installs
-            # Note that the moonraker service suffix can be numbers or letters, so we use the same rules.
-            serviceSuffixStr = f"-companion{context.ObserverInstanceId}"
-        elif context.OsType == OsTypes.SonicPad:
-            # For Sonic Pad, we know the format of the service file is a bit different.
-            # For the SonicIt is moonraker_service or moonraker_service.<number>
-            if "." in context.MoonrakerServiceFileName:
-                serviceSuffixStr = context.MoonrakerServiceFileName.split(".")[1]
-        elif context.OsType == OsTypes.K1:
-            # For the k1, there's only every one moonraker instance, so this isn't needed.
-            pass
-        else:
-            # Now we need to figure out the instance suffix we need to use.
-            # To keep with Kiauh style installs, each moonraker instances will be named moonraker-<number or name>.service.
-            # If there is only one moonraker instance, the name is moonraker.service.
-            # Default to empty string, which means there's no suffix and only one instance.
-            serviceFileNameNoExtension = context.MoonrakerServiceFileName.split('.')[0]
-            if '-' in serviceFileNameNoExtension:
-                moonrakerServiceSuffix = serviceFileNameNoExtension.split('-')
-                serviceSuffixStr = "-" + moonrakerServiceSuffix[1]
-        Logger.Debug(f"Moonraker Service File Name: {context.MoonrakerServiceFileName}, Suffix: '{serviceSuffixStr}'")
-
-        if context.IsObserverSetup:
-            # For observer setups, there is no local moonraker config file, so things are setup differently.
-            # The plugin data folder, which is normally the root printer data folder for that instance, becomes our per instance
-            # observer folder.
-            context.PrinterDataFolder = context.ObserverDataPath
-            # We mock the same layout as the moonraker folder structure, to keep things common.
-            context.PrinterDataConfigFolder = ObserverConfigFile.GetConfigFolderPathFromDataPath(context.PrinterDataFolder)
-            # Set the path to where the observer config file will be.
-            # This path is shared by the plugin logic, so it can't change!
-            context.ObserverConfigFilePath = ObserverConfigFile.GetConfigFilePathFromDataPath(context.PrinterDataFolder)
-            # Make a logs folder, so it's found bellow
-            Util.EnsureDirExists(os.path.join(context.PrinterDataFolder, "logs"), context, True)
-        elif context.OsType == OsTypes.SonicPad:
-            # ONLY FOR THE SONIC PAD, we know the folder setup is different.
-            # The user data folder will have /mnt/UDISK/printer_config<number> where the config files are and /mnt/UDISK/printer_logs<number> for logs.
-            # Use the normal folder for the config files.
-            context.PrinterDataConfigFolder = Util.GetParentDirectory(context.MoonrakerConfigFilePath)
-
-            # There really is no printer data folder, so make one that's unique per instance.
-            # So based on the config folder, go to the root of it, and them make the folder "octoeverywhere_data"
-            context.PrinterDataFolder = os.path.join(Util.GetParentDirectory(context.PrinterDataConfigFolder), f"octoeverywhere_data{serviceSuffixStr}")
-            Util.EnsureDirExists(context.PrinterDataFolder, context, True)
-        else:
-            # For now we assume the folder structure is the standard Klipper folder config,
-            # thus the full moonraker config path will be .../something_data/config/moonraker.conf
-            # Based on that, we will define the config folder and the printer data root folder.
-            # Note that the K1 uses this standard folder layout as well.
-            context.PrinterDataConfigFolder = Util.GetParentDirectory(context.MoonrakerConfigFilePath)
-            context.PrinterDataFolder = Util.GetParentDirectory(context.PrinterDataConfigFolder)
-            Logger.Debug("Printer data folder: "+context.PrinterDataFolder)
+from py_installer.Util import Util
+from py_installer.Logging import Logger
+from py_installer.Context import Context
+from py_installer.ConfigHelper import ConfigHelper
 
 
-        # This is the name of our service we create. If the port is the default port, use the default name.
-        # Otherwise, add the port to keep services unique.
-        if context.OsType == OsTypes.SonicPad:
-            # For Sonic Pad, since the service is setup differently, follow the conventions of it.
-            # Both the service name and the service file name must match.
-            # The format is <name>_service<number>
-            # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
-            context.ServiceName = Configure.c_ServiceCommonName + "_service"
-            if len(serviceSuffixStr) != 0:
-                context.ServiceName= context.ServiceName + "." + serviceSuffixStr
-            context.ServiceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, context.ServiceName)
-        elif context.OsType == OsTypes.K1:
-            # For the k1, there's only ever one moonraker and we know the exact service naming convention.
-            # Note we use 66 to ensure we start after moonraker.
-            # This is page for details on the file name: https://docs.oracle.com/cd/E36784_01/html/E36882/init.d-4.html
-            # Note the 'S66' string is looked for in the plugin's EnsureUpdateManagerFilesSetup function. So it must not change!
-            context.ServiceName = f"S66{Configure.c_ServiceCommonName}_service"
-            context.ServiceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, context.ServiceName)
-        else:
-            # For normal setups, use the convention that Klipper users
-            # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
-            context.ServiceName = Configure.c_ServiceCommonName + serviceSuffixStr
-            context.ServiceFilePath = os.path.join(Paths.SystemdServiceFilePath, context.ServiceName+".service")
+# A class that helps the user discover, connect, and setup the details required to connect to a remote Moonraker server.
+class MoonrakerConnector:
 
-        # Since the moonraker config folder is unique to the moonraker instance, we will put our storage in it.
-        # This also prevents the user from messing with it accidentally.
-        context.LocalFileStorageFolder = os.path.join(context.PrinterDataFolder, "octoeverywhere-store")
-
-        # Ensure the storage folder exists and is owned by the correct user.
-        Util.EnsureDirExists(context.LocalFileStorageFolder, context, True)
-
-        # There's not a great way to find the log path from the config file, since the only place it's located is in the systemd file.
-        context.PrinterDataLogsFolder = None
-
-        # First, we will see if we can find a named folder relative to this folder.
-        context.PrinterDataLogsFolder = os.path.join(context.PrinterDataFolder, "logs")
-        if os.path.exists(context.PrinterDataLogsFolder) is False:
-            # Try an older path
-            context.PrinterDataLogsFolder = os.path.join(context.PrinterDataFolder, "klipper_logs")
-            if os.path.exists(context.PrinterDataLogsFolder) is False:
-                # Try the path Creality OS uses, something like /mnt/UDISK/printer_logs<number>
-                context.PrinterDataLogsFolder = os.path.join(Util.GetParentDirectory(context.PrinterDataConfigFolder), f"printer_logs{serviceSuffixStr}")
-                if os.path.exists(context.PrinterDataLogsFolder) is False:
-                    # Failed, make a folder in the printer data root.
-                    context.PrinterDataLogsFolder = os.path.join(context.PrinterDataFolder, "octoeverywhere-logs")
-                    # Create the folder and force the permissions so our service can write to it.
-                    Util.EnsureDirExists(context.PrinterDataLogsFolder, context, True)
-
-        # Finally, if this is an observer setup, we need the user to tell us where moonraker is installed
-        # and need to write the observer config file.
-        if context.IsObserverSetup:
-            self._EnsureObserverConfigure(context)
-
-        # Report
-        Logger.Info(f'Configured. Service: {context.ServiceName}, Path: {context.ServiceFilePath}, LocalStorage: {context.LocalFileStorageFolder}, Config Dir: {context.PrinterDataConfigFolder}, Logs: {context.PrinterDataLogsFolder}')
-
-
-    def _EnsureObserverConfigure(self, context:Context):
-        Logger.Debug("Running observer ensure config logic.")
+    def EnsureCompanionMoonrakerConnection(self, context:Context):
+        Logger.Debug("Running companion ensure config logic.")
 
         # See if there's a valid config already.
-        ip, port = ObserverConfigFile.TryToParseConfig(context.ObserverConfigFilePath)
+        ip, port = ConfigHelper.TryToGetCompanionDetails(context)
         if ip is not None and port is not None:
             # Check if we can still connect. This can happen if the IP address changes, the user might need to setup the
             # printer again.
-            Logger.Info(f"Existing observer config file found. IP: {ip}:{port}")
+            Logger.Info(f"Existing companion config file found. IP: {ip}:{port}")
             Logger.Info("Checking if we can connect to Klipper...")
             success, _ = self._CheckForMoonraker(ip, port, 10.0)
             if success:
@@ -159,11 +35,11 @@ class Configure:
                     return
 
         ip, port = self._SetupNewMoonrakerConnection()
-        if ObserverConfigFile.WriteIpAndPort(context, context.ObserverConfigFilePath, ip, port) is False:
-            raise Exception("Failed to write observer config.")
+        ConfigHelper.WriteCompanionDetails(context, ip, port)
         Logger.Blank()
         Logger.Header("Klipper connection successful!")
         Logger.Blank()
+
 
     # Helps the user setup a moonraker connection via auto scanning or manual setup.
     # Returns (ip:str, port:str)
@@ -311,6 +187,7 @@ class Configure:
             pass
 
         return (capturedSuccess, capturedEx)
+
 
     # Scans the subnet for Moonraker instances.
     # Returns a list of IPs where moonraker was found.

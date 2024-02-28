@@ -3,23 +3,22 @@ import os
 from .Context import Context
 from .Logging import Logger
 from .Util import Util
-from .Frontend import Frontend
-
+from .ConfigHelper import ConfigHelper
 
 class Permissions:
     # Must be lower case.
     c_RootUserName = "root"
 
-    # For some companion setups, users only use one user on the device, root.
+    # For some companion or bambu setups, users only use one user on the device, root.
     # In this case, it's ok to install as root, but sometimes the $USER is empty
     # Thus, if the home user path is root, we will update the user to be root as well.
     # Note that since the install script always cd ~, we should have the correct home user.
     #
     # Also note, this function runs before the first context validation, so the vars could be null.
     def CheckUserAndCorrectIfRequired_RanBeforeFirstContextValidation(self, context:Context) -> None:
-        # If this is a companion install, check if we need to set the user name.
+        # If this is a companion or bambu install, check if we need to set the user name.
         # It's ok be ran as root, but sometimes the bash USER var isn't set to the user name.
-        if context.IsObserverSetup:
+        if context.IsCompanionOrBambu():
             if context.UserName is None or len(context.UserName) == 0:
                 # Since the install script does a cd ~, we know if the user home path starts with /root/, the user is root.
                 if context.UserHomePath is not None and context.UserHomePath.lower().startswith("/root/"):
@@ -28,11 +27,11 @@ class Permissions:
 
 
     def EnsureRunningAsRootOrSudo(self, context:Context) -> None:
-        # IT'S NOT OK TO INSTALL AS ROOT for the normal klipper setup.
+        # IT'S NOT OK TO INSTALL AS ROOT for the local klipper setup.
         # This is because the moonraker updater system needs to get able to access the .git repo.
         # If the repo is owned by the root, it can't do that.
         # For the Sonic Pad and K1 setup, the only user is root, so it's ok.
-        if context.IsObserverSetup is False and context.IsCrealityOs() is False:
+        if context.IsCompanionOrBambu() is False and context.IsCrealityOs() is False:
             if context.UserName.lower() == Permissions.c_RootUserName:
                 raise Exception("The installer was ran under the root user, this will cause problems with Moonraker. Please run the installer script as a non-root user, usually that's the `pi` user or 'mks' for MKS PI.")
 
@@ -67,9 +66,10 @@ class Permissions:
         Util.SetFileOwnerRecursive(context.RepoRootFolder, context.UserName)
 
         # These following files or folders must be owned by the user the service is running under.
-        f = Frontend()
-        SetPermissions(f.GetOctoEverywhereServiceConfigFilePath(context))
-        SetPermissions(context.MoonrakerConfigFilePath)
-        SetPermissions(context.ObserverDataPath)
+        # Ensure the the main plugin config - this is important because if this installer made the config, it's owned by root not the service user.
+        SetPermissions(ConfigHelper.GetConfigFilePath(context))
+        # The folder where we will store files.
         SetPermissions(context.LocalFileStorageFolder)
-        SetPermissions(context.ObserverConfigFilePath)
+        # If this is a companion or bambu setup, the root data folder
+        SetPermissions(context.CompanionDataRoot)
+        # Note we can't set permission on the log folder, since there are logs in there that other services own.

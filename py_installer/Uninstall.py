@@ -11,33 +11,32 @@ from .Util import Util
 class Uninstall:
 
     def DoUninstall(self, context:Context):
+        # Ensure there's something to remove first.
+        # Since all service names must use the same identifier in them, we can find any services using the same search.
+        foundOeServices = []
+        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
+        for fileOrDirName in fileAndDirList:
+            Logger.Debug(f"Searching for OE services to remove, found: {fileOrDirName}")
+            if Configure.c_ServiceCommonName in fileOrDirName.lower():
+                foundOeServices.append(fileOrDirName)
+        if len(foundOeServices) == 0:
+            Logger.Warn("No local, companion, or Bambu Connect plugins were found to remove.")
+            return
 
         Logger.Blank()
         Logger.Blank()
-        Logger.Header("You're about to uninstall OctoEverywhere.")
-        Logger.Info  ("This printer ID will be deleted, but you can always reinstall the plugin and re-add this printer.")
+        Logger.Header("You're about to uninstall ALL OctoEverywhere local, companion, or Bambu Connect plugins on this device.")
+        Logger.Info  ("This printer ID(s) will be deleted, but you can always reinstall the plugin and re-add this printer.")
         Logger.Blank()
-        r =     input("Are you want to uninstall? [y/n]")
+        r =     input("Are you want to uninstall ALL plugins? [y/n]")
         r = r.lower().strip()
         if r != "y":
-            Logger.Info("Uninstall canceled.")
+            Logger.Info("Canceled.")
             Logger.Blank()
             return
         Logger.Blank()
         Logger.Blank()
         Logger.Header("Starting OctoEverywhere uninstall")
-
-        # Since all service names must use the same identifier in them, we can find any services using the same search.
-        foundOeServices = []
-        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
-        for fileOrDirName in fileAndDirList:
-            Logger.Debug(f" Searching for OE services to remove, found: {fileOrDirName}")
-            if Configure.c_ServiceCommonName in fileOrDirName.lower():
-                foundOeServices.append(fileOrDirName)
-
-        if len(foundOeServices) == 0:
-            Logger.Warn("No local plugins or companions were found to remove.")
-            return
 
         # TODO - We need to cleanup more, but for now, just make sure any services are shutdown.
         Logger.Info("Stopping services...")

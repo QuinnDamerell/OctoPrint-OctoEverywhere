@@ -3,10 +3,17 @@
 
 
 #
-# OctoEverywhere for Klipper!
+# OctoEverywhere for Klipper And Bambu Labs!
 #
-# Use this script to install the plugin on a normal device or a Creality device, or to install the companion!
+# Use this script to install the OctoEverywhere plugin for:
+#    OctoEverywhere for Klipper - Where this device is running Moonraker.
+#    OctoEverywhere for Creality - Where this device is a Creality device (Sonic Pad, K1, etc)
+#    OctoEverywhere Companion Plugin - Where this plugin will connect to Moonraker running on a different device on the same LAN
+#    OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu printer running on the save LAN.
+#
+# For a device running Klipper locally, use no arguments.
 # For a companion install, use the -companion argument.
+# For a Bambu Connect install, use the -bambu argument.
 #
 # Simply run ./install.sh from the git repo root directory to get started!
 #
@@ -318,11 +325,13 @@ cat << EOF
       @@@@@@@@@@@@@@@,,,,,,,,,,,,,,,,,,,,,@@@@@@@@@@@@@@
 EOF
 log_blank
+#log_header    "            OctoEverywhere For Klipper And Bambu Labs"
 log_important "                  OctoEverywhere For Klipper"
 log_blue      " The 3D Printing Communities #1 Remote Access And AI Cloud Service"
 log_blank
 log_blank
 log_important "OctoEverywhere empowers the worldwide maker community with..."
+#log_info      "  - Free & Unlimited Mainsail, Fluidd, And Bambu Labs Printers Remote Access"
 log_info      "  - Free & Unlimited Mainsail and Fluidd Remote Access"
 log_info      "  - Free & Unlimited Next-Gen AI Print Failure Detection"
 log_info      "  - Free Full Frame Rate & Full Resolution Webcam Streaming"
@@ -381,9 +390,9 @@ cd ${OE_REPO_DIR} > /dev/null
 if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
 then
     # Creality OS only has a root user and we can't use sudo.
-    ${OE_ENV}/bin/python3 -B -m moonraker_installer ${PY_LAUNCH_JSON}
+    ${OE_ENV}/bin/python3 -B -m py_installer ${PY_LAUNCH_JSON}
 else
-    sudo ${OE_ENV}/bin/python3 -B -m moonraker_installer ${PY_LAUNCH_JSON}
+    sudo ${OE_ENV}/bin/python3 -B -m py_installer ${PY_LAUNCH_JSON}
 fi
 
 cd ${CURRENT_DIR} > /dev/null

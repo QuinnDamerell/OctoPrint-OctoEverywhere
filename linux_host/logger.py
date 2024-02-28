@@ -9,7 +9,7 @@ class LoggerInit:
 
     # Sets up and returns the main logger object
     @staticmethod
-    def GetLogger(config, klipperLogDir, logLevelOverride_CanBeNone) -> logging.Logger:
+    def GetLogger(config:Config, logDir:str, logLevelOverride_CanBeNone:str) -> logging.Logger:
         logger = logging.getLogger()
 
         # From the possible logging values, read the current value from the config.
@@ -43,7 +43,7 @@ class LoggerInit:
         maxFileSizeBytes = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxSizeMbKey, 3, 1, 5000) * 1024 * 1024
         maxFileCount = config.GetIntIfInRange(Config.LoggingSection, Config.LogFileMaxCountKey, 1, 1, 50)
         file = logging.handlers.RotatingFileHandler(
-            os.path.join(klipperLogDir, "octoeverywhere.log"),
+            os.path.join(logDir, "octoeverywhere.log"),
             maxBytes=maxFileSizeBytes, backupCount=maxFileCount)
         file.setFormatter(formatter)
         logger.addHandler(file)
