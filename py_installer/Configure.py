@@ -119,7 +119,7 @@ class Configure:
             context.LogsFolder = os.path.join(context.RootFolder, "klipper_logs")
             if os.path.exists(context.LogsFolder) is False:
                 # Try the path Creality OS uses, something like /mnt/UDISK/printer_logs<number>
-                context.LogsFolder = os.path.join(Util.GetParentDirectory(context.PrinterDataConfigFolder), f"printer_logs{serviceSuffixStr}")
+                context.LogsFolder = os.path.join(Util.GetParentDirectory(context.RootFolder), f"printer_logs{serviceSuffixStr}")
                 if os.path.exists(context.LogsFolder) is False:
                     # Failed, make a folder in the printer data root.
                     context.LogsFolder = os.path.join(context.RootFolder, "octoeverywhere-logs")
