@@ -142,6 +142,7 @@ class Config:
     # If the default value is None, the default will not be written into the config.
     def GetInt(self, section:str, key:str, defaultValue) -> int:
         # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
+        result = None
         try:
             # If None is passed as the default, don't str it.
             if defaultValue is not None:
@@ -154,7 +155,7 @@ class Config:
 
             return int(str)
         except Exception as e:
-            self.Logger.error("Config settings error! "+key+" failed to get as int. Resetting to default. "+str(e))
+            self.Logger.error(f"Config settings error! {key} failed to get as int. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, str(defaultValue))
             return int(defaultValue)
 
@@ -164,6 +165,7 @@ class Config:
     # If the default value is None, the default will not be written into the config.
     def GetBool(self, section, key, defaultValue) -> bool:
         # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
+        result = None
         try:
             # If None is passed as the default, don't str it.
             if defaultValue is not None:
@@ -182,7 +184,7 @@ class Config:
                 return True
             raise Exception("Invalid bool value, value was: "+strValue)
         except Exception as e:
-            self.Logger.error("Config settings error! "+key+" failed to get as bool. Resetting to default. "+str(e))
+            self.Logger.error(f"Config settings error! {key} failed to get as bool. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, str(defaultValue))
             return bool(defaultValue)
 
