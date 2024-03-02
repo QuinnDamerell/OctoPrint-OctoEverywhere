@@ -153,7 +153,7 @@ class Config:
             if result is None:
                 return None
 
-            return int(str)
+            return int(result)
         except Exception as e:
             self.Logger.error(f"Config settings error! {key} failed to get as int. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, str(defaultValue))
