@@ -1,7 +1,6 @@
 import threading
 import time
 import zlib
-import sys
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.compat import Compat
@@ -259,17 +258,18 @@ class Slipstream:
             octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, PathTypes.Relative, "GET", headers)
 
             # Check for success
-            if octoHttpResult is None or octoHttpResult.Result is None or octoHttpResult.Result.status_code != 200:
+            if octoHttpResult is None or octoHttpResult.StatusCode != 200:
                 self.Logger.error("Slipstream failed to make the http request for "+url)
                 return None
 
             # Remove any headers we don't want.
             setCookieKey = None
             contentLength = None
-            for key in octoHttpResult.Result.headers:
+            headers = octoHttpResult.Headers
+            for key in headers:
                 keyLower = key.lower()
                 if keyLower == "content-length":
-                    contentLength = int(octoHttpResult.Result.headers[key])
+                    contentLength = int(headers[key])
                 elif keyLower == "set-cookie":
                     setCookieKey = key
 
@@ -280,18 +280,18 @@ class Slipstream:
 
             # We remove Set-Cookie so no session gets applied from this cached item.
             if setCookieKey is not None:
-                del octoHttpResult.Result.headers[setCookieKey]
+                del octoHttpResult.Headers[setCookieKey]
 
             # Set the cache header
-            octoHttpResult.Result.headers["x-oe-slipstream-plugin"] = "1"
+            octoHttpResult.Headers["x-oe-slipstream-plugin"] = "1"
 
             # Since the request is setup to use streaming mode, we need to read in the entire contents and store them
             # because when the function exist the request will be closed and the stream will no longer be able to be read.
             # This is actually a good idea, so the request connection doesn't hang around for a long time.
-            buffer = bytearray()
+            buffer = None
             try:
-                for data in octoHttpResult.Result.iter_content(chunk_size=contentLength):
-                    buffer += data
+                octoHttpResult.ReadAllContentFromStreamResponse()
+                buffer = octoHttpResult.FullBodyBuffer
             except Exception as e:
                 self.Logger.error("Slipstream failed to read index buffer for "+url+", e:"+str(e))
                 return None
@@ -300,17 +300,6 @@ class Slipstream:
             if len(buffer) != contentLength:
                 self.Logger.error("Slipstream read a a body of different size then the content length. url:"+url+" body:"+str(len(buffer))+" cl:"+str(contentLength))
                 return None
-
-            # Since we are doing this in the background, we will take some time to compress it.
-            # This has two benefits:
-            #  1) We don't need to spend time and CPU cycles compressing on the fly.
-            #  2) We can do a better compression to get less size that we don't have time for in realtime.
-            # Note for now, we compress everything.
-            #
-            # PY2 zlib.compress can't accept a bytearray, so we must convert them before compressing.
-            # This isn't ideal, but not a big deal since this is in the background.
-            if sys.version_info[0] < 3:
-                buffer = bytes(buffer)
 
             # Do the compression.
             # See the compression chat in the main http stream class for tradeoffs about complexity.

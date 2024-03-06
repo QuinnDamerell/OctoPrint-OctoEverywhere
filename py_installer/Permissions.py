@@ -38,7 +38,7 @@ class Permissions:
         # But regardless of the user, we must have sudo permissions.
         # pylint: disable=no-member # Linux only
         if os.geteuid() != 0:
-            if context.Debug:
+            if context.SkipSudoActions:
                 Logger.Warn("Not running as root, but ignoring since we are in debug.")
             else:
                 raise Exception("Script not ran as root or using sudo. This is required to integrate into Moonraker.")

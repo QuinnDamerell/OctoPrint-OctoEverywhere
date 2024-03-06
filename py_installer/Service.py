@@ -60,17 +60,19 @@ class Service:
 
     # Install for debian setups
     def _InstallDebian(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
+        serviceName = "Bambu Labs Printers" if context.IsBambuSetup else "Moonraker"
+        optionalAfter = "" if context.IsBambuSetup else "moonraker.service"
         s = f'''\
-    # OctoEverywhere For Moonraker Service
+    # OctoEverywhere For {serviceName}
     [Unit]
-    Description=OctoEverywhere For Moonraker
-    # Start after network and moonraker has started.
-    After=network-online.target moonraker.service
+    Description=OctoEverywhere For {serviceName}
+    # Start after network.
+    After=network-online.target {optionalAfter}
 
     [Install]
     WantedBy=multi-user.target
 
-    # Simple service, targeting the user that was used to install the service, simply running our moonraker py host script.
+    # Simple service, targeting the user that was used to install the service, simply running our py host script.
     [Service]
     Type=simple
     User={context.UserName}

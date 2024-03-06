@@ -1,4 +1,5 @@
 import os
+import logging
 from datetime import datetime
 # pylint: disable=import-error # Only exists on linux
 import pwd
@@ -19,7 +20,7 @@ class Logger:
     IsDebugEnabled = False
     OutputFile = None
     OutputFilePath = None
-
+    PyLogger = None
 
     @staticmethod
     def InitFile(userHomePath:str, userName:str):
@@ -46,6 +47,16 @@ class Logger:
             Logger.OutputFile.close()
         except Exception:
             pass
+
+
+    # Returns a logging.Logger standard logger which can be used in the common PY files.
+    @staticmethod
+    def GetPyLogger() -> logging.Logger:
+        if Logger.PyLogger is None:
+            Logger.PyLogger = logging.getLogger("octoeverywhere-installer")
+            Logger.PyLogger.setLevel(logging.DEBUG)
+            Logger.PyLogger.addHandler(CustomLogHandler())
+        return Logger.PyLogger
 
 
     @staticmethod
@@ -110,3 +121,18 @@ class Logger:
             Logger.OutputFile.write(str(datetime.now()) + " ["+level+"] - " + msg+"\n")
         except Exception:
             pass
+
+
+# Allows us to return a logging.Logger for use in common classes.
+class CustomLogHandler(logging.Handler):
+    def emit(self, record:logging.LogRecord):
+        if record.levelno == logging.DEBUG:
+            Logger.Debug(record.getMessage())
+        elif record.levelno == logging.INFO:
+            Logger.Info(record.getMessage())
+        elif record.levelno == logging.WARNING:
+            Logger.Warn(record.getMessage())
+        elif record.levelno == logging.ERROR:
+            Logger.Error(record.getMessage())
+        else:
+            Logger.Info("Unknown logging level "+record.getMessage())

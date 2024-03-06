@@ -49,6 +49,10 @@ class OctoWebStreamWsHelper:
         self.IsWsObjOpened = False
         self.IsWsObjClosed = False
 
+        # Ensure that the http relay is enabled
+        if OctoHttpRequest.GetDisableHttpRelay():
+            raise Exception("Web stream ws was attempted to be started when the http relay is disabled.")
+
         # Capture the initial http context
         self.HttpInitialContext = webStreamOpenMsg.HttpInitialContext()
         if self.HttpInitialContext is None:

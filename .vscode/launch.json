@@ -44,8 +44,8 @@
             "args": [
                 // These args reflect the correct setup for a pi installed with the Bambu Connect version of the plugin. These args target the first instance.
                 //
-                // { "ServiceName": "octoeverywhere-bambu", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-bambu/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-bambu/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-bambu/", "InstanceStr":"1" }
-                "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtYmFtYnUiLCAiVmlydHVhbEVudlBhdGgiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS8iLCAiTG9nRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1L2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtYmFtYnUvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1LyIsICJJbnN0YW5jZVN0ciI6IjEiIH0=",
+                // { "ServiceName": "octoeverywhere-bambu", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-bambu/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-bambu/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-bambu/", "CompanionInstanceIdStr":"1" }
+                "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtYmFtYnUiLCAiVmlydHVhbEVudlBhdGgiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS8iLCAiTG9nRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1L2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtYmFtYnUvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1LyIsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjoiMSIgfQ==",
                 // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
@@ -104,7 +104,7 @@
                 // The module requires this json object to be passed.
                 // Normally the install.sh script runs, ensure everything is installed, creates a virtural env, and then runs this modlue giving it these args.
                 // But for debugging, we can skip that assuming it's already been ran.
-                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-debug -skipsudoactions -bambu\"}"
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -bambu\"}"
             ]
         },
         {

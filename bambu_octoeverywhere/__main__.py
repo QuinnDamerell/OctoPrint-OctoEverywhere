@@ -17,7 +17,7 @@ if __name__ == '__main__':
         jsonConfig = s.GetJsonFromArgs(sys.argv)
 
         #
-        # 1) Parse the common, required args.
+        # Parse the common, required args.
         #
         ServiceName = s.GetConfigVarAndValidate(jsonConfig, "ServiceName", ConfigDataTypes.String)
         VirtualEnvPath = s.GetConfigVarAndValidate(jsonConfig, "VirtualEnvPath", ConfigDataTypes.Path)
@@ -25,7 +25,7 @@ if __name__ == '__main__':
         LocalFileStoragePath = s.GetConfigVarAndValidate(jsonConfig, "LocalFileStoragePath", ConfigDataTypes.Path)
         LogFolder = s.GetConfigVarAndValidate(jsonConfig, "LogFolder", ConfigDataTypes.Path)
         ConfigFolder = s.GetConfigVarAndValidate(jsonConfig, "ConfigFolder", ConfigDataTypes.Path)
-        InstanceStr   = s.GetConfigVarAndValidate(jsonConfig, "InstanceStr",  ConfigDataTypes.String)
+        InstanceStr   = s.GetConfigVarAndValidate(jsonConfig, "CompanionInstanceIdStr",  ConfigDataTypes.String)
 
     except Exception as e:
         s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)}, Config: {jsonConfigStr}")

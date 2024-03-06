@@ -9,6 +9,8 @@ from octoeverywhere.webcamhelper import WebcamHelper
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
+from octoeverywhere.notificationshandler import NotificationsHandler
+from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.compat import Compat
 
@@ -18,8 +20,10 @@ from linux_host.version import Version
 from linux_host.logger import LoggerInit
 
 from .bambuclient import BambuClient
-from .bambucommandhandler import BambuCommandHandler
 from .bambuwebcamhelper import BambuWebcamHelper
+from .bambucommandhandler import BambuCommandHandler
+from .bambustatetranslater import BambuStateTranslator
+from .quickcam import QuickCam
 
 # This file is the main host for the bambu service.
 class BambuHost:
@@ -27,6 +31,7 @@ class BambuHost:
     def __init__(self, configDir:str, logDir:str, devConfig_CanBeNone) -> None:
         # When we create our class, make sure all of our core requirements are created.
         self.Secrets = None
+        self.NotificationHandler:NotificationsHandler = None
 
         # Let the compat system know this is an Bambu host.
         Compat.SetIsBambu(True)
@@ -64,7 +69,6 @@ class BambuHost:
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
-            # As of 8/15/2023, we don't store any sensitive things in teh config file, since all config files are sometimes backed up publicly.
             self.Secrets = Secrets(self.Logger, localStorageDir)
 
             # Now, detect if this is a new instance and we need to init our global vars. If so, the setup script will be waiting on this.
@@ -87,40 +91,36 @@ class BambuHost:
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
 
-
-
-            # # Setup the http requester. We default to port 80 and assume the frontend can be found there.
-            # # TODO - parse nginx to see what front ends exist and make them switchable
-            # # TODO - detect HTTPS port if 80 is not bound.
-            # frontendPort = self.Config.GetInt(Config.RelaySection, Config.RelayFrontEndPortKey, 80)
-            # self.Logger.info("Setting up relay with frontend port %s", str(frontendPort))
-            # OctoHttpRequest.SetLocalHttpProxyPort(frontendPort)
-            # OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
-            # OctoHttpRequest.SetLocalOctoPrintPort(frontendPort)
+            # For bambu, there's no frontend to connect to, so we disable the http relay system.
+            OctoHttpRequest.SetDisableHttpRelay(True)
 
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoPingPong.Get().DisablePrimaryOverride()
 
-            # Setup the snapshot helper
-            # TODO
-            webcamHelper = BambuWebcamHelper(self.Logger)
+            # Setup the webcam helper and QuickCam
+            QuickCam.Init(self.Logger, self.Config)
+            webcamHelper = BambuWebcamHelper(self.Logger, self.Config)
             WebcamHelper.Init(self.Logger, webcamHelper, localStorageDir)
 
-            # Setup the command handler
-            # TODO - Notification handler
-            CommandHandler.Init(self.Logger, None, BambuCommandHandler(self.Logger))
+            # Setup the state translator and notification handler
+            stateTranslator = BambuStateTranslator(self.Logger)
+            self.NotificationHandler = NotificationsHandler(self.Logger, stateTranslator)
+            self.NotificationHandler.SetPrinterId(printerId)
+            stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
-            c = BambuClient(self.Logger, self.Config)
-            c.DoesNothing()
+            # Setup the command handler
+            CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger))
+
+            # Setup and start the Bambu Client
+            BambuClient.Init(self.Logger, self.Config, stateTranslator)
 
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
-            # TODO update types
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Moonraker, False)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Bambu, False)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("!! Exception thrown out of main host run function.", e)
@@ -207,6 +207,9 @@ class BambuHost:
     #
     def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
+
+        # Give the octoKey to who needs it.
+        self.NotificationHandler.SetOctoKey(octoKey)
 
         # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
         # This would be if the skipped the printer link or missed it in the setup script.

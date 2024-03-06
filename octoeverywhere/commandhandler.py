@@ -331,8 +331,7 @@ class CommandHandler:
                 }).encode(encoding="utf-8")
 
         # Build the full result
-        mockResponse = MockResponse(resultBytes, 200)
-        return OctoHttpRequest.Result(mockResponse, OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path()), False, resultBytes)
+        return OctoHttpRequest.Result(200, {}, OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path()), False, fullBodyBuffer=resultBytes)
 
 
     # The goal here is to keep as much of the common logic as common as possible.
@@ -353,7 +352,6 @@ class CommandHandler:
             return self.Resume()
         elif commandPathLower.startswith("cancel"):
             return self.Cancel()
-
 
         return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
 
@@ -377,28 +375,3 @@ class CommandResponse():
         self.StatusCode = statusCode
         self.ResultDict = resultDict
         self.ErrorStr = errorStr_CanBeNull
-
-
-class MockResponse():
-
-    def __init__(self, fullBodyBytes, statusCode):
-        #
-        # The following are public members that must exist to mock the request lib's response object.
-        #
-
-        # All values in this dict must be strings.
-        self.headers = {
-            "Content-Length": str(len(fullBodyBytes)),  # Use this so the full size is known and read at once.
-            "Content-Type": "application/json",      # Use this so we get compressed
-        }
-        self.status_code = statusCode
-
-
-    # Needed to mock the with keyword
-    def __enter__(self):
-        return self
-
-
-    # Needed to mock the with keyword
-    def __exit__(self, t, v, tb):
-        pass

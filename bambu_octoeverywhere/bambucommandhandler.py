@@ -1,6 +1,6 @@
-#import json
+from octoeverywhere.commandhandler import CommandResponse
 
-from octoeverywhere.commandhandler import CommandHandler, CommandResponse
+from .bambuclient import BambuClient
 
 # This class implements the Platform Command Handler Interface
 class BambuCommandHandler:
@@ -18,148 +18,131 @@ class BambuCommandHandler:
     #
     # See the JobStatusV2 class in the service for the object definition.
     #
+    # Returning None will result in the "Printer not connected" state.
     def GetCurrentJobStatus(self):
-        # result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
-        # {
-        #     "objects": {
-        #         "print_stats": None,    # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
-        #         "gcode_move": None,     # Needed for GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult to get the current speed
-        #         "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
-        #         "extruder": None,       # Needed for temps
-        #         "heater_bed": None,     # Needed for temps
-        #         # "webhooks": None,
-        #         # "extruder": None,
-        #         # "bed_mesh": None,
-        #     }
-        # })
-        # # Validate
-        # if result.HasError():
-        #     self.Logger.error("MoonrakerCommandHandler failed GetCurrentJobStatus() query. "+result.GetLoggingErrorStr())
-        #     return None
+        # Try to get the current state.
+        bambuState = BambuClient.Get().GetState()
 
-        # # Get the result.
-        # res = result.GetResult()
+        # If the state is None, we are disconnected.
+        if bambuState is None:
+            # Returning None will be a "connection lost" state.
+            return None
 
-        # # Map the state
-        # state = "idle"
-        # if "status" in res and "print_stats" in res["status"] and "state" in res["status"]["print_stats"]:
-        #     # https://moonraker.readthedocs.io/en/latest/printer_objects/#print_stats
-        #     mrState = res["status"]["print_stats"]["state"]
-        #     if mrState == "standby":
-        #         state = "idle"
-        #     elif mrState == "printing":
-        #         # This is a special case, we consider "warmingup" a subset of printing.
-        #         if MoonrakerClient.Get().GetMoonrakerCompat().CheckIfPrinterIsWarmingUp_WithPrintStats(result):
-        #             state = "warmingup"
-        #         else:
-        #             state = "printing"
-        #     elif mrState == "paused":
-        #         state = "paused"
-        #     elif mrState == "complete":
-        #         state = "complete"
-        #     elif mrState == "cancelled":
-        #         state = "cancelled"
-        #     elif mrState == "error":
-        #         state = "error"
-        #     else:
-        #         self.Logger.warn("Unknown mrState returned from print_stats: "+str(mrState))
-        # else:
-        #     self.Logger.warn("MoonrakerCommandHandler failed to find the print_stats.status")
+        # Map the state
+        # TODO - Add "error" if possible
+        # Possible states: https://github.com/greghesp/ha-bambulab/blob/e72e343acd3279c9bccba510f94bf0e291fe5aaa/custom_components/bambu_lab/pybambu/const.py#L83C1-L83C21
+        state = "idle"
+        if bambuState.gcode_state is not None:
+            gcodeState = bambuState.gcode_state
+            if gcodeState == "IDLE" or gcodeState == "INIT" or gcodeState == "OFFLINE" or gcodeState == "UNKNOWN":
+                state = "idle"
+            elif gcodeState == "RUNNING" or gcodeState == "SLICING":
+                # Only check stg_cur in the known printing state, because sometimes it doesn't get reset to idle when transitioning to an error.
+                stg = bambuState.stg_cur
+                # Here's a full list: https://github.com/davglass/bambu-cli/blob/398c24057c71fc6bcc5dbd818bdcacc20833f61c/lib/const.js#L104
+                # stg==255 is used as a kind of intenum unknown state when the print is first starting and finishing.
+                # We can't really use it because it can happen at different points in time and it's not clear what the real state is.
+                if stg == 2 or stg == 7:
+                    state = "warmingup"
+                elif stg == 14:
+                    state = "cleaningnozzle"
+                elif stg == 1:
+                    state = "autobedlevel"
+                else:
+                    state = "printing"
+            elif gcodeState == "PAUSE":
+                state = "paused"
+            elif gcodeState == "FINISH":
+                state = "complete"
+            elif gcodeState == "FAILED":
+                state = "cancelled"
+            elif gcodeState == "PREPARE":
+                state = "warmingup"
+            else:
+                self.Logger.warn(f"Unknown gcode_state state in print state: {gcodeState}")
 
-        # # TODO - If in an error state, set some context as to why.
-        # errorStr_CanBeNone = None
+        # TODO - If in an error state, set some context as to why.
+        errorStr_CanBeNone = None
 
-        # # Get current layer info
-        # # None = The platform doesn't provide it.
-        # # 0 = The platform provider it, but there's no info yet.
-        # # # = The values
-        # # Note this is similar to how we also do it for notifications.
-        # currentLayerInt = None
-        # totalLayersInt = None
-        # currentLayerRaw, totalLayersRaw = MoonrakerClient.Get().GetMoonrakerCompat().GetCurrentLayerInfo()
-        # if totalLayersRaw is not None and totalLayersRaw > 0 and currentLayerRaw is not None and currentLayerRaw >= 0:
-        #     currentLayerInt = int(currentLayerRaw)
-        #     totalLayersInt = int(totalLayersRaw)
+        # Get current layer info
+        # None = The platform doesn't provide it.
+        # 0 = The platform provider it, but there's no info yet.
+        # # = The values
+        currentLayerInt = None
+        totalLayersInt = None
+        if bambuState.layer_num is not None:
+            currentLayerInt = int(bambuState.layer_num)
+        if bambuState.total_layer_num is not None:
+            totalLayersInt = int(bambuState.total_layer_num)
 
-        # # Get duration and filename.
-        # durationSec = 0
-        # fileName = ""
-        # if "status" in res and "print_stats" in res["status"]:
-        #     ps = res["status"]["print_stats"]
-        #     # We choose to use print_duration over "total_duration" so we only show the time actually spent printing. This is consistent across platforms.
-        #     if "print_duration" in ps:
-        #         durationSec = int(ps["print_duration"])
-        #     if "filename" in ps:
-        #         fileName = ps["filename"]
+        # Get duration and filename.
+        durationSec = 0
+        fileName = ""
+        if bambuState.gcode_file is not None:
+            fileName = bambuState.gcode_file
+        #if "gcode_file" in res:
+            #durationSec = res["gcode_file"]
 
-        # # If we have a file name, try to get the current filament usage.
-        # filamentUsageMm = 0
+        # If we have a file name, try to get the current filament usage.
+        filamentUsageMm = 0
         # if fileName is not None and len(fileName) > 0:
         #     filamentUsageMm = FileMetadataCache.Get().GetEstimatedFilamentUsageMm(fileName)
 
-        # # Get the progress
-        # progress = 0.0
-        # if "status" in res and "virtual_sdcard" in res["status"]:
-        #     vs = res["status"]["virtual_sdcard"]
-        #     if "progress" in vs:
-        #         # Convert progress 0->1 to 0->100
-        #         progress = vs["progress"] * 100.0
+        # Get the progress
+        progress = 0.0
+        if bambuState.mc_percent is not None:
+            progress = float(bambuState.mc_percent)
 
-        # # Time left can be hard to compute correctly, so use the common function to do it based
-        # # on what we can get as a best effort.
-        # timeLeftSec = MoonrakerClient.Get().GetMoonrakerCompat().GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(result)
+        # We have special logic to handle the time left count down, since bambu only gives us minutes
+        # and we want seconds. We can estimate it pretty well by counting down from the last time it changed.
+        timeLeftSec = bambuState.GetContinuousTimeRemainingSec()
+        if timeLeftSec is None:
+            timeLeftSec = 0
 
-        # # Get the current temps if possible.
-        # hotendActual = 0.0
-        # hotendTarget = 0.0
-        # bedTarget = 0.0
-        # bedActual = 0.0
-        # if "status" in res and "extruder" in res["status"]:
-        #     extruder = res["status"]["extruder"]
-        #     if "temperature" in extruder:
-        #         hotendActual = round(float(extruder["temperature"]), 2)
-        #     if "target" in extruder:
-        #         hotendTarget = round(float(extruder["target"]), 2)
-        # if "status" in res and "heater_bed" in res["status"]:
-        #     heater_bed = res["status"]["heater_bed"]
-        #     if "temperature" in heater_bed:
-        #         bedActual = round(float(heater_bed["temperature"]), 2)
-        #     if "target" in heater_bed:
-        #         bedTarget = round(float(heater_bed["target"]), 2)
+        # Get the current temps if possible.
+        hotendActual = 0.0
+        hotendTarget = 0.0
+        bedTarget = 0.0
+        bedActual = 0.0
+        if bambuState.nozzle_temper is not None:
+            hotendActual = round(float(bambuState.nozzle_temper), 2)
+        if bambuState.nozzle_target_temper is not None:
+            hotendTarget = round(float(bambuState.nozzle_target_temper), 2)
+        if bambuState.bed_temper is not None:
+            bedActual = round(float(bambuState.bed_temper), 2)
+        if bambuState.bed_target_temper is not None:
+            bedTarget = round(float(bambuState.bed_target_temper), 2)
 
         # Build the object and return.
         return {
-            "State": "error",
-            "Error": "bambu",
+            "State": state,
+            "Error": errorStr_CanBeNone,
+            "CurrentPrint":
+            {
+                "Progress" : progress,
+                "DurationSec" : durationSec,
+                "TimeLeftSec" : timeLeftSec,
+                "FileName" : fileName,
+                "EstTotalFilUsedMm" : filamentUsageMm,
+                "CurrentLayer": currentLayerInt,
+                "TotalLayers": totalLayersInt,
+                "Temps": {
+                    "BedActual": bedActual,
+                    "BedTarget": bedTarget,
+                    "HotendActual": hotendActual,
+                    "HotendTarget": hotendTarget,
+                }
+            }
         }
-
-        # return {
-        #     "State": state,
-        #     "Error": errorStr_CanBeNone,
-        #     "CurrentPrint":
-        #     {
-        #         "Progress" : progress,
-        #         "DurationSec" : durationSec,
-        #         "TimeLeftSec" : timeLeftSec,
-        #         "FileName" : fileName,
-        #         "EstTotalFilUsedMm" : filamentUsageMm,
-        #         "CurrentLayer": currentLayerInt,
-        #         "TotalLayers": totalLayersInt,
-        #         "Temps": {
-        #             "BedActual": bedActual,
-        #             "BedTarget": bedTarget,
-        #             "HotendActual": hotendActual,
-        #             "HotendTarget": hotendTarget,
-        #         }
-        #     }
-        # }
 
 
     # !! Platform Command Handler Interface Function !!
     # This must return the platform version as a string.
     def GetPlatformVersionStr(self):
-        # We don't supply this for moonraker at the moment.
-        return "1.0.0"
+        version = BambuClient.Get().GetVersion()
+        if version is None:
+            return "0.0.0"
+        return f"{version.SoftwareVersion}-{version.PrinterName}"
 
 
     # !! Platform Command Handler Interface Function !!
@@ -167,14 +150,10 @@ class BambuCommandHandler:
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
     def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup) -> CommandResponse:
-        # Check the state and that we have a connection to the host.
-        result = self._CheckIfConnectedAndForExpectedStates(["printing"])
-        if result is not None:
-            return result
-
-        # The smart pause logic handles all pause commands.
-        #return SmartPause.Get().ExecuteSmartPause(suppressNotificationBool)
-        return CommandResponse.Success(None)
+        if BambuClient.Get().SendPause():
+            return CommandResponse.Success(None)
+        else:
+            return CommandResponse.Error(400, "Failed to send command to printer.")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -182,23 +161,10 @@ class BambuCommandHandler:
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
     def ExecuteResume(self) -> CommandResponse:
-        # Check the state and that we have a connection to the host.
-        result = self._CheckIfConnectedAndForExpectedStates(["paused"])
-        if result is not None:
-            return result
-
-        # # Do the resume.
-        # result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.resume", {})
-        # if result.HasError():
-        #     self.Logger.error("ExecuteResume failed to request resume. "+result.GetLoggingErrorStr())
-        #     return CommandResponse.Error(400, "Failed to request resume")
-
-        # # Check the response
-        # if result.GetResult() != "ok":
-        #     self.Logger.error("ExecuteResume got an invalid request response. "+json.dumps(result.GetResult()))
-        #     return CommandResponse.Error(400, "Invalid request response.")
-
-        return CommandResponse.Success(None)
+        if BambuClient.Get().SendResume():
+            return CommandResponse.Success(None)
+        else:
+            return CommandResponse.Error(400, "Failed to send command to printer.")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -206,49 +172,7 @@ class BambuCommandHandler:
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
     def ExecuteCancel(self) -> CommandResponse:
-        # Check the state and that we have a connection to the host.
-        result = self._CheckIfConnectedAndForExpectedStates(["printing","paused"])
-        if result is not None:
-            return result
-
-        # Do the resume.
-        # result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.cancel", {})
-        # if result.HasError():
-        #     self.Logger.error("ExecuteCancel failed to request cancel. "+result.GetLoggingErrorStr())
-        #     return CommandResponse.Error(400, "Failed to request cancel")
-
-        # # Check the response
-        # if result.GetResult() != "ok":
-        #     self.Logger.error("ExecuteCancel got an invalid request response. "+json.dumps(result.GetResult()))
-        #     return CommandResponse.Error(400, "Invalid request response.")
-
-        return CommandResponse.Success(None)
-
-
-    # Checks if the printer is connected and in the correct state (or states)
-    # If everything checks out, returns None. Otherwise it returns a CommandResponse
-    def _CheckIfConnectedAndForExpectedStates(self, stateArray) -> CommandResponse:
-        # Only allow the pause if the print state is printing, otherwise the system seems to get confused.
-        # result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
-        # {
-        #     "objects": {
-        #         "print_stats": None
-        #     }
-        # })
-        # if result.HasError():
-        #     if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
-        #         self.Logger.error("Command failed because the printer is no connected. "+result.GetLoggingErrorStr())
-        #         return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
-        #     self.Logger.error("Command failed to get state. "+result.GetLoggingErrorStr())
-        #     return CommandResponse.Error(500, "Error Getting State")
-        # res = result.GetResult()
-        # if "status" not in res or "print_stats" not in res["status"] or "state" not in res["status"]["print_stats"]:
-        #     self.Logger.error("Command failed to get state, state not found in dict.")
-        #     return CommandResponse.Error(500, "Error Getting State From Dict")
-        # state = res["status"]["print_stats"]["state"]
-        # for s in stateArray:
-        #     if s == state:
-        #         return None
-
-        # self.Logger.warn("Command failed, printer "+state+" not the expected states.")
-        return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Wrong State")
+        if BambuClient.Get().SendCancel():
+            return CommandResponse.Success(None)
+        else:
+            return CommandResponse.Error(400, "Failed to send command to printer.")

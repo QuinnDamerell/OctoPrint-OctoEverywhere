@@ -4,7 +4,6 @@ import json
 
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
-from .requestsutils import RequestsUtils
 
 #
 # A platform agnostic definition of a webcam stream.
@@ -164,6 +163,10 @@ class WebcamHelper:
 
 
     def _GetWebcamStreamInternal(self, cameraName:str) -> OctoHttpRequest.Result:
+        # Check if the platform helper has an override. If so, it is responsible for all of the stream getting logic.
+        if hasattr(self.WebcamPlatformHelperInterface, 'GetStream_Override'):
+            return self.WebcamPlatformHelperInterface.GetStream_Override(cameraName)
+
         # Try to get the URL from the settings.
         webcamStreamUrl = self.GetWebcamStreamUrl(cameraName)
         if webcamStreamUrl is not None:
@@ -191,6 +194,10 @@ class WebcamHelper:
 
 
     def _GetSnapshotInternal(self, cameraName:str) -> OctoHttpRequest.Result:
+        # Check if the platform helper has an override. If so, it is responsible for all of the snapshot getting logic.
+        if  hasattr(self.WebcamPlatformHelperInterface, 'GetSnapshot_Override'):
+            return self.WebcamPlatformHelperInterface.GetSnapshot_Override(cameraName)
+
         # First, try to get the snapshot using the string defined in settings.
         snapshotUrl = self.GetSnapshotUrl(cameraName)
         if snapshotUrl is not None:
@@ -201,7 +208,8 @@ class WebcamHelper:
             self.Logger.debug("Trying to get a snapshot using url: %s", snapshotUrl)
             octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, snapshotUrl, OctoHttpRequest.GetPathType(snapshotUrl), "GET", {}, allowRedirects=True)
             # If the result was successful, we are done.
-            if octoHttpResult is not None and octoHttpResult.Result is not None and octoHttpResult.Result.status_code == 200:
+
+            if octoHttpResult is not None and octoHttpResult.StatusCode == 200:
                 return octoHttpResult
 
         # If getting the snapshot from the snapshot URL fails, try getting a single frame from the mjpeg stream
@@ -219,28 +227,25 @@ class WebcamHelper:
             # We use the allow redirects flag to make the API more robust, since some webcam images might need that.
             self.Logger.debug("_GetSnapshotFromStream - Trying to get a snapshot using THE STREAM URL: %s", url)
             octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, OctoHttpRequest.GetPathType(url), "GET", {}, allowRedirects=True)
-            if octoHttpResult is None or octoHttpResult.Result is None:
+            if octoHttpResult is None:
                 self.Logger.debug("_GetSnapshotFromStream - Failed to make web request.")
                 return None
 
             # Check for success.
-            response = octoHttpResult.Result
-            if response is None or response.status_code != 200:
-                if response is None:
-                    self.Logger.info("Snapshot fallback failed due to the http call having no response object.")
-                else:
-                    self.Logger.info("Snapshot fallback failed due to the http call having a bad status: "+str(response.status_code))
+            if octoHttpResult.StatusCode != 200:
+                self.Logger.info("Snapshot fallback failed due to the http call having a bad status: "+str(octoHttpResult.StatusCode))
                 return None
 
             # Hold the entire response in a with block, so that we we leave it will be cleaned up, since it's most likely a streaming stream.
-            with response:
+            with octoHttpResult:
                 # We expect this to be a multipart stream if it's going to be a mjpeg stream.
                 isMultipartStream = False
                 contentTypeLower = ""
-                for name in response.headers:
+                headers = octoHttpResult.Headers
+                for name in headers:
                     nameLower = name.lower()
                     if nameLower == "content-type":
-                        contentTypeLower = response.headers[name].lower()
+                        contentTypeLower = headers[name].lower()
                         if contentTypeLower.startswith("multipart/"):
                             isMultipartStream = True
                         break
@@ -250,9 +255,15 @@ class WebcamHelper:
                     self.Logger.info("Snapshot fallback failed not correct content type: "+str(contentTypeLower))
                     return None
 
+                # Ensure we have a response object to read from.
+                responseForBodyRead = octoHttpResult.ResponseForBodyRead
+                if responseForBodyRead is None:
+                    self.Logger.warn("Snapshot fallback got a response that didn't have a requests lib Response object to read from.")
+                    return None
+
                 # Try to read some of the stream, so we can find the content type and the size of this first frame.
                 # We use the raw response, so we can control directly how much we read.
-                dataBuffer = response.raw.read(300)
+                dataBuffer = responseForBodyRead.raw.read(300)
                 if dataBuffer is None:
                     self.Logger.info("Snapshot fallback failed no data returned.")
                     return None
@@ -304,7 +315,7 @@ class WebcamHelper:
                 totalDesiredBufferSize = frameSizeInt + headerStrSize
                 toRead = totalDesiredBufferSize - len(dataBuffer)
                 if toRead > 0:
-                    data = response.raw.read(toRead)
+                    data = responseForBodyRead.raw.read(toRead)
                     if data is None:
                         self.Logger.error("_GetSnapshotFromStream failed to read the rest of the image buffer.")
                         return None
@@ -313,7 +324,7 @@ class WebcamHelper:
                 # Since this is a stream, ideally we close it as soon as possible to not waste resources.
                 # Otherwise this will be auto closed when the function leaves, since we are using the with: scope
                 try:
-                    response.close()
+                    responseForBodyRead.close()
                 except Exception:
                     pass
 
@@ -332,17 +343,16 @@ class WebcamHelper:
                 if len(imageBuffer) != frameSizeInt:
                     self.Logger.warn("Snapshot callback final image size was not the frame size. expected: "+str(frameSizeInt)+", got: "+str(len(imageBuffer)))
 
-                # If successful, we will use the already existing response object but update the values to match the fixed size body and content type.
-                response.status_code = 200
-                # Clear all of the current
-                response.headers.clear()
-                # Set the content type to the header we got from the stream chunk.
-                response.headers["content-type"] = contentType
-                # It's very important this size matches the body buffer we give OctoHttpRequest, or the logic in the http loop will fail because it will keep trying to read more.
-                response.headers["content-length"] = str(len(imageBuffer))
+                # If successful, set values to match the fixed size body and content type.
+                headers = {
+                    # Set the content type to the header we got from the stream chunk.
+                    "content-type": contentType,
+                    # It's very important this size matches the body buffer we give OctoHttpRequest, or the logic in the http loop will fail because it will keep trying to read more.
+                    "content-length": str(len(imageBuffer))
+                }
                 # Return a result. Return the full image buffer which will be used as the response body.
                 self.Logger.debug("Successfully got image from stream URL. Size: %s, Format: %s", str(len(imageBuffer)), contentType)
-                return OctoHttpRequest.Result(response, url, True, imageBuffer)
+                return OctoHttpRequest.Result(200, headers, url, True, fullBodyBuffer=imageBuffer)
         except ConnectionError as e:
             # We have a lot of telemetry indicating a read timeout can happen while trying to read from the stream
             # in that case we should just get out of here.
@@ -397,7 +407,7 @@ class WebcamHelper:
     # Checks if the result was success and if so adds the common header.
     # Returns the octoHttpResult, so the function is chainable
     def _AddOeWebcamTransformHeader(self, octoHttpResult, cameraName:str):
-        if octoHttpResult is None or octoHttpResult.Result is None:
+        if octoHttpResult is None:
             return octoHttpResult
 
         # Default to none
@@ -415,7 +425,7 @@ class WebcamHelper:
                 transformStr += "rotate="+str(settings.Rotation)+" "
 
         # Set the header
-        octoHttpResult.Result.headers[WebcamHelper.c_OeWebcamTransformHeaderKey] = transformStr
+        octoHttpResult.Headers[WebcamHelper.c_OeWebcamTransformHeaderKey] = transformStr
         return octoHttpResult
 
 
@@ -425,18 +435,21 @@ class WebcamHelper:
     # To combat this, we will check if the image is a jpeg, and if so, ensure the header is set correctly.
     #
     # Returns the octoHttpResult, so the function is chainable
-    def _EnsureJpegHeaderInfo(self, octoHttpResult: OctoHttpRequest.Result):
+    def _EnsureJpegHeaderInfo(self, octoHttpResult:OctoHttpRequest.Result):
         # Ensure we got a result.
-        if octoHttpResult is None or octoHttpResult.Result is None:
+        if octoHttpResult is None:
             return octoHttpResult
 
         # The GetSnapshot API will always return the fully buffered snapshot.
-        buf = RequestsUtils.ReadAllContentFromStreamResponse(octoHttpResult.Result)
+        # If there already isn't a full buffered body, make one now.
+        buf = octoHttpResult.FullBodyBuffer
         if buf is None:
-            self.Logger.error("_EnsureJpegHeaderInfo got a null body read from ReadAllContentFromStreamResponse")
-            return None
-        # Set the buffer now, incase of early returns.
-        octoHttpResult.SetFullBodyBuffer(buf)
+            # This will read the entire stream and store it into the FullBodyBuffer
+            octoHttpResult.ReadAllContentFromStreamResponse()
+            buf = octoHttpResult.FullBodyBuffer
+            if buf is None:
+                self.Logger.error("_EnsureJpegHeaderInfo got a null body read from ReadAllContentFromStreamResponse")
+                return None
 
         # Handle the buffer.
         # In a nutshell, all jpeg images have a lot of header segments, but they must have the app0 header.

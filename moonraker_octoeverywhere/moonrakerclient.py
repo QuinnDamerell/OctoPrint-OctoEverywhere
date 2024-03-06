@@ -1083,7 +1083,7 @@ class MoonrakerCompat:
         fileName_CanBeNone = stats["filename"]
         totalDurationFloatSec_CanBeNone = stats["total_duration"] # Use the total duration
         self.Logger.info("Printer state at socket connect is: "+state)
-        self.NotificationHandler.OnRestorePrintIfNeeded(state, fileName_CanBeNone, totalDurationFloatSec_CanBeNone)
+        self.NotificationHandler.OnRestorePrintIfNeeded(state == "printing", state == "paused", fileName_CanBeNone, totalDurationFloatSec_CanBeNone)
 
 
     # Queries moonraker for the current printer stats.

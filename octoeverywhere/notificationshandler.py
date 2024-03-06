@@ -181,37 +181,37 @@ class NotificationsHandler:
         return self._IsPingTimerRunning()
 
 
-    # A special case used by moonraker to restore the state of an ongoing print that we don't know of.
-    # What we want to do is check moonraker's current state and our current state, to see if there's anything that needs to be synced.
+    # A special case used by moonraker and bambu to restore the state of an ongoing print that we don't know of.
+    # What we want to do is check moonraker or bambu's current state and our current state, to see if there's anything that needs to be synced.
     # Remember that we might be syncing because our service restarted during a print, or moonraker restarted, so we might already have
     # the correct context.
     #
     # Most importantly, we want to make sure the ping timer and thus Gadget get restored to the correct states.
     #
-    def OnRestorePrintIfNeeded(self, moonrakerPrintStatsState, fileName_CanBeNone, totalDurationFloatSec_CanBeNone):
-        if moonrakerPrintStatsState == "printing":
+    def OnRestorePrintIfNeeded(self, isPrinting:bool, isPaused:bool, fileName_CanBeNone, totalDurationFloatSec_CanBeNone):
+        if isPrinting:
             # There is an active print. Check our state.
             if self._IsPingTimerRunning():
-                self.Logger.info("Moonraker client sync state: Detected an active print and our timers are already running, there's nothing to do.")
+                self.Logger.info("Restore client sync state: Detected an active print and our timers are already running, there's nothing to do.")
                 return
             else:
-                self.Logger.info("Moonraker client sync state: Detected an active print but we aren't tracking it, so we will restore now.")
+                self.Logger.info("Restore client sync state: Detected an active print but we aren't tracking it, so we will restore now.")
                 # We need to do the restore of a active print.
-        elif moonrakerPrintStatsState == "paused":
+        elif isPaused:
             # There is a print currently paused, check to see if we have a filename, which indicates if we know of a print or not.
             if self._HasCurrentPrintFileName():
-                self.Logger.info("Moonraker client sync state: Detected a paused print, but we are already tracking a print, so there's nothing to do.")
+                self.Logger.info("Restore client sync state: Detected a paused print, but we are already tracking a print, so there's nothing to do.")
                 return
             else:
-                self.Logger.info("Moonraker client sync state: Detected a paused print, but we aren't tracking any prints, so we will restore now")
+                self.Logger.info("Restore client sync state: Detected a paused print, but we aren't tracking any prints, so we will restore now")
         else:
             # There's no print running.
             if self._IsPingTimerRunning():
-                self.Logger.info("Moonraker client sync state: Detected no active print but our ping timers ARE RUNNING. Stopping them now.")
+                self.Logger.info("Restore client sync state: Detected no active print but our ping timers ARE RUNNING. Stopping them now.")
                 self.StopTimers()
                 return
             else:
-                self.Logger.info("Moonraker client sync state: Detected no active print and no ping timers are running, so there's nothing to do.")
+                self.Logger.info("Restore client sync state: Detected no active print and no ping timers are running, so there's nothing to do.")
                 return
 
         # If we are here, we need to restore a print.
@@ -235,7 +235,7 @@ class NotificationsHandler:
         self.RestorePrintProgressPercentage = True
 
         # Make sure the timers are set correctly
-        if moonrakerPrintStatsState == "printing":
+        if isPrinting:
             # If we have a total duration, use it to offset the "hours reported" so our time based notifications
             # are correct.
             hoursReportedInt = 0
@@ -244,7 +244,7 @@ class NotificationsHandler:
                 hoursReportedInt = int(math.floor(totalDurationFloatSec_CanBeNone / 60.0 / 60.0))
 
             # Setup the timers, with hours reported, to make sure that the ping timer and Gadget are running.
-            self.Logger.info("Moonraker client sync state: Restoring printing timer with existing duration of "+str(totalDurationFloatSec_CanBeNone))
+            self.Logger.info("Restore client sync state: Restoring printing timer with existing duration of "+str(totalDurationFloatSec_CanBeNone))
             self.StartPrintTimers(False, hoursReportedInt)
         else:
             # On paused, make sure they are stopped.
@@ -704,7 +704,7 @@ class NotificationsHandler:
             octoHttpResponse = WebcamHelper.Get().GetSnapshot()
 
             # Check for a valid response.
-            if octoHttpResponse is None or octoHttpResponse.Result is None or octoHttpResponse.Result.status_code != 200:
+            if octoHttpResponse is None or octoHttpResponse.StatusCode != 200:
                 return None
 
             # GetSnapshot will always return the full result already read.

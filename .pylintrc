@@ -24,6 +24,7 @@ disable=
     R0916, # Too many booleans in one if statment.
     R1730, # consider-using-min-builtin
     R1731, # consider-using-max-builtin
+    R1724, # Unnecessary "else" after "break"
 
 
 # A comma-separated list of package or module names from where C extensions may
