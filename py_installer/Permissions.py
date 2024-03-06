@@ -56,6 +56,7 @@ class Permissions:
         # We try to set permissions to all paths and files in the context, some might be null
         # due to the setup mode. We don't care to difference the setup mode here, because the context
         # validation will do that for us already. Thus if a field is None, its ok.
+        # NOTE - In update mode, most of the paths in the context are None, since it's updating all plugins at once, which is fine.
         def SetPermissions(path:str):
             if path is not None and len(path) != 0:
                 Util.SetFileOwnerRecursive(path, context.UserName)

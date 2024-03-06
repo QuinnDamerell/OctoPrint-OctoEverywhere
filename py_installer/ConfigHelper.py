@@ -143,11 +143,13 @@ class ConfigHelper:
 
 
     # Given a context or config file path, this returns file path of the config.
+    # If the context is missing the ConfigFolder, None is returned.
     @staticmethod
     def GetConfigFilePath(context:Context = None, configFolderPath:str = None):
         if context is not None:
             if context.ConfigFolder is None:
-                raise Exception("GetConfigFilePath context doesn't have a ConfigFolder string.")
+                # Don't throw here, return None and let the caller handle it, incase it's ok to not have a config folder set.
+                return None
             return Config.GetConfigFilePath(context.ConfigFolder)
         if configFolderPath is not None:
             return Config.GetConfigFilePath(configFolderPath)
