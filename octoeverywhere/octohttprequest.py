@@ -76,7 +76,8 @@ class OctoHttpRequest:
     #                   customBodyStreamClosedCallback() -> None : MUST BE CALLED when this Result object is closed, to clean up the stream.
     class Result():
         def __init__(self, statusCode:int, headers:dict, url:str, didFallback:bool, fullBodyBuffer=None, requestLibResponseObj:requests.Response=None, customBodyStreamCallback=None, customBodyStreamClosedCallback=None):
-            self._statusCode = statusCode
+            # Status code isn't a property because some things need to set it externally to the class. (Result.StatusCode = 302)
+            self.StatusCode = statusCode
             self._headers = headers
             self._url:str = url
             self._requestLibResponseObj = requestLibResponseObj
@@ -89,10 +90,6 @@ class OctoHttpRequest:
             self._customBodyStreamClosedCallback = customBodyStreamClosedCallback
             if (self._customBodyStreamCallback is not None and self._customBodyStreamClosedCallback is None) or (self._customBodyStreamCallback is None and self._customBodyStreamClosedCallback is not None):
                 raise Exception("Both the customBodyStreamCallback and customBodyStreamClosedCallback must be set!")
-
-        @property
-        def StatusCode(self) -> int:
-            return self._statusCode
 
         @property
         def Headers(self) -> dict:
