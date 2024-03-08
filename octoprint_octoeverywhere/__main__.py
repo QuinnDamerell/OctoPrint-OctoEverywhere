@@ -14,6 +14,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.Proto.ServerHost import ServerHost
+from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
 #from .threaddebug import ThreadDebug
 
@@ -199,6 +200,9 @@ if __name__ == '__main__':
     # If we are using a local dev connection, disable this or it will overwrite.
     if LocalServerAddress is not None:
         OctoPingPong.Get().DisablePrimaryOverride()
+
+    # Setup the print info manager before the notification manager
+    PrintInfoManager.Init(logger, PluginFilePathRoot)
 
     # Setup the notification handler.
     NotificationHandlerInstance = NotificationsHandler(logger, MockPrinterStateObject(logger))

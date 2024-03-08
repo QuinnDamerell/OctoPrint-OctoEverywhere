@@ -93,6 +93,9 @@ class BambuClient:
         while True:
             ipOrHostname = None
             try:
+                # Before we try to connect, ensure we tell the state translator that we are starting a new connection.
+                self.StateTranslator.ResetForNewConnection()
+
                 # We always connect locally. We use encryption, but the printer doesn't have a trusted
                 # cert root, so we have to disable the cert root checks.
                 self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
@@ -260,9 +263,10 @@ class BambuClient:
 
             # Send all messages to the state translator
             # This must happen AFTER we update the State object, so it's current.
-            # We also pass the State object since we know it's not None
             try:
-                self.StateTranslator.OnMqttMessage(msg, self.State, isFirstFullSyncResponse)
+                # Only send the message along if there's a state. This can happen if a push_status isn't the first message we receive.
+                if self.State is not None:
+                    self.StateTranslator.OnMqttMessage(msg, self.State, isFirstFullSyncResponse)
             except Exception as e:
                 Sentry.Exception("Exception calling StateTranslator.OnMqttMessage", e)
 

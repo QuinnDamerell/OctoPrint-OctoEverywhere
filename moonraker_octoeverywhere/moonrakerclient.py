@@ -834,7 +834,7 @@ class MoonrakerCompat:
         fileSizeKBytes = max(fileSizeKBytes, 0)
 
         # Fire on started.
-        self.NotificationHandler.OnStarted(fileName, fileSizeKBytes, filamentUsageMm)
+        self.NotificationHandler.OnStarted(self._GetPrintCookie(fileName), fileName, fileSizeKBytes, filamentUsageMm)
 
 
     def OnDone(self):
@@ -1069,6 +1069,20 @@ class MoonrakerCompat:
     # Helpers
     #
 
+    # Returns a unique string for this print.
+    # This string should be as unique as possible, but always the same for the same print.
+    # See details in NotificationHandler._RecoverOrRestForNewPrint
+    def _GetPrintCookie(self, fileName:str) -> str:
+        # For Moonraker, there's no way to differentiate between prints beyond the basic things like the file name.
+        # This means that there is a possibility that the print cookie will match, on back to back prints.
+        # However on each start we will clear any Print info that exists, so it will clear each time.
+        # But if the service restarts mid print, we will still be able to recover it.
+        if fileName is None:
+            # If there is no filename, just use the time, which will make the print unrecoverable.
+            return f"{int(time.time())}"
+        return fileName
+
+
     def _InitPrintStateForFreshConnect(self):
         # Get the current state
         stats = self._GetCurrentPrintStats()
@@ -1081,9 +1095,8 @@ class MoonrakerCompat:
         # the state as well as possible to get notifications in sync.
         state = stats["state"]
         fileName_CanBeNone = stats["filename"]
-        totalDurationFloatSec_CanBeNone = stats["total_duration"] # Use the total duration
         self.Logger.info("Printer state at socket connect is: "+state)
-        self.NotificationHandler.OnRestorePrintIfNeeded(state == "printing", state == "paused", fileName_CanBeNone, totalDurationFloatSec_CanBeNone)
+        self.NotificationHandler.OnRestorePrintIfNeeded(state == "printing", state == "paused", self._GetPrintCookie(fileName_CanBeNone))
 
 
     # Queries moonraker for the current printer stats.

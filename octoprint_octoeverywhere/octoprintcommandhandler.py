@@ -63,9 +63,11 @@ class OctoPrintCommandHandler:
                 estTotalFilamentUsageMm = int(currentData["job"]["filament"]["tool0"]["length"])
 
             # Get the error, if there is one.
+            # This is shown to the user directly, so it must be short (think of a dashboard status) and formatted well.
+            # TODO - Since OctoPrint can give back all kinds of strings for this, we don't set it, since we can't show it to the user.
             errorStr_CanBeNone = None
-            if self._Exists(currentData, "state") and self._Exists(currentData["state"], "error"):
-                errorStr_CanBeNone = currentData["state"]["error"]
+            # if self._Exists(currentData, "state") and self._Exists(currentData["state"], "error"):
+            #     errorStr_CanBeNone = currentData["state"]["error"]
 
             # Map the state to our common states.
             # We us this get_state_id to get a more explicit state, over what's in get_current_data above.

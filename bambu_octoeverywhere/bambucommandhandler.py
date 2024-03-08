@@ -1,6 +1,8 @@
 from octoeverywhere.commandhandler import CommandResponse
+from octoeverywhere.printinfo import PrintInfoManager
 
 from .bambuclient import BambuClient
+from .bambumodels import BambuPrintErrors
 
 # This class implements the Platform Command Handler Interface
 class BambuCommandHandler:
@@ -29,10 +31,21 @@ class BambuCommandHandler:
             return None
 
         # Map the state
-        # TODO - Add "error" if possible
         # Possible states: https://github.com/greghesp/ha-bambulab/blob/e72e343acd3279c9bccba510f94bf0e291fe5aaa/custom_components/bambu_lab/pybambu/const.py#L83C1-L83C21
         state = "idle"
-        if bambuState.gcode_state is not None:
+        errorStr_CanBeNone = None
+
+        # Before checking the state, see if the print is in an error state.
+        # This error state can be common among other states, like "IDLE" or "PAUSE"
+        printError = bambuState.GetPrinterError()
+        if printError is not None:
+            # Always set the state to error.
+            # If we can match a known state, return a good string that can be shown for the user.
+            state = "error"
+            if printError == BambuPrintErrors.FilamentRunOut:
+                errorStr_CanBeNone = "Filament Run Out"
+        # If we aren't in error, use the state
+        elif bambuState.gcode_state is not None:
             gcodeState = bambuState.gcode_state
             if gcodeState == "IDLE" or gcodeState == "INIT" or gcodeState == "OFFLINE" or gcodeState == "UNKNOWN":
                 state = "idle"
@@ -61,8 +74,6 @@ class BambuCommandHandler:
             else:
                 self.Logger.warn(f"Unknown gcode_state state in print state: {gcodeState}")
 
-        # TODO - If in an error state, set some context as to why.
-        errorStr_CanBeNone = None
 
         # Get current layer info
         # None = The platform doesn't provide it.
@@ -75,13 +86,18 @@ class BambuCommandHandler:
         if bambuState.total_layer_num is not None:
             totalLayersInt = int(bambuState.total_layer_num)
 
-        # Get duration and filename.
+        # Get the filename.
+        fileName = bambuState.GetFileNameWithNoExtension()
+        if fileName is None:
+            fileName = ""
+
+        # For Bambu, the printer doesn't report the duration or the print start time.
+        # Thus we have to track it ourselves in our print info.
+        # When the print is over, a final print duration is set, so this doesn't keep going from print start.
         durationSec = 0
-        fileName = ""
-        if bambuState.gcode_file is not None:
-            fileName = bambuState.gcode_file
-        #if "gcode_file" in res:
-            #durationSec = res["gcode_file"]
+        pi = PrintInfoManager.Get().GetPrintInfo(bambuState.GetPrintCookie())
+        if pi is not None:
+            durationSec = pi.GetPrintDurationSec()
 
         # If we have a file name, try to get the current filament usage.
         filamentUsageMm = 0

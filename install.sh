@@ -325,14 +325,12 @@ cat << EOF
       @@@@@@@@@@@@@@@,,,,,,,,,,,,,,,,,,,,,@@@@@@@@@@@@@@
 EOF
 log_blank
-#log_header    "            OctoEverywhere For Klipper And Bambu Labs"
-log_important "                  OctoEverywhere For Klipper"
+log_header    "            OctoEverywhere For Klipper And Bambu Labs"
 log_blue      " The 3D Printing Communities #1 Remote Access And AI Cloud Service"
 log_blank
 log_blank
 log_important "OctoEverywhere empowers the worldwide maker community with..."
-#log_info      "  - Free & Unlimited Mainsail, Fluidd, And Bambu Labs Printers Remote Access"
-log_info      "  - Free & Unlimited Mainsail and Fluidd Remote Access"
+log_info      "  - Free & Unlimited Mainsail, Fluidd, And Bambu Labs Printers Remote Access"
 log_info      "  - Free & Unlimited Next-Gen AI Print Failure Detection"
 log_info      "  - Free Full Frame Rate & Full Resolution Webcam Streaming"
 log_info      "  - 5 Star Rated iOS & Android Apps"

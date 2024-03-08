@@ -3,8 +3,9 @@ import traceback
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.hostcommon import HostCommon
+from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.webcamhelper import WebcamHelper
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.commandhandler import CommandHandler
@@ -90,6 +91,9 @@ class BambuHost:
 
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
+
+            # Setup the print info manager.
+            PrintInfoManager.Init(self.Logger, localStorageDir)
 
             # For bambu, there's no frontend to connect to, so we disable the http relay system.
             OctoHttpRequest.SetDisableHttpRelay(True)

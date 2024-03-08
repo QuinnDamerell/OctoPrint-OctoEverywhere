@@ -72,6 +72,7 @@ class MoonrakerCommandHandler:
             self.Logger.warn("MoonrakerCommandHandler failed to find the print_stats.status")
 
         # TODO - If in an error state, set some context as to why.
+        # This is shown to the user directly, so it must be short (think of a dashboard status) and formatted well.
         errorStr_CanBeNone = None
 
         # Get current layer info

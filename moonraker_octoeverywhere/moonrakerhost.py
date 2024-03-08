@@ -3,10 +3,11 @@ import traceback
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.webcamhelper import WebcamHelper
+from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -114,6 +115,9 @@ class MoonrakerHost:
 
             # Allow the UI injector to run and do it's thing.
             UiInjector.Init(self.Logger, repoRoot)
+
+            # Setup the print info manager
+            PrintInfoManager.Init(self.Logger, localStorageDir)
 
             # Setup the database helper
             self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId, pluginVersionStr)

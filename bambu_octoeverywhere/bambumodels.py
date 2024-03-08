@@ -2,6 +2,15 @@ import time
 import logging
 from enum import Enum
 
+
+# Known printer error types.
+# Note that the print state doesn't have to be ERROR to have an error, during a print it's "PAUSED" but the print_error value is not 0.
+# Here's the full list https://e.bambulab.com/query.php?lang=en
+class BambuPrintErrors(Enum):
+    Unknown = 1             # This will be most errors, since most of them aren't mapped
+    FilamentRunOut = 2
+
+
 # Since MQTT syncs a full state and then sends partial updates, we keep track of the full state
 # and then apply updates on top of it. We basically keep a locally cached version of the state around.
 class BambuState:
@@ -20,6 +29,8 @@ class BambuState:
         self.bed_temper:int = None
         self.bed_target_temper:int = None
         self.mc_remaining_time:int = None
+        self.project_id:str = None
+        self.print_error:int = None
         # Custom fields
         self.LastTimeRemainingWallClock:float = None
 
@@ -33,11 +44,13 @@ class BambuState:
         self.layer_num = msg.get("layer_num", self.layer_num)
         self.total_layer_num = msg.get("total_layer_num", self.total_layer_num)
         self.gcode_file = msg.get("gcode_file", self.gcode_file)
+        self.project_id = msg.get("project_id", self.project_id)
         self.mc_percent = msg.get("mc_percent", self.mc_percent)
         self.nozzle_temper = msg.get("nozzle_temper", self.nozzle_temper)
         self.nozzle_target_temper = msg.get("nozzle_target_temper", self.nozzle_target_temper)
         self.bed_temper = msg.get("bed_temper", self.bed_temper)
         self.bed_target_temper = msg.get("bed_target_temper", self.bed_target_temper)
+        self.print_error = msg.get("print_error", self.print_error)
 
         # Time remaining has some custom logic, so as it's queried each time it keep counting down in seconds, since Bambu only gives us minutes.
         old_mc_remaining_time = self.mc_remaining_time
@@ -77,6 +90,47 @@ class BambuState:
         return self.gcode_state == "PAUSE"
 
 
+    # If there is a file name, this returns it without the final .
+    def GetFileNameWithNoExtension(self):
+        if self.gcode_file is None:
+            return None
+        pos = self.gcode_file.rfind(".")
+        if pos == -1:
+            return self.gcode_file
+        return self.gcode_file[:pos]
+
+
+    # Returns a unique string for this print.
+    # This string should be as unique as possible, but always the same for the same print.
+    # See details in NotificationHandler._RecoverOrRestForNewPrint
+    def GetPrintCookie(self) -> str:
+        # From testing, the project_id is always unique for cloud based prints, but is 0 for local prints.
+        # The file name changes most of the time, so the combination of both makes a good pair.
+        return f"{self.project_id}-{self.GetFileNameWithNoExtension()}"
+
+
+    # If the printer is in an error state, this tries to return the type, if known.
+    # If the printer is not in an error state, None is returned.
+    def GetPrinterError(self) -> BambuPrintErrors:
+        # If there is a printer error, this is not 0
+        if self.print_error is None or self.print_error == 0:
+            return None
+        # There's a full list of errors here, we only care about some of them
+        # https://e.bambulab.com/query.php?lang=en
+        # We format the error into a hex the same way the are on the page, to make it easier.
+        # NOTE SOME ERRORS HAVE MULTPLE VALUES, SO GET THEM ALL!
+        # They have different values for the different AMS slots
+        h = hex(self.print_error)[2:].rjust(8, '0')
+        errorMap = {
+            "07008011": BambuPrintErrors.FilamentRunOut,
+            "07018011": BambuPrintErrors.FilamentRunOut,
+            "07028011": BambuPrintErrors.FilamentRunOut,
+            "07038011": BambuPrintErrors.FilamentRunOut,
+            "07FF8011": BambuPrintErrors.FilamentRunOut,
+        }
+        return errorMap.get(h, BambuPrintErrors.Unknown)
+
+
 # Different types of hardware.
 class BambuPrinters(Enum):
     Unknown = 1
@@ -99,6 +153,7 @@ class BambuVersion:
 
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
+        self.HasLoggedPrinterVersion = False
         # We only parse out what we currently use.
         self.SoftwareVersion:str = None
         self.HardwareVersion:str = None
@@ -156,3 +211,7 @@ class BambuVersion:
         if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
             self.Logger.warn(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}")
             self.PrinterName = BambuPrinters.Unknown
+
+        if self.HasLoggedPrinterVersion is False:
+            self.HasLoggedPrinterVersion = True
+            self.Logger.info(f"Printer Version: {self.PrinterName}, CPU: {self.Cpu}, Project: {self.ProjectName} Hardware: {self.HardwareVersion}, Software: {self.SoftwareVersion}, Serial: {self.SerialNumber}")

@@ -11,10 +11,11 @@ import requests
 from .gadget import Gadget
 from .sentry import Sentry
 from .compat import Compat
-from .snapshotresizeparams import SnapshotResizeParams
+from .finalsnap import FinalSnap
 from .repeattimer import RepeatTimer
 from .webcamhelper import WebcamHelper
-from .finalsnap import FinalSnap
+from .printinfo import PrintInfoManager, PrintInfo
+from .snapshotresizeparams import SnapshotResizeParams
 
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -60,11 +61,8 @@ class NotificationsHandler:
         self.FinalSnapObj:FinalSnap = None
         self.Gadget = Gadget(logger, self, self.PrinterStateInterface)
 
-        # Define all the vars
-        self.CurrentFileName = ""
-        self.CurrentFileSizeInKBytes = 0
-        self.CurrentEstFilamentUsageMm = 0
-        self.CurrentPrintStartTime = time.time()
+        # Define all the vars we use locally in the notification handler
+        self.PrintCookie = ""
         self.FallbackProgressInt = 0
         self.MoonrakerReportedProgressFloat_CanBeNone = None
         self.PingTimerHoursReported = 0
@@ -77,22 +75,20 @@ class NotificationsHandler:
         self.FirstLayerDoneSince = 0.0
         self.ThirdLayerDoneSince = 0.0
         self.ProgressCompletionReported = []
-        self.PrintId = "none"
-        self.PrintStartTimeSec = 0
         self.RestorePrintProgressPercentage = False
 
         self.SpammyEventTimeDict = {}
         self.SpammyEventLock = threading.Lock()
 
-        # Since all of the commands don't send things we need, we will also track them.
-        self.ResetForNewPrint(None)
+        # Call this to init all of the vars to their default values.
+        # But we pass none, so we don't delete any print infos that might be on disk we will try to recover when connected to the server.
+        self._RecoverOrRestForNewPrint(None)
 
 
-    def ResetForNewPrint(self, restoreDurationOffsetSec_OrNone):
-        self.CurrentFileName = ""
-        self.CurrentFileSizeInKBytes = 0
-        self.CurrentEstFilamentUsageMm = 0
-        self.CurrentPrintStartTime = time.time()
+    # Called to start a new print.
+    # On class init, this can be called with printCookie=None, but after that we should always have a print cookie.
+    def _RecoverOrRestForNewPrint(self, printCookie:str):
+        # We always reset these local notification handler values for new prints or recovered prints.
         self.FallbackProgressInt = 0
         self.MoonrakerReportedProgressFloat_CanBeNone = None
         self.PingTimerHoursReported = 0
@@ -106,23 +102,6 @@ class NotificationsHandler:
         self.zOffsetTrackingStartTimeSec = 0.0
         self.zOffsetHasSeenPositiveExtrude = False
         self.RestorePrintProgressPercentage = False
-
-        # Ensure there's no final snap running.
-        self._getFinalSnapSnapshotAndStop()
-
-        # If we have a restore time offset, back up the start time to make it reflect when the print started.
-        if restoreDurationOffsetSec_OrNone is not None:
-            self.CurrentPrintStartTime -= restoreDurationOffsetSec_OrNone
-
-        # Each time a print starts, we generate a fixed length random id to identify it.
-        # This id is used to globally identify the print for the user, so it needs to have high entropy.
-        self.PrintId = ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase + string.digits, k=NotificationsHandler.PrintIdLength))
-
-        # Note the time this print started
-        self.PrintStartTimeSec = time.time()
-
-        # Reset our anti spam times.
-        self._clearSpammyEventContexts()
 
         # Build the progress completion reported list.
         # Add an entry for each progress we want to report, not including 0 and 100%.
@@ -138,6 +117,36 @@ class NotificationsHandler:
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(70.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(80.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(90.0, False))
+
+        # Reset our anti spam times.
+        self._clearSpammyEventContexts()
+
+        # Ensure there's no final snap running.
+        self._getFinalSnapSnapshotAndStop()
+
+        # The print cookie can only be None on class init.
+        # We pass None so we don't call the PrintInfoManager, which might create a new print info on disk.
+        # There might be a print info on disk we want to restore when the host connects to the printer.
+        if printCookie is None:
+            return
+
+        # Always set the new print cookie
+        self.PrintCookie = printCookie
+
+        # See if we have an existing print that matches this cookie on disk.
+        if PrintInfoManager.Get().GetPrintInfo(printCookie) is not None:
+            self.Logger.info(f"Print Manager recovered a print info from disk matching cookie: {printCookie}")
+            return
+
+        # If we didn't find an existing print info, we need to make a new one.
+
+        # Each time a print starts, we generate a fixed length random id to identify it.
+        # This id is used to globally identify the print for the user, so it needs to have high entropy.
+        printId = ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase + string.digits, k=NotificationsHandler.PrintIdLength))
+
+        # Always make a new print info for this new print.
+        # This is where we will store all of the vars for this print, and it's also written to disk if we need to recover the info.
+        PrintInfoManager.Get().CreateNewPrintInfo(printCookie, printId)
 
 
     def SetPrinterId(self, printerId):
@@ -157,12 +166,26 @@ class NotificationsHandler:
         self.Gadget.SetServerProtocolAndDomain(protocolAndDomain)
 
 
+    # If there is an valid print cookie and we can get the info, this returns it.
+    # Returns None if there's no current print info.
+    def GetPrintInfo(self) -> PrintInfo:
+        if self.PrintCookie is None or len(self.PrintCookie) == 0:
+            return None
+        return PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
+
+
     def GetPrintId(self) -> str:
-        return self.PrintId
+        pi = self.GetPrintInfo()
+        if pi is None:
+            return None
+        return pi.GetPrintId()
 
 
-    def GetPrintStartTimeSec(self):
-        return self.PrintStartTimeSec
+    def GetPrintStartTimeSec(self) -> float:
+        pi = self.GetPrintInfo()
+        if pi is None:
+            return 0.0
+        return pi.GetLocalPrintStartTimeSec()
 
 
     def GetGadget(self):
@@ -188,43 +211,52 @@ class NotificationsHandler:
     #
     # Most importantly, we want to make sure the ping timer and thus Gadget get restored to the correct states.
     #
-    def OnRestorePrintIfNeeded(self, isPrinting:bool, isPaused:bool, fileName_CanBeNone, totalDurationFloatSec_CanBeNone):
-        if isPrinting:
-            # There is an active print. Check our state.
-            if self._IsPingTimerRunning():
-                self.Logger.info("Restore client sync state: Detected an active print and our timers are already running, there's nothing to do.")
-                return
-            else:
-                self.Logger.info("Restore client sync state: Detected an active print but we aren't tracking it, so we will restore now.")
-                # We need to do the restore of a active print.
-        elif isPaused:
-            # There is a print currently paused, check to see if we have a filename, which indicates if we know of a print or not.
-            if self._HasCurrentPrintFileName():
-                self.Logger.info("Restore client sync state: Detected a paused print, but we are already tracking a print, so there's nothing to do.")
-                return
-            else:
-                self.Logger.info("Restore client sync state: Detected a paused print, but we aren't tracking any prints, so we will restore now")
-        else:
+    def OnRestorePrintIfNeeded(self, isPrinting:bool, isPaused:bool, printCookie_CanBeNoneIfNoPrintIsActive:str = None):
+
+        # First, check if there's no active print currently.
+        if (isPrinting is False and isPaused is False) or printCookie_CanBeNoneIfNoPrintIsActive is None:
             # There's no print running.
             if self._IsPingTimerRunning():
-                self.Logger.info("Restore client sync state: Detected no active print but our ping timers ARE RUNNING. Stopping them now.")
+                self.Logger.info("Restore client sync state: There's no print running but the ping timers are running. Stopping them now.")
                 self.StopTimers()
                 return
             else:
-                self.Logger.info("Restore client sync state: Detected no active print and no ping timers are running, so there's nothing to do.")
+                self.Logger.info("Restore client sync state: There's no print and none of the timers are running.")
                 return
 
-        # If we are here, we need to restore a print.
-        # The print can be in an active or paused state.
 
-        # Always restart for a new print.
-        # If totalDurationFloatSec_CanBeNone is not None, it will update the print start time to offset it correctly.
-        # This is important so our time elapsed number is correct.
-        self.ResetForNewPrint(totalDurationFloatSec_CanBeNone)
+        # Next, we know there's an active print, so check if we already are tracking it's print cookie.
+        # This is a scenario like the plugin didn't crash, but it lost the connection to the server, but it's back now.
+        printCookie = printCookie_CanBeNoneIfNoPrintIsActive
+        if self.PrintCookie is not None and self.PrintCookie == printCookie:
+            # We have a print cookie and the cookie matches.
+            # This means we just need to make sure the timer states are correct.
+            if isPrinting:
+                # There is an active print. Check our state.
+                if self._IsPingTimerRunning():
+                    self.Logger.info("Restore client sync state: We have the print cookie, detected an active print, and our timers are already running. So there's nothing to do.")
+                    return
+                else:
+                    self.Logger.info("Restore client sync state: We have a print cookie, detected and active print, but the timers aren't running, so we will start them now.")
+                    self.StartPrintTimers(False, None)
+                    return
+                    # We need to restore so we start the print timers.
+            elif isPaused:
+                # The print is paused, check our state.
+                if self._IsPingTimerRunning():
+                    self.Logger.info("Restore client sync state: We have a print cookie, detected a paused print, but our ping timers ARE RUNNING. Stopping them now.")
+                    self.StopTimers()
+                    return
+                else:
+                    self.Logger.info("Restore client sync state: We have a print cookie, detected a paused print, and timers aren't running. So there's nothing to do.")
+                    return
 
-        # Always set the file name, if not None
-        if fileName_CanBeNone is not None:
-            self._updateCurrentFileName(fileName_CanBeNone)
+        # If we are here, there's a print running or paused and we aren't tracking it currently.
+        # This scenario probably is due to the plugin restarting.
+
+        # This function will take the print cookie and (hopefully) recover an existing print info.
+        # If it can't recover an existing print info, it will create a new one.
+        self._RecoverOrRestForNewPrint(printCookie)
 
         # Disable the first layer complete logic, since we don't know what the base z-axis was
         self.HasSendFirstLayerDoneMessage = True
@@ -236,19 +268,21 @@ class NotificationsHandler:
 
         # Make sure the timers are set correctly
         if isPrinting:
-            # If we have a total duration, use it to offset the "hours reported" so our time based notifications
-            # are correct.
+            # If we can get a duration, set the hours reported to that.
             hoursReportedInt = 0
-            if totalDurationFloatSec_CanBeNone is not None:
+            durationSec = self.GetCurrentDurationSecFloat()
+            if durationSec > 0:
                 # Convert seconds to hours, floor the value, make it an int.
-                hoursReportedInt = int(math.floor(totalDurationFloatSec_CanBeNone / 60.0 / 60.0))
+                hoursReportedInt = int(math.floor(durationSec / 60.0 / 60.0))
 
             # Setup the timers, with hours reported, to make sure that the ping timer and Gadget are running.
-            self.Logger.info("Restore client sync state: Restoring printing timer with existing duration of "+str(totalDurationFloatSec_CanBeNone))
+            self.Logger.info("Restore client sync state: Restoring printing timer with existing duration of "+str(durationSec))
             self.StartPrintTimers(False, hoursReportedInt)
         else:
             # On paused, make sure they are stopped.
             self.StopTimers()
+            self.Logger.info("Restore client sync state: Restoring into a paused print state.")
+
 
 
     # Only used for testing.
@@ -273,20 +307,43 @@ class NotificationsHandler:
 
 
     # Fired when a print starts.
-    def OnStarted(self, fileName:str, fileSizeKBytes:int, totalFilamentUsageMm:int):
+    # The print cookie is required. It's a per platform print unique string that's used to identify the print.
+    # The string can be anything, but it must be a valid file name.
+    # The string should also be unique between prints, but common for the same print. This allows us to pull up the print info for the same print if we crash or
+    # or lose the printer connection.
+    def OnStarted(self, printCookie:str, fileName:str = None, fileSizeKBytes:int = 0, totalFilamentUsageMm:int = 0):
+        # Validate
         if self._shouldIgnoreEvent(fileName):
             return
-        self.ResetForNewPrint(None)
+        if printCookie is None or len(printCookie) == 0:
+            raise Exception("NotificationHandler OnStarted called with no print cookie.")
+
+        # Since know we are starting a new print, we want to clear any existing print infos.
+        # This is important for Moonraker, because there's no way to differentiate between prints beyond the filename.
+        # So we have to use the file name, so we can still restore will work.
+        # But in the case of printing the same print back to back, the print cookie will be the same.
+        PrintInfoManager.Get().ClearAllPrintInfos()
+
+        # This will reset the class for this new print and create the print info.
+        self._RecoverOrRestForNewPrint(printCookie)
+
+        # Update vars
         self._updateCurrentFileName(fileName)
-        self.CurrentFileSizeInKBytes = fileSizeKBytes
-        self.CurrentEstFilamentUsageMm = totalFilamentUsageMm
+
+        pi = self.GetPrintInfo()
+        if pi is None:
+            self.Logger.error("No print info returned after a new print started, this should not be possible.")
+            return
+        pi.SetFileSizeKBytes(fileSizeKBytes)
+        pi.SetEstFilamentUsageMm(totalFilamentUsageMm)
+
         self.StartPrintTimers(True, None)
         self._sendEvent("started")
-        self.Logger.info(f"New print started; PrintId: {str(self.PrintId)} file:{str(self.CurrentFileName)} size:{str(self.CurrentFileSizeInKBytes)} filament:{str(self.CurrentEstFilamentUsageMm)}")
+        self.Logger.info(f"New print started; PrintId: {str(self.GetPrintId())} file:{str(pi.GetFileName())} size:{str(pi.GetFileSizeKBytes())} filament:{str(pi.GetEstFilamentUsageMm())}")
 
 
     # Fired when a print fails
-    def OnFailed(self, fileName, durationSecStr, reason):
+    def OnFailed(self, fileName:str, durationSecStr:str = None, reason:str = None):
         if self._shouldIgnoreEvent(fileName):
             return
         self._updateCurrentFileName(fileName)
@@ -297,17 +354,17 @@ class NotificationsHandler:
 
     # Fired when a print done
     # For moonraker, these vars aren't known, so they are None
-    def OnDone(self, fileName_CanBeNone, durationSecStr_CanBeNone):
-        if self._shouldIgnoreEvent(fileName_CanBeNone):
+    def OnDone(self, fileName:str = None, durationSecStr:str = None):
+        if self._shouldIgnoreEvent(fileName):
             return
-        self._updateCurrentFileName(fileName_CanBeNone)
-        self._updateToKnownDuration(durationSecStr_CanBeNone)
+        self._updateCurrentFileName(fileName)
+        self._updateToKnownDuration(durationSecStr)
         self.StopTimers()
         self._sendEvent("done", useFinalSnapSnapshot=True)
 
 
     # Fired when a print is paused
-    def OnPaused(self, fileName):
+    def OnPaused(self, fileName:str = None):
         if self._shouldIgnoreEvent(fileName):
             return
 
@@ -331,7 +388,7 @@ class NotificationsHandler:
 
 
     # Fired when a print is resumed
-    def OnResume(self, fileName):
+    def OnResume(self, fileName:str = None):
         if self._shouldIgnoreEvent(fileName):
             return
         self._updateCurrentFileName(fileName)
@@ -363,7 +420,7 @@ class NotificationsHandler:
         if self._shouldIgnoreEvent():
             return
         # Make this the same as the paused command.
-        self.OnPaused(self.CurrentFileName)
+        self.OnPaused()
 
 
     # Fired when we get a M600 command from the printer to change the filament
@@ -863,12 +920,16 @@ class NotificationsHandler:
         return None
 
 
-    # Assuming the current time is set at the start of the printer correctly
+    # Assuming the current time is set at the start of the printer correctly.
+    # This is also a live duration, if this is called once the print is over it will keep incrementing.
     def GetCurrentDurationSecFloat(self):
-        return float(time.time() - self.CurrentPrintStartTime)
+        pi = self.GetPrintInfo()
+        if pi is None:
+            return 0.0
+        return float(time.time() - pi.GetLocalPrintStartTimeSec())
 
 
-    # When OctoPrint tells us the duration, make sure we are in sync.
+    # If we get a known duration from the platform, be sure to update it.
     def _updateToKnownDuration(self, durationSecStr):
         # If the string is empty or None, return.
         # This is important for Moonraker
@@ -877,17 +938,23 @@ class NotificationsHandler:
 
         # If we fail this logic don't kill the event.
         try:
-            self.CurrentPrintStartTime = time.time() - float(durationSecStr)
+            pi = self.GetPrintInfo()
+            if pi is None:
+                return
+            pi.SetLocalPrintStartTimeSec(time.time() - float(durationSecStr))
         except Exception as e:
             Sentry.ExceptionNoSend("_updateToKnownDuration exception", e)
 
 
     # Updates the current file name, if there is a new name to set.
-    def _updateCurrentFileName(self, fileNameStr):
+    def _updateCurrentFileName(self, fileName:str):
         # The None check is important for Moonraker
-        if fileNameStr is None or len(fileNameStr) == 0:
+        if fileName is None or len(fileName) == 0:
             return
-        self.CurrentFileName = fileNameStr
+        pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
+        if pi is None:
+            return
+        pi.SetFileName(fileName)
 
 
     # Stops the final snap object if it's running and returns
@@ -1042,16 +1109,22 @@ class NotificationsHandler:
         if args is None:
             args = {}
 
+        # Get the print info for the current print.
+        pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
+        if pi is None:
+            self.Logger.error("NotificationsHandler failed to get the print info for the current print.")
+            return args
+
         # Add the required vars
         args["PrinterId"] = self.PrinterId
-        args["PrintId"] = self.PrintId
+        args["PrintId"] = pi.GetPrintId()
         args["OctoKey"] = self.OctoKey
         args["Event"] = event
 
         # Always add the file name and other common props
-        args["FileName"] = str(self.CurrentFileName)
-        args["FileSizeKb"] = str(self.CurrentFileSizeInKBytes)
-        args["FilamentUsageMm"] = str(self.CurrentEstFilamentUsageMm)
+        args["FileName"] = str(pi.GetFileName())
+        args["FileSizeKb"] = str(pi.GetFileSizeKBytes())
+        args["FilamentUsageMm"] = str(pi.GetEstFilamentUsageMm())
 
         # Always include the ETA, note this will be -1 if the time is unknown.
         timeRemainEstStr =  str(self.PrinterStateInterface.GetPrintTimeRemainingEstimateInSeconds())
@@ -1121,7 +1194,7 @@ class NotificationsHandler:
 
 
     # Starts all print timers, including the progress time, Gadget, and the first layer watcher.
-    def StartPrintTimers(self, resetHoursReported, restoreActionSetHoursReportedInt_OrNone):
+    def StartPrintTimers(self, resetHoursReported:bool, restoreActionSetHoursReported:int = None):
         # First, stop any timer that's currently running.
         self.StopTimers()
 
@@ -1130,8 +1203,8 @@ class NotificationsHandler:
             self.PingTimerHoursReported = 0
 
         # If this is a restore, set the value
-        if restoreActionSetHoursReportedInt_OrNone is not None:
-            self.PingTimerHoursReported = int(restoreActionSetHoursReportedInt_OrNone)
+        if restoreActionSetHoursReported is not None:
+            self.PingTimerHoursReported = int(restoreActionSetHoursReported)
 
         # Setup the progress timer
         intervalSec = 60 * 60 # Fire every hour.
@@ -1152,11 +1225,6 @@ class NotificationsHandler:
     # Let's the caller know if the ping timer is running, and thus we are tracking a print.
     def _IsPingTimerRunning(self):
         return self.ProgressTimer is not None
-
-
-    # Returns if we have a current print file name, indication if we are setup to track a print at all, even a paused one.
-    def _HasCurrentPrintFileName(self):
-        return self.CurrentFileName is not None and len(self.CurrentFileName) > 0
 
 
     # Fired when the ping timer fires.
@@ -1219,7 +1287,10 @@ class NotificationsHandler:
         # If not, fall back to the current file name.
         # If there is neither, dont ignore.
         if fileName is None or len(fileName) == 0:
-            fileName = self.CurrentFileName
+            pi = self.GetPrintInfo()
+            if pi is None:
+                return False
+            fileName = pi.GetFileName()
             if fileName is None or len(fileName) == 0:
                 return False
         # One case we want to ignore is when the continuous print plugin uses it's "placeholder" .gcode files.

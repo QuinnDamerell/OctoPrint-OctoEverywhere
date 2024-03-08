@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 import threading
 import socket
+import time
 from datetime import datetime
 
 import flask
@@ -19,6 +20,7 @@ from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.commandhandler import CommandHandler
+from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
 
 
@@ -174,6 +176,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Init the mdns helper
         MDns.Init(self._logger, self.get_plugin_data_folder())
+
+        # Init the print info manager.
+        PrintInfoManager.Init(self._logger, self.get_plugin_data_folder())
 
         # Setup our printer state object, that implements the interface.
         printerStateObject = PrinterStateObject(self._logger, self._printer)
@@ -407,7 +412,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             totalFilamentUsageMm = 0
             if self._exists(currentData, "job") and self._exists(currentData["job"], "filament") and self._exists(currentData["job"]["filament"], "tool0") and self._exists(currentData["job"]["filament"]["tool0"], "length"):
                 totalFilamentUsageMm = int(currentData["job"]["filament"]["tool0"]["length"])
-            self.NotificationHandler.OnStarted(fileName, fileSizeKBytes, totalFilamentUsageMm)
+            # On OctoPrint, we dont need to support print recovery, because if this process crashes so does the print.
+            # So for the print cookie, we just use the current time, to make sure it's always unique.
+            # See details in NotificationHandler._RecoverOrRestForNewPrint
+            # TODO - With things like OctoKlipper, I'm not sure if the above is true, OctoPrint could restart and the print would still be active.
+            self.NotificationHandler.OnStarted(f"{int(time.time())}", fileName, fileSizeKBytes, totalFilamentUsageMm)
         elif event == "PrintFailed":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
