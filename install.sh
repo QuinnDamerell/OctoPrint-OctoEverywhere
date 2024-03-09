@@ -281,6 +281,13 @@ check_for_octoprint()
         # Skip, there's no need and we don't have curl.
         return
     else
+        # Check if we are running in the Bambu Connect or Companion mode, if so, don't do this since
+        # The device could be running OctoPrint and that's fine.
+        if [[ "$*" == *"-bambu"* ]] || [[ "$*" == *"-companion"* ]]
+        then
+            return
+        fi
+
         # Do a basic check to see if OctoPrint is running on the standard port.
         # This obviously doesn't work for all OctoPrint setups, but it works for the default ones.
         if curl -s "http://127.0.0.1:5000" >/dev/null ; then
@@ -359,7 +366,7 @@ install_or_update_system_dependencies
 
 # Check that OctoPrint isn't found. If it is, we want to check with the user to make sure they are
 # not trying to setup OE for OctoPrint.
-check_for_octoprint
+check_for_octoprint $*
 
 # Now make sure the virtual env exists, is updated, and all of our currently required PY packages are updated.
 install_or_update_python_env
