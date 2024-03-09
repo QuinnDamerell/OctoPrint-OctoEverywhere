@@ -5,7 +5,7 @@ from py_installer.Logging import Logger
 from py_installer.Context import Context
 from py_installer.ConfigHelper import ConfigHelper
 
-# A class that helps the user discover, connect, and setup the details required to connect to a remote Bambu Labs printer.
+# A class that helps the user discover, connect, and setup the details required to connect to a remote Bambu Lab printer.
 class BambuConnector:
 
 
@@ -19,21 +19,21 @@ class BambuConnector:
         if ip is not None and port is not None and accessCode is not None and printerSn is not None:
             # Check if we can still connect. This can happen if the IP address changes, the user might need to setup the printer again.
             Logger.Info(f"Existing bambu config found. IP: {ip} - {printerSn}")
-            Logger.Info("Checking if we can connect to your Bambu Labs printer...")
+            Logger.Info("Checking if we can connect to your Bambu Lab printer...")
             result = NetworkSearch.ValidateConnection_Bambu(Logger.GetPyLogger(), ip, accessCode, printerSn, portStr=port, timeoutSec=10.0)
             if result.Success():
-                Logger.Info("Successfully connected to you Bambu Labs printer!")
+                Logger.Info("Successfully connected to you Bambu Lab printer!")
                 return
             else:
                 # Let the user keep this connection setup, or try to set it up again.
                 Logger.Blank()
                 Logger.Warn(f"We failed to connect or authenticate to your printer using {ip}.")
-                if Util.AskYesOrNoQuestion("Do you want to setup the Bambu Labs printer connection again?") is False:
-                    Logger.Info(f"Keeping the existing Bambu Labs printer connection setup. {ip} - {printerSn}")
+                if Util.AskYesOrNoQuestion("Do you want to setup the Bambu Lab printer connection again?") is False:
+                    Logger.Info(f"Keeping the existing Bambu Lab printer connection setup. {ip} - {printerSn}")
                     return
 
         ipOrHostname, port, accessToken, printerSn = self._SetupNewBambuConnection()
-        Logger.Info(f"You Bambu printer was found and authentication was successful! IP: {ip}")
+        Logger.Info(f"You Bambu printer was found and authentication was successful! IP: {ipOrHostname}")
 
         ConfigHelper.WriteCompanionDetails(context, ipOrHostname, port)
         ConfigHelper.WriteBambuDetails(context, accessToken, printerSn)
@@ -50,10 +50,10 @@ class BambuConnector:
             Logger.Blank()
             Logger.Blank()
             Logger.Header("##################################")
-            Logger.Header("    Bambu Labs Printer Setup")
+            Logger.Header("     Bambu Lab Printer Setup")
             Logger.Header("##################################")
             Logger.Blank()
-            Logger.Info("OctoEverywhere Bambu Connect needs to connect to your Bambu Labs printer to provide remote access.")
+            Logger.Info("OctoEverywhere Bambu Connect needs to connect to your Bambu Lab printer to provide remote access.")
             Logger.Info("Bambu Connect needs your printer's Access Code and Serial Number to connect to your printer.")
             Logger.Info("If you have any trouble, we are happy to help! Contact us at support@octoeverywhere.com")
 
@@ -62,15 +62,18 @@ class BambuConnector:
             while True:
                 Logger.Blank()
                 Logger.Blank()
-                Logger.Header("We need your Bambu Labs printer's Access Code to connect.")
+                Logger.Header("We need your Bambu Lab printer's Access Code to connect.")
                 Logger.Info("The Access Code can be found using the screen on your printer, in the Network settings.")
                 Logger.Blank()
                 Logger.Warn("Follow this link for a step-by-step guide to find the Access Code for your printer:")
                 Logger.Warn("https://octoeverywhere.com/s/access-code")
                 Logger.Blank()
+                Logger.Info("The access code is case sensitive - make sure to enter it exactly as shown on your printer.")
+                Logger.Blank()
                 accessCode = input("Enter your printer's Access Code: ")
 
                 # Validate
+                # The access code IS CASE SENSITIVE and can letters and numbers.
                 accessCode = accessCode.strip()
                 if len(accessCode) != 8:
                     if Util.AskYesOrNoQuestion(f"The Access Code should be 8 numbers, you have entered {len(accessCode)}. Do you want to try again? "):
@@ -78,8 +81,8 @@ class BambuConnector:
 
                 retryEntry = False
                 for c in accessCode:
-                    if not c.isdigit():
-                        if Util.AskYesOrNoQuestion("The Access Code should only be numbers, you seem to have entered something else. Do you want to try again? "):
+                    if not c.isdigit() and not c.isalpha():
+                        if Util.AskYesOrNoQuestion("The Access Code should only be letters and numbers, you seem to have entered something else. Do you want to try again? "):
                             retryEntry = True
                             break
                 if retryEntry:
@@ -97,7 +100,7 @@ class BambuConnector:
             printerSn = None
             while True:
                 Logger.Blank()
-                Logger.Header("Finally, Bambu Connect needs your Bambu Labs printer's Serial Number to connect.")
+                Logger.Header("Finally, Bambu Connect needs your Bambu Lab printer's Serial Number to connect.")
                 Logger.Info("The Serial Number is required for authentication when the printer's local network protocol.")
                 Logger.Info("Your Serial Number and Access Code are only stored on this device and will not be uploaded.")
                 Logger.Blank()

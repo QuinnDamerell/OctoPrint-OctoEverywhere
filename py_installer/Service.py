@@ -60,7 +60,7 @@ class Service:
 
     # Install for debian setups
     def _InstallDebian(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
-        serviceName = "Bambu Labs Printers" if context.IsBambuSetup else "Moonraker"
+        serviceName = "Bambu Lab Printers" if context.IsBambuSetup else "Moonraker"
         optionalAfter = "" if context.IsBambuSetup else "moonraker.service"
         s = f'''\
     # OctoEverywhere For {serviceName}

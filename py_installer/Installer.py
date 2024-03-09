@@ -211,7 +211,7 @@ class Installer:
         Logger.Info("   - OctoEverywhere for Klipper - Where Moonraker is running on this device.")
         Logger.Info("   - OctoEverywhere for Creality - Where this device is a Creality device (Sonic Pad, K1, Ender v3, etc)")
         Logger.Info("   - OctoEverywhere Companion - Where this plugin will connect to Moonraker running on a different device on the same LAN.")
-        Logger.Info("   - OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu Labs printer on the same LAN.")
+        Logger.Info("   - OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu Lab printer on the same LAN.")
         Logger.Blank()
         Logger.Warn("This installer is NOT for:")
         Logger.Info("   - OctoPrint or OctoKlipper - If you're using OctoPrint, install OctoEverywhere directly in OctoPrint from the plugin manager.")

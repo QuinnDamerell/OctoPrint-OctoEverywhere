@@ -79,7 +79,8 @@ class BambuStateTranslator:
         # and we are currently tacking a print.
         if not isFirstFullSyncResponse and self.NotificationsHandler.IsTrackingPrint():
             # Percentage progress update
-            if "mc_percent" in msg["print"]:
+            printMsg = msg.get("print", None)
+            if printMsg is not None and "mc_percent" in printMsg:
                 self.BambuOnPrintProgress(bambuState)
 
         # Since bambu doesn't tell us a print duration, we need to figure out when it ends ourselves.
