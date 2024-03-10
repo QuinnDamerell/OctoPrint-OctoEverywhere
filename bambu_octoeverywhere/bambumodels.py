@@ -115,6 +115,14 @@ class BambuState:
         # If there is a printer error, this is not 0
         if self.print_error is None or self.print_error == 0:
             return None
+
+        # Oddly there are some errors that aren't errors? And the printer might sit in them while printing.
+        # We ignore these. We also use the direct int values, so we don't have to build the hex string all of the time.
+        # These error codes are in https://e.bambulab.com/query.php?lang=en, but have empty strings.
+        # Hex: 05008030, 03008012, 0500C011
+        if self.print_error == 83918896 or self.print_error == 50364434 or self.print_error == 83935249:
+            return None
+
         # There's a full list of errors here, we only care about some of them
         # https://e.bambulab.com/query.php?lang=en
         # We format the error into a hex the same way the are on the page, to make it easier.
