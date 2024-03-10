@@ -332,7 +332,7 @@ cat << EOF
       @@@@@@@@@@@@@@@,,,,,,,,,,,,,,,,,,,,,@@@@@@@@@@@@@@
 EOF
 log_blank
-log_header    "        OctoEverywhere For Klipper And Bambu Lab Printers"
+log_header    "  OctoEverywhere For Klipper, Creality OS, And Bambu Lab Printers"
 log_blue      " The 3D Printing Communities #1 Remote Access And AI Cloud Service"
 log_blank
 log_blank
