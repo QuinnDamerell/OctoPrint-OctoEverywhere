@@ -1,22 +1,24 @@
-#import logging
+import logging
 import time
 import traceback
 
-# import sentry_sdk
-# from sentry_sdk.integrations.logging import LoggingIntegration
-# from sentry_sdk.integrations.threading import ThreadingIntegration
-# from sentry_sdk import capture_exception
+import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.threading import ThreadingIntegration
+from sentry_sdk import capture_exception
 
 # A helper class to handle Sentry logic.
 class Sentry:
+
     logger = None
     isDevMode = False
     lastErrorReport = time.time()
     lastErrorCount = 0
 
-# Sets up Sentry
+
+    # Sets up Sentry
     @staticmethod
-    def Init(logger, versionString, isDevMode):
+    def Init(logger:logging.Logger, versionString:str, isDevMode:bool):
         # Capture the logger for future use.
         Sentry.logger = logger
 
@@ -26,25 +28,24 @@ class Sentry:
         # Only setup sentry if we aren't in dev mode.
         if Sentry.isDevMode is False:
             try:
-                # Disabled for now
-                #
                 # We don't want sentry to capture error logs, which is it's default.
                 # We do want the logging for breadcrumbs, so we will leave it enabled.
-                # sentry_logging = LoggingIntegration(
-                #     level=logging.INFO,        # Capture info and above as breadcrumbs
-                #     event_level=logging.FATAL  # Only send FATAL errors and above.
-                # )
-                # # Setup and init
-                # sentry_sdk.init(
-                #     dsn="https://a2eaa1b58ea447f08472545eedfc74fb@o1317704.ingest.sentry.io/6570908",
-                #     integrations=[
-                #         sentry_logging,
-                #         ThreadingIntegration(propagate_hub=True),
-                #     ],
-                #     release=versionString,
-                #     before_send=Sentry._beforeSendFilter
-                # )
-                pass
+                sentry_logging = LoggingIntegration(
+                    level=logging.INFO,        # Capture info and above as breadcrumbs
+                    event_level=logging.FATAL  # Only send FATAL errors and above.
+                )
+                # Setup and init
+                sentry_sdk.init(
+                    dsn="https://5ce4e93a61f09e32634ab4ffc7a865c0@oe-sentry.octoeverywhere.com/6",
+                    integrations=[
+                        sentry_logging,
+                        ThreadingIntegration(propagate_hub=True),
+                    ],
+                    release=versionString,
+                    before_send=Sentry._beforeSendFilter,
+                    traces_sample_rate=0.5,
+                    profiles_sample_rate=0.1
+                )
             except Exception as e:
                 logger.error("Failed to init Sentry: "+str(e))
 
@@ -77,10 +78,10 @@ class Sentry:
         try:
             stack = traceback.extract_stack((exc_info[2]).tb_frame)
             for s in stack:
-                # Check for any "octoeverywhere". The main source should be our package folder, which is
-                # "octoprint_octoeverywhere".
+                # Check for any "octoeverywhere" or "linux_host" in the filename.
+                # This will match one of the main modules in our code, but exclude any 3rd party code.
                 filenameLower = s.filename.lower()
-                if "octoeverywhere" in filenameLower:
+                if "octoeverywhere" in filenameLower or "linux_host" in filenameLower or "py_installer" in filenameLower:
                     # If found, return the event so it's reported.
                     return event
         except Exception as e:
@@ -118,5 +119,5 @@ class Sentry:
 
         # Sentry is disabled for now.
         # Never send in dev mode, as Sentry will not be setup.
-        # if sendException and Sentry.isDevMode is False:
-        #     capture_exception(exception)
+        if sendException and Sentry.isDevMode is False:
+            capture_exception(exception)
