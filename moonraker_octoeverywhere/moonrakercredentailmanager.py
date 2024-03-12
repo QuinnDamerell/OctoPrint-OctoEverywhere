@@ -145,6 +145,9 @@ class MoonrakerCredentialManager:
                     if os.path.exists(possibleMoonrakerSocketFilePath):
                         self.Logger.info("Moonraker socket path found from moonraker config klippy socket path. :"+possibleMoonrakerSocketFilePath)
                         return possibleMoonrakerSocketFilePath
+        except configparser.ParsingError as e:
+            if "Source contains parsing errors" in str(e):
+                self.Logger.error("_TryToFindUnixSocket failed to handle moonraker config. "+str(e))
         except Exception as e:
             Sentry.Exception("_TryToFindUnixSocket failed to handle moonraker config.", e)
 

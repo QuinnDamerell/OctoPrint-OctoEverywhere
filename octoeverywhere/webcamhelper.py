@@ -1,6 +1,7 @@
 import logging
 import os
 import json
+import urllib3
 
 from .sentry import Sentry
 from .octohttprequest import OctoHttpRequest
@@ -361,6 +362,12 @@ class WebcamHelper:
                 return None
             else:
                 Sentry.Exception("Failed to get fallback snapshot due to ConnectionError", e)
+        except urllib3.exceptions.ProtocolError as e:
+            if "IncompleteRead" in str(e):
+                self.Logger.debug("_GetSnapshotFromStream got a incomplete read while reading the stream.")
+                return None
+            else:
+                Sentry.Exception("Failed to get fallback snapshot due to ProtocolError", e)
         except Exception as e:
             Sentry.Exception("Failed to get fallback snapshot.", e)
 

@@ -56,8 +56,8 @@ class MoonrakerHost:
             self.Logger = LoggerInit.GetLogger(self.Config, klipperLogDir, logLevelOverride_CanBeNone)
             self.Config.SetLogger(self.Logger)
 
-            # Init sentry, since it's needed for Exceptions.
-            Sentry.Init(self.Logger, "0.0.0", "klipper", True)
+            # Set the logger ASAP.
+            Sentry.SetLogger(self.Logger)
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -71,9 +71,12 @@ class MoonrakerHost:
                     devConfig_CanBeNone):
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
-            self.Logger.info("##################################")
-            self.Logger.info("#### OctoEverywhere Starting #####")
-            self.Logger.info("##################################")
+            self.Logger.info("################################################")
+            if isCompanionMode:
+                self.Logger.info("## OctoEverywhere Klipper Companion Starting  ##")
+            else:
+                self.Logger.info("##### OctoEverywhere For Klipper Starting ######")
+            self.Logger.info("################################################")
 
             # Set companion mode flag as soon as we know it.
             Compat.SetIsCompanionMode(isCompanionMode)
@@ -82,8 +85,9 @@ class MoonrakerHost:
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
 
-            # Re-init Sentry now that we have the plugin version.
-            Sentry.Init(self.Logger, pluginVersionStr, "klipper", devConfig_CanBeNone is not None)
+            # As soon as we have the plugin version, setup Sentry
+            # Enabling profiling and no filtering, since we are the only PY in this process.
+            Sentry.Setup(pluginVersionStr, "klipper", devConfig_CanBeNone is not None, enableProfiling=True, filterExceptionsByPackage=False)
 
             # This logic only works if running locally.
             if not isCompanionMode:

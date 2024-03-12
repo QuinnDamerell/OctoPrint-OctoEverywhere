@@ -219,12 +219,14 @@ install_or_update_system_dependencies()
         # the user might install opkg via the 3rd party moonraker installer script.
         # But in general, PY will already be installed, so there's no need to try.
         # On the K1, the only we thing we ensure is that virtualenv is installed via pip.
-        pip3 install virtualenv
+        # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
+        pip3 install -q --no-cache-dir virtualenv
     elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
     then
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
+        # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
         opkg install ${SONIC_PAD_DEP_LIST}
-        pip3 install virtualenv
+        pip3 install -q --no-cache-dir virtualenv
     else
         # It seems a lot of printer control systems don't have the date and time set correctly, and then the fail
         # getting packages and other downstream things. We will will use our HTTP API to set the current UTC time.
@@ -267,7 +269,7 @@ install_or_update_python_env()
 
     # Finally, ensure our plugin requirements are installed and updated.
     log_info "Installing or updating required python libs..."
-    "${OE_ENV}"/bin/pip3 install -q -r "${OE_REPO_DIR}"/requirements.txt
+    "${OE_ENV}"/bin/pip3 install -q -r --require-virtualenv --no-cache-dir "${OE_REPO_DIR}"/requirements.txt
     log_info "Python libs installed."
 }
 

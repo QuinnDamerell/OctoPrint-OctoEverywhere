@@ -108,6 +108,7 @@ class BambuClient:
                 self.Client.on_message = self._OnMessage
                 self.Client.on_disconnect = self._OnDisconnect
                 self.Client.on_subscribe = self._OnSubscribe
+                self.Client.on_log = self._OnLog
 
                 # Get the IP to try on this connect
                 ipOrHostname = self._GetIpOrHostnameToTry()
@@ -191,6 +192,17 @@ class BambuClient:
         self._CleanupStateOnDisconnect()
 
 
+    # Fired when the MQTT connection has something to log.
+    def _OnLog(self, client, userdata, level:mqtt.LOGGING_LEVEL, msg:str):
+        if level == mqtt.MQTT_LOG_ERR:
+            # If the string is something like "Caught exception in on_connect: ..."
+            # It's a leaked exception from us.
+            if "exception" in msg:
+                Sentry.Exception("MQTT leaked exception.", Exception(msg))
+            else:
+                self.Logger.error(f"MQTT log error: {msg}")
+
+
     # Fried when the MQTT subscribe result has come back.
     def _OnSubscribe(self, client, userdata, mid, reason_code_list:List[mqtt.ReasonCode], properties):
         # We only want to listen for the result of the report subscribe.
@@ -211,10 +223,10 @@ class BambuClient:
 
 
     # Fired when there's an incoming MQTT message.
-    def _OnMessage(self, client, userdata, msg:mqtt.MQTTMessage):
+    def _OnMessage(self, client, userdata, mqttMsg:mqtt.MQTTMessage):
         try:
             # Try to deserialize the message.
-            msg = json.loads(msg.payload)
+            msg = json.loads(mqttMsg.payload)
             if msg is None:
                 raise Exception("Parsed json MQTT message returned None")
 
@@ -271,7 +283,7 @@ class BambuClient:
                 Sentry.Exception("Exception calling StateTranslator.OnMqttMessage", e)
 
         except Exception as e:
-            self.Logger.warn(f"Failed to handle incoming mqtt message. {e} {msg.payload}")
+            Sentry.Exception(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
 
 
     # Publishes a message and blocks until it knows if the message send was successful or not.

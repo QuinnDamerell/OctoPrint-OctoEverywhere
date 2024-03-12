@@ -429,7 +429,10 @@ class OctoHttpRequest:
             # We have more fallbacks to try.
             # Return false so we keep going, but also return this response if we had one. This lets
             # use capture the main result object, so we can use it eventually if all fallbacks fail.
-            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response))
+            result = None
+            if response is not None:
+                OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)
+            return OctoHttpRequest.AttemptResult(False, result)
 
         # We don't have another fallback, so we need to end this.
         if mainResult is not None:

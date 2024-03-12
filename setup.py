@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this is also parsed by the moonraker module to pull the version, so the string and format must remain the same!
-plugin_version = "3.0.3"
+plugin_version = "3.0.4"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -82,7 +82,7 @@ plugin_requires = [
     "rsa>=4.9",
     "dnspython>=2.3.0",
     "httpx>=0.24.1,<0.26.0",
-    "urllib3>=1.26.18,<2.0.0"
+    "urllib3>=1.26.18,<2.0.0",
     "sentry-sdk>=1.19.1,<2"
     ]
 

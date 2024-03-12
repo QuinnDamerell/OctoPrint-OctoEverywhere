@@ -48,8 +48,8 @@ class BambuHost:
             self.Logger = LoggerInit.GetLogger(self.Config, logDir, logLevelOverride_CanBeNone)
             self.Config.SetLogger(self.Logger)
 
-            # Init sentry, since it's needed for Exceptions.
-            Sentry.Init(self.Logger, "0.0.0", "bambu", True)
+            # Give the logger to Sentry ASAP.
+            Sentry.SetLogger(self.Logger)
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -61,16 +61,17 @@ class BambuHost:
     def RunBlocking(self, configPath, localStorageDir, repoRoot, devConfig_CanBeNone):
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
-            self.Logger.info("##################################")
-            self.Logger.info("#### OctoEverywhere Starting #####")
-            self.Logger.info("##################################")
+            self.Logger.info("################################################")
+            self.Logger.info("#### OctoEverywhere Bambu Connect Starting #####")
+            self.Logger.info("################################################")
 
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
 
-            # Re-init Sentry now that we have the plugin version.
-            Sentry.Init(self.Logger, pluginVersionStr, "bambu", devConfig_CanBeNone is not None)
+            # As soon as we have the plugin version, setup Sentry
+            # Enabling profiling and no filtering, since we are the only PY in this process.
+            Sentry.Setup(pluginVersionStr, "bambu", devConfig_CanBeNone is not None, enableProfiling=True, filterExceptionsByPackage=False)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
             self.Secrets = Secrets(self.Logger, localStorageDir)

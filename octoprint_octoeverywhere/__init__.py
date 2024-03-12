@@ -148,7 +148,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._logger.info("OctoPrint host:" +str(self.OctoPrintLocalHost) + " port:" + str(self.OctoPrintLocalPort))
 
         # Setup Sentry to capture issues.
-        Sentry.Init(self._logger, self._plugin_version, "octoprint", False)
+        # We can't enable tracing or profiling in OctoPrint, because it picks up a lot of OctoPrint functions.
+        Sentry.SetLogger(self._logger)
+        Sentry.Setup(self._plugin_version, "octoprint", isDevMode=False, enableProfiling=False, filterExceptionsByPackage=True)
 
         # Setup our telemetry class.
         Telemetry.Init(self._logger)

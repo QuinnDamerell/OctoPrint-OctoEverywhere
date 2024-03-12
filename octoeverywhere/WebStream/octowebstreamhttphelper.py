@@ -412,16 +412,17 @@ class OctoWebStreamHttpHelper:
                     WebStreamMsg.AddMultipartReadsPerSecond(builder, self.MultipartReadsPerSecond)
                     self.MultipartReadsPerSecond = 0
                     # Also attach the other stats.
-                    if self.BodyReadTimeHighWaterMarkSec > 65535.0 or self.BodyReadTimeHighWaterMarkSec < 0.0:
-                        self.Logger.warn("self.BodyReadTimeHighWaterMarkSec is larger than uint8. "+str(self.BodyReadTimeHighWaterMarkSec))
-                        self.BodyReadTimeHighWaterMarkSec  = 65535.0
-                    WebStreamMsg.AddBodyReadTimeHighWaterMarkMs(builder, int(self.BodyReadTimeHighWaterMarkSec * 1000.0))
+                    bodyReadTimeHighWaterMarkMs = int(self.BodyReadTimeHighWaterMarkSec * 1000.0)
                     self.BodyReadTimeHighWaterMarkSec = 0.0
-                    if self.ServiceUploadTimeHighWaterMarkSec > 65535.0 or self.ServiceUploadTimeHighWaterMarkSec < 0.0:
-                        self.Logger.warn("self.ServiceUploadTimeHighWaterMarkSec is larger than uint8. "+str(self.ServiceUploadTimeHighWaterMarkSec))
-                        self.ServiceUploadTimeHighWaterMarkSec  = 65535.0
-                    WebStreamMsg.AddBodyReadTimeHighWaterMarkMs(builder, int(self.ServiceUploadTimeHighWaterMarkSec * 1000.0))
+                    if bodyReadTimeHighWaterMarkMs > 65535 or bodyReadTimeHighWaterMarkMs < 0:
+                        bodyReadTimeHighWaterMarkMs  = 65535
+                    WebStreamMsg.AddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs)
+
+                    serviceUploadTimeHighWaterMarkMs = int(self.ServiceUploadTimeHighWaterMarkSec * 1000.0)
                     self.ServiceUploadTimeHighWaterMarkSec = 0.0
+                    if serviceUploadTimeHighWaterMarkMs > 65535 or serviceUploadTimeHighWaterMarkMs < 0:
+                        serviceUploadTimeHighWaterMarkMs  = 65535
+                    WebStreamMsg.AddSocketSendTimeHighWaterMarkMs(builder, serviceUploadTimeHighWaterMarkMs)
 
                 webStreamMsgOffset = WebStreamMsg.End(builder)
 

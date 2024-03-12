@@ -1098,7 +1098,7 @@ class NotificationsHandler:
 
     # Used by notifications and gadget to build a common event args.
     # Returns an array of [args, files] which are ready to be used in the request.
-    # Returns None if the system isn't ready yet.
+    # Returns None if we don't have the printer id or octokey yet.
     def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None, snapshotResizeParams = None, useFinalSnapSnapshot = False):
 
         # Ensure we have the required var set already. If not, get out of here.
@@ -1112,8 +1112,10 @@ class NotificationsHandler:
         # Get the print info for the current print.
         pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
         if pi is None:
+            # If we can't get a print info, we can't send the event.
+            # But return whatever args we have thus far.
             self.Logger.error("NotificationsHandler failed to get the print info for the current print.")
-            return args
+            return [args, None]
 
         # Add the required vars
         args["PrinterId"] = self.PrinterId

@@ -11,6 +11,7 @@ from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
+from octoeverywhere.exceptions import NoSentryReportException
 
 from linux_host.config import Config
 
@@ -147,7 +148,7 @@ class MoonrakerClient:
         if Compat.IsCompanionMode() is False:
             if os.path.exists(self.MoonrakerConfigFilePath) is False:
                 self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
-                raise Exception("No config file found")
+                raise NoSentryReportException("No moonraker config file found")
 
         # Get the values.
         (hostStr, portInt) = self.GetMoonrakerHostAndPortFromConfig()
@@ -195,10 +196,14 @@ class MoonrakerClient:
 
             # Done!
             return (currentHostStr, currentPortInt)
-
+        except configparser.ParsingError as e:
+            if "Source contains parsing errors" in str(e):
+                self.Logger.error("Failed to parse moonraker config file. "+str(e))
+            else:
+                Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
         except Exception as e:
             Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
-            return (currentHostStr, currentPortInt)
+        return (currentHostStr, currentPortInt)
 
 
     #
@@ -550,9 +555,9 @@ class MoonrakerClient:
 
                     # Handle the timeout without throwing, since this happens sometimes when the system is down.
                     if result.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
-                        self.Logger.info("Moonraker client failed to send klippy ready query message, it hit a timeout.")
-                        self._RestartWebsocket()
-                        return
+                        raise NoSentryReportException("Moonraker client failed to send klippy ready query message, it hit a timeout.")
+                    if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                        raise NoSentryReportException("Moonraker client failed to send klippy ready query message, there was no websocket.")
                     self.Logger.error("Moonraker client failed to send klippy ready query message. "+result.GetLoggingErrorStr())
                     raise Exception("Error returned from klippy state query. "+ str(result.GetLoggingErrorStr()))
 
@@ -574,7 +579,7 @@ class MoonrakerClient:
                     # Done
                     return
 
-                if state == "startup" or state == "error" or state == "shutdown" or state == "initializing":
+                if state == "startup" or state == "error" or state == "shutdown" or state == "initializing" or state == "disconnected":
                     logCounter += 1
                     # 2 seconds * 150 = one log every 5 minutes. We don't want to log a ton if the printer is offline for a long time.
                     if logCounter % 150 == 1:
@@ -689,7 +694,11 @@ class MoonrakerClient:
 
     # Called if the websocket hits an error and is closing.
     def _onWsError(self, ws, exception):
-        Sentry.Exception("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
+        if Client.IsCommonConnectionException(exception):
+            # Don't bother logging, this just means there's no server to connect to.
+            pass
+        else:
+            Sentry.Exception("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
 
 
 # A helper class used for waiting rpc requests
