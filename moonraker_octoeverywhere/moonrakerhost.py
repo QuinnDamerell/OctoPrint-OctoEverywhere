@@ -57,7 +57,7 @@ class MoonrakerHost:
             self.Config.SetLogger(self.Logger)
 
             # Init sentry, since it's needed for Exceptions.
-            Sentry.Init(self.Logger, "klipper", True)
+            Sentry.Init(self.Logger, "0.0.0", "klipper", True)
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -81,6 +81,9 @@ class MoonrakerHost:
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
+
+            # Re-init Sentry now that we have the plugin version.
+            Sentry.Init(self.Logger, pluginVersionStr, "klipper", devConfig_CanBeNone is not None)
 
             # This logic only works if running locally.
             if not isCompanionMode:

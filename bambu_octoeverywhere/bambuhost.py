@@ -49,7 +49,7 @@ class BambuHost:
             self.Config.SetLogger(self.Logger)
 
             # Init sentry, since it's needed for Exceptions.
-            Sentry.Init(self.Logger, "bambu", True)
+            Sentry.Init(self.Logger, "0.0.0", "bambu", True)
 
         except Exception as e:
             tb = traceback.format_exc()
@@ -68,6 +68,9 @@ class BambuHost:
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
+
+            # Re-init Sentry now that we have the plugin version.
+            Sentry.Init(self.Logger, pluginVersionStr, "bambu", devConfig_CanBeNone is not None)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
             self.Secrets = Secrets(self.Logger, localStorageDir)

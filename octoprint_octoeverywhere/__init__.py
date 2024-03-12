@@ -148,7 +148,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self._logger.info("OctoPrint host:" +str(self.OctoPrintLocalHost) + " port:" + str(self.OctoPrintLocalPort))
 
         # Setup Sentry to capture issues.
-        Sentry.Init(self._logger, self._plugin_version, False)
+        Sentry.Init(self._logger, self._plugin_version, "octoprint", False)
 
         # Setup our telemetry class.
         Telemetry.Init(self._logger)

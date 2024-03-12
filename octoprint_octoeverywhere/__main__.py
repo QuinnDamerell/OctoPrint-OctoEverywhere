@@ -163,7 +163,7 @@ if __name__ == '__main__':
     Compat.SetIsOctoPrint(True)
 
     # Init Sentry, but it won't report since we are in dev mode.
-    Sentry.Init(logger, "dev", True)
+    Sentry.Init(logger, "0.0.0", "dev", True)
     Telemetry.Init(logger)
     if LocalServerAddress is not None:
         Telemetry.SetServerProtocolAndDomain("http://"+LocalServerAddress)

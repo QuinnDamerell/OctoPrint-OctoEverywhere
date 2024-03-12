@@ -18,7 +18,7 @@ class Sentry:
 
     # Sets up Sentry
     @staticmethod
-    def Init(logger:logging.Logger, versionString:str, isDevMode:bool):
+    def Init(logger:logging.Logger, versionString:str, distType:str, isDevMode:bool):
         # Capture the logger for future use.
         Sentry.logger = logger
 
@@ -42,6 +42,7 @@ class Sentry:
                         ThreadingIntegration(propagate_hub=True),
                     ],
                     release=versionString,
+                    dist=distType,
                     before_send=Sentry._beforeSendFilter,
                     traces_sample_rate=0.5,
                     profiles_sample_rate=0.1
