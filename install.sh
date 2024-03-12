@@ -269,7 +269,7 @@ install_or_update_python_env()
 
     # Finally, ensure our plugin requirements are installed and updated.
     log_info "Installing or updating required python libs..."
-    "${OE_ENV}"/bin/pip3 install -q -r --require-virtualenv --no-cache-dir "${OE_REPO_DIR}"/requirements.txt
+    "${OE_ENV}"/bin/pip3 install --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
     log_info "Python libs installed."
 }
 
