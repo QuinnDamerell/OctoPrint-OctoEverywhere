@@ -178,24 +178,49 @@ class MoonrakerClient:
                 self.Logger.error("GetMoonrakerHostAndPortFromConfig failed to find moonraker config file.")
                 return (currentHostStr, currentPortInt)
 
-            # Open and read the config.
-            moonrakerConfig = configparser.ConfigParser()
-            moonrakerConfig.read(self.MoonrakerConfigFilePath)
+            # Ideally we use Config parser
+            try:
+                # Open and read the config.
+                # Set strict to false, which allows for some common errors like duplicate keys to be ignored.
+                moonrakerConfig = configparser.ConfigParser(allow_no_value=True, strict=False)
+                moonrakerConfig.read(self.MoonrakerConfigFilePath)
 
-            # We have found that some users don't have a [server] block, so if they don't, return the defaults.
-            if "server" not in moonrakerConfig:
-                self.Logger.info("No server block found in the moonraker config, so we are returning the defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt))
+                # We have found that some users don't have a [server] block, so if they don't, return the defaults.
+                if "server" not in moonrakerConfig:
+                    self.Logger.info("No server block found in the moonraker config, so we are returning the defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt))
+                    return (currentHostStr, currentPortInt)
+
+                # Otherwise, parse the host and port, if they exist.
+                serverBlock = moonrakerConfig["server"]
+                if "host" in serverBlock:
+                    currentHostStr = moonrakerConfig['server']['host']
+                if "port" in serverBlock:
+                    currentPortInt = int(moonrakerConfig['server']['port'])
+
+                # Done!
+                return (currentHostStr, currentPortInt)
+            except configparser.ParsingError as e:
+                self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+
+            # If we got here, we failed to parse the file, so we will try to read it manually.
+            # It's better to get something rather than nothing.
+            with open(self.MoonrakerConfigFilePath, 'r', encoding="utf-8") as f:
+                foundHost = False
+                foundPort = False
+                # Just look for the host and port lines.
+                lines = f.readlines()
+                for l in lines:
+                    lLower = l.lower()
+                    if "host:" in lLower:
+                        currentHostStr = l.split(":", 1)[1].strip()
+                        foundHost = True
+                    if "port:" in lLower:
+                        currentPortInt = int(l.split(":", 1)[1].strip())
+                        foundPort = True
+                    if foundHost and foundPort:
+                        break
                 return (currentHostStr, currentPortInt)
 
-            # Otherwise, parse the host and port, if they exist.
-            serverBlock = moonrakerConfig["server"]
-            if "host" in serverBlock:
-                currentHostStr = moonrakerConfig['server']['host']
-            if "port" in serverBlock:
-                currentPortInt = int(moonrakerConfig['server']['port'])
-
-            # Done!
-            return (currentHostStr, currentPortInt)
         except configparser.ParsingError as e:
             if "Source contains parsing errors" in str(e):
                 self.Logger.error("Failed to parse moonraker config file. "+str(e))
