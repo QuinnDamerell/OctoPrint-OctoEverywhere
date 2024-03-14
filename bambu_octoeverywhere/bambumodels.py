@@ -68,7 +68,7 @@ class BambuState:
         if self.gcode_state == "SLICING" or self.gcode_state == "PREPARE":
             # Reset the last wall clock time to now, so when we transition to running, we don't snap to a strange offset.
             self.LastTimeRemainingWallClock = time.time()
-            return self.mc_remaining_time * 60.0
+            return int(self.mc_remaining_time * 60)
         # Compute the time based on when the value last updated.
         return int(max(0, (self.mc_remaining_time * 60) - (time.time() - self.LastTimeRemainingWallClock)))
 
