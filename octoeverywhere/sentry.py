@@ -48,20 +48,22 @@ class Sentry:
                 )
                 # Setup and init
                 sentry_sdk.init(
-                    dsn="https://883879bfa2402df86c098f6527f96bfa@oe-sentry.octoeverywhere.com/4",
-                    integrations=[
+                    dsn= "https://883879bfa2402df86c098f6527f96bfa@oe-sentry.octoeverywhere.com/4",
+                    integrations= [
                         sentry_logging,
                         ThreadingIntegration(propagate_hub=True),
                     ],
                     # This is the recommended format
-                    release=f"oe-plugin@{versionString}",
-                    dist=distType,
-                    before_send=Sentry._beforeSendFilter,
+                    release= f"oe-plugin@{versionString}",
+                    dist= distType,
+                    environment= "dev" if isDevMode else "production",
+                    before_send= Sentry._beforeSendFilter,
                     # This means we will send 100% of errors, maybe we want to reduce this in the future?
-                    sample_rate=1.0,
+                    enable_tracing= enableProfiling,
+                    sample_rate= 1.0,
                     # Only enable these if we enable profiling. We can't do it in OctoPrint, because it picks up a lot of OctoPrint functions.
-                    traces_sample_rate=0.001 if enableProfiling else 0.0,
-                    profiles_sample_rate=0.01 if enableProfiling else 0.0
+                    traces_sample_rate= 0.01 if enableProfiling else 0.0,
+                    profiles_sample_rate= 0.01 if enableProfiling else 0.0
                 )
             except Exception as e:
                 if Sentry.Logger is not None:
