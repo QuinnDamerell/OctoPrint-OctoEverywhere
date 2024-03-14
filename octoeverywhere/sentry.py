@@ -48,12 +48,13 @@ class Sentry:
                 )
                 # Setup and init
                 sentry_sdk.init(
-                    dsn="https://5ce4e93a61f09e32634ab4ffc7a865c0@oe-sentry.octoeverywhere.com/6",
+                    dsn="https://883879bfa2402df86c098f6527f96bfa@oe-sentry.octoeverywhere.com/4",
                     integrations=[
                         sentry_logging,
                         ThreadingIntegration(propagate_hub=True),
                     ],
-                    release=versionString,
+                    # This is the recommended format
+                    release=f"oe-plugin@{versionString}",
                     dist=distType,
                     before_send=Sentry._beforeSendFilter,
                     # This means we will send 100% of errors, maybe we want to reduce this in the future?
