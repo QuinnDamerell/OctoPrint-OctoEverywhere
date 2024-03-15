@@ -17,7 +17,7 @@ class Sentry:
 
     # Flags to help Sentry get setup.
     IsSentrySetup:bool = False
-    isDevMode:bool = False
+    IsDevMode:bool = False
     FilterExceptionsByPackage:bool = False
     LastErrorReport:float = time.time()
     LastErrorCount:int = 0
@@ -32,7 +32,7 @@ class Sentry:
     # This actually setups sentry.
     # It's only called after the plugin version is known, and thus it might be a little into the process lifetime.
     @staticmethod
-    def Setup(versionString:str, distType:str = "unknown", isDevMode:bool = False, enableProfiling:bool = False, filterExceptionsByPackage:bool = False):
+    def Setup(versionString:str, distType:str, isDevMode:bool = False, enableProfiling:bool = False, filterExceptionsByPackage:bool = False):
         # Set the dev mode flag.
         Sentry.IsDevMode = isDevMode
         Sentry.FilterExceptionsByPackage = filterExceptionsByPackage
@@ -63,7 +63,7 @@ class Sentry:
                     sample_rate= 1.0,
                     # Only enable these if we enable profiling. We can't do it in OctoPrint, because it picks up a lot of OctoPrint functions.
                     traces_sample_rate= 0.01 if enableProfiling else 0.0,
-                    profiles_sample_rate= 0.01 if enableProfiling else 0.0
+                    profiles_sample_rate= 0.01 if enableProfiling else 0.0,
                 )
             except Exception as e:
                 if Sentry.Logger is not None:
@@ -71,6 +71,11 @@ class Sentry:
 
             # Set that sentry is ready to use.
             Sentry.IsSentrySetup = True
+
+
+    @staticmethod
+    def SetPrinterId(printerId:str):
+        sentry_sdk.set_context("octoeverywhere", { "printer-id": printerId })
 
 
     @staticmethod

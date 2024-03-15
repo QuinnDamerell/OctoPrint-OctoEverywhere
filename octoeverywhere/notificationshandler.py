@@ -1109,13 +1109,16 @@ class NotificationsHandler:
         if args is None:
             args = {}
 
+        # Define files so we can return an empty dict on any failures.
+        files = {}
+
         # Get the print info for the current print.
         pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
         if pi is None:
             # If we can't get a print info, we can't send the event.
             # But return whatever args we have thus far.
             self.Logger.error("NotificationsHandler failed to get the print info for the current print.")
-            return [args, None]
+            return [args, files]
 
         # Add the required vars
         args["PrinterId"] = self.PrinterId
@@ -1153,7 +1156,6 @@ class NotificationsHandler:
         args["DurationSec"] = str(self.GetCurrentDurationSecFloat())
 
         # Also always include a snapshot if we can get one.
-        files = {}
         snapshot = None
 
         # If we are requested to use a final snapshot, try to use the snapshot from it.

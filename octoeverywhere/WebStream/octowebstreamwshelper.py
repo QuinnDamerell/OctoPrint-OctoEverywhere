@@ -241,13 +241,6 @@ class OctoWebStreamWsHelper:
             # Sleep for 5ms.
             time.sleep(0.005)
 
-        # If the websocket object is closed ignore this message. It will throw if the socket is closed
-        # which will take down the entire OctoStream. But since it's closed the web stream is already cleaning up.
-        # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
-        # were already inbound messages on the way.
-        if self.IsWsObjClosed:
-            return True
-
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
         # exist, we need to check for it.
         buffer = webStreamMsg.DataAsByteArray()
@@ -272,8 +265,16 @@ class OctoWebStreamWsHelper:
         else:
             raise Exception("Web stream ws was sent a data type that's unknown. "+str(msgType))
 
-        # Send!
-        self.Ws.SendWithOptCode(buffer, sendType)
+        # Before we send, make sure we have a local websocket still and it's not closed.
+        # If the websocket object is closed ignore this message. It will throw if the socket is closed
+        # which will take down the entire OctoStream. But since it's closed the web stream is already cleaning up.
+        # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
+        # were already inbound messages on the way.
+        localWs = self.Ws
+        if self.IsWsObjClosed or self.IsClosed or localWs is None:
+            return True
+        # Send using the known non-null local ws object.
+        localWs.SendWithOptCode(buffer, sendType)
 
         # Log for perf tracking
         if self.FirstWsMessageSentToLocal is False:

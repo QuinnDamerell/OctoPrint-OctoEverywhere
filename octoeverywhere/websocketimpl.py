@@ -170,8 +170,10 @@ class Client:
             # This means the other side never responded.
             if isinstance(e, TimeoutError) and "Connection timed out" in str(e):
                 return True
-            # This just means the server closed the socket.
-            if isinstance(e, websocket.WebSocketConnectionClosedException) and "Connection to remote host was lost." in str(e):
+            # This just means the server closed the socket,
+            #   or the socket connection was lost after a long delay
+            #   or there was a DNS name resolve failure.
+            if isinstance(e, websocket.WebSocketConnectionClosedException) and ("Connection to remote host was lost." in str(e) or "ping/pong timed out" in str(e) or "Name or service not known" in str(e)):
                 return True
         except Exception:
             pass

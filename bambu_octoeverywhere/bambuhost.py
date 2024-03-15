@@ -83,6 +83,9 @@ class BambuHost:
             printerId = self.GetPrinterId()
             privateKey = self.GetPrivateKey()
 
+            # Set the printer ID into sentry.
+            Sentry.SetPrinterId(printerId)
+
             # Unpack any dev vars that might exist
             DevLocalServerAddress_CanBeNone = self.GetDevConfigStr(devConfig_CanBeNone, "LocalServerAddress")
             if DevLocalServerAddress_CanBeNone is not None:

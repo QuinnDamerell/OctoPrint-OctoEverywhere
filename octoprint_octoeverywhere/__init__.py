@@ -167,6 +167,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Ensure the plugin version is updated in the settings for the frontend.
         self.EnsurePluginVersionSet()
 
+        # Set the printer id to Sentry.
+        Sentry.SetPrinterId(printerId)
+
         # Init the static local auth helper
         LocalAuth.Init(self._logger, self._user_manager)
 
