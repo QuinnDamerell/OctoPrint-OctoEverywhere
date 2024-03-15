@@ -170,6 +170,8 @@ class Client:
             # This means the other side never responded.
             if isinstance(e, TimeoutError) and "Connection timed out" in str(e):
                 return True
+            if isinstance(e, websocket.WebSocketTimeoutException):
+                return True
             # This just means the server closed the socket,
             #   or the socket connection was lost after a long delay
             #   or there was a DNS name resolve failure.

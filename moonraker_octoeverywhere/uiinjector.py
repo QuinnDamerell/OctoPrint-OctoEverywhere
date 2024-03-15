@@ -261,8 +261,13 @@ class UiInjector():
                 return False
 
             # Write the file back.
-            with open(indexHtmlFilePath, 'w', encoding="utf-8") as f:
-                f.write(htmlText)
+            # If we can't write, it's ok.
+            try:
+                with open(indexHtmlFilePath, 'w', encoding="utf-8") as f:
+                    f.write(htmlText)
+            except PermissionError as e:
+                self.Logger.warn(f"Failed to write to {indexHtmlFilePath}, permission error. This is ok. "+str(e))
+                return False
 
             self.Logger.info("No existing ui tags found, so we added them")
             return True

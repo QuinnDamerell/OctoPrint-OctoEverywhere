@@ -447,7 +447,7 @@ class MoonrakerWebcamHelper():
         streamUrlLower = streamUrl.lower()
         c_streamAction = "action=stream"
         c_snapshotAction = "action=snapshot"
-        indexOfStreamSuffix = streamUrlLower.index(c_streamAction)
+        indexOfStreamSuffix = streamUrlLower.find(c_streamAction)
 
         if indexOfStreamSuffix != -1:
             # We found the action=stream, try replacing it and see if we hit a valid endpoint.
