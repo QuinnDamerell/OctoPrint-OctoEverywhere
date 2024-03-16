@@ -164,8 +164,10 @@ class Client:
             # This means a device was at the IP, but the port isn't open.
             if isinstance(e, ConnectionRefusedError):
                 return True
+            if isinstance(e, ConnectionResetError):
+                return True
             # This means the IP doesn't route to a device.
-            if isinstance(e, OSError) and "No route to host" in str(e):
+            if isinstance(e, OSError) and ("No route to host" in str(e) or "Network is unreachable" in str(e)):
                 return True
             # This means the other side never responded.
             if isinstance(e, TimeoutError) and "Connection timed out" in str(e):

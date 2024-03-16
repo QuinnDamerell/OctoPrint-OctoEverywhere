@@ -1020,7 +1020,7 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEvent(self, event, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
+    def _sendEvent(self, event:str, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
         thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ))
         thread.start()
@@ -1030,7 +1030,7 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEventThreadWorker(self, event, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
+    def _sendEventThreadWorker(self, event:str, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
         try:
             # Build the common even args.
             requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat=progressOverwriteFloat, useFinalSnapSnapshot=useFinalSnapSnapshot)
@@ -1098,8 +1098,9 @@ class NotificationsHandler:
 
     # Used by notifications and gadget to build a common event args.
     # Returns an array of [args, files] which are ready to be used in the request.
+    # The args and files will always contain any information that can be gathered at the time of the call.
     # Returns None if we don't have the printer id or octokey yet.
-    def BuildCommonEventArgs(self, event, args=None, progressOverwriteFloat=None, snapshotResizeParams = None, useFinalSnapSnapshot = False):
+    def BuildCommonEventArgs(self, event:str, args=None, progressOverwriteFloat=None, snapshotResizeParams = None, useFinalSnapSnapshot = False):
 
         # Ensure we have the required var set already. If not, get out of here.
         if self.PrinterId is None or self.OctoKey is None:
@@ -1113,23 +1114,20 @@ class NotificationsHandler:
         files = {}
 
         # Get the print info for the current print.
+        # We should always be able to get the print info, but if not, we will still try to send what we can anyways.
         pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
-        if pi is None:
-            # If we can't get a print info, we can't send the event.
-            # But return whatever args we have thus far.
-            self.Logger.error("NotificationsHandler failed to get the print info for the current print.")
-            return [args, files]
+        if pi is not None:
+            args["PrintId"] = pi.GetPrintId()
+            args["FileName"] = str(pi.GetFileName())
+            args["FileSizeKb"] = str(pi.GetFileSizeKBytes())
+            args["FilamentUsageMm"] = str(pi.GetEstFilamentUsageMm())
+        else:
+            Sentry.LogError("NotificationsHandler failed to get the print info for the current print.", {"Cookie": self.PrintCookie, "Event": event})
 
         # Add the required vars
         args["PrinterId"] = self.PrinterId
-        args["PrintId"] = pi.GetPrintId()
         args["OctoKey"] = self.OctoKey
         args["Event"] = event
-
-        # Always add the file name and other common props
-        args["FileName"] = str(pi.GetFileName())
-        args["FileSizeKb"] = str(pi.GetFileSizeKBytes())
-        args["FilamentUsageMm"] = str(pi.GetEstFilamentUsageMm())
 
         # Always include the ETA, note this will be -1 if the time is unknown.
         timeRemainEstStr =  str(self.PrinterStateInterface.GetPrintTimeRemainingEstimateInSeconds())

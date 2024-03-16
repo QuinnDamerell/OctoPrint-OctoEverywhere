@@ -144,9 +144,14 @@ subscriptions:
                     logger.info("Our existing update config file include was found in the moonraker config.")
                     return
 
-        # The text wasn't found, append it to the end.
-        with open(moonrakerConfigFilePath,'a', encoding="utf-8") as f:
-            f.write("\n"+includeText+"\n")
+        # We should always have permissions, since the installer sets them, but if not, we'll just fail.
+        try:
+            # The text wasn't found, append it to the end of the config file.
+            with open(moonrakerConfigFilePath, 'a', encoding="utf-8") as f:
+                f.write("\n"+includeText+"\n")
+        except PermissionError as e:
+            logger.error("We tried to update the moonraker config to add our include, but we don't have file permissions. "+str(e))
+            return
         logger.info("Our update config include was not found in the moonraker config, so we added it.")
 
 
