@@ -1113,8 +1113,8 @@ class NotificationsHandler:
         # Define files so we can return an empty dict on any failures.
         files = {}
 
-        # Get the print info for the current print.
-        # We should always be able to get the print info, but if not, we will still try to send what we can anyways.
+        # Get the print info if there is a current print.
+        # Remember that some notifications will fire when there's no print running, like if OctoPrint loses it's connection to the printer while idle.
         pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
         if pi is not None:
             args["PrintId"] = pi.GetPrintId()
