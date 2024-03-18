@@ -3,6 +3,7 @@ from octoeverywhere.printinfo import PrintInfoManager
 
 from .bambuclient import BambuClient
 from .bambumodels import BambuPrintErrors
+from .filemanager import FileManager
 
 # This class implements the Platform Command Handler Interface
 class BambuCommandHandler:
@@ -192,3 +193,9 @@ class BambuCommandHandler:
             return CommandResponse.Success(None)
         else:
             return CommandResponse.Error(400, "Failed to send command to printer.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Must return a list of FileDetails or None.
+    def GetFiles(self):
+        return FileManager.Get().GetFiles()
