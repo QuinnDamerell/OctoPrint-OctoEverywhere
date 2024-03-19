@@ -712,4 +712,8 @@ class WebcamHelper:
                 name = name[WebcamHelper.c_MaxWebcamNameLength]
             # Ensure the string is only utf8
             name = name.encode('utf-8', 'ignore').decode('utf-8')
+            # Make the first letter uppercase
+            name = name[0].upper() + name[1:]
+            # If there are any / they will break our UI, so remove them.
+            name = name.replace("/", "")
         return name

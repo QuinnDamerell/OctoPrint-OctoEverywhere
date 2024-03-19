@@ -78,6 +78,13 @@ class OctoPrintWebcamHelper():
                     if webcam.canSnapshot is False:
                         self.Logger.info(f"We found a webcam {webcamName} but it doesn't support snapshots, we will try to detect the snapshot URL for ourselves.")
 
+                    # We found that some of the webcam plugins do fun things with the names, so we clean them up for the UI.
+                    # The multicam plugin prefixes them with multicam/Camera Name
+                    if webcamName is not None:
+                        slashPos = webcamName.find("/")
+                        if slashPos != -1:
+                            webcamName = webcamName[slashPos+1:]
+
                     # Make an empty webcam settings item to fill.
                     webSettingsItem = WebcamSettingItem(webcamName)
 
@@ -120,7 +127,7 @@ class OctoPrintWebcamHelper():
                     # Ensure we have everything required.
                     if webSettingsItem.Validate(self.Logger):
                         results.append(webSettingsItem)
-                        self.Logger.debug(f"Webcam found. Name: {webcamName}, {webSettingsItem.StreamUrl}, {webSettingsItem.SnapshotUrl}, {webSettingsItem.FlipH}, {webSettingsItem.FlipV}, {webSettingsItem.Rotation}")
+                        self.Logger.debug(f"Webcam found. Name: {webSettingsItem.Name}, {webSettingsItem.StreamUrl}, {webSettingsItem.SnapshotUrl}, {webSettingsItem.FlipH}, {webSettingsItem.FlipV}, {webSettingsItem.Rotation}")
                     else:
                         self.Logger.debug(f"Webcam settings item validation failed for {webcamName}")
 
