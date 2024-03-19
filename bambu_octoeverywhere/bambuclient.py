@@ -124,16 +124,19 @@ class BambuClient:
 
                 # This will run forever, including handling reconnects and such.
                 self.Client.loop_forever()
-
-            except ConnectionRefusedError as e:
-                # This means there was no open socket at the given IP and port.
-                self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
-            except TimeoutError as e:
-                # This means there was no open socket at the given IP and port.
-                self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
             except Exception as e:
-                # Random other errors.
-                Sentry.Exception("Failed to connect to Bambu printer.", e)
+                if isinstance(e, ConnectionRefusedError):
+                    # This means there was no open socket at the given IP and port.
+                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                elif isinstance(e, TimeoutError):
+                    # This means there was no open socket at the given IP and port.
+                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                elif isinstance(e, OSError) and "Network is unreachable" in str(e):
+                    # This means the IP doesn't route to a device.
+                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                else:
+                    # Random other errors.
+                    Sentry.Exception("FaWiled to connect to Bambu printer.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.

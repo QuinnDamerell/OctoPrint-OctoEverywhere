@@ -898,9 +898,12 @@ class NotificationsHandler:
                             buffer.close()
                     else:
                         self.Logger.warn("Can't manipulate image because the Image rotation lib failed to import.")
-                except Exception as ex:
+                except Exception as e:
                     # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
-                    Sentry.ExceptionNoSend("Failed to manipulate image for notifications", ex)
+                    if "name 'Image' is not defined" in str(e):
+                        self.Logger.info("Can't manipulate image because the Image rotation lib failed to import.")
+                    else:
+                        Sentry.Exception("Failed to manipulate image for notifications", e)
 
             # Ensure in the end, the snapshot is a reasonable size.
             if len(snapshot) > NotificationsHandler.MaxSnapshotFileSizeBytes:

@@ -41,7 +41,7 @@ class BambuWebcamHelper():
     # On failure, return None
     # On success, this will return a valid OctoHttpRequest that's fully filled out.
     # The snapshot will always already be fully read, and will be FullBodyBuffer var.
-    def GetSnapshot_Override(self, cameraName:str):
+    def GetSnapshot_Override(self, cameraIndex:int):
         # Try to get a snapshot from our QuickCam system.
         img = QuickCam.Get().GetCurrentImage()
         if img is None:
@@ -60,7 +60,7 @@ class BambuWebcamHelper():
     # On failure, return None
     # On success, this will return a valid OctoHttpRequest that's fully filled out.
     # This must return an OctoHttpRequest object with a custom body read stream.
-    def GetStream_Override(self, cameraName:str):
+    def GetStream_Override(self, cameraIndex:int):
         # We must create a new instance of this class per stream to ensure all of the vars stay in it's context
         # and the streams are cleaned up properly.
         sm = StreamInstance(self.Logger)

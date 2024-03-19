@@ -99,7 +99,7 @@ subscriptions:
     # Details: https://moonraker.readthedocs.io/en/latest/configuration/#allowed-services
     # TODO - Eventually we will get our PR in that will add this to moonraker's default list.
     @staticmethod
-    def EnsureAllowedServicesFile(logger, klipperConfigDir, serviceName):
+    def EnsureAllowedServicesFile(logger, klipperConfigDir, serviceName) -> None:
         # Make the expected file path, it should be one folder up from the config folder
         dataRootDir = os.path.abspath(os.path.join(klipperConfigDir, os.pardir))
         allowedServiceFile = os.path.join(dataRootDir, "moonraker.asvc")
@@ -127,6 +127,7 @@ subscriptions:
                 f.write("\n"+serviceName)
         except PermissionError as e:
             logger.warn("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
+            return
         logger.info("Our name wasn't found in moonraker's allowed service file, so we added it.")
 
 

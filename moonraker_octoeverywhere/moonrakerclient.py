@@ -7,6 +7,8 @@ import logging
 import math
 import configparser
 
+import websocket
+
 from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
@@ -201,6 +203,12 @@ class MoonrakerClient:
                 return (currentHostStr, currentPortInt)
             except configparser.ParsingError as e:
                 self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+            except AttributeError as e:
+                # This seems to be a configparser bug.
+                if "'NoneType' object has no attribute 'append'" in str(e):
+                    self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+                else:
+                    raise e
 
             # If we got here, we failed to parse the file, so we will try to read it manually.
             # It's better to get something rather than nothing.
@@ -722,6 +730,9 @@ class MoonrakerClient:
         if Client.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
             pass
+        elif isinstance(exception, websocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
+            # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
+            self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
         else:
             Sentry.Exception("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
 

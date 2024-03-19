@@ -3,6 +3,7 @@ import logging
 
 from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.octohttprequest import OctoHttpRequest
 
 # The context class we return if we want to handle this request.
 class ResponseHandlerContext:
@@ -61,12 +62,12 @@ class MoonrakerWebRequestResponseHandler:
     # If we returned a context above in CheckIfResponseNeedsToBeHandled, this will be called after the web request is made
     # and the body is fully read. The entire body will be read into the bodyBuffer.
     # We are able to modify the bodyBuffer as we wish or not, but we must return the full bodyBuffer back to be returned.
-    def HandleResponse(self, contextObject:ResponseHandlerContext, bodyBuffer: bytes) -> bytes:
+    def HandleResponse(self, contextObject:ResponseHandlerContext, octoHttpResult:OctoHttpRequest.Result, bodyBuffer: bytes) -> bytes:
         try:
             if contextObject.Type == ResponseHandlerContext.MainsailConfig:
-                return self._HandleMainsailConfig(bodyBuffer)
+                return self._HandleMainsailConfig(octoHttpResult, bodyBuffer)
             elif contextObject.Type == ResponseHandlerContext.CameraStreamerWebRTCSdp:
-                return self._HandleWebRtcSdpResponse(bodyBuffer)
+                return self._HandleWebRtcSdpResponse(octoHttpResult, bodyBuffer)
             else:
                 self.Logger.Error("MoonrakerWebRequestResponseHandler tired to handle a context with an unknown Type? "+str(contextObject.Type))
         except Exception as e:
@@ -74,7 +75,7 @@ class MoonrakerWebRequestResponseHandler:
         return bodyBuffer
 
 
-    def _HandleMainsailConfig(self, bodyBuffer:bytes) -> bytes:
+    def _HandleMainsailConfig(self, octoHttpResult:OctoHttpRequest.Result, bodyBuffer:bytes) -> bytes:
         #
         # Note that we identify this file just by dont a .endsWith("/config.json") to the URL. Thus other things could match it
         # and we need to be careful to only edit it if we find what we expect.
@@ -86,18 +87,29 @@ class MoonrakerWebRequestResponseHandler:
         # Right now we can't do anything else, because moonraker only allows the user to set custom hostname and ports, not paths, to call
         # the different websockets at. But in the future, we could look into redirecting the websocket and known moonraker http api paths to the
         # known moonraker instance running with this octoeverywhere instance.
-        mainsailConfig = json.loads(bodyBuffer.decode("utf8"))
-        if "instancesDB" in mainsailConfig:
-            # Set mainsail and be sure to clear our any instances.
-            mainsailConfig["instancesDB"] = "moonraker"
-            mainsailConfig["instances"] = []
-            # Older versions struggle to connect to the websocket if we don't set this port as well
-            # We can always set it to 443, because we will always have SSL.
-            mainsailConfig["port"] = 443
-        return json.dumps(mainsailConfig, indent=4).encode("utf8")
+        try:
+            mainsailConfig = json.loads(bodyBuffer.decode("utf8"))
+            if "instancesDB" in mainsailConfig:
+                # Set mainsail and be sure to clear our any instances.
+                mainsailConfig["instancesDB"] = "moonraker"
+                mainsailConfig["instances"] = []
+                # Older versions struggle to connect to the websocket if we don't set this port as well
+                # We can always set it to 443, because we will always have SSL.
+                mainsailConfig["port"] = 443
+            return json.dumps(mainsailConfig, indent=4).encode("utf8")
+        except Exception as e:
+            body = None
+            try:
+                body = bodyBuffer.decode("utf8")
+            except Exception:
+                pass
+            Sentry.Exception(f"MainsailConfigHandler exception while handling mainsail config. {octoHttpResult.StatusCode}; body: {body}", e)
+        # On failure, return the original result.
+        return bodyBuffer
 
 
-    def _HandleWebRtcSdpResponse(self, bodyBuffer:bytes) -> bytes:
+
+    def _HandleWebRtcSdpResponse(self, octoHttpResult:OctoHttpRequest.Result, bodyBuffer:bytes) -> bytes:
         #
         # As of Crowsnest 4.0, it now supports camera-stream (like OctoPrint) which supports WebRTC.
         # This is an obvious winner in camera streaming, because WebRTC is much better than mjpeg streaming.

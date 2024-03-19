@@ -567,7 +567,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self.ShowUiPopup(title, message, "notice", "Finish Your Setup Now", addPrinterUrl, 20, False)
 
         except Exception as e:
-            Sentry.Exception("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
+            if "Temporary failure in name resolution" in str(e):
+                # Ignore this temp issue.
+                pass
+            else:
+                Sentry.Exception("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
 
 
     # Ensures we have generated a printer id and returns it.

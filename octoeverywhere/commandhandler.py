@@ -148,37 +148,51 @@ class CommandHandler:
         except Exception as e:
             Sentry.ExceptionNoSend("API command GetStatus failed to get OctoPrint version", e)
 
+        # Get the list webcams response as well
+        # Don't include the URL to reduce the payload size.
+        webcamInfoCommandResponse = self.ListWebcams(False)
+        # This shouldn't be possible, but we will check for sanity sake.
+        if webcamInfoCommandResponse is None or webcamInfoCommandResponse.StatusCode != 200:
+            self.Logger.error("GetStatus command failed to get webcam info.")
+            webcamInfoCommandResponse = CommandResponse.Success({})
+
         # Build the final response
         responseObj = {
             "JobStatus" : jobStatus,
             "OctoEverywhereStatus" : octoeverywhereStatus,
-            "PlatformVersion" : versionStr
+            "PlatformVersion" : versionStr,
+            "ListWebcams" : webcamInfoCommandResponse.ResultDict
         }
 
         return CommandResponse.Success(responseObj)
 
 
     # Must return a CommandResponse
-    def ListWebcams(self):
+    def ListWebcams(self, includeUrls = True):
         # Get all of the known webcams
         webcamSettingsItems = WebcamHelper.Get().ListWebcams()
         if webcamSettingsItems is None:
             webcamSettingsItems = []
         # We need to convert the objects into a dic to serialize.
+        # Note this format is also used for GetStatus!
         webcams = []
         for i in webcamSettingsItems:
             wc = {}
             wc["Name"] = i.Name
-            wc["SnapshotUrl"] = i.SnapshotUrl
-            wc["StreamUrl"] = i.StreamUrl
             wc["FlipH"] = i.FlipH
             wc["FlipV"] = i.FlipV
             wc["Rotation"] = i.Rotation
+            if includeUrls:
+                wc["SnapshotUrl"] = i.SnapshotUrl
+                wc["StreamUrl"] = i.StreamUrl
             webcams.append(wc)
-        # Build the response
+
+        # We always use the default index, which is a reflection of the current camera list.
+        # We don't use the name, we only use that internally to keep track of the current index.
+        defaultIndex = WebcamHelper.Get().GetDefaultCameraIndex(webcamSettingsItems)
         responseObj = {
             "Webcams" : webcams,
-            "DefaultName" : WebcamHelper.Get().GetDefaultCameraName()
+            "DefaultIndex" : defaultIndex
         }
         return CommandResponse.Success(responseObj)
 
@@ -360,18 +374,18 @@ class CommandHandler:
 class CommandResponse():
 
     @staticmethod
-    def Success(resultDict):
+    def Success(resultDict:dict):
         if resultDict is None:
             resultDict = {}
         return CommandResponse(200, resultDict, None)
 
 
     @staticmethod
-    def Error(statusCode, errorStr_CanBeNull):
+    def Error(statusCode:int, errorStr_CanBeNull:str):
         return CommandResponse(statusCode, None, errorStr_CanBeNull)
 
 
-    def __init__(self, statusCode, resultDict, errorStr_CanBeNull):
+    def __init__(self, statusCode:int, resultDict:dict, errorStr_CanBeNull:str):
         self.StatusCode = statusCode
         self.ResultDict = resultDict
         self.ErrorStr = errorStr_CanBeNull

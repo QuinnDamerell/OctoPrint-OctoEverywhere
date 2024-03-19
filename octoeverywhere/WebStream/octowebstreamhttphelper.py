@@ -740,7 +740,7 @@ class OctoWebStreamHttpHelper:
             else:
                 # If we have the compat handler, give it the buffer before we finalize the size, as it might want to edit the buffer.
                 if Compat.HasWebRequestResponseHandler():
-                    finalDataBuffer = Compat.GetWebRequestResponseHandler().HandleResponse(responseHandlerContext, finalDataBuffer)
+                    finalDataBuffer = Compat.GetWebRequestResponseHandler().HandleResponse(responseHandlerContext, octoHttpResult, finalDataBuffer)
 
         # If we were asked to compress, do it
         originalBufferSize = len(finalDataBuffer)

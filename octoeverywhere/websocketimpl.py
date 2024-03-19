@@ -91,9 +91,13 @@ class Client:
             # ignore any exceptions.
             try:
                 self.Ws.close()
-            except Exception as ex :
-                Sentry.Exception("Websocket fireWsErrorCallbackThread close exception", ex)
-
+            except Exception as e:
+                # This is a known bug in the websocket class, it happens when the WS is closing.
+                if isinstance(e, AttributeError) and "object has no attribute 'close'" in str(e):
+                    # We don't have a logger, sooooooo
+                    print("Websocket closed due to: 'NoneType' object has no attribute 'close'")
+                else:
+                    Sentry.Exception("Websocket fireWsErrorCallbackThread close exception", e)
         except Exception as e :
             Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
 
@@ -178,6 +182,12 @@ class Client:
             #   or the socket connection was lost after a long delay
             #   or there was a DNS name resolve failure.
             if isinstance(e, websocket.WebSocketConnectionClosedException) and ("Connection to remote host was lost." in str(e) or "ping/pong timed out" in str(e) or "Name or service not known" in str(e)):
+                return True
+            # Invalid host name.
+            if isinstance(e, websocket.WebSocketAddressException) and "Name or service not known" in str(e):
+                return True
+            # We don't care.
+            if isinstance(e. WebSocketConnectionClosedException):
                 return True
         except Exception:
             pass

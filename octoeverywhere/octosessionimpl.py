@@ -2,6 +2,7 @@ import sys
 import struct
 import threading
 import traceback
+import logging
 
 
 #
@@ -15,6 +16,7 @@ from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .serverauth import ServerAuthHelper
 from .sentry import Sentry
 from .ostypeidentifier import OsTypeIdentifier
+from .threaddebug import ThreadDebug
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
@@ -26,7 +28,7 @@ from .Proto import OctoSummon
 
 class OctoSession:
 
-    def __init__(self, octoStream, logger, printerId, privateKey, isPrimarySession, sessionId, uiPopupInvoker, pluginVersion, serverHostType, isCompanion):
+    def __init__(self, octoStream, logger:logging.Logger, printerId:str, privateKey:str, isPrimarySession:bool, sessionId, uiPopupInvoker, pluginVersion, serverHostType, isCompanion):
         self.ActiveWebStreams = {}
         self.ActiveWebStreamsLock = threading.Lock()
         self.IsAcceptingStreams = True
@@ -297,6 +299,8 @@ class OctoSession:
         except Exception as e:
             # If anything throws, we consider it a protocol failure.
             traceback.print_exc()
+            # We have seen "failed to create thread" here before, so we do this to debug that.
+            ThreadDebug.DoThreadDumpLogout(self.Logger)
             Sentry.Exception("Failed to handle octo message.", e)
             self.OnSessionError(0)
             return

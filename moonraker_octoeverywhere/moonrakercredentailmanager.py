@@ -55,7 +55,7 @@ class MoonrakerCredentialManager:
         # First, we need to find the unix socket to connect to
         moonrakerSocketFilePath = self._TryToFindUnixSocket()
         if moonrakerSocketFilePath is None:
-            self.Logger.Warn("No moonraker unix socket file could be found.")
+            self.Logger.warn("No moonraker unix socket file could be found.")
             return None
 
         try:

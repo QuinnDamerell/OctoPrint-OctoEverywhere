@@ -18,12 +18,28 @@ class WebcamSettingItem:
     #  flipHBool & flipVBool & rotationInt must exist.
     #  rotationInt must be 0, 90, 180, or 270
     def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0):
+        self._name = ""
         self.Name = name
         self.SnapshotUrl = snapshotUrl
         self.StreamUrl = streamUrl
         self.FlipH = flipHBool
         self.FlipV = flipVBool
         self.Rotation = rotationInt
+
+
+    @property
+    def Name(self):
+        return self._name
+
+
+    @Name.setter
+    def Name(self, value):
+        # When the name is set, make sure we convert it to the string style we use internally.
+        # This ensures that the name can be used and is consistent across the platform.
+        if value is not None and len(value) > 0:
+            value = WebcamHelper.MoonrakerToInternalWebcamNameConvert(value)
+        self._name = value
+
 
     def Validate(self, logger:logging.Logger) -> bool:
         if self.Name is None or len(self.Name) == 0:
@@ -50,6 +66,14 @@ class WebcamSettingItem:
 # printer setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
 # setup. This includes USB based cameras, external IP based cameras, and OctoPrint instances that don't have a snapshot URL defined.
 class WebcamHelper:
+
+    # If no other index is specified, 0 is the default webcam index.
+    # This assumption is also made in the service and website, so it can't change.
+    c_DefaultWebcamIndex = 0
+
+    # We need to cap this so they aren't crazy long.
+    # However, this COULD mess with teh default camera name logic, since it matches off names.
+    c_MaxWebcamNameLength = 20
 
     # A header we apply to all snapshot and webcam streams so the client can get the correct transforms the user has setup.
     c_OeWebcamTransformHeaderKey = "x-oe-webcam-transform"
@@ -79,8 +103,8 @@ class WebcamHelper:
     # Returns the snapshot URL from the settings.
     # Can be None if there is no snapshot URL set in the settings!
     # This URL can be absolute or relative.
-    def GetSnapshotUrl(self, cameraName:str = None):
-        obj = self._GetWebcamSettingObj(cameraName)
+    def GetSnapshotUrl(self, cameraIndex:int = None):
+        obj = self._GetWebcamSettingObj(cameraIndex)
         if obj is None:
             return None
         return obj.SnapshotUrl
@@ -89,32 +113,32 @@ class WebcamHelper:
     # Returns the mjpeg stream URL from the settings.
     # Can be None if there is no URL set in the settings!
     # This URL can be absolute or relative.
-    def GetWebcamStreamUrl(self, cameraName:str = None):
-        obj = self._GetWebcamSettingObj(cameraName)
+    def GetWebcamStreamUrl(self, cameraIndex:int = None):
+        obj = self._GetWebcamSettingObj(cameraIndex)
         if obj is None:
             return None
         return obj.StreamUrl
 
 
     # Returns if flip H is set in the settings.
-    def GetWebcamFlipH(self, cameraName:str = None):
-        obj = self._GetWebcamSettingObj(cameraName)
+    def GetWebcamFlipH(self, cameraIndex:int = None):
+        obj = self._GetWebcamSettingObj(cameraIndex)
         if obj is None:
             return None
         return obj.FlipH
 
 
     # Returns if flip V is set in the settings.
-    def GetWebcamFlipV(self, cameraName:str = None):
-        obj = self._GetWebcamSettingObj(cameraName)
+    def GetWebcamFlipV(self, cameraIndex:int = None):
+        obj = self._GetWebcamSettingObj(cameraIndex)
         if obj is None:
             return None
         return obj.FlipV
 
 
     # Returns if rotate 90 is set in the settings.
-    def GetWebcamRotation(self, cameraName:str = None):
-        obj = self._GetWebcamSettingObj(cameraName)
+    def GetWebcamRotation(self, cameraIndex:int = None):
+        obj = self._GetWebcamSettingObj(cameraIndex)
         if obj is None:
             return None
         return obj.Rotation
@@ -135,20 +159,20 @@ class WebcamHelper:
         return "oe-webcamstream" in requestHeadersDict
 
     # If the header is set to specify a camera name, this returns it. Otherwise None
-    def GetOracleRequestCameraName(self, requestHeadersDict):
-        if "oe-webcam-name" in requestHeadersDict:
-            return requestHeadersDict["oe-webcam-name"]
+    def GetOracleRequestCameraIndex(self, requestHeadersDict) -> int:
+        if "oe-webcam-index" in requestHeadersDict:
+            return int(requestHeadersDict["oe-webcam-index"])
         return None
 
     # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
     # It's important that this function returns a OctoHttpRequest that's very similar to what the default MakeHttpCall function
     # returns, to ensure the rest of the octostream http logic can handle the response.
     def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders, uploadBuffer) -> OctoHttpRequest.Result:
-        cameraNameOpt = self.GetOracleRequestCameraName(sendHeaders)
+        cameraIndexOpt = self.GetOracleRequestCameraIndex(sendHeaders)
         if self.IsSnapshotOracleRequest(sendHeaders):
-            return self.GetSnapshot(cameraNameOpt)
+            return self.GetSnapshot(cameraIndexOpt)
         elif self.IsWebcamStreamOracleRequest(sendHeaders):
-            return self.GetWebcamStream(cameraNameOpt)
+            return self.GetWebcamStream(cameraIndexOpt)
         else:
             raise Exception("Webcam helper MakeSnapshotOrWebcamStreamRequest was called but the request didn't have the oracle headers?")
 
@@ -158,18 +182,18 @@ class WebcamHelper:
     #
     # On failure, this returns None. Returning None will fail out the request.
     # On success, this will return a valid OctoHttpRequest.
-    def GetWebcamStream(self, cameraName:str = None) -> OctoHttpRequest.Result:
+    def GetWebcamStream(self, cameraIndex:int = None) -> OctoHttpRequest.Result:
         # Wrap the entire result in the add transform function, so on success the header gets added.
-        return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal(cameraName), cameraName)
+        return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal(cameraIndex), cameraIndex)
 
 
-    def _GetWebcamStreamInternal(self, cameraName:str) -> OctoHttpRequest.Result:
+    def _GetWebcamStreamInternal(self, cameraIndex:int) -> OctoHttpRequest.Result:
         # Check if the platform helper has an override. If so, it is responsible for all of the stream getting logic.
         if hasattr(self.WebcamPlatformHelperInterface, 'GetStream_Override'):
-            return self.WebcamPlatformHelperInterface.GetStream_Override(cameraName)
+            return self.WebcamPlatformHelperInterface.GetStream_Override(cameraIndex)
 
         # Try to get the URL from the settings.
-        webcamStreamUrl = self.GetWebcamStreamUrl(cameraName)
+        webcamStreamUrl = self.GetWebcamStreamUrl(cameraIndex)
         if webcamStreamUrl is not None:
             # Try to make a standard http call with this stream url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
@@ -188,19 +212,19 @@ class WebcamHelper:
     #
     # On failure, this returns None. Returning None will fail out the request.
     # On success, this will return a valid OctoHttpRequest that's fully filled out. The stream will always already be fully read, and will be FullBodyBuffer var.
-    def GetSnapshot(self, cameraName:str = None) -> OctoHttpRequest.Result:
+    def GetSnapshot(self, cameraIndex:int = None) -> OctoHttpRequest.Result:
         # Wrap the entire result in the _EnsureJpegHeaderInfo function, so ensure the returned snapshot can be used by all image processing libs.
         # Wrap the entire result in the add transform function, so on success the header gets added.
-        return self._AddOeWebcamTransformHeader(self._EnsureJpegHeaderInfo(self._GetSnapshotInternal(cameraName)), cameraName)
+        return self._AddOeWebcamTransformHeader(self._EnsureJpegHeaderInfo(self._GetSnapshotInternal(cameraIndex)), cameraIndex)
 
 
-    def _GetSnapshotInternal(self, cameraName:str) -> OctoHttpRequest.Result:
+    def _GetSnapshotInternal(self, cameraIndex:int) -> OctoHttpRequest.Result:
         # Check if the platform helper has an override. If so, it is responsible for all of the snapshot getting logic.
         if  hasattr(self.WebcamPlatformHelperInterface, 'GetSnapshot_Override'):
-            return self.WebcamPlatformHelperInterface.GetSnapshot_Override(cameraName)
+            return self.WebcamPlatformHelperInterface.GetSnapshot_Override(cameraIndex)
 
         # First, try to get the snapshot using the string defined in settings.
-        snapshotUrl = self.GetSnapshotUrl(cameraName)
+        snapshotUrl = self.GetSnapshotUrl(cameraIndex)
         if snapshotUrl is not None:
             # Try to make a standard http call with this snapshot url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
@@ -375,23 +399,24 @@ class WebcamHelper:
 
 
     # Returns the default webcam setting object or None if there isn't one.
-    def _GetWebcamSettingObj(self, cameraName:str = None):
+    # If there isn't a default webcam name, it's assumed to be the first webcam returned in the list command.
+    def _GetWebcamSettingObj(self, cameraIndex:int = None):
         try:
-            a = self.ListWebcams()
-            if a is None or len(a) == 0:
+            # Get the current list of webcam settings.
+            webcamItems = self.ListWebcams()
+            if webcamItems is None or len(webcamItems) == 0:
                 return None
-            # If a camera name wasn't passed, see if there's a default.
-            if cameraName is None or len(cameraName) == 0:
-                cameraName = self.GetDefaultCameraName()
-            # If we have a target name, see if we can find it.
-            if cameraName is not None:
-                cameraNameLower = cameraName.lower()
-                for i in a:
-                    if i.Name.lower() == cameraNameLower:
-                        return i
-                self.Logger.warn(f"_GetWebcamSettingObj asked for {cameraName} but we didn't find it.")
-            # Otherwise, default to the first entry.
-            return a[0]
+
+            # If a camera index wasn't passed, get the default index.
+            if cameraIndex is None:
+                cameraIndex = self.GetDefaultCameraIndex(webcamItems)
+
+            # We will always get a default index back from the above function.
+            if cameraIndex is not None and cameraIndex >= 0 and cameraIndex < len(webcamItems):
+                return webcamItems[cameraIndex]
+
+            self.Logger.warn(f"_GetWebcamSettingObj asked for {cameraIndex} but it was out of bounds. Max: {len(webcamItems)}")
+            return webcamItems[WebcamHelper.c_DefaultWebcamIndex]
         except Exception as e:
             Sentry.Exception("WebcamHelper _GetWebcamSettingObj exception.", e)
         return None
@@ -413,7 +438,7 @@ class WebcamHelper:
 
     # Checks if the result was success and if so adds the common header.
     # Returns the octoHttpResult, so the function is chainable
-    def _AddOeWebcamTransformHeader(self, octoHttpResult, cameraName:str):
+    def _AddOeWebcamTransformHeader(self, octoHttpResult, cameraIndex:int):
         if octoHttpResult is None:
             return octoHttpResult
 
@@ -421,7 +446,7 @@ class WebcamHelper:
         transformStr = "none"
 
         # If there are any settings build a string with them all contaminated.
-        settings = self._GetWebcamSettingObj(cameraName)
+        settings = self._GetWebcamSettingObj(cameraIndex)
         if settings.FlipH or settings.FlipV or settings.Rotation != 0:
             transformStr = ""
             if settings.FlipH:
@@ -452,7 +477,7 @@ class WebcamHelper:
         buf = octoHttpResult.FullBodyBuffer
         if buf is None:
             # This will read the entire stream and store it into the FullBodyBuffer
-            octoHttpResult.ReadAllContentFromStreamResponse()
+            octoHttpResult.ReadAllContentFromStreamResponse(self.Logger)
             buf = octoHttpResult.FullBodyBuffer
             if buf is None:
                 self.Logger.error("_EnsureJpegHeaderInfo got a null body read from ReadAllContentFromStreamResponse")
@@ -619,6 +644,8 @@ class WebcamHelper:
 
     #
     # Default camera name logic.
+    # The default camera is always set and stored as the name, since the camera index can change over time.
+    # But it's always gotten as the index of the current list of cameras.
     #
 
     # Sets the default camera name and writes it to the settings file.
@@ -635,9 +662,23 @@ class WebcamHelper:
             self.Logger.error("SetDefaultCameraName failed "+str(e))
 
 
-    # Returns the default camera name or None
-    def GetDefaultCameraName(self) -> str:
-        return self.DefaultCameraName
+    # Returns the default camera index. This will always return an int.
+    # If there is not a default currently set, this returns the WebcamHelper.c_DefaultWebcamIndex, which is index 0.
+    def GetDefaultCameraIndex(self, webcamItemList) -> int:
+        # If there is no name currently, the default is 0.
+        if self.DefaultCameraName is None:
+            return WebcamHelper.c_DefaultWebcamIndex
+
+        # Try to find the name that was last set.
+        defaultCameraNameLower = self.DefaultCameraName.lower()
+        count = 0
+        for i in webcamItemList:
+            if i.Name == defaultCameraNameLower:
+                return count
+            count += 1
+
+        # We didn't find it, return the default.
+        return WebcamHelper.c_DefaultWebcamIndex
 
 
     # Loads the current name from our settings file.
@@ -661,3 +702,14 @@ class WebcamHelper:
             self.Logger.info(f"Webcam settings loaded. Default camera name: {self.DefaultCameraName}")
         except Exception as e:
             self.Logger.error("_LoadDefaultCameraName failed "+str(e))
+
+
+    @staticmethod
+    def MoonrakerToInternalWebcamNameConvert(name:str):
+        if name is not None and len(name) > 0:
+            # Enforce max name length.
+            if len(name) > WebcamHelper.c_MaxWebcamNameLength:
+                name = name[WebcamHelper.c_MaxWebcamNameLength]
+            # Ensure the string is only utf8
+            name = name.encode('utf-8', 'ignore').decode('utf-8')
+        return name

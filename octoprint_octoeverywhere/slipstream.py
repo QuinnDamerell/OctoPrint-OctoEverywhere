@@ -290,7 +290,7 @@ class Slipstream:
             # This is actually a good idea, so the request connection doesn't hang around for a long time.
             buffer = None
             try:
-                octoHttpResult.ReadAllContentFromStreamResponse()
+                octoHttpResult.ReadAllContentFromStreamResponse(self.Logger)
                 buffer = octoHttpResult.FullBodyBuffer
             except Exception as e:
                 self.Logger.error("Slipstream failed to read index buffer for "+url+", e:"+str(e))

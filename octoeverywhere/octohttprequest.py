@@ -1,4 +1,6 @@
 import platform
+import logging
+
 import requests
 
 from .localip import LocalIpHelper
@@ -138,7 +140,9 @@ class OctoHttpRequest:
         # Since most things use request Stream=True, this is a helpful util that will read the entire
         # content of a request and return it. Note if the request has no defined length, this will read
         # as long as the stream will go.
-        def ReadAllContentFromStreamResponse(self) -> None:
+        # This function will not throw on failures, it will read as much as it can and then set the buffer.
+        # On a complete failure, the buffer will be set to None, so that should be checked.
+        def ReadAllContentFromStreamResponse(self, logger:logging.Logger) -> None:
             # Ensure we have a stream to read.
             if self._requestLibResponseObj is None:
                 raise Exception("ReadAllContentFromStreamResponse was called on a result with no request lib Response object.")
@@ -146,11 +150,15 @@ class OctoHttpRequest:
             # We can't simply use response.content, since streaming was enabled.
             # We need to use iter_content, since it will keep returning data until all is read.
             # We use a high chunk count, so most of the time it will read all of the content in one go.
-            for chunk in self._requestLibResponseObj.iter_content(10000000):
-                if buffer is None:
-                    buffer = chunk
-                else:
-                    buffer += chunk
+            try:
+                for chunk in self._requestLibResponseObj.iter_content(10000000):
+                    if buffer is None:
+                        buffer = chunk
+                    else:
+                        buffer += chunk
+            except Exception as e:
+                lengthStr =  "[buffer is None]" if buffer is None else str(len(buffer))
+                logger.warn(f"ReadAllContentFromStreamResponse got an exception. We will return the current buffer length of {lengthStr}, exception: {e}")
             self.SetFullBodyBuffer(buffer)
 
         @property
