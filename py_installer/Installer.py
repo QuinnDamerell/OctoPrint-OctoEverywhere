@@ -13,6 +13,7 @@ from .Permissions import Permissions
 from .TimeSync import TimeSync
 from .Frontend import Frontend
 from .Uninstall import Uninstall
+from .Ffmpeg import Ffmpeg
 
 class Installer:
 
@@ -138,6 +139,10 @@ class Installer:
         # For all types, do the frontend setup now.
         frontend = Frontend()
         frontend.DoFrontendSetup(context)
+
+        # If this is a bambu setup, make sure ffmpeg is installed since it's required for the X1 webcam.
+        if context.IsBambuSetup:
+            Ffmpeg.EnsureFfmpeg()
 
         # Before we start the service, check if the secrets config file already exists and if a printer id already exists.
         # This will indicate if this is a fresh install or not.

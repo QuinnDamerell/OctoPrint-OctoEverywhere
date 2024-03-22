@@ -228,32 +228,33 @@ class Context:
             # Handle and flags passed.
             if a[0] == '-':
                 rawArg = a[1:]
-                if rawArg.lower() == "debug":
+                rawArgLower = rawArg.lower()
+                if rawArgLower == "debug":
                     # Enable debug printing.
                     self.Debug = True
                     Logger.EnableDebugLogging()
-                elif rawArg.lower() == "help" or rawArg.lower() == "usage" or rawArg.lower() == "h":
+                elif rawArgLower == "help" or rawArgLower == "usage" or rawArgLower == "h":
                     self.ShowHelp = True
-                elif rawArg.lower() == "skipsudoactions":
+                elif rawArgLower == "skipsudoactions":
                     Logger.Warn("Skipping sudo actions. ! This will not result in a valid install! ")
                     self.SkipSudoActions = True
-                elif rawArg.lower() == "noatuoselect":
+                elif rawArgLower == "noatuoselect":
                     Logger.Info("Disabling Moonraker instance auto selection.")
                     self.DisableAutoMoonrakerInstanceSelection = True
-                elif rawArg.lower() == "observer":
+                elif rawArgLower == "observer":
                     # This is the legacy flag
                     Logger.Info("Setup running in companion setup mode.")
                     self.IsCompanionSetup = True
-                elif rawArg.lower() == "companion":
+                elif rawArgLower == "companion":
                     Logger.Info("Setup running in companion setup mode.")
                     self.IsCompanionSetup = True
-                elif rawArg.lower() == "bambu":
+                elif rawArgLower == "bambu":
                     Logger.Info("Setup running in Bambu Connect setup mode.")
                     self.IsBambuSetup = True
-                elif rawArg.lower() == "update":
+                elif rawArgLower == "update" or rawArgLower == "upgrade":
                     Logger.Info("Setup running in update mode.")
                     self.IsUpdateMode = True
-                elif rawArg.lower() == "uninstall":
+                elif rawArgLower == "uninstall":
                     Logger.Info("Setup running in uninstall mode.")
                     self.IsUninstallMode = True
                 else:

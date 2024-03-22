@@ -10,6 +10,7 @@ from .Configure import Configure
 from .Paths import Paths
 from .Service import Service
 from .Util import Util
+from .Ffmpeg import Ffmpeg
 
 #
 # This class is responsible for doing updates for all local, companions, and bambu connect plugins on this local system.
@@ -33,15 +34,24 @@ class Updater:
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
         foundOeServices = []
+        hasAnyBambuConnects = False
         fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f"Searching for OE services to update, found: {fileOrDirName}")
-            if Configure.c_ServiceCommonName in fileOrDirName.lower():
+            fileOrDirNameLower = fileOrDirName.lower()
+            if Configure.c_ServiceCommonName in fileOrDirNameLower:
                 foundOeServices.append(fileOrDirName)
+                if "bambu" in fileOrDirNameLower:
+                    hasAnyBambuConnects = True
 
         if len(foundOeServices) == 0:
             Logger.Warn("No local, companion, or Bambu Connect plugins were found on this device.")
             raise Exception("No local, companion, or Bambu Connect plugins were found on this device.")
+
+        # If this is a bambu system, we also want to make sure we install/upgrade ffmpeg
+        # Since it's required for the X1 camera streaming.
+        if hasAnyBambuConnects:
+            Ffmpeg.EnsureFfmpeg()
 
         Logger.Info("We found the following plugins to update:")
         for s in foundOeServices:
