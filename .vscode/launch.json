@@ -4,24 +4,24 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        // {
+        //     "name": "Moonraker - PI - Single Instance",
+        //     "type": "debugpy",
+        //     "request": "launch",
+        //     "module": "moonraker_octoeverywhere",
+        //     "justMyCode": false,
+        //     "args": [
+        //         // These args reflect the correct setup for a pi installed single instance of OctoEverywhere connecting to a local Moonraker.
+        //         // The string is a urlBase64 encoded string of json. We base64 encode it to prevent any issues with command line args.
+        //         //
+        //         "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfZGF0YS9jb25maWciLCAiTW9vbnJha2VyQ29uZmlnRmlsZSI6ICIvaG9tZS9waS9wcmludGVyX2RhdGEvY29uZmlnL21vb25yYWtlci5jb25mIiwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL29jdG9ldmVyeXdoZXJlLXN0b3JlIiwgIlNlcnZpY2VOYW1lIjogIm9jdG9ldmVyeXdoZXJlIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSJ9",
+        //         //
+        //         // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+        //         "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+        //     ]
+        // },
         {
-            "name": "Moonraker - PI - Single Instance",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "moonraker_octoeverywhere",
-            "justMyCode": false,
-            "args": [
-                // These args reflect the correct setup for a pi installed single instance of OctoEverywhere connecting to a local Moonraker.
-                // The string is a urlBase64 encoded string of json. We base64 encode it to prevent any issues with command line args.
-                //
-                "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfZGF0YS9jb25maWciLCAiTW9vbnJha2VyQ29uZmlnRmlsZSI6ICIvaG9tZS9waS9wcmludGVyX2RhdGEvY29uZmlnL21vb25yYWtlci5jb25mIiwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl9kYXRhL29jdG9ldmVyeXdoZXJlLXN0b3JlIiwgIlNlcnZpY2VOYW1lIjogIm9jdG9ldmVyeXdoZXJlIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSJ9",
-                //
-                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
-                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
-            ]
-        },
-        {
-            "name": "Moonraker - PI - Multi Instance",
+            "name": "Moonraker - Klipper",
             "type": "debugpy",
             "request": "launch",
             "module": "moonraker_octoeverywhere",
@@ -36,7 +36,7 @@
             ]
         },
         {
-            "name": "Bambu Connect - PI - Instnace 1",
+            "name": "Bambu Connect - P1S",
             "type": "debugpy",
             "request": "launch",
             "module": "bambu_octoeverywhere",
@@ -46,6 +46,21 @@
                 //
                 // { "ServiceName": "octoeverywhere-bambu", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-bambu/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-bambu/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-bambu/", "CompanionInstanceIdStr":"1" }
                 "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtYmFtYnUiLCAiVmlydHVhbEVudlBhdGgiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS8iLCAiTG9nRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1L2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtYmFtYnUvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1LyIsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjoiMSIgfQ==",
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
+        {
+            "name": "Bambu Connect - X1C",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "bambu_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Bambu Connect version of the plugin. These args target the first instance.
+                //
+                // { "ServiceName": "octoeverywhere-bambu-2", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-bambu-2/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-bambu-2/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-bambu-2/", "CompanionInstanceIdStr":"1" }
+                "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtYmFtYnUtMiIsICJWaXJ0dWFsRW52UGF0aCI6Ii9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6Ii9ob21lL3BpL29jdG9ldmVyeXdoZXJlLyIsICJMb2dGb2xkZXIiOiIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtYmFtYnUtMi9sb2dzIiwgIkxvY2FsRmlsZVN0b3JhZ2VQYXRoIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1LTIvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWJhbWJ1LTIvIiwgIkNvbXBhbmlvbkluc3RhbmNlSWRTdHIiOiIxIiB9",
                 // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]

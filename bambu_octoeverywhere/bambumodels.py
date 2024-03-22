@@ -2,6 +2,7 @@ import time
 import logging
 from enum import Enum
 
+from octoeverywhere.sentry import Sentry
 
 # Known printer error types.
 # Note that the print state doesn't have to be ERROR to have an error, during a print it's "PAUSED" but the print_error value is not 0.
@@ -22,7 +23,7 @@ class BambuState:
         self.gcode_state:str = None
         self.layer_num:int = None
         self.total_layer_num:int = None
-        self.gcode_file:str = None
+        self.subtask_name:str = None
         self.mc_percent:int = None
         self.nozzle_temper:int = None
         self.nozzle_target_temper:int = None
@@ -31,6 +32,10 @@ class BambuState:
         self.mc_remaining_time:int = None
         self.project_id:str = None
         self.print_error:int = None
+        # On the X1, this is empty is LAN viewing of off
+        # It's a URL if streaming is enabled
+        # On other printers, this doesn't exist, so it's None
+        self.rtsp_url:str = None
         # Custom fields
         self.LastTimeRemainingWallClock:float = None
 
@@ -43,7 +48,7 @@ class BambuState:
         self.gcode_state = msg.get("gcode_state", self.gcode_state)
         self.layer_num = msg.get("layer_num", self.layer_num)
         self.total_layer_num = msg.get("total_layer_num", self.total_layer_num)
-        self.gcode_file = msg.get("gcode_file", self.gcode_file)
+        self.subtask_name = msg.get("subtask_name", self.subtask_name)
         self.project_id = msg.get("project_id", self.project_id)
         self.mc_percent = msg.get("mc_percent", self.mc_percent)
         self.nozzle_temper = msg.get("nozzle_temper", self.nozzle_temper)
@@ -51,6 +56,9 @@ class BambuState:
         self.bed_temper = msg.get("bed_temper", self.bed_temper)
         self.bed_target_temper = msg.get("bed_target_temper", self.bed_target_temper)
         self.print_error = msg.get("print_error", self.print_error)
+        ipCam = msg.get("ipcam", None)
+        if ipCam is not None:
+            self.rtsp_url = ipCam.get("rtsp_url", self.rtsp_url)
 
         # Time remaining has some custom logic, so as it's queried each time it keep counting down in seconds, since Bambu only gives us minutes.
         old_mc_remaining_time = self.mc_remaining_time
@@ -92,12 +100,12 @@ class BambuState:
 
     # If there is a file name, this returns it without the final .
     def GetFileNameWithNoExtension(self):
-        if self.gcode_file is None:
+        if self.subtask_name is None:
             return None
-        pos = self.gcode_file.rfind(".")
+        pos = self.subtask_name.rfind(".")
         if pos == -1:
-            return self.gcode_file
-        return self.gcode_file[:pos]
+            return self.subtask_name
+        return self.subtask_name[:pos]
 
 
     # Returns a unique string for this print.
@@ -121,6 +129,11 @@ class BambuState:
         # These error codes are in https://e.bambulab.com/query.php?lang=en, but have empty strings.
         # Hex: 05008030, 03008012, 0500C011
         if self.print_error == 83918896 or self.print_error == 50364434 or self.print_error == 83935249:
+            return None
+
+        # This state is when the user is loading filament, and the printer is asking them to push it in.
+        # This isn't an error.
+        if self.print_error == 134184967:
             return None
 
         # There's a full list of errors here, we only care about some of them
@@ -217,7 +230,12 @@ class BambuVersion:
                         self.PrinterName = BambuPrinters.A1
 
         if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
-            self.Logger.warn(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}")
+            Sentry.LogError(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
+                "CPU": str(self.Cpu),
+                "ProjectName": str(self.ProjectName),
+                "HardwareVersion": str(self.HardwareVersion),
+                "SoftwareVersion": str(self.SoftwareVersion),
+            })
             self.PrinterName = BambuPrinters.Unknown
 
         if self.HasLoggedPrinterVersion is False:

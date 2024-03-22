@@ -20,6 +20,9 @@ class BambuClient:
 
     _Instance = None
 
+    # Useful for debugging.
+    _PrintMQTTMessages = False
+
     @staticmethod
     def Init(logger:logging.Logger, config:Config, stateTranslator):
         BambuClient._Instance = BambuClient(logger, config, stateTranslator)
@@ -234,7 +237,7 @@ class BambuClient:
                 raise Exception("Parsed json MQTT message returned None")
 
             # Print for debugging if desired.
-            if self.Logger.isEnabledFor(logging.DEBUG):
+            if BambuClient._PrintMQTTMessages and self.Logger.isEnabledFor(logging.DEBUG):
                 self.Logger.debug("Incoming Bambu Message:\r\n"+json.dumps(msg, indent=3))
 
             # Since we keep a track of the state locally from the partial updates, we need to feed all updates to our state object.

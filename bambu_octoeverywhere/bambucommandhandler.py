@@ -66,7 +66,12 @@ class BambuCommandHandler:
             elif gcodeState == "PAUSE":
                 state = "paused"
             elif gcodeState == "FINISH":
-                state = "complete"
+                # When the X1C first starts and does the first time user calibration, the state is FINISH
+                # but there's really nothing done. This might happen after other calibrations, so if the total layers is 0, we are idle.
+                if bambuState.total_layer_num is not None and bambuState.total_layer_num == 0:
+                    state = "idle"
+                else:
+                    state = "complete"
             elif gcodeState == "FAILED":
                 state = "cancelled"
             elif gcodeState == "PREPARE":
