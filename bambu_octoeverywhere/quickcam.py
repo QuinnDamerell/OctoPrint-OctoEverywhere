@@ -143,24 +143,25 @@ class QuickCam:
                 # Sleep for a bit.
                 time.sleep(2.0)
 
-            # Create the camera implementation we need for this device.
-            camImpl = None
-            # Since we have to use the URL....
-            #     IF the URL is empty, it's an X1 with LAN streaming disabled.
-            #     If the URL has an address, it's an X1 with LAN streaming.
-            #     If it's None, it's a P1, A1, or another printer with no RTSP.
-            if rtspUrl is not None:
-                camImpl = QuickCam_RTSP(self.Logger)
-            else:
-                # Default to the websocket impl, since it's used on the most printers.
-                camImpl = QuickCam_WebSocket(self.Logger)
+            # We allow a few attempts, so if there are any connection issues or errors we buffer them out.
+            attempts = 0
+            while attempts < 5:
+                attempts += 1
 
-            # Wrap the usage into a with, so the connection is always cleaned up
-            with camImpl:
-                # We allow a few attempts, so if there are any connection issues or errors we buffer them out.
-                attempts = 0
-                while attempts < 5:
-                    attempts += 1
+                # Create the camera implementation we need for this device.
+                camImpl = None
+                # Since we have to use the URL....
+                #     IF the URL is empty, it's an X1 with LAN streaming disabled.
+                #     If the URL has an address, it's an X1 with LAN streaming.
+                #     If it's None, it's a P1, A1, or another printer with no RTSP.
+                if rtspUrl is not None:
+                    camImpl = QuickCam_RTSP(self.Logger)
+                else:
+                    # Default to the websocket impl, since it's used on the most printers.
+                    camImpl = QuickCam_WebSocket(self.Logger)
+
+                # Wrap the usage into a with, so the connection is always cleaned up
+                with camImpl:
                     try:
                         # Connect to the server.
                         camImpl.Connect(ipOrHostname, accessCode)
@@ -320,6 +321,13 @@ class QuickCam_WebSocket:
 # Implements the websocket camera version for the X1 series printers.
 class QuickCam_RTSP:
 
+    # How long we will wait for data on each read before timing out.
+    c_ReadTimeoutSec = 5.0
+
+    # Adds a ton of logging useful for debugging.
+    c_DebugLogging = False
+
+
     def __init__(self, logger:logging.Logger):
         self.Logger = logger
         self.Process:subprocess.Popen = None
@@ -331,15 +339,25 @@ class QuickCam_RTSP:
         self.JpegStartSequenceLen = len(self.JpegStartSequence)
         self.JpegEndSequence = bytearray([0xff, 0xd9])
         self.PipeSelect = selectors.DefaultSelector()
+        self.TimeSinceLastImg = time.time()
+
+        # Std Error logic
+        self.StdErrBuffer = ""
+        self.ErrorReaderThread:threading.Thread = None
+        self.ErrorReaderThreadRunning = True
 
 
     # ~~ Interface Function ~~
     # Connects to the server.
     # This will throw an exception if it fails.
     def Connect(self, ipOrHostname:str, accessCode:str) -> None:
-        # TODO check for ffmpeg
-        # TODO detect if ffmpeg has died or failed to run
         # TODO get the address from the bambu state object
+
+        # We set the logging level of ffmpeg depending on our logging level
+        # The logs are written to stderr even if they aren't errors, which is nice, so
+        # we can capture them on timeouts.
+        logLevel = "trace" if self.Logger.isEnabledFor(logging.DEBUG) else "warning"
+
         # Notes
         #   We use 15 fps because it's a good trade off of fps and cpu perf hits
         #      It also decreases the bandwidth needed, which helps on mobile
@@ -348,7 +366,7 @@ class QuickCam_RTSP:
         self.Process = subprocess.Popen(["ffmpeg",
                     "-hide_banner",
                     "-y",
-                    "-loglevel", "error",
+                    "-loglevel", logLevel,
                     "-rtsp_transport", "tcp",
                     "-use_wallclock_as_timestamps", "1",
                     "-i", f"rtsps://bblp:{accessCode}@{ipOrHostname}:322/streaming/live/1",
@@ -359,7 +377,15 @@ class QuickCam_RTSP:
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # pylint: disable=no-member # Linux only
         os.set_blocking(self.Process.stdout.fileno(), False)
+        os.set_blocking(self.Process.stderr.fileno(), False)
         self.PipeSelect.register(self.Process.stdout, selectors.EVENT_READ)
+
+        # Since we setup the stderr pipe, we must read from it. If it fills it's buffer it will block the ffmpeg process.
+        self.ErrorReaderThread = threading.Thread(target=self._ErrorReader)
+        self.ErrorReaderThread.start()
+
+        if QuickCam_RTSP.c_DebugLogging:
+            self.Logger.debug("Ffmpeg process started.")
 
 
     # ~~ Interface Function ~~
@@ -369,21 +395,32 @@ class QuickCam_RTSP:
     def GetImage(self) -> bytearray:
         while True:
             # Wait on the pipe, which will signal us when there's data to be read.
-            self.PipeSelect.select()
+            # We timeout after 5 seconds, which is plenty of time for the stream to be ready.
+            self.PipeSelect.select(QuickCam_RTSP.c_ReadTimeoutSec)
 
             # Read all of the data we can.
             buffer = self.Process.stdout.read(100000000)
 
+            # Check for a timeout. This can happen because the select timeout, or it's been too long since we got an image parsed.
+            # This usually means that ffmpeg has died or is not running correctly.
+            if self.Process.returncode is not None or (time.time() - self.TimeSinceLastImg) > QuickCam_RTSP.c_ReadTimeoutSec:
+                if self.StdErrBuffer is None or len(self.StdErrBuffer) == 0:
+                    self.StdErrBuffer = "<None>"
+                raise Exception(f"Ffmpeg read timeout. StdError: {self.StdErrBuffer}")
+
             # If we get an empty buffer, we just need to wait for more.
             if buffer is None or len(buffer) == 0:
+                if QuickCam_RTSP.c_DebugLogging:
+                    self.Logger.debug("RTSP read empty buffer from stdin.")
                 continue
 
             # If there's no pending buffered data do a quick exit if we were able to read the entire buffer in our first read.
             # If the full buffer is only one jpeg images, we don't need to do any scanning and can just return it.
             if self.Buffer is None:
                 if self._CheckIfFullJpeg(buffer):
-                    #self.Logger.info(f"quick image {len(buffer)}")
-                    self._ResetLocalBuffer()
+                    self._ResetLocalBuffer(True)
+                    if QuickCam_RTSP.c_DebugLogging:
+                        self.Logger.debug("RTSP fast path image received.")
                     return buffer
 
             # Append this buffer to the current pending buffer.
@@ -400,8 +437,9 @@ class QuickCam_RTSP:
             # Check if the buffer is a full image now
             if self._CheckIfFullJpeg(self.Buffer):
                 img = self.Buffer
-                self._ResetLocalBuffer()
-                #self.Logger.info("second quick exit")
+                self._ResetLocalBuffer(True)
+                if QuickCam_RTSP.c_DebugLogging:
+                    self.Logger.debug("RTSP second quick path image received.")
                 return img
 
             # Scan the buffer for the jpeg end sequence.
@@ -421,15 +459,22 @@ class QuickCam_RTSP:
                     # So reset the buffer and continue. Note after we reset the buffer, we might
                     # hit this, since we could have a partial image in the Buffer
                     self._ResetLocalBuffer()
+                    if QuickCam_RTSP.c_DebugLogging:
+                        self.Logger.debug("RTSP we found a jpeg end sequence, but the buffer didn't start with a jpeg start sequence.")
                     continue
                 # Take the image off the buffer.
                 self.Buffer = self.Buffer[newImageStart:]
                 self.SearchedIndex = 0
+                self.TimeSinceLastImg = time.time()
                 # Ensure the buffer isn't too long.
                 self._ResetLocalBufferIfOverLimit()
+                if QuickCam_RTSP.c_DebugLogging:
+                    self.Logger.debug("RTSP slow path image received.")
                 return imgBuffer
 
             # If we didn't find anything, check the limit.
+            if QuickCam_RTSP.c_DebugLogging:
+                self.Logger.debug("We got a new buffer with no image match.")
             self._ResetLocalBufferIfOverLimit()
 
 
@@ -441,9 +486,41 @@ class QuickCam_RTSP:
             self._ResetLocalBuffer()
 
 
-    def _ResetLocalBuffer(self):
+    def _ResetLocalBuffer(self, hasNewImage:bool = False):
         self.SearchedIndex = 0
         self.Buffer = None
+        if hasNewImage:
+            self.TimeSinceLastImg = time.time()
+
+
+    # Reads the error stream from ffmpeg.
+    # Since we pipe the images via stdout, stderr will have all of the logs, not just errors.
+    def _ErrorReader(self):
+        while self.ErrorReaderThreadRunning:
+            try:
+                # Use a selector, so we only wake up when there's data to be read.
+                with selectors.DefaultSelector() as selector:
+                    selector.register(self.Process.stderr, selectors.EVENT_READ)
+                    while self.ErrorReaderThreadRunning:
+                        # Wait for data to be read.
+                        # We can wait on this forever, because when the processes closes, the pipe will close, and that will release the select call.
+                        selector.select()
+
+                        # Check that we aren't shutting down.
+                        if self.ErrorReaderThreadRunning is False:
+                            return
+
+                        # Read the data.
+                        buffer = self.Process.stderr.read(10000)
+                        if buffer is not None and len(buffer) > 0:
+                            # Append to the log
+                            self.StdErrBuffer += buffer.decode("utf-8")
+                            # Have some sanity limit
+                            if len(self.StdErrBuffer) > 100000:
+                                self.StdErrBuffer = self.StdErrBuffer[-100000:]
+
+            except Exception as e:
+                Sentry.Exception("RTSP error reader thread failed.", e)
 
 
     # Checks if the buffer is only one image, from start to end.
@@ -465,14 +542,25 @@ class QuickCam_RTSP:
     # Allows us to using the with: scope.
     # Must not throw!
     def __exit__(self, t, v, tb):
+        # Close the error reader thread.
+        # Killing the process will cause the error reader thread to exit.
+        self.ErrorReaderThreadRunning = False
+
         # Close in the opposite order they were opened.
         try:
             if self.PipeSelect is not None:
                 self.PipeSelect.close()
         except Exception:
             pass
+        # Tell the process to be killed
         try:
             if self.Process is not None:
                 self.Process.kill()
+        except Exception:
+            pass
+        # And then call exit to cleanup all of the pipes and process handles.
+        try:
+            if self.Process is not None:
+                self.Process.__exit__(t, v, tb)
         except Exception:
             pass
