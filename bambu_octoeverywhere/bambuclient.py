@@ -134,12 +134,12 @@ class BambuClient:
                 elif isinstance(e, TimeoutError):
                     # This means there was no open socket at the given IP and port.
                     self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
-                elif isinstance(e, OSError) and "Network is unreachable" in str(e):
+                elif isinstance(e, OSError) and "Network is unreachable" in str(e) or "No route to host" in str(e):
                     # This means the IP doesn't route to a device.
                     self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
-                    Sentry.Exception("FaWiled to connect to Bambu printer.", e)
+                    Sentry.Exception("Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
@@ -330,13 +330,17 @@ class BambuClient:
             return configIpOrHostname
 
         # If we fail too many times, try to scan for the printer on the local subnet, the IP could have changed.
-        # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it, and if we find something, it must be it.
+        # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
         ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.AccessToken, self.PrinterSn)
 
-        # If we find a different IP, try it.
+        # If we get an IP back, it is the printer.
+        # The scan above will only return an IP if the printer was successfully connected to, logged into, and fully authorized with the Access Token and Printer SN.
         if len(ips) == 1:
+            # Since we know this is the IP, we will update it in the config. This mean in the future we will use this IP directly
+            # And everything else trying to connect to the printer (webcam and ftp) will use the correct IP.
             ip = ips[0]
-            self.Logger.info(f"We found a possible IP for this instance {ip}, trying it now.")
+            self.Logger.info(f"We found a new IP for this printer. [{configIpOrHostname} -> {ip}] Updating the config and using it to connect.")
+            self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ip)
             return ip
 
         # If we don't find anything, just use the config IP.
