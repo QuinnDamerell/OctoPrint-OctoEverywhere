@@ -25,6 +25,7 @@ disable=
     R1730, # consider-using-min-builtin
     R1731, # consider-using-max-builtin
     R1724, # Unnecessary "else" after "break"
+    R1715, # consider-using-get for dict gets.
 
 
 # A comma-separated list of package or module names from where C extensions may
