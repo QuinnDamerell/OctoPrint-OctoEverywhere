@@ -1,4 +1,4 @@
-from linux_host.networksearch import NetworkSearch
+from linux_host.networksearch import NetworkSearch, NetworkValidationResult
 
 from py_installer.Util import Util
 from py_installer.Logging import Logger
@@ -23,6 +23,8 @@ class BambuConnector:
             result = NetworkSearch.ValidateConnection_Bambu(Logger.GetPyLogger(), ip, accessCode, printerSn, portStr=port, timeoutSec=10.0)
             if result.Success():
                 Logger.Info("Successfully connected to you Bambu Lab printer!")
+                # Ensure the X1 camera is setup.
+                self._EnsureX1CameraSetup(result)
                 return
             else:
                 # Let the user keep this connection setup, or try to set it up again.
@@ -34,6 +36,9 @@ class BambuConnector:
 
         ipOrHostname, port, accessToken, printerSn = self._SetupNewBambuConnection()
         Logger.Info(f"You Bambu printer was found and authentication was successful! IP: {ipOrHostname}")
+
+        # Ensure the X1 camera is setup.
+        self._EnsureX1CameraSetup(None, ipOrHostname, accessToken, printerSn)
 
         ConfigHelper.WriteCompanionDetails(context, ipOrHostname, port)
         ConfigHelper.WriteBambuDetails(context, accessToken, printerSn)
@@ -214,3 +219,37 @@ class BambuConnector:
                     # Default to a full restart.
                     # Breaking this loop will return us to the main setup loop, which will do the entire access code and sn entry again.
                     break
+
+
+    # Given either a validation result or required details, this gets the x1 carbon's ip camera state
+    # and ensures it's enabled properly
+    def _EnsureX1CameraSetup(self, result:NetworkValidationResult = None,  ipOrHostname:str = None, accessToken:str = None, printerSn:str = None):
+        # If we didn't get passed a result, get one now.
+        if result is None:
+            result = NetworkSearch.ValidateConnection_Bambu(Logger.GetPyLogger(), ipOrHostname, accessToken, printerSn)
+        # If we didn't get something, it's a failure.
+        if result is None:
+            Logger.Error("Ensure camera failed to get a validation result.")
+            return
+        # Ensure success.
+        if result.Success() is False:
+            Logger.Error("Ensure camera got a validation result that failed.")
+            return
+        # If the bambu rtsp url is None, this printer doesn't support RTSP.
+        if result.BambuRtspUrl is None:
+            Logger.Info("This printer doesn't use RTSP camera streaming, skipping setup.")
+            return
+        # If there is a string and the string isn't 'disable' then we are good to go.
+        if len(result.BambuRtspUrl) > 0 and "disable" not in result.BambuRtspUrl:
+            Logger.Info(f"RTSP Liveview is enabled. '{result.BambuRtspUrl}'")
+            return
+        # Tell the user how to enable it.
+        Logger.Info("")
+        Logger.Info("")
+        Logger.Header("You need to enable 'LAN Mode Liveview' on your printer for webcam access.")
+        Logger.Blank()
+        Logger.Warn("Don't worry, you just need to flip a switch in the settings on your printer.")
+        Logger.Warn("Follow this link for a step-by-step guide:")
+        Logger.Warn("https://octoeverywhere.com/s/liveview")
+        Logger.Blank()
+        Util.AskYesOrNoQuestion("Did you enable 'LAN Mode Liveview'?")

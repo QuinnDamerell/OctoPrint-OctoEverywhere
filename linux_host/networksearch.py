@@ -1,4 +1,5 @@
 import ssl
+import json
 import socket
 import logging
 import threading
@@ -7,11 +8,16 @@ from typing import List
 import paho.mqtt.client as mqtt
 
 class NetworkValidationResult:
-    def __init__(self, failedToConnect:bool = False, failedAuth:bool = False, failSn:bool = False, exception:Exception = None) -> None:
+    def __init__(self, failedToConnect:bool = False, failedAuth:bool = False, failSn:bool = False, exception:Exception = None, bambuRtspUrl = None) -> None:
         self.FailedToConnect = failedToConnect
         self.FailedAuth = failedAuth
         self.FailedSerialNumber = failSn
         self.Exception = exception
+        # Only used for Bambu printers.
+        # If none, the printer doesn't support RTSP.
+        # If empty string, the LAN Mode Liveview is not turned on.
+        # If a URL, the printer is ready to stream.
+        self.BambuRtspUrl = bambuRtspUrl
 
 
     def Success(self) -> bool:
@@ -31,6 +37,16 @@ class NetworkSearch:
         def callback(ip:str):
             return NetworkSearch.ValidateConnection_Bambu(logger, ip, accessCode, printerSn, portStr, timeoutSec=5)
         return NetworkSearch._ScanForInstances(logger, callback)
+
+
+    # The final two steps can happen in different orders, so we need to wait for both the sub success and state object to be received.
+    @staticmethod
+    def _BambuConnectionDone(data:dict, client:mqtt.Client) -> bool:
+        if "SnSubSuccess" in data and data["SnSubSuccess"] is True and "GotStateObj" in data and data["GotStateObj"] is True:
+            data["Event"].set()
+            client.disconnect()
+            return True
+        return False
 
 
     # Given the ip, accessCode, printerSn, and optionally port, this will check if the printer is connectable.
@@ -85,15 +101,47 @@ class NetworkSearch:
                             logger.debug(f"Bambu {ipOrHostname} Sub response for the report subscription reports failure. {r}")
                             failedSn = True
                     if not failedSn:
+                        # Note we are now subed.
                         userdata["SnSubSuccess"] = True
-                        logger.debug(f"Bambu {ipOrHostname} Sub success, the serial number is good")
-                    client.disconnect()
-                    userdata["Event"].set()
+                        logger.debug(f"Bambu {ipOrHostname} Sub success.")
+                        # Push the message to get the full state, this is needed on teh P1 and A1
+                        client.publish(f"device/{printerSn}/report", json.dumps( { "pushing": {"sequence_id": "0", "command": "pushall"}}))
+                        # Check if we are done, this will disconnect if we are.
+                        NetworkSearch._BambuConnectionDone(userdata, client)
+
+            def message(client, userdata:dict, mqttMsg:mqtt.MQTTMessage):
+                # When we get a message, check if it is a state object.
+                # We need info from the state object, and also it's a good validation the system is healthy.
+                try:
+                    msg = json.loads(mqttMsg.payload)
+                    if "print" in msg:
+                        printMsg = msg["print"]
+                        # We dont have a 100% great way to know if this is a fully sync message.
+                        # For now, we use this stat. The message we get from a P1P has 59 members in the root, so we use 40 as mark.
+                        # Note we use this same value in BambuClient._OnMessage
+                        if len(printMsg) > 40:
+                            # Indicate we got the state object.
+                            userdata["GotStateObj"] = True
+                            # Try to parse the rtsp url if the printer has one.
+                            ipCam = printMsg.get("ipcam", None)
+                            rtspUrl = None
+                            if ipCam is not None:
+                                rtspUrl = ipCam.get("rtsp_url", None)
+                                userdata["BambuRtspUrl"] = rtspUrl
+                            # Report we got the full sync object and see if we are done.
+                            logger.debug(f"Bambu {ipOrHostname} got a full state sync message. RTSP URL: {rtspUrl}")
+                            # Check if we are done, this will disconnect if we are.
+                            NetworkSearch._BambuConnectionDone(userdata, client)
+                        else:
+                            logger.debug(f"Bambu {ipOrHostname} got a state message, but it was too small to be a full message.")
+                except Exception as e:
+                    logger.debug(f"Bambu {ipOrHostname} - message failure {e}")
 
             # Setup functions and connect.
             client.on_connect = connect
             client.on_disconnect = disconnect
             client.on_subscribe = subscribe
+            client.on_message = message
 
             # Try to connect, this will throw if it fails to find any server to connect to.
             failedToConnect = True
@@ -111,12 +159,18 @@ class NetworkSearch:
             # Walk though the connection and see how far we got.
             failedAuth = True
             failedSn = True
+            rtspUrl = None
+
             if "IsAuthorized" in result:
                 failedAuth = False
-            if "SnSubSuccess" in result:
+            # We need both the sub success message and a successful state sync to consider this success.
+            if "SnSubSuccess" in result and "GotStateObj" in result:
                 failedSn = False
+            # Optional - Get the URL if there was one detected.
+            if "BambuRtspUrl" in result:
+                rtspUrl = result["BambuRtspUrl"]
 
-            return NetworkValidationResult(failedToConnect, failedAuth, failedSn)
+            return NetworkValidationResult(failedToConnect, failedAuth, failedSn, bambuRtspUrl=rtspUrl)
 
         except Exception as e:
             return NetworkValidationResult(exception=e)

@@ -159,7 +159,7 @@ class BambuClient:
                 getInfo = {"info": {"sequence_id": "0", "command": "get_version"}}
                 if not self._Publish(getInfo):
                     raise Exception("Failed to publish get_version")
-                pushAll = { "pushing": {"sequence_id": "55", "command": "pushall"}}
+                pushAll = { "pushing": {"sequence_id": "0", "command": "pushall"}}
                 if not self._Publish(pushAll):
                     raise Exception("Failed to publish full sync")
             except Exception as e:
@@ -262,6 +262,7 @@ class BambuClient:
                     if cmd is not None and cmd == "push_status":
                         # We dont have a 100% great way to know if this is a fully sync message.
                         # For now, we use this stat. The message we get from a P1P has 59 members in the root, so we use 40 as mark.
+                        # Note we use this same value in NetworkSearch.ValidateConnection_Bambu
                         if len(printMsg) > 40:
                             isFirstFullSyncResponse = True
                             self.HasDoneFirstFullStateSync = True
