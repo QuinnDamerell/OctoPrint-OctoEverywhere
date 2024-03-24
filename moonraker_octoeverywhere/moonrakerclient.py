@@ -508,7 +508,9 @@ class MoonrakerClient:
                                     )
 
                 # Run until the socket closes
-                self.WebSocket.RunUntilClosed()
+                # When it returns, ensure it's closed.
+                with self.WebSocket:
+                    self.WebSocket.RunUntilClosed()
 
             except Exception as e:
                 Sentry.Exception("Moonraker client exception in main WS loop.", e)

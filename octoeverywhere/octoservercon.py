@@ -317,9 +317,11 @@ class OctoServerCon:
                     endpoint = self.GetEndpoint()
 
                     # Connect to the service.
+                    # When this returns, make sure it's fully closed.
                     self.Ws = Client(endpoint, self.OnOpened, self.OnMsg, None, self.OnClosed, self.OnError)
-                    self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString() + " wsId:"+self.GetWsId(self.Ws))
-                    self.Ws.RunUntilClosed()
+                    with self.Ws:
+                        self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString() + " wsId:"+self.GetWsId(self.Ws))
+                        self.Ws.RunUntilClosed()
 
                     # Handle disconnects
                     self.Logger.info("Disconnected from OctoEverywhere, server con "+self.GetConnectionString())

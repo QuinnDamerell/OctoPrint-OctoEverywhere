@@ -165,26 +165,23 @@ class MoonrakerConnector:
 
         # Create the websocket
         Logger.Debug(f"Checking for moonraker using the address: `{url}`")
-        ws = Client(url, onWsOpen=OnOpened, onWsMsg=OnMsg, onWsError=OnError, onWsClose=OnClosed)
-        ws.RunAsync()
-
-        # Wait for the event or a timeout.
-        doneEvent.wait(timeoutSec)
-
-        # Get the results before we close.
-        capturedSuccess = False
-        capturedEx = None
-        with lock:
-            if result.get("success", None) is not None:
-                capturedSuccess = result["success"]
-            if result.get("exception", None) is not None:
-                capturedEx = result["exception"]
-
-        # Ensure the ws is closed
         try:
-            ws.Close()
-        except Exception:
-            pass
+            with Client(url, onWsOpen=OnOpened, onWsMsg=OnMsg, onWsError=OnError, onWsClose=OnClosed) as ws:
+                ws.RunAsync()
+
+                # Wait for the event or a timeout.
+                doneEvent.wait(timeoutSec)
+
+                # Get the results before we close.
+                capturedSuccess = False
+                capturedEx = None
+                with lock:
+                    if result.get("success", None) is not None:
+                        capturedSuccess = result["success"]
+                    if result.get("exception", None) is not None:
+                        capturedEx = result["exception"]
+        except Exception as e:
+            Logger.Info(f"Websocket threw and exception. {e}")
 
         return (capturedSuccess, capturedEx)
 

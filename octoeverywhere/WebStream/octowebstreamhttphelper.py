@@ -524,10 +524,11 @@ class OctoWebStreamHttpHelper:
             # Done!
             return
 
+        # NOTE: We can't do this! Since we try to compress all of the things right now, for already compressed things it will add a little overhead!
+        # The full upload size will be the same size as we expect, but the compression will make the payload larger.
         # If we know the upload size, make sure this doesn't exceeded it.
-        if self.KnownFullStreamUploadSizeBytes is not None and thisMessageDataLen + self.UploadBytesReceivedSoFar > self.KnownFullStreamUploadSizeBytes:
-            self.Logger.warn(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(thisMessageDataLen)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
-            raise Exception("Too many bytes received for http upload buffer")
+        # if self.KnownFullStreamUploadSizeBytes is not None and thisMessageDataLen + self.UploadBytesReceivedSoFar > self.KnownFullStreamUploadSizeBytes:
+        #     self.Logger.warn(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(thisMessageDataLen)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
 
         # Make sure the array has been allocated and it's still large enough.
         if self.UploadBuffer is None or thisMessageDataLen + self.UploadBytesReceivedSoFar > len(self.UploadBuffer):
@@ -553,6 +554,11 @@ class OctoWebStreamHttpHelper:
         # We are ready to copy the new data now.
         # Get a slice of the buffer to avoid a the copy, since we copy on the next step anyways.
         buf = self.decompressBufferIfNeeded(webStreamMsg)
+
+        # Now that we have the original size of the body back, check to make sure it's not too much.
+        if self.KnownFullStreamUploadSizeBytes is not None and len(buf) + self.UploadBytesReceivedSoFar > self.KnownFullStreamUploadSizeBytes:
+            self.Logger.warn(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(len(buf))+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
+            raise Exception("Too many bytes received for http upload buffer")
 
         # Append the data into the main buffer.
         pos = self.UploadBytesReceivedSoFar
@@ -639,9 +645,11 @@ class OctoWebStreamHttpHelper:
         if contentLengthOpt is not None and contentLengthOpt < 200:
             return False
 
-        # If we don't know what this is, might as well compress it.
+        # If we don't know what this is, we don't want to compress it.
+        # Compressing the body of a compressed thing will make it larger and takes a good amount of time,
+        # so we don't want to waste time on it.
         if contentTypeLower is None:
-            return True
+            return False
 
         # If there is a full body buffer and and it's already compressed, always return true.
         # This ensures the message is flagged correctly for compression and the body reading system
@@ -655,21 +663,21 @@ class OctoWebStreamHttpHelper:
         #   - Anything that says it's json
         #   - Anything that's xml
         #   - Anything that's svg
-        #   - Anything that's octet-stream. (we do this because some of the .less files don't get set as text correctly)
         return (contentTypeLower.find("text/") != -1 or contentTypeLower.find("javascript") != -1
                 or contentTypeLower.find("json") != -1 or contentTypeLower.find("xml") != -1
-                or contentTypeLower.find("svg") != -1 or contentTypeLower.find("octet-stream") != -1)
+                or contentTypeLower.find("svg") != -1)
 
 
     # Reads data from the response body, puts it in a data vector, and returns the offset.
     # If the body has been fully read, this should return ogLen == 0, len = 0, and offset == None
     # The read style depends on the presence of the boundary string existing.
     def readContentFromBodyAndMakeDataVector(self, builder, octoHttpResult:OctoHttpRequest.Result, boundaryStr_opt, shouldCompress, contentTypeLower_NoneIfNotKnown, contentLength_NoneIfNotKnown, responseHandlerContext):
-        # This is the max size each body read will be. Since we are making local calls, most of the time
-        # we will always get this full amount as long as theres more body to read.
-        # Note that this amount is larger than a single read of the websocket on the server. After some testing
-        # we found the transfer was most efficient if we sent larger message sizes, because it could saturate the tcp link better.
-        defaultBodyReadSizeBytes = 199 * 1024
+        # This is the max size each body read will be. Since we are making local calls, most of the time we will always get this full amount as long as theres more body to read.
+        # This size is a little under the max read buffer on the server, allowing the server to handle the buffers with no copies.
+        #
+        # 3/24/24 - We did a lot of direct download testing to tweak this buffer size and the server read size, these were the best values able to hit about 160mpbs.
+        # With the current values, the majority of the time is spent sending the data on the websocket.
+        defaultBodyReadSizeBytes = 490 * 1024
 
         # If we are going to compress this read, use a much higher number. Since most of what we compress is text,
         # and that text usually compresses down to 25% of the og size, we will use a x4 multiplier.
@@ -843,7 +851,9 @@ class OctoWebStreamHttpHelper:
                 # Read a small chunk to try to read the header
                 # We want to read enough that hopefully we get all of the headers, but not so much that
                 # we accidentally read two boundary messages at once.
-                headerBuffer = self.doBodyRead(octoHttpResult, 300)
+                # 3/24/24 - After a lot of testing, it seems most times we get the full headers in 120 chars.
+                # So we will target that much, hoping we can do one read and get them.
+                headerBuffer = self.doBodyRead(octoHttpResult, 120)
 
                 # If this returns 0, the body read is complete
                 if headerBuffer is None:

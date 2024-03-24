@@ -190,8 +190,23 @@ class OctoWebStreamWsHelper:
 
         # Make the websocket object and start it running.
         self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
-        self.Ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
-        self.Ws.RunAsync()
+        ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
+
+        # To ensure we never leak a websocket, we need to use this lock.
+        # We need to check the is closed flag and then only set the ws if it's not closed.
+        with self.StateLock:
+            if self.IsClosed:
+                # Cleanup and leave
+                try:
+                    ws.Close()
+                except Exception:
+                    pass
+                return False
+
+            # We aren't closed, set the websocket and run it.
+            # We have to be careful with this ws, because it needs to be closed to fully shutdown, but we can't use a with statement.
+            self.Ws = ws
+            self.Ws.RunAsync()
 
         # Return true to indicate we are trying to connect again.
         return True
@@ -201,6 +216,7 @@ class OctoWebStreamWsHelper:
     # Called by the main socket thread so this should be quick!
     def Close(self):
         # Don't try to close twice.
+        wsToClose = None
         with self.StateLock:
             # If we are already closed, there's nothing to do.
             if self.IsClosed is True:
@@ -208,16 +224,18 @@ class OctoWebStreamWsHelper:
             # We will close now, so set the flag.
             self.IsClosed = True
 
+            # We use this lock to protect the websocket and make sure we never open when when we are closed or closing.
+            # We must capture this in the same lock as self.IsClosed
+            wsToClose = self.Ws
+
         self.Logger.info(self.getLogMsgPrefix()+"websocket closed after " +str(time.time() - self.OpenedTime) + " seconds")
 
         # The initial connection is created (or at least started) in the constructor, but there's re-attempt logic
         # that can cause the websocket to be destroyed and re-created. For that reason we need to grab a local ref
         # and make sure it's not null. If the close fails, just ignore it, since we are shutting down already.
-        ws = self.Ws
-        self.Ws = None
-        if ws is not None:
+        if wsToClose is not None:
             try:
-                ws.Close()
+                wsToClose.Close()
             except Exception as _ :
                 pass
 
