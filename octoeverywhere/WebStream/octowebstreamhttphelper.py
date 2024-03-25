@@ -313,6 +313,15 @@ class OctoWebStreamHttpHelper:
                 # Before we process the response, make sure we shouldn't defer for a high pri request
                 self.checkForDelayIfNotHighPri()
 
+                # This is an interesting check. If we are spinning to deliver a http body, and we detect that what we are compressing
+                # is larger than the OG body, we will disable compression for all future messages. We do this because any files that's already
+                # compressed (video, audio, images, or files) will be the same after compression but with overhead added.
+                # We take a big time hit applying the compression, which is usually offset by the size reduction, but if that's not the case, disable it.
+                # If the compressed stream size (contentReadBytes) is larger than  90% of the original stream size(nonCompressedContentReadSizeBytes), stop compression.
+                if compressBody and contentReadBytes != 0 and nonCompressedContentReadSizeBytes != 0 and contentReadBytes > nonCompressedContentReadSizeBytes * 0.9:
+                    compressBody = False
+                    self.Logger.info(f"We detected that the compression being applied to this stream was inefficient, so we are disabling compression. Compression: {float(contentReadBytes)/float(nonCompressedContentReadSizeBytes)} URL: {uri}")
+
                 # Prepare a response.
                 # TODO - We should start the buffer at something that's likely to not need expanding for most requests.
                 builder = OctoStreamMsgBuilder.CreateBuffer(20000)
@@ -675,7 +684,7 @@ class OctoWebStreamHttpHelper:
         # This is the max size each body read will be. Since we are making local calls, most of the time we will always get this full amount as long as theres more body to read.
         # This size is a little under the max read buffer on the server, allowing the server to handle the buffers with no copies.
         #
-        # 3/24/24 - We did a lot of direct download testing to tweak this buffer size and the server read size, these were the best values able to hit about 160mpbs.
+        # 3/24/24 - We did a lot of direct download testing to tweak this buffer size and the server read size, these were the best values able to hit about 223mpbs.
         # With the current values, the majority of the time is spent sending the data on the websocket.
         defaultBodyReadSizeBytes = 490 * 1024
 
