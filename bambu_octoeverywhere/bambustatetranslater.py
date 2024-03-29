@@ -43,6 +43,7 @@ class BambuStateTranslator:
         # Here's a list of all states: https://github.com/greghesp/ha-bambulab/blob/e72e343acd3279c9bccba510f94bf0e291fe5aaa/custom_components/bambu_lab/pybambu/const.py#L83C1-L83C21
         if self.LastState != bambuState.gcode_state:
             # We know the state changed.
+            self.Logger.debug(f"Bambu state change: {self.LastState} -> {bambuState.gcode_state}")
             if self.LastState is None:
                 # If the last state is None, this is mostly likely the first time we've seen a state.
                 # All we want to do here is update last state to the new state.
@@ -52,7 +53,10 @@ class BambuStateTranslator:
                 if self.LastState == "PAUSE":
                     self.BambuOnResume(bambuState)
                 else:
-                    self.BambuOnStart(bambuState)
+                    # We know the state changed and the state is now a printing state.
+                    # If the last state was also a printing state, we don't want to fire this, since we already did.
+                    if BambuState.IsPrintingState(self.LastState, False) is False:
+                        self.BambuOnStart(bambuState)
             # Check for the paused state
             elif bambuState.IsPaused():
                 # If the error is temporary, like a filament run out, the printer goes into a paused state
@@ -81,7 +85,10 @@ class BambuStateTranslator:
             # Percentage progress update
             printMsg = msg.get("print", None)
             if printMsg is not None and "mc_percent" in printMsg:
-                self.BambuOnPrintProgress(bambuState)
+                # On the X1, the progress doesn't get reset from the last print when the printer switches into prepare or slicing for the next print.
+                # So we will not send any progress updates in these states, until the state is "RUNNING" and the progress should reset to 0.
+                if bambuState.IsPrepareOrSlicing() is False:
+                    self.BambuOnPrintProgress(bambuState)
 
         # Since bambu doesn't tell us a print duration, we need to figure out when it ends ourselves.
         # This is different from the state changes above, because if we are ever not printing for any reason,

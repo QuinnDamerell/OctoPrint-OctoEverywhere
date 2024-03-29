@@ -902,6 +902,8 @@ class NotificationsHandler:
                     # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
                     if "name 'Image' is not defined" in str(e):
                         self.Logger.info("Can't manipulate image because the Image rotation lib failed to import.")
+                    if "cannot identify image file" in str(e):
+                        self.Logger.info("Can't manipulate image because the Image lib can't figure out the image type.")
                     else:
                         Sentry.Exception("Failed to manipulate image for notifications", e)
 

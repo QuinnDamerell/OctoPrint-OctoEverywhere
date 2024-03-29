@@ -83,12 +83,31 @@ class BambuState:
 
     # Since there's a lot to consider to figure out if a print is running, this one function acts as common logic across the plugin.
     def IsPrinting(self, includePausedAsPrinting:bool) -> bool:
-        if self.gcode_state is None:
+        return BambuState.IsPrintingState(self.gcode_state, includePausedAsPrinting)
+
+
+    # Since there's a lot to consider to figure out if a print is running, this one function acts as common logic across the plugin.
+    def IsPrepareOrSlicing(self) -> bool:
+        return BambuState.IsPrepareOrSlicingState(self.gcode_state)
+
+
+    # We use this common method since "is this a printing state?" is complicated and we can to keep all of the logic common in the plugin
+    @staticmethod
+    def IsPrintingState(state:str, includePausedAsPrinting:bool) -> bool:
+        if state is None:
             return False
-        if self.gcode_state == "PAUSE" and includePausedAsPrinting:
+        if state == "PAUSE" and includePausedAsPrinting:
             return True
         # Do we need to consider some of the stg_cur states?
-        return self.gcode_state == "RUNNING" or self.gcode_state == "SLICING" or self.gcode_state == "PREPARE"
+        return state == "RUNNING" or BambuState.IsPrepareOrSlicingState(state)
+
+
+    # We use this common method to keep all of the logic common in the plugin
+    @staticmethod
+    def IsPrepareOrSlicingState(state:str) -> bool:
+        if state is None:
+            return False
+        return state == "SLICING" or state == "PREPARE"
 
 
     # This one function acts as common logic across the plugin.
@@ -211,13 +230,13 @@ class BambuVersion:
             self.Cpu = BambuCPUs.Unknown
 
         # Now that we have info, map the printer type.
-        if self.Cpu is not BambuCPUs.Unknown and self.HardwareVersion is not None and self.ProjectName is not None:
+        if self.Cpu is not BambuCPUs.Unknown and self.HardwareVersion is not None:
             if self.Cpu is BambuCPUs.RV1126:
                 if self.HardwareVersion == "AP05":
                     self.PrinterName = BambuPrinters.X1C
                 elif self.HardwareVersion == "AP02":
                     self.PrinterName = BambuPrinters.X1E
-            if self.Cpu is BambuCPUs.ESP32:
+            if self.Cpu is BambuCPUs.ESP32 and self.ProjectName is not None:
                 if self.HardwareVersion == "AP04":
                     if self.ProjectName == "C11":
                         self.PrinterName = BambuPrinters.P1P

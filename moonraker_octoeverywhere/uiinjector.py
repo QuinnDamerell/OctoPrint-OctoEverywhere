@@ -223,7 +223,10 @@ class UiInjector():
             self.Logger.info("Found existing ui tags but the hash didn't match, so we updated the hash.")
             return True, True
         except Exception as e:
-            Sentry.Exception("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
+            if e is UnicodeDecodeError and "invalid continuation byte" in str(e):
+                self.Logger.warn("_InjectIntoHtml failed, the html file has invalid utf-8")
+            else:
+                Sentry.Exception("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
         return False, False
 
 
@@ -272,7 +275,10 @@ class UiInjector():
             self.Logger.info("No existing ui tags found, so we added them")
             return True
         except Exception as e:
-            Sentry.Exception("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
+            if e is UnicodeDecodeError and "invalid continuation byte" in str(e):
+                self.Logger.warn("Failed to inject UI helpers into html, the html file has invalid utf-8")
+            else:
+                Sentry.Exception("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
             return False
 
 

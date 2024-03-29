@@ -155,6 +155,7 @@ class QuickCam:
                 #     If the URL has an address, it's an X1 with LAN streaming.
                 #     If it's None, it's a P1, A1, or another printer with no RTSP.
                 if rtspUrl is not None:
+                    self.Logger.debug(f"Bambu RTSP URL is: `{rtspUrl}`")
                     camImpl = QuickCam_RTSP(self.Logger)
                 else:
                     # Default to the websocket impl, since it's used on the most printers.
@@ -367,7 +368,7 @@ class QuickCam_RTSP:
                     "-hide_banner",
                     "-y",
                     "-loglevel", logLevel,
-                    "-rtsp_transport", "tcp",
+                    "-rtsp_transport", "udp",
                     "-use_wallclock_as_timestamps", "1",
                     "-i", f"rtsps://bblp:{accessCode}@{ipOrHostname}:322/streaming/live/1",
                     "-filter:v", "fps=15",

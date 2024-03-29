@@ -1,8 +1,9 @@
 import logging
 import ssl
-import json
-import threading
 import time
+import json
+import socket
+import threading
 from typing import List
 
 import paho.mqtt.client as mqtt
@@ -134,9 +135,12 @@ class BambuClient:
                 elif isinstance(e, TimeoutError):
                     # This means there was no open socket at the given IP and port.
                     self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
-                elif isinstance(e, OSError) and "Network is unreachable" in str(e) or "No route to host" in str(e):
+                elif isinstance(e, OSError) and ("Network is unreachable" in str(e) or "No route to host" in str(e)):
                     # This means the IP doesn't route to a device.
                     self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                elif isinstance(e, socket.timeout) and "timed out" in str(e):
+                    # This means the IP doesn't route to a device.
+                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
                     Sentry.Exception("Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)

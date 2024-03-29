@@ -378,23 +378,15 @@ class WebcamHelper:
                 # Return a result. Return the full image buffer which will be used as the response body.
                 self.Logger.debug("Successfully got image from stream URL. Size: %s, Format: %s", str(len(imageBuffer)), contentType)
                 return OctoHttpRequest.Result(200, headers, url, True, fullBodyBuffer=imageBuffer)
-        except ConnectionError as e:
-            # We have a lot of telemetry indicating a read timeout can happen while trying to read from the stream
-            # in that case we should just get out of here.
-            if "Read timed out" in str(e):
-                self.Logger.debug("_GetSnapshotFromStream got a timeout while reading the stream.")
-                return None
-            else:
-                Sentry.Exception("Failed to get fallback snapshot due to ConnectionError", e)
-        except urllib3.exceptions.ProtocolError as e:
-            if "IncompleteRead" in str(e):
-                self.Logger.debug("_GetSnapshotFromStream got a incomplete read while reading the stream.")
-                return None
-            else:
-                Sentry.Exception("Failed to get fallback snapshot due to ProtocolError", e)
         except Exception as e:
-            Sentry.Exception("Failed to get fallback snapshot.", e)
-
+            if e is ConnectionError and "Read timed out" in str(e):
+                self.Logger.debug("_GetSnapshotFromStream got a timeout while reading the stream.")
+            elif e is urllib3.exceptions.ProtocolError and "IncompleteRead" in str(e):
+                self.Logger.debug("_GetSnapshotFromStream got a incomplete read while reading the stream.")
+            elif e is urllib3.exceptions.ReadTimeoutError and "Read timed out" in str(e):
+                self.Logger.debug("_GetSnapshotFromStream got a read timeout while reading stream.")
+            else:
+                Sentry.Exception("Failed to get fallback snapshot.", e)
         return None
 
 
