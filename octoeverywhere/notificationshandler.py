@@ -389,6 +389,7 @@ class NotificationsHandler:
 
     # Fired when a print is resumed
     def OnResume(self, fileName:str = None):
+        Sentry.Breadcrumb("OnResume called.", {"filename":fileName})
         if self._shouldIgnoreEvent(fileName):
             return
         self._updateCurrentFileName(fileName)

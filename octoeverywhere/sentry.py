@@ -128,6 +128,12 @@ class Sentry:
         return event
 
 
+    # Adds a breadcrumb to the sentry log, which is helpful to figure out what happened before an exception.
+    @staticmethod
+    def Breadcrumb(msg:str, data:dict = None, level:str = "info", category:str = "breadcrumb"):
+        sentry_sdk.add_breadcrumb(message=msg, data=data, level=level, category=category)
+
+
     # Sends an error log to sentry.
     # This is useful for debugging things that shouldn't be happening.
     @staticmethod

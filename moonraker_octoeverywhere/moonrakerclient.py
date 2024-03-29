@@ -447,6 +447,7 @@ class MoonrakerClient:
                     # so they don't trigger something too much lower too easily.
                     elif state == "printing":
                         if progressFloat_CanBeNone is None or progressFloat_CanBeNone > 0.01:
+                            Sentry.Breadcrumb("Sending Resume Notification", stateContainerObj)
                             self.MoonrakerCompat.OnPrintResumed()
                             return
                     elif state == "complete":
