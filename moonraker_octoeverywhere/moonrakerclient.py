@@ -827,6 +827,7 @@ class MoonrakerCompat:
         self._InitPrintStateForFreshConnect()
 
         # We are ready to process notifications!
+        Sentry.Breadcrumb("Moonraker client connected, print state restored, and we are ready to accept notifications.")
         self.IsReadyToProcessNotifications = True
 
 
@@ -838,6 +839,7 @@ class MoonrakerCompat:
             return
 
         # Set the flag to false again, since we can't send any more notifications until we are reconnected and re-synced.
+        Sentry.Breadcrumb("Moonraker disconnected. Stopping notification processing.")
         self.IsReadyToProcessNotifications = False
 
         # Only fire this error if we are tracking a print.
