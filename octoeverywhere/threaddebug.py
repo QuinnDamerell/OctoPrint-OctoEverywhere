@@ -26,9 +26,8 @@ class ThreadDebug:
 
 
     @staticmethod
-    def DoThreadDumpLogout(logger:logging.Logger, addSentryBreadcrumb:bool = False):
+    def DoThreadDumpLogout(logger:logging.Logger):
         try:
-            sentryData = {}
             logger.info("ThreadDump - Starting Thread Dump")
             # pylint: disable=protected-access
             for threadId, stack in sys._current_frames().items():
@@ -42,10 +41,5 @@ class ThreadDebug:
                     else:
                         trace += ", "+filename+":"+name
                 logger.info("ThreadDump- Id: "+str(threadId) + " -> "+str(trace))
-                sentryData[str(threadId)] = str(trace)
-
-            # Dump the sentry data if desired.
-            if addSentryBreadcrumb:
-                Sentry.Breadcrumb("ThreadDump", sentryData)
         except Exception as e:
             logger.error("Exception in ThreadDebug : "+str(e))
