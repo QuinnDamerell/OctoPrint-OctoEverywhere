@@ -1,12 +1,15 @@
+import os
 import logging
 import time
 import traceback
 
 import sentry_sdk
+from sentry_sdk import Hub
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.threading import ThreadingIntegration
 
 from .exceptions import NoSentryReportException
+from .threaddebug import ThreadDebug
 
 # A helper class to handle Sentry logic.
 class Sentry:
@@ -20,6 +23,7 @@ class Sentry:
     FilterExceptionsByPackage:bool = False
     LastErrorReport:float = time.time()
     LastErrorCount:int = 0
+    RestartProcessOnCantCreateThreadBug = False
 
 
     # This will be called as soon as possible when the process starts to capture the logger, so it's ready for use.
@@ -31,10 +35,11 @@ class Sentry:
     # This actually setups sentry.
     # It's only called after the plugin version is known, and thus it might be a little into the process lifetime.
     @staticmethod
-    def Setup(versionString:str, distType:str, isDevMode:bool = False, enableProfiling:bool = False, filterExceptionsByPackage:bool = False):
+    def Setup(versionString:str, distType:str, isDevMode:bool = False, enableProfiling:bool = False, filterExceptionsByPackage:bool = False, restartOnCantCreateThreadBug:bool = False):
         # Set the dev mode flag.
         Sentry.IsDevMode = isDevMode
         Sentry.FilterExceptionsByPackage = filterExceptionsByPackage
+        Sentry.RestartProcessOnCantCreateThreadBug = restartOnCantCreateThreadBug
 
         # Only setup sentry if we aren't in dev mode.
         if Sentry.IsDevMode is False:
@@ -172,6 +177,11 @@ class Sentry:
         if Sentry._Logger is None:
             return
 
+        # We have special logic to handle a bug were we can't create new threads due to a deadlock
+        # in our websocket lib. This logic will do that, if it returns true, the Exception has handled.
+        if Sentry._HandleCantCreateThreadException(Sentry._Logger, exception):
+            return
+
         tb = traceback.format_exc()
         exceptionClassType = "unknown_type"
         if exception is not None:
@@ -191,3 +201,41 @@ class Sentry:
                     for key, value in extras.items():
                         scope.set_extra(key, value)
                 sentry_sdk.capture_exception(exception)
+
+
+    # If the exception is that we can't start new thread, this logs it, and then restarts if needed.
+    # Returns of the exception was handled.
+    _IsHandlingCantCreateThreadException = False
+    @staticmethod
+    def _HandleCantCreateThreadException(logger:logging.Logger, e:Exception) -> bool:
+        # Filter the exception
+        if e is not RuntimeError or "can't start new thread" not in str(e):
+            return False
+
+        # If we can't restart, return false, and the normal exception handling will occur.
+        if Sentry.RestartProcessOnCantCreateThreadBug is False:
+            return False
+
+        # If we are already handling this, return False to prevent a loop.
+        # We return false so the exception we are reporting will be handled in the normal way.
+        if Sentry._IsHandlingCantCreateThreadException:
+            return False
+        Sentry._IsHandlingCantCreateThreadException = True
+
+        # Log the error
+        ThreadDebug.DoThreadDumpLogout(logger, True)
+        logger.error("~~~~~~~~~ Process Restarting Due To Threading Bug ~~~~~~~~~~~~")
+        Sentry.Exception("Can't start new thread - restarting the process.", e)
+
+        # Flush Sentry
+        # Once this is called, Sentry is shutdown, so we must restart.
+        try:
+            client = Hub.current.client
+            if client is not None:
+                client.close(timeout=5.0)
+        except Exception:
+            pass
+
+        # Restart the process - We must use this function to actually force the process to exit
+        # The systemd handler will restart us.
+        os.abort()

@@ -87,7 +87,7 @@ class MoonrakerHost:
 
             # As soon as we have the plugin version, setup Sentry
             # Enabling profiling and no filtering, since we are the only PY in this process.
-            Sentry.Setup(pluginVersionStr, "klipper", devConfig_CanBeNone is not None, enableProfiling=True, filterExceptionsByPackage=False)
+            Sentry.Setup(pluginVersionStr, "klipper", devConfig_CanBeNone is not None, enableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # This logic only works if running locally.
             if not isCompanionMode:
