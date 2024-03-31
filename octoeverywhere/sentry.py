@@ -206,8 +206,8 @@ class Sentry:
     # If the exception is that we can't start new thread, this logs it, and then restarts if needed.
     # Returns of the exception was handled.
     _IsHandlingCantCreateThreadException = False
+    # pylint: disable=inconsistent-return-statements
     @staticmethod
-    # pylint: inconsistent-return-statements
     def _HandleCantCreateThreadException(logger:logging.Logger, e:Exception) -> bool:
         # Filter the exception
         if e is not RuntimeError or "can't start new thread" not in str(e):
