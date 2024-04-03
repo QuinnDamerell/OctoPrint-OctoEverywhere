@@ -7,6 +7,7 @@ import ssl
 import socket
 import time
 import os
+import signal
 
 from octoeverywhere.sentry import Sentry
 
@@ -407,7 +408,7 @@ class QuickCam_RTSP:
             if self.Process.returncode is not None or (time.time() - self.TimeSinceLastImg) > QuickCam_RTSP.c_ReadTimeoutSec:
                 if self.StdErrBuffer is None or len(self.StdErrBuffer) == 0:
                     self.StdErrBuffer = "<None>"
-                raise Exception(f"Ffmpeg read timeout. StdError: {self.StdErrBuffer}")
+                raise Exception(f"Ffmpeg read timeout. ffmpeg output:\n{self.StdErrBuffer}")
 
             # If we get an empty buffer, we just need to wait for more.
             if buffer is None or len(buffer) == 0:
@@ -547,18 +548,41 @@ class QuickCam_RTSP:
         # Killing the process will cause the error reader thread to exit.
         self.ErrorReaderThreadRunning = False
 
+        # First, we want to try to gracefully kill ffmpeg. That way it has time to tell the rtsp server it's
+        # going away and clean up.
+        try:
+            if self.Process is not None:
+                # Send sig int to emulate a ctl+c
+                self.Process.send_signal(signal.SIGINT)
+
+                # Use communicate which will wait for the process to end and read it's final output.
+                # We also try to issue the q terminal command to exit, just incase the ffmpeg needs it.
+                # Give ffmpeg a good amount of time to exit, so ideally it gracefully exits. (usually this is really quick)
+                _, stderr =self.Process.communicate("q\r\n".encode("utf-8"), timeout=10.0)
+
+                # Report what happened.
+                # For some reason communicate will eat the output instead of it being sent to our reader above, so we just print it here as well.
+                if stderr is None:
+                    stderr = b""
+                stderr = stderr.decode("utf-8")
+                self.Logger.debug(f"ffmpeg gracefully killed. Remaining ffmpeg output:\n{stderr}")
+        except Exception as e:
+            self.Logger.warn(f"Exception when trying to gracefully kill ffmpeg. {e}")
+
         # Close in the opposite order they were opened.
         try:
             if self.PipeSelect is not None:
                 self.PipeSelect.close()
         except Exception:
             pass
-        # Tell the process to be killed
+
+        # Ensure the process is killed
         try:
             if self.Process is not None:
                 self.Process.kill()
         except Exception:
             pass
+
         # And then call exit to cleanup all of the pipes and process handles.
         try:
             if self.Process is not None:
