@@ -3,11 +3,14 @@
 # namespace: Proto
 
 import octoflatbuffers
+from typing import Any
+from octoflatbuffers.table import Table
+from typing import Optional
 class OctoStreamMessage(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAs(cls, buf, offset=0):
+    def GetRootAs(cls, buf, offset: int = 0):
         n = octoflatbuffers.encode.Get(octoflatbuffers.packer.uoffset, buf, offset)
         x = OctoStreamMessage()
         x.Init(buf, n + offset)
@@ -18,7 +21,7 @@ class OctoStreamMessage(object):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
     # OctoStreamMessage
-    def Init(self, buf, pos):
+    def Init(self, buf: bytes, pos: int):
         self._tab = octoflatbuffers.table.Table(buf, pos)
 
     # OctoStreamMessage
@@ -29,28 +32,34 @@ class OctoStreamMessage(object):
         return 0
 
     # OctoStreamMessage
-    def Context(self):
+    def Context(self) -> Optional[octoflatbuffers.table.Table]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
-            from octoflatbuffers.table import Table
             obj = Table(bytearray(), 0)
             self._tab.Union(obj, o)
             return obj
         return None
 
-def Start(builder): builder.StartObject(2)
-def OctoStreamMessageStart(builder):
-    """This method is deprecated. Please switch to Start."""
-    return Start(builder)
-def AddContextType(builder, contextType): builder.PrependUint8Slot(0, contextType, 0)
-def OctoStreamMessageAddContextType(builder, contextType):
-    """This method is deprecated. Please switch to AddContextType."""
-    return AddContextType(builder, contextType)
-def AddContext(builder, context): builder.PrependUOffsetTRelativeSlot(1, octoflatbuffers.number_types.UOffsetTFlags.py_type(context), 0)
-def OctoStreamMessageAddContext(builder, context):
-    """This method is deprecated. Please switch to AddContext."""
-    return AddContext(builder, context)
-def End(builder): return builder.EndObject()
-def OctoStreamMessageEnd(builder):
-    """This method is deprecated. Please switch to End."""
-    return End(builder)
+def OctoStreamMessageStart(builder: octoflatbuffers.Builder):
+    builder.StartObject(2)
+
+def Start(builder: octoflatbuffers.Builder):
+    OctoStreamMessageStart(builder)
+
+def OctoStreamMessageAddContextType(builder: octoflatbuffers.Builder, contextType: int):
+    builder.PrependUint8Slot(0, contextType, 0)
+
+def AddContextType(builder: octoflatbuffers.Builder, contextType: int):
+    OctoStreamMessageAddContextType(builder, contextType)
+
+def OctoStreamMessageAddContext(builder: octoflatbuffers.Builder, context: int):
+    builder.PrependUOffsetTRelativeSlot(1, octoflatbuffers.number_types.UOffsetTFlags.py_type(context), 0)
+
+def AddContext(builder: octoflatbuffers.Builder, context: int):
+    OctoStreamMessageAddContext(builder, context)
+
+def OctoStreamMessageEnd(builder: octoflatbuffers.Builder) -> int:
+    return builder.EndObject()
+
+def End(builder: octoflatbuffers.Builder) -> int:
+    return OctoStreamMessageEnd(builder)

@@ -6,4 +6,3 @@ class PathTypes(object):
     None_ = 0
     Relative = 1
     Absolute = 2
-

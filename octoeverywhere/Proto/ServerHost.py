@@ -7,4 +7,3 @@ class ServerHost(object):
     OctoPrint = 1
     Moonraker = 2
     Bambu = 3
-

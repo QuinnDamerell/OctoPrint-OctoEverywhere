@@ -3,11 +3,13 @@
 # namespace: Proto
 
 import octoflatbuffers
+from typing import Any
+from typing import Optional
 class OctoSummon(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAs(cls, buf, offset=0):
+    def GetRootAs(cls, buf, offset: int = 0):
         n = octoflatbuffers.encode.Get(octoflatbuffers.packer.uoffset, buf, offset)
         x = OctoSummon()
         x.Init(buf, n + offset)
@@ -18,11 +20,11 @@ class OctoSummon(object):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
     # OctoSummon
-    def Init(self, buf, pos):
+    def Init(self, buf: bytes, pos: int):
         self._tab = octoflatbuffers.table.Table(buf, pos)
 
     # OctoSummon
-    def ServerConnectUrl(self):
+    def ServerConnectUrl(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
@@ -35,19 +37,26 @@ class OctoSummon(object):
             return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
         return 1
 
-def Start(builder): builder.StartObject(2)
-def OctoSummonStart(builder):
-    """This method is deprecated. Please switch to Start."""
-    return Start(builder)
-def AddServerConnectUrl(builder, serverConnectUrl): builder.PrependUOffsetTRelativeSlot(0, octoflatbuffers.number_types.UOffsetTFlags.py_type(serverConnectUrl), 0)
-def OctoSummonAddServerConnectUrl(builder, serverConnectUrl):
-    """This method is deprecated. Please switch to AddServerConnectUrl."""
-    return AddServerConnectUrl(builder, serverConnectUrl)
-def AddSummonMethod(builder, summonMethod): builder.PrependInt8Slot(1, summonMethod, 1)
-def OctoSummonAddSummonMethod(builder, summonMethod):
-    """This method is deprecated. Please switch to AddSummonMethod."""
-    return AddSummonMethod(builder, summonMethod)
-def End(builder): return builder.EndObject()
-def OctoSummonEnd(builder):
-    """This method is deprecated. Please switch to End."""
-    return End(builder)
+def OctoSummonStart(builder: octoflatbuffers.Builder):
+    builder.StartObject(2)
+
+def Start(builder: octoflatbuffers.Builder):
+    OctoSummonStart(builder)
+
+def OctoSummonAddServerConnectUrl(builder: octoflatbuffers.Builder, serverConnectUrl: int):
+    builder.PrependUOffsetTRelativeSlot(0, octoflatbuffers.number_types.UOffsetTFlags.py_type(serverConnectUrl), 0)
+
+def AddServerConnectUrl(builder: octoflatbuffers.Builder, serverConnectUrl: int):
+    OctoSummonAddServerConnectUrl(builder, serverConnectUrl)
+
+def OctoSummonAddSummonMethod(builder: octoflatbuffers.Builder, summonMethod: int):
+    builder.PrependInt8Slot(1, summonMethod, 1)
+
+def AddSummonMethod(builder: octoflatbuffers.Builder, summonMethod: int):
+    OctoSummonAddSummonMethod(builder, summonMethod)
+
+def OctoSummonEnd(builder: octoflatbuffers.Builder) -> int:
+    return builder.EndObject()
+
+def End(builder: octoflatbuffers.Builder) -> int:
+    return OctoSummonEnd(builder)

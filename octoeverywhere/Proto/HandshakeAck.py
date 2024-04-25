@@ -3,11 +3,13 @@
 # namespace: Proto
 
 import octoflatbuffers
+from typing import Any
+from typing import Optional
 class HandshakeAck(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAs(cls, buf, offset=0):
+    def GetRootAs(cls, buf, offset: int = 0):
         n = octoflatbuffers.encode.Get(octoflatbuffers.packer.uoffset, buf, offset)
         x = HandshakeAck()
         x.Init(buf, n + offset)
@@ -18,7 +20,7 @@ class HandshakeAck(object):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
     # HandshakeAck
-    def Init(self, buf, pos):
+    def Init(self, buf: bytes, pos: int):
         self._tab = octoflatbuffers.table.Table(buf, pos)
 
     # HandshakeAck
@@ -29,7 +31,7 @@ class HandshakeAck(object):
         return False
 
     # HandshakeAck
-    def ConnectedAccounts(self, j):
+    def ConnectedAccounts(self, j: int):
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
             a = self._tab.Vector(o)
@@ -37,19 +39,19 @@ class HandshakeAck(object):
         return ""
 
     # HandshakeAck
-    def ConnectedAccountsLength(self):
+    def ConnectedAccountsLength(self) -> int:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
     # HandshakeAck
-    def ConnectedAccountsIsNone(self):
+    def ConnectedAccountsIsNone(self) -> bool:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(6))
         return o == 0
 
     # HandshakeAck
-    def Error(self):
+    def Error(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
@@ -70,56 +72,75 @@ class HandshakeAck(object):
         return False
 
     # HandshakeAck
-    def Octokey(self):
+    def Octokey(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
     # HandshakeAck
-    def RsaChallengeResult(self):
+    def RsaChallengeResult(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
-def Start(builder): builder.StartObject(7)
-def HandshakeAckStart(builder):
-    """This method is deprecated. Please switch to Start."""
-    return Start(builder)
-def AddAccepted(builder, accepted): builder.PrependBoolSlot(0, accepted, 0)
-def HandshakeAckAddAccepted(builder, accepted):
-    """This method is deprecated. Please switch to AddAccepted."""
-    return AddAccepted(builder, accepted)
-def AddConnectedAccounts(builder, connectedAccounts): builder.PrependUOffsetTRelativeSlot(1, octoflatbuffers.number_types.UOffsetTFlags.py_type(connectedAccounts), 0)
-def HandshakeAckAddConnectedAccounts(builder, connectedAccounts):
-    """This method is deprecated. Please switch to AddConnectedAccounts."""
-    return AddConnectedAccounts(builder, connectedAccounts)
-def StartConnectedAccountsVector(builder, numElems): return builder.StartVector(4, numElems, 4)
-def HandshakeAckStartConnectedAccountsVector(builder, numElems):
-    """This method is deprecated. Please switch to Start."""
-    return StartConnectedAccountsVector(builder, numElems)
-def AddError(builder, error): builder.PrependUOffsetTRelativeSlot(2, octoflatbuffers.number_types.UOffsetTFlags.py_type(error), 0)
-def HandshakeAckAddError(builder, error):
-    """This method is deprecated. Please switch to AddError."""
-    return AddError(builder, error)
-def AddBackoffSeconds(builder, backoffSeconds): builder.PrependUint64Slot(3, backoffSeconds, 0)
-def HandshakeAckAddBackoffSeconds(builder, backoffSeconds):
-    """This method is deprecated. Please switch to AddBackoffSeconds."""
-    return AddBackoffSeconds(builder, backoffSeconds)
-def AddRequiresPluginUpdate(builder, requiresPluginUpdate): builder.PrependBoolSlot(4, requiresPluginUpdate, 0)
-def HandshakeAckAddRequiresPluginUpdate(builder, requiresPluginUpdate):
-    """This method is deprecated. Please switch to AddRequiresPluginUpdate."""
-    return AddRequiresPluginUpdate(builder, requiresPluginUpdate)
-def AddOctokey(builder, octokey): builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(octokey), 0)
-def HandshakeAckAddOctokey(builder, octokey):
-    """This method is deprecated. Please switch to AddOctokey."""
-    return AddOctokey(builder, octokey)
-def AddRsaChallengeResult(builder, rsaChallengeResult): builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(rsaChallengeResult), 0)
-def HandshakeAckAddRsaChallengeResult(builder, rsaChallengeResult):
-    """This method is deprecated. Please switch to AddRsaChallengeResult."""
-    return AddRsaChallengeResult(builder, rsaChallengeResult)
-def End(builder): return builder.EndObject()
-def HandshakeAckEnd(builder):
-    """This method is deprecated. Please switch to End."""
-    return End(builder)
+def HandshakeAckStart(builder: octoflatbuffers.Builder):
+    builder.StartObject(7)
+
+def Start(builder: octoflatbuffers.Builder):
+    HandshakeAckStart(builder)
+
+def HandshakeAckAddAccepted(builder: octoflatbuffers.Builder, accepted: bool):
+    builder.PrependBoolSlot(0, accepted, 0)
+
+def AddAccepted(builder: octoflatbuffers.Builder, accepted: bool):
+    HandshakeAckAddAccepted(builder, accepted)
+
+def HandshakeAckAddConnectedAccounts(builder: octoflatbuffers.Builder, connectedAccounts: int):
+    builder.PrependUOffsetTRelativeSlot(1, octoflatbuffers.number_types.UOffsetTFlags.py_type(connectedAccounts), 0)
+
+def AddConnectedAccounts(builder: octoflatbuffers.Builder, connectedAccounts: int):
+    HandshakeAckAddConnectedAccounts(builder, connectedAccounts)
+
+def HandshakeAckStartConnectedAccountsVector(builder, numElems: int) -> int:
+    return builder.StartVector(4, numElems, 4)
+
+def StartConnectedAccountsVector(builder, numElems: int) -> int:
+    return HandshakeAckStartConnectedAccountsVector(builder, numElems)
+
+def HandshakeAckAddError(builder: octoflatbuffers.Builder, error: int):
+    builder.PrependUOffsetTRelativeSlot(2, octoflatbuffers.number_types.UOffsetTFlags.py_type(error), 0)
+
+def AddError(builder: octoflatbuffers.Builder, error: int):
+    HandshakeAckAddError(builder, error)
+
+def HandshakeAckAddBackoffSeconds(builder: octoflatbuffers.Builder, backoffSeconds: int):
+    builder.PrependUint64Slot(3, backoffSeconds, 0)
+
+def AddBackoffSeconds(builder: octoflatbuffers.Builder, backoffSeconds: int):
+    HandshakeAckAddBackoffSeconds(builder, backoffSeconds)
+
+def HandshakeAckAddRequiresPluginUpdate(builder: octoflatbuffers.Builder, requiresPluginUpdate: bool):
+    builder.PrependBoolSlot(4, requiresPluginUpdate, 0)
+
+def AddRequiresPluginUpdate(builder: octoflatbuffers.Builder, requiresPluginUpdate: bool):
+    HandshakeAckAddRequiresPluginUpdate(builder, requiresPluginUpdate)
+
+def HandshakeAckAddOctokey(builder: octoflatbuffers.Builder, octokey: int):
+    builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(octokey), 0)
+
+def AddOctokey(builder: octoflatbuffers.Builder, octokey: int):
+    HandshakeAckAddOctokey(builder, octokey)
+
+def HandshakeAckAddRsaChallengeResult(builder: octoflatbuffers.Builder, rsaChallengeResult: int):
+    builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(rsaChallengeResult), 0)
+
+def AddRsaChallengeResult(builder: octoflatbuffers.Builder, rsaChallengeResult: int):
+    HandshakeAckAddRsaChallengeResult(builder, rsaChallengeResult)
+
+def HandshakeAckEnd(builder: octoflatbuffers.Builder) -> int:
+    return builder.EndObject()
+
+def End(builder: octoflatbuffers.Builder) -> int:
+    return HandshakeAckEnd(builder)

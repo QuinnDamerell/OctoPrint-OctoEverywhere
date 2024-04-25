@@ -9,7 +9,7 @@
 #
 websocket_client>=1.6.0,<1.7.99
 requests>=2.31.0
-octoflatbuffers==2.0.5
+octoflatbuffers==24.3.26
 pillow
 certifi>=2023.11.17
 rsa>=4.9

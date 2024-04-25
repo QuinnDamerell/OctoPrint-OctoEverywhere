@@ -5,4 +5,3 @@
 class OeAuthAllowed(object):
     Deny = 0
     Allow = 1
-

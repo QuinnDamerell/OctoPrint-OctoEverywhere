@@ -3,11 +3,14 @@
 # namespace: Proto
 
 import octoflatbuffers
+from typing import Any
+from octoeverywhere.Proto.HttpInitialContext import HttpInitialContext
+from typing import Optional
 class WebStreamMsg(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAs(cls, buf, offset=0):
+    def GetRootAs(cls, buf, offset: int = 0):
         n = octoflatbuffers.encode.Get(octoflatbuffers.packer.uoffset, buf, offset)
         x = WebStreamMsg()
         x.Init(buf, n + offset)
@@ -18,7 +21,7 @@ class WebStreamMsg(object):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
     # WebStreamMsg
-    def Init(self, buf, pos):
+    def Init(self, buf: bytes, pos: int):
         self._tab = octoflatbuffers.table.Table(buf, pos)
 
     # WebStreamMsg
@@ -64,7 +67,7 @@ class WebStreamMsg(object):
         return -1
 
     # WebStreamMsg
-    def Data(self, j):
+    def Data(self, j: int):
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             a = self._tab.Vector(o)
@@ -86,14 +89,14 @@ class WebStreamMsg(object):
         return 0
 
     # WebStreamMsg
-    def DataLength(self):
+    def DataLength(self) -> int:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
     # WebStreamMsg
-    def DataIsNone(self):
+    def DataIsNone(self) -> bool:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         return o == 0
 
@@ -112,11 +115,10 @@ class WebStreamMsg(object):
         return 0
 
     # WebStreamMsg
-    def HttpInitialContext(self):
+    def HttpInitialContext(self) -> Optional[HttpInitialContext]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(22))
         if o != 0:
             x = self._tab.Indirect(o + self._tab.Pos)
-            from octoeverywhere.Proto.HttpInitialContext import HttpInitialContext
             obj = HttpInitialContext()
             obj.Init(self._tab.Bytes, x)
             return obj
@@ -178,87 +180,128 @@ class WebStreamMsg(object):
             return self._tab.Get(octoflatbuffers.number_types.Uint8Flags, o + self._tab.Pos)
         return 0
 
-def Start(builder): builder.StartObject(18)
-def WebStreamMsgStart(builder):
-    """This method is deprecated. Please switch to Start."""
-    return Start(builder)
-def AddStreamId(builder, streamId): builder.PrependUint32Slot(0, streamId, 0)
-def WebStreamMsgAddStreamId(builder, streamId):
-    """This method is deprecated. Please switch to AddStreamId."""
-    return AddStreamId(builder, streamId)
-def AddIsOpenMsg(builder, isOpenMsg): builder.PrependBoolSlot(1, isOpenMsg, 0)
-def WebStreamMsgAddIsOpenMsg(builder, isOpenMsg):
-    """This method is deprecated. Please switch to AddIsOpenMsg."""
-    return AddIsOpenMsg(builder, isOpenMsg)
-def AddIsCloseMsg(builder, isCloseMsg): builder.PrependBoolSlot(2, isCloseMsg, 0)
-def WebStreamMsgAddIsCloseMsg(builder, isCloseMsg):
-    """This method is deprecated. Please switch to AddIsCloseMsg."""
-    return AddIsCloseMsg(builder, isCloseMsg)
-def AddIsDataTransmissionDone(builder, isDataTransmissionDone): builder.PrependBoolSlot(3, isDataTransmissionDone, 0)
-def WebStreamMsgAddIsDataTransmissionDone(builder, isDataTransmissionDone):
-    """This method is deprecated. Please switch to AddIsDataTransmissionDone."""
-    return AddIsDataTransmissionDone(builder, isDataTransmissionDone)
-def AddIsControlFlagsOnly(builder, isControlFlagsOnly): builder.PrependBoolSlot(4, isControlFlagsOnly, 1)
-def WebStreamMsgAddIsControlFlagsOnly(builder, isControlFlagsOnly):
-    """This method is deprecated. Please switch to AddIsControlFlagsOnly."""
-    return AddIsControlFlagsOnly(builder, isControlFlagsOnly)
-def AddFullStreamDataSize(builder, fullStreamDataSize): builder.PrependInt64Slot(5, fullStreamDataSize, -1)
-def WebStreamMsgAddFullStreamDataSize(builder, fullStreamDataSize):
-    """This method is deprecated. Please switch to AddFullStreamDataSize."""
-    return AddFullStreamDataSize(builder, fullStreamDataSize)
-def AddData(builder, data): builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(data), 0)
-def WebStreamMsgAddData(builder, data):
-    """This method is deprecated. Please switch to AddData."""
-    return AddData(builder, data)
-def StartDataVector(builder, numElems): return builder.StartVector(1, numElems, 1)
-def WebStreamMsgStartDataVector(builder, numElems):
-    """This method is deprecated. Please switch to Start."""
-    return StartDataVector(builder, numElems)
-def AddDataCompression(builder, dataCompression): builder.PrependInt8Slot(7, dataCompression, 0)
-def WebStreamMsgAddDataCompression(builder, dataCompression):
-    """This method is deprecated. Please switch to AddDataCompression."""
-    return AddDataCompression(builder, dataCompression)
-def AddOriginalDataSize(builder, originalDataSize): builder.PrependUint64Slot(8, originalDataSize, 0)
-def WebStreamMsgAddOriginalDataSize(builder, originalDataSize):
-    """This method is deprecated. Please switch to AddOriginalDataSize."""
-    return AddOriginalDataSize(builder, originalDataSize)
-def AddHttpInitialContext(builder, httpInitialContext): builder.PrependUOffsetTRelativeSlot(9, octoflatbuffers.number_types.UOffsetTFlags.py_type(httpInitialContext), 0)
-def WebStreamMsgAddHttpInitialContext(builder, httpInitialContext):
-    """This method is deprecated. Please switch to AddHttpInitialContext."""
-    return AddHttpInitialContext(builder, httpInitialContext)
-def AddIsWebsocketStream(builder, isWebsocketStream): builder.PrependBoolSlot(10, isWebsocketStream, 0)
-def WebStreamMsgAddIsWebsocketStream(builder, isWebsocketStream):
-    """This method is deprecated. Please switch to AddIsWebsocketStream."""
-    return AddIsWebsocketStream(builder, isWebsocketStream)
-def AddStatusCode(builder, statusCode): builder.PrependUint16Slot(11, statusCode, 0)
-def WebStreamMsgAddStatusCode(builder, statusCode):
-    """This method is deprecated. Please switch to AddStatusCode."""
-    return AddStatusCode(builder, statusCode)
-def AddWebsocketDataType(builder, websocketDataType): builder.PrependInt8Slot(12, websocketDataType, 126)
-def WebStreamMsgAddWebsocketDataType(builder, websocketDataType):
-    """This method is deprecated. Please switch to AddWebsocketDataType."""
-    return AddWebsocketDataType(builder, websocketDataType)
-def AddMsgPriority(builder, msgPriority): builder.PrependInt8Slot(13, msgPriority, 10)
-def WebStreamMsgAddMsgPriority(builder, msgPriority):
-    """This method is deprecated. Please switch to AddMsgPriority."""
-    return AddMsgPriority(builder, msgPriority)
-def AddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFailure): builder.PrependBoolSlot(14, closeDueToRequestConnectionFailure, 0)
-def WebStreamMsgAddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFailure):
-    """This method is deprecated. Please switch to AddCloseDueToRequestConnectionFailure."""
-    return AddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFailure)
-def AddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs): builder.PrependUint16Slot(15, bodyReadTimeHighWaterMarkMs, 0)
-def WebStreamMsgAddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs):
-    """This method is deprecated. Please switch to AddBodyReadTimeHighWaterMarkMs."""
-    return AddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs)
-def AddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs): builder.PrependUint16Slot(16, socketSendTimeHighWaterMarkMs, 0)
-def WebStreamMsgAddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs):
-    """This method is deprecated. Please switch to AddSocketSendTimeHighWaterMarkMs."""
-    return AddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs)
-def AddMultipartReadsPerSecond(builder, multipartReadsPerSecond): builder.PrependUint8Slot(17, multipartReadsPerSecond, 0)
-def WebStreamMsgAddMultipartReadsPerSecond(builder, multipartReadsPerSecond):
-    """This method is deprecated. Please switch to AddMultipartReadsPerSecond."""
-    return AddMultipartReadsPerSecond(builder, multipartReadsPerSecond)
-def End(builder): return builder.EndObject()
-def WebStreamMsgEnd(builder):
-    """This method is deprecated. Please switch to End."""
-    return End(builder)
+def WebStreamMsgStart(builder: octoflatbuffers.Builder):
+    builder.StartObject(18)
+
+def Start(builder: octoflatbuffers.Builder):
+    WebStreamMsgStart(builder)
+
+def WebStreamMsgAddStreamId(builder: octoflatbuffers.Builder, streamId: int):
+    builder.PrependUint32Slot(0, streamId, 0)
+
+def AddStreamId(builder: octoflatbuffers.Builder, streamId: int):
+    WebStreamMsgAddStreamId(builder, streamId)
+
+def WebStreamMsgAddIsOpenMsg(builder: octoflatbuffers.Builder, isOpenMsg: bool):
+    builder.PrependBoolSlot(1, isOpenMsg, 0)
+
+def AddIsOpenMsg(builder: octoflatbuffers.Builder, isOpenMsg: bool):
+    WebStreamMsgAddIsOpenMsg(builder, isOpenMsg)
+
+def WebStreamMsgAddIsCloseMsg(builder: octoflatbuffers.Builder, isCloseMsg: bool):
+    builder.PrependBoolSlot(2, isCloseMsg, 0)
+
+def AddIsCloseMsg(builder: octoflatbuffers.Builder, isCloseMsg: bool):
+    WebStreamMsgAddIsCloseMsg(builder, isCloseMsg)
+
+def WebStreamMsgAddIsDataTransmissionDone(builder: octoflatbuffers.Builder, isDataTransmissionDone: bool):
+    builder.PrependBoolSlot(3, isDataTransmissionDone, 0)
+
+def AddIsDataTransmissionDone(builder: octoflatbuffers.Builder, isDataTransmissionDone: bool):
+    WebStreamMsgAddIsDataTransmissionDone(builder, isDataTransmissionDone)
+
+def WebStreamMsgAddIsControlFlagsOnly(builder: octoflatbuffers.Builder, isControlFlagsOnly: bool):
+    builder.PrependBoolSlot(4, isControlFlagsOnly, 1)
+
+def AddIsControlFlagsOnly(builder: octoflatbuffers.Builder, isControlFlagsOnly: bool):
+    WebStreamMsgAddIsControlFlagsOnly(builder, isControlFlagsOnly)
+
+def WebStreamMsgAddFullStreamDataSize(builder: octoflatbuffers.Builder, fullStreamDataSize: int):
+    builder.PrependInt64Slot(5, fullStreamDataSize, -1)
+
+def AddFullStreamDataSize(builder: octoflatbuffers.Builder, fullStreamDataSize: int):
+    WebStreamMsgAddFullStreamDataSize(builder, fullStreamDataSize)
+
+def WebStreamMsgAddData(builder: octoflatbuffers.Builder, data: int):
+    builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(data), 0)
+
+def AddData(builder: octoflatbuffers.Builder, data: int):
+    WebStreamMsgAddData(builder, data)
+
+def WebStreamMsgStartDataVector(builder, numElems: int) -> int:
+    return builder.StartVector(1, numElems, 1)
+
+def StartDataVector(builder, numElems: int) -> int:
+    return WebStreamMsgStartDataVector(builder, numElems)
+
+def WebStreamMsgAddDataCompression(builder: octoflatbuffers.Builder, dataCompression: int):
+    builder.PrependInt8Slot(7, dataCompression, 0)
+
+def AddDataCompression(builder: octoflatbuffers.Builder, dataCompression: int):
+    WebStreamMsgAddDataCompression(builder, dataCompression)
+
+def WebStreamMsgAddOriginalDataSize(builder: octoflatbuffers.Builder, originalDataSize: int):
+    builder.PrependUint64Slot(8, originalDataSize, 0)
+
+def AddOriginalDataSize(builder: octoflatbuffers.Builder, originalDataSize: int):
+    WebStreamMsgAddOriginalDataSize(builder, originalDataSize)
+
+def WebStreamMsgAddHttpInitialContext(builder: octoflatbuffers.Builder, httpInitialContext: int):
+    builder.PrependUOffsetTRelativeSlot(9, octoflatbuffers.number_types.UOffsetTFlags.py_type(httpInitialContext), 0)
+
+def AddHttpInitialContext(builder: octoflatbuffers.Builder, httpInitialContext: int):
+    WebStreamMsgAddHttpInitialContext(builder, httpInitialContext)
+
+def WebStreamMsgAddIsWebsocketStream(builder: octoflatbuffers.Builder, isWebsocketStream: bool):
+    builder.PrependBoolSlot(10, isWebsocketStream, 0)
+
+def AddIsWebsocketStream(builder: octoflatbuffers.Builder, isWebsocketStream: bool):
+    WebStreamMsgAddIsWebsocketStream(builder, isWebsocketStream)
+
+def WebStreamMsgAddStatusCode(builder: octoflatbuffers.Builder, statusCode: int):
+    builder.PrependUint16Slot(11, statusCode, 0)
+
+def AddStatusCode(builder: octoflatbuffers.Builder, statusCode: int):
+    WebStreamMsgAddStatusCode(builder, statusCode)
+
+def WebStreamMsgAddWebsocketDataType(builder: octoflatbuffers.Builder, websocketDataType: int):
+    builder.PrependInt8Slot(12, websocketDataType, 126)
+
+def AddWebsocketDataType(builder: octoflatbuffers.Builder, websocketDataType: int):
+    WebStreamMsgAddWebsocketDataType(builder, websocketDataType)
+
+def WebStreamMsgAddMsgPriority(builder: octoflatbuffers.Builder, msgPriority: int):
+    builder.PrependInt8Slot(13, msgPriority, 10)
+
+def AddMsgPriority(builder: octoflatbuffers.Builder, msgPriority: int):
+    WebStreamMsgAddMsgPriority(builder, msgPriority)
+
+def WebStreamMsgAddCloseDueToRequestConnectionFailure(builder: octoflatbuffers.Builder, closeDueToRequestConnectionFailure: bool):
+    builder.PrependBoolSlot(14, closeDueToRequestConnectionFailure, 0)
+
+def AddCloseDueToRequestConnectionFailure(builder: octoflatbuffers.Builder, closeDueToRequestConnectionFailure: bool):
+    WebStreamMsgAddCloseDueToRequestConnectionFailure(builder, closeDueToRequestConnectionFailure)
+
+def WebStreamMsgAddBodyReadTimeHighWaterMarkMs(builder: octoflatbuffers.Builder, bodyReadTimeHighWaterMarkMs: int):
+    builder.PrependUint16Slot(15, bodyReadTimeHighWaterMarkMs, 0)
+
+def AddBodyReadTimeHighWaterMarkMs(builder: octoflatbuffers.Builder, bodyReadTimeHighWaterMarkMs: int):
+    WebStreamMsgAddBodyReadTimeHighWaterMarkMs(builder, bodyReadTimeHighWaterMarkMs)
+
+def WebStreamMsgAddSocketSendTimeHighWaterMarkMs(builder: octoflatbuffers.Builder, socketSendTimeHighWaterMarkMs: int):
+    builder.PrependUint16Slot(16, socketSendTimeHighWaterMarkMs, 0)
+
+def AddSocketSendTimeHighWaterMarkMs(builder: octoflatbuffers.Builder, socketSendTimeHighWaterMarkMs: int):
+    WebStreamMsgAddSocketSendTimeHighWaterMarkMs(builder, socketSendTimeHighWaterMarkMs)
+
+def WebStreamMsgAddMultipartReadsPerSecond(builder: octoflatbuffers.Builder, multipartReadsPerSecond: int):
+    builder.PrependUint8Slot(17, multipartReadsPerSecond, 0)
+
+def AddMultipartReadsPerSecond(builder: octoflatbuffers.Builder, multipartReadsPerSecond: int):
+    WebStreamMsgAddMultipartReadsPerSecond(builder, multipartReadsPerSecond)
+
+def WebStreamMsgEnd(builder: octoflatbuffers.Builder) -> int:
+    return builder.EndObject()
+
+def End(builder: octoflatbuffers.Builder) -> int:
+    return WebStreamMsgEnd(builder)

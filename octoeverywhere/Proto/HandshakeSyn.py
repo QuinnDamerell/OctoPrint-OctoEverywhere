@@ -3,11 +3,13 @@
 # namespace: Proto
 
 import octoflatbuffers
+from typing import Any
+from typing import Optional
 class HandshakeSyn(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAs(cls, buf, offset=0):
+    def GetRootAs(cls, buf, offset: int = 0):
         n = octoflatbuffers.encode.Get(octoflatbuffers.packer.uoffset, buf, offset)
         x = HandshakeSyn()
         x.Init(buf, n + offset)
@@ -18,11 +20,11 @@ class HandshakeSyn(object):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
     # HandshakeSyn
-    def Init(self, buf, pos):
+    def Init(self, buf: bytes, pos: int):
         self._tab = octoflatbuffers.table.Table(buf, pos)
 
     # HandshakeSyn
-    def PrinterId(self):
+    def PrinterId(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
@@ -36,14 +38,14 @@ class HandshakeSyn(object):
         return False
 
     # HandshakeSyn
-    def PluginVersion(self):
+    def PluginVersion(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
     # HandshakeSyn
-    def LocalDeviceIp(self):
+    def LocalDeviceIp(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
@@ -57,14 +59,14 @@ class HandshakeSyn(object):
         return 0
 
     # HandshakeSyn
-    def Key(self):
+    def Key(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(14))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
     # HandshakeSyn
-    def RsaChallenge(self, j):
+    def RsaChallenge(self, j: int):
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             a = self._tab.Vector(o)
@@ -86,14 +88,14 @@ class HandshakeSyn(object):
         return 0
 
     # HandshakeSyn
-    def RsaChallengeLength(self):
+    def RsaChallengeLength(self) -> int:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
     # HandshakeSyn
-    def RsaChallengeIsNone(self):
+    def RsaChallengeIsNone(self) -> bool:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
         return o == 0
 
@@ -126,7 +128,7 @@ class HandshakeSyn(object):
         return False
 
     # HandshakeSyn
-    def PrivateKey(self):
+    def PrivateKey(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(26))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
@@ -160,79 +162,116 @@ class HandshakeSyn(object):
             return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
         return 0
 
-def Start(builder): builder.StartObject(16)
-def HandshakeSynStart(builder):
-    """This method is deprecated. Please switch to Start."""
-    return Start(builder)
-def AddPrinterId(builder, printerId): builder.PrependUOffsetTRelativeSlot(0, octoflatbuffers.number_types.UOffsetTFlags.py_type(printerId), 0)
-def HandshakeSynAddPrinterId(builder, printerId):
-    """This method is deprecated. Please switch to AddPrinterId."""
-    return AddPrinterId(builder, printerId)
-def AddIsPrimaryConnection(builder, isPrimaryConnection): builder.PrependBoolSlot(1, isPrimaryConnection, 0)
-def HandshakeSynAddIsPrimaryConnection(builder, isPrimaryConnection):
-    """This method is deprecated. Please switch to AddIsPrimaryConnection."""
-    return AddIsPrimaryConnection(builder, isPrimaryConnection)
-def AddPluginVersion(builder, pluginVersion): builder.PrependUOffsetTRelativeSlot(2, octoflatbuffers.number_types.UOffsetTFlags.py_type(pluginVersion), 0)
-def HandshakeSynAddPluginVersion(builder, pluginVersion):
-    """This method is deprecated. Please switch to AddPluginVersion."""
-    return AddPluginVersion(builder, pluginVersion)
-def AddLocalDeviceIp(builder, localDeviceIp): builder.PrependUOffsetTRelativeSlot(3, octoflatbuffers.number_types.UOffsetTFlags.py_type(localDeviceIp), 0)
-def HandshakeSynAddLocalDeviceIp(builder, localDeviceIp):
-    """This method is deprecated. Please switch to AddLocalDeviceIp."""
-    return AddLocalDeviceIp(builder, localDeviceIp)
-def AddLocalHttpProxyPort(builder, localHttpProxyPort): builder.PrependUint32Slot(4, localHttpProxyPort, 0)
-def HandshakeSynAddLocalHttpProxyPort(builder, localHttpProxyPort):
-    """This method is deprecated. Please switch to AddLocalHttpProxyPort."""
-    return AddLocalHttpProxyPort(builder, localHttpProxyPort)
-def AddKey(builder, key): builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(key), 0)
-def HandshakeSynAddKey(builder, key):
-    """This method is deprecated. Please switch to AddKey."""
-    return AddKey(builder, key)
-def AddRsaChallenge(builder, rsaChallenge): builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(rsaChallenge), 0)
-def HandshakeSynAddRsaChallenge(builder, rsaChallenge):
-    """This method is deprecated. Please switch to AddRsaChallenge."""
-    return AddRsaChallenge(builder, rsaChallenge)
-def StartRsaChallengeVector(builder, numElems): return builder.StartVector(1, numElems, 1)
-def HandshakeSynStartRsaChallengeVector(builder, numElems):
-    """This method is deprecated. Please switch to Start."""
-    return StartRsaChallengeVector(builder, numElems)
-def AddRasChallengeVersion(builder, rasChallengeVersion): builder.PrependInt8Slot(7, rasChallengeVersion, 0)
-def HandshakeSynAddRasChallengeVersion(builder, rasChallengeVersion):
-    """This method is deprecated. Please switch to AddRasChallengeVersion."""
-    return AddRasChallengeVersion(builder, rasChallengeVersion)
-def AddWebcamFlipH(builder, webcamFlipH): builder.PrependBoolSlot(8, webcamFlipH, 0)
-def HandshakeSynAddWebcamFlipH(builder, webcamFlipH):
-    """This method is deprecated. Please switch to AddWebcamFlipH."""
-    return AddWebcamFlipH(builder, webcamFlipH)
-def AddWebcamFlipV(builder, webcamFlipV): builder.PrependBoolSlot(9, webcamFlipV, 0)
-def HandshakeSynAddWebcamFlipV(builder, webcamFlipV):
-    """This method is deprecated. Please switch to AddWebcamFlipV."""
-    return AddWebcamFlipV(builder, webcamFlipV)
-def AddWebcamFlipRotate90(builder, webcamFlipRotate90): builder.PrependBoolSlot(10, webcamFlipRotate90, 0)
-def HandshakeSynAddWebcamFlipRotate90(builder, webcamFlipRotate90):
-    """This method is deprecated. Please switch to AddWebcamFlipRotate90."""
-    return AddWebcamFlipRotate90(builder, webcamFlipRotate90)
-def AddPrivateKey(builder, privateKey): builder.PrependUOffsetTRelativeSlot(11, octoflatbuffers.number_types.UOffsetTFlags.py_type(privateKey), 0)
-def HandshakeSynAddPrivateKey(builder, privateKey):
-    """This method is deprecated. Please switch to AddPrivateKey."""
-    return AddPrivateKey(builder, privateKey)
-def AddSummonMethod(builder, summonMethod): builder.PrependInt8Slot(12, summonMethod, 1)
-def HandshakeSynAddSummonMethod(builder, summonMethod):
-    """This method is deprecated. Please switch to AddSummonMethod."""
-    return AddSummonMethod(builder, summonMethod)
-def AddServerHost(builder, serverHost): builder.PrependInt8Slot(13, serverHost, 0)
-def HandshakeSynAddServerHost(builder, serverHost):
-    """This method is deprecated. Please switch to AddServerHost."""
-    return AddServerHost(builder, serverHost)
-def AddIsCompanion(builder, isCompanion): builder.PrependBoolSlot(14, isCompanion, 0)
-def HandshakeSynAddIsCompanion(builder, isCompanion):
-    """This method is deprecated. Please switch to AddIsCompanion."""
-    return AddIsCompanion(builder, isCompanion)
-def AddOsType(builder, osType): builder.PrependInt8Slot(15, osType, 0)
-def HandshakeSynAddOsType(builder, osType):
-    """This method is deprecated. Please switch to AddOsType."""
-    return AddOsType(builder, osType)
-def End(builder): return builder.EndObject()
-def HandshakeSynEnd(builder):
-    """This method is deprecated. Please switch to End."""
-    return End(builder)
+def HandshakeSynStart(builder: octoflatbuffers.Builder):
+    builder.StartObject(16)
+
+def Start(builder: octoflatbuffers.Builder):
+    HandshakeSynStart(builder)
+
+def HandshakeSynAddPrinterId(builder: octoflatbuffers.Builder, printerId: int):
+    builder.PrependUOffsetTRelativeSlot(0, octoflatbuffers.number_types.UOffsetTFlags.py_type(printerId), 0)
+
+def AddPrinterId(builder: octoflatbuffers.Builder, printerId: int):
+    HandshakeSynAddPrinterId(builder, printerId)
+
+def HandshakeSynAddIsPrimaryConnection(builder: octoflatbuffers.Builder, isPrimaryConnection: bool):
+    builder.PrependBoolSlot(1, isPrimaryConnection, 0)
+
+def AddIsPrimaryConnection(builder: octoflatbuffers.Builder, isPrimaryConnection: bool):
+    HandshakeSynAddIsPrimaryConnection(builder, isPrimaryConnection)
+
+def HandshakeSynAddPluginVersion(builder: octoflatbuffers.Builder, pluginVersion: int):
+    builder.PrependUOffsetTRelativeSlot(2, octoflatbuffers.number_types.UOffsetTFlags.py_type(pluginVersion), 0)
+
+def AddPluginVersion(builder: octoflatbuffers.Builder, pluginVersion: int):
+    HandshakeSynAddPluginVersion(builder, pluginVersion)
+
+def HandshakeSynAddLocalDeviceIp(builder: octoflatbuffers.Builder, localDeviceIp: int):
+    builder.PrependUOffsetTRelativeSlot(3, octoflatbuffers.number_types.UOffsetTFlags.py_type(localDeviceIp), 0)
+
+def AddLocalDeviceIp(builder: octoflatbuffers.Builder, localDeviceIp: int):
+    HandshakeSynAddLocalDeviceIp(builder, localDeviceIp)
+
+def HandshakeSynAddLocalHttpProxyPort(builder: octoflatbuffers.Builder, localHttpProxyPort: int):
+    builder.PrependUint32Slot(4, localHttpProxyPort, 0)
+
+def AddLocalHttpProxyPort(builder: octoflatbuffers.Builder, localHttpProxyPort: int):
+    HandshakeSynAddLocalHttpProxyPort(builder, localHttpProxyPort)
+
+def HandshakeSynAddKey(builder: octoflatbuffers.Builder, key: int):
+    builder.PrependUOffsetTRelativeSlot(5, octoflatbuffers.number_types.UOffsetTFlags.py_type(key), 0)
+
+def AddKey(builder: octoflatbuffers.Builder, key: int):
+    HandshakeSynAddKey(builder, key)
+
+def HandshakeSynAddRsaChallenge(builder: octoflatbuffers.Builder, rsaChallenge: int):
+    builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(rsaChallenge), 0)
+
+def AddRsaChallenge(builder: octoflatbuffers.Builder, rsaChallenge: int):
+    HandshakeSynAddRsaChallenge(builder, rsaChallenge)
+
+def HandshakeSynStartRsaChallengeVector(builder, numElems: int) -> int:
+    return builder.StartVector(1, numElems, 1)
+
+def StartRsaChallengeVector(builder, numElems: int) -> int:
+    return HandshakeSynStartRsaChallengeVector(builder, numElems)
+
+def HandshakeSynAddRasChallengeVersion(builder: octoflatbuffers.Builder, rasChallengeVersion: int):
+    builder.PrependInt8Slot(7, rasChallengeVersion, 0)
+
+def AddRasChallengeVersion(builder: octoflatbuffers.Builder, rasChallengeVersion: int):
+    HandshakeSynAddRasChallengeVersion(builder, rasChallengeVersion)
+
+def HandshakeSynAddWebcamFlipH(builder: octoflatbuffers.Builder, webcamFlipH: bool):
+    builder.PrependBoolSlot(8, webcamFlipH, 0)
+
+def AddWebcamFlipH(builder: octoflatbuffers.Builder, webcamFlipH: bool):
+    HandshakeSynAddWebcamFlipH(builder, webcamFlipH)
+
+def HandshakeSynAddWebcamFlipV(builder: octoflatbuffers.Builder, webcamFlipV: bool):
+    builder.PrependBoolSlot(9, webcamFlipV, 0)
+
+def AddWebcamFlipV(builder: octoflatbuffers.Builder, webcamFlipV: bool):
+    HandshakeSynAddWebcamFlipV(builder, webcamFlipV)
+
+def HandshakeSynAddWebcamFlipRotate90(builder: octoflatbuffers.Builder, webcamFlipRotate90: bool):
+    builder.PrependBoolSlot(10, webcamFlipRotate90, 0)
+
+def AddWebcamFlipRotate90(builder: octoflatbuffers.Builder, webcamFlipRotate90: bool):
+    HandshakeSynAddWebcamFlipRotate90(builder, webcamFlipRotate90)
+
+def HandshakeSynAddPrivateKey(builder: octoflatbuffers.Builder, privateKey: int):
+    builder.PrependUOffsetTRelativeSlot(11, octoflatbuffers.number_types.UOffsetTFlags.py_type(privateKey), 0)
+
+def AddPrivateKey(builder: octoflatbuffers.Builder, privateKey: int):
+    HandshakeSynAddPrivateKey(builder, privateKey)
+
+def HandshakeSynAddSummonMethod(builder: octoflatbuffers.Builder, summonMethod: int):
+    builder.PrependInt8Slot(12, summonMethod, 1)
+
+def AddSummonMethod(builder: octoflatbuffers.Builder, summonMethod: int):
+    HandshakeSynAddSummonMethod(builder, summonMethod)
+
+def HandshakeSynAddServerHost(builder: octoflatbuffers.Builder, serverHost: int):
+    builder.PrependInt8Slot(13, serverHost, 0)
+
+def AddServerHost(builder: octoflatbuffers.Builder, serverHost: int):
+    HandshakeSynAddServerHost(builder, serverHost)
+
+def HandshakeSynAddIsCompanion(builder: octoflatbuffers.Builder, isCompanion: bool):
+    builder.PrependBoolSlot(14, isCompanion, 0)
+
+def AddIsCompanion(builder: octoflatbuffers.Builder, isCompanion: bool):
+    HandshakeSynAddIsCompanion(builder, isCompanion)
+
+def HandshakeSynAddOsType(builder: octoflatbuffers.Builder, osType: int):
+    builder.PrependInt8Slot(15, osType, 0)
+
+def AddOsType(builder: octoflatbuffers.Builder, osType: int):
+    HandshakeSynAddOsType(builder, osType)
+
+def HandshakeSynEnd(builder: octoflatbuffers.Builder) -> int:
+    return builder.EndObject()
+
+def End(builder: octoflatbuffers.Builder) -> int:
+    return HandshakeSynEnd(builder)

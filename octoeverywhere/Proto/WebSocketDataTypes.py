@@ -7,4 +7,3 @@ class WebSocketDataTypes(object):
     Binary = 2
     Close = 8
     None_ = 126
-

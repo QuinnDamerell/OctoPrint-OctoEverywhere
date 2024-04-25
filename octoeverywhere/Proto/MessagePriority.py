@@ -8,4 +8,3 @@ class MessagePriority(object):
     Normal = 10
     Low = 15
     Background = 20
-

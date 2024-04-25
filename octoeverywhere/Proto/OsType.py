@@ -8,4 +8,3 @@ class OsType(object):
     Windows = 2
     CrealitySonicPad = 3
     CrealityK1 = 4
-

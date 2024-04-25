@@ -9,4 +9,3 @@ class MessageContext(object):
     WebStreamMsg = 3
     OctoNotification = 4
     OctoSummon = 5
-

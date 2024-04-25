@@ -3,11 +3,14 @@
 # namespace: Proto
 
 import octoflatbuffers
+from typing import Any
+from octoeverywhere.Proto.HttpHeader import HttpHeader
+from typing import Optional
 class HttpInitialContext(object):
     __slots__ = ['_tab']
 
     @classmethod
-    def GetRootAs(cls, buf, offset=0):
+    def GetRootAs(cls, buf, offset: int = 0):
         n = octoflatbuffers.encode.Get(octoflatbuffers.packer.uoffset, buf, offset)
         x = HttpInitialContext()
         x.Init(buf, n + offset)
@@ -18,11 +21,11 @@ class HttpInitialContext(object):
         """This method is deprecated. Please switch to GetRootAs."""
         return cls.GetRootAs(buf, offset)
     # HttpInitialContext
-    def Init(self, buf, pos):
+    def Init(self, buf: bytes, pos: int):
         self._tab = octoflatbuffers.table.Table(buf, pos)
 
     # HttpInitialContext
-    def Path(self):
+    def Path(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(4))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
@@ -36,41 +39,40 @@ class HttpInitialContext(object):
         return 1
 
     # HttpInitialContext
-    def Method(self):
+    def Method(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
     # HttpInitialContext
-    def OctoHost(self):
+    def OctoHost(self) -> Optional[str]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
         if o != 0:
             return self._tab.String(o + self._tab.Pos)
         return None
 
     # HttpInitialContext
-    def Headers(self, j):
+    def Headers(self, j: int) -> Optional[HttpHeader]:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
         if o != 0:
             x = self._tab.Vector(o)
             x += octoflatbuffers.number_types.UOffsetTFlags.py_type(j) * 4
             x = self._tab.Indirect(x)
-            from octoeverywhere.Proto.HttpHeader import HttpHeader
             obj = HttpHeader()
             obj.Init(self._tab.Bytes, x)
             return obj
         return None
 
     # HttpInitialContext
-    def HeadersLength(self):
+    def HeadersLength(self) -> int:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
         if o != 0:
             return self._tab.VectorLen(o)
         return 0
 
     # HttpInitialContext
-    def HeadersIsNone(self):
+    def HeadersIsNone(self) -> bool:
         o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(12))
         return o == 0
 
@@ -81,39 +83,56 @@ class HttpInitialContext(object):
             return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
         return 0
 
-def Start(builder): builder.StartObject(6)
-def HttpInitialContextStart(builder):
-    """This method is deprecated. Please switch to Start."""
-    return Start(builder)
-def AddPath(builder, path): builder.PrependUOffsetTRelativeSlot(0, octoflatbuffers.number_types.UOffsetTFlags.py_type(path), 0)
-def HttpInitialContextAddPath(builder, path):
-    """This method is deprecated. Please switch to AddPath."""
-    return AddPath(builder, path)
-def AddPathType(builder, pathType): builder.PrependInt8Slot(1, pathType, 1)
-def HttpInitialContextAddPathType(builder, pathType):
-    """This method is deprecated. Please switch to AddPathType."""
-    return AddPathType(builder, pathType)
-def AddMethod(builder, method): builder.PrependUOffsetTRelativeSlot(2, octoflatbuffers.number_types.UOffsetTFlags.py_type(method), 0)
-def HttpInitialContextAddMethod(builder, method):
-    """This method is deprecated. Please switch to AddMethod."""
-    return AddMethod(builder, method)
-def AddOctoHost(builder, octoHost): builder.PrependUOffsetTRelativeSlot(3, octoflatbuffers.number_types.UOffsetTFlags.py_type(octoHost), 0)
-def HttpInitialContextAddOctoHost(builder, octoHost):
-    """This method is deprecated. Please switch to AddOctoHost."""
-    return AddOctoHost(builder, octoHost)
-def AddHeaders(builder, headers): builder.PrependUOffsetTRelativeSlot(4, octoflatbuffers.number_types.UOffsetTFlags.py_type(headers), 0)
-def HttpInitialContextAddHeaders(builder, headers):
-    """This method is deprecated. Please switch to AddHeaders."""
-    return AddHeaders(builder, headers)
-def StartHeadersVector(builder, numElems): return builder.StartVector(4, numElems, 4)
-def HttpInitialContextStartHeadersVector(builder, numElems):
-    """This method is deprecated. Please switch to Start."""
-    return StartHeadersVector(builder, numElems)
-def AddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth): builder.PrependInt8Slot(5, useOctoeverywhereAuth, 0)
-def HttpInitialContextAddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth):
-    """This method is deprecated. Please switch to AddUseOctoeverywhereAuth."""
-    return AddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth)
-def End(builder): return builder.EndObject()
-def HttpInitialContextEnd(builder):
-    """This method is deprecated. Please switch to End."""
-    return End(builder)
+def HttpInitialContextStart(builder: octoflatbuffers.Builder):
+    builder.StartObject(6)
+
+def Start(builder: octoflatbuffers.Builder):
+    HttpInitialContextStart(builder)
+
+def HttpInitialContextAddPath(builder: octoflatbuffers.Builder, path: int):
+    builder.PrependUOffsetTRelativeSlot(0, octoflatbuffers.number_types.UOffsetTFlags.py_type(path), 0)
+
+def AddPath(builder: octoflatbuffers.Builder, path: int):
+    HttpInitialContextAddPath(builder, path)
+
+def HttpInitialContextAddPathType(builder: octoflatbuffers.Builder, pathType: int):
+    builder.PrependInt8Slot(1, pathType, 1)
+
+def AddPathType(builder: octoflatbuffers.Builder, pathType: int):
+    HttpInitialContextAddPathType(builder, pathType)
+
+def HttpInitialContextAddMethod(builder: octoflatbuffers.Builder, method: int):
+    builder.PrependUOffsetTRelativeSlot(2, octoflatbuffers.number_types.UOffsetTFlags.py_type(method), 0)
+
+def AddMethod(builder: octoflatbuffers.Builder, method: int):
+    HttpInitialContextAddMethod(builder, method)
+
+def HttpInitialContextAddOctoHost(builder: octoflatbuffers.Builder, octoHost: int):
+    builder.PrependUOffsetTRelativeSlot(3, octoflatbuffers.number_types.UOffsetTFlags.py_type(octoHost), 0)
+
+def AddOctoHost(builder: octoflatbuffers.Builder, octoHost: int):
+    HttpInitialContextAddOctoHost(builder, octoHost)
+
+def HttpInitialContextAddHeaders(builder: octoflatbuffers.Builder, headers: int):
+    builder.PrependUOffsetTRelativeSlot(4, octoflatbuffers.number_types.UOffsetTFlags.py_type(headers), 0)
+
+def AddHeaders(builder: octoflatbuffers.Builder, headers: int):
+    HttpInitialContextAddHeaders(builder, headers)
+
+def HttpInitialContextStartHeadersVector(builder, numElems: int) -> int:
+    return builder.StartVector(4, numElems, 4)
+
+def StartHeadersVector(builder, numElems: int) -> int:
+    return HttpInitialContextStartHeadersVector(builder, numElems)
+
+def HttpInitialContextAddUseOctoeverywhereAuth(builder: octoflatbuffers.Builder, useOctoeverywhereAuth: int):
+    builder.PrependInt8Slot(5, useOctoeverywhereAuth, 0)
+
+def AddUseOctoeverywhereAuth(builder: octoflatbuffers.Builder, useOctoeverywhereAuth: int):
+    HttpInitialContextAddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth)
+
+def HttpInitialContextEnd(builder: octoflatbuffers.Builder) -> int:
+    return builder.EndObject()
+
+def End(builder: octoflatbuffers.Builder) -> int:
+    return HttpInitialContextEnd(builder)
