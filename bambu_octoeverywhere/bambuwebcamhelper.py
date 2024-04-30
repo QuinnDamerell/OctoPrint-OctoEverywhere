@@ -30,18 +30,24 @@ class BambuWebcamHelper():
     # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
     def GetWebcamConfig(self):
-        # Bambu has a special webcam setup where there's only one cam and we need to get in a special way,
-        # So we return this one default webcam object.
-        return [WebcamSettingItem("Default", BambuWebcamHelper.c_SpecialMockSnapshotPath, BambuWebcamHelper.c_SpecialMockStreamPath, False, False, 0)]
+        # Bambu has a special webcam setup where there's only one cam and we need to get in a special way, so we return this one default webcam object.
+        # We do support plugin local webcam items, which are webcams the user can setup from the website and are external webcams.
+        # Note! This webcam name is shown on to the user in the UI, so it should be a good name that indicates this is a Bambu built in webcam.
+        # Also, if the name changes, the default printer index might also change.
+        return [WebcamSettingItem("Bambu Cam", BambuWebcamHelper.c_SpecialMockSnapshotPath, BambuWebcamHelper.c_SpecialMockStreamPath, False, False, 0)]
 
 
     # !! Optional Interface Function !!
     # If defined, this function must handle ALL snapshot requests for the platform.
     #
-    # On failure, return None
+    # On failure or if this camera doesn't need the override, return None
     # On success, this will return a valid OctoHttpRequest that's fully filled out.
     # The snapshot will always already be fully read, and will be FullBodyBuffer var.
-    def GetSnapshot_Override(self, cameraIndex:int):
+    def GetSnapshot_Override(self, webcamSettingsItem:WebcamSettingItem):
+        # Detect if this request is for our special snapshot logic, if not, return None to use the default webcam handling.
+        if webcamSettingsItem.SnapshotUrl != BambuWebcamHelper.c_SpecialMockSnapshotPath:
+            return None
+
         # Try to get a snapshot from our QuickCam system.
         img = QuickCam.Get().GetCurrentImage()
         if img is None:
@@ -60,7 +66,11 @@ class BambuWebcamHelper():
     # On failure, return None
     # On success, this will return a valid OctoHttpRequest that's fully filled out.
     # This must return an OctoHttpRequest object with a custom body read stream.
-    def GetStream_Override(self, cameraIndex:int):
+    def GetStream_Override(self, webcamSettingsItem:WebcamSettingItem):
+        # Detect if this request is for our special snapshot logic, if not, return None to use the default webcam handling.
+        if webcamSettingsItem.StreamUrl != BambuWebcamHelper.c_SpecialMockStreamPath:
+            return None
+
         # We must create a new instance of this class per stream to ensure all of the vars stay in it's context
         # and the streams are cleaned up properly.
         sm = StreamInstance(self.Logger)

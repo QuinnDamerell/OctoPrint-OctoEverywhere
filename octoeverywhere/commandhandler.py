@@ -3,7 +3,7 @@ import json
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .octohttprequest import OctoHttpRequest
 from .octohttprequest import PathTypes
-from .webcamhelper import WebcamHelper
+from .webcamhelper import WebcamHelper, WebcamSettingItem
 from .sentry import Sentry
 
 #
@@ -177,15 +177,7 @@ class CommandHandler:
         # Note this format is also used for GetStatus!
         webcams = []
         for i in webcamSettingsItems:
-            wc = {}
-            wc["Name"] = i.Name
-            wc["FlipH"] = i.FlipH
-            wc["FlipV"] = i.FlipV
-            wc["Rotation"] = i.Rotation
-            if includeUrls:
-                wc["SnapshotUrl"] = i.SnapshotUrl
-                wc["StreamUrl"] = i.StreamUrl
-            webcams.append(wc)
+            webcams.append(i.Serialize(includeUrls))
 
         # We always use the default index, which is a reflection of the current camera list.
         # We don't use the name, we only use that internally to keep track of the current index.
@@ -212,6 +204,49 @@ class CommandHandler:
         # Set the name
         WebcamHelper.Get().SetDefaultCameraName(name)
         # Return success
+        return CommandResponse.Success({})
+
+
+    # Must return a CommandResponse
+    def GetPluginLocalWebcamSettingsItems(self, _):
+        # Get the list, make sure we also include any disabled items
+        localWebcams = WebcamHelper.Get().GetPluginLocalWebcamList(returnDisabledItems=True)
+
+        # Serialize them
+        webcamDicts = []
+        for i in localWebcams:
+            webcamDicts.append(i.Serialize())
+
+        # Build the final response
+        responseObj = {
+            "LocalPluginWebcams" : webcamDicts,
+        }
+        return CommandResponse.Success(responseObj)
+
+
+    # Must return a CommandResponse
+    def SetPluginLocalWebcamSettingsItems(self, jsonObjData_CanBeNone):
+        localWebcamSettingItems = []
+        try:
+            # Get the list.
+            items = jsonObjData_CanBeNone.get("LocalPluginWebcams", None)
+            if items is None:
+                raise Exception("No LocalPluginWebcams found")
+
+            # Convert the list to objects
+            for i in items:
+                # This will deserialize the dict and also validate.
+                # If None is returned, the item failed, and we won't try to set anything.
+                o = WebcamSettingItem.Deserialize(i, self.Logger)
+                if o is None:
+                    raise Exception("Failed to deserialize item")
+                localWebcamSettingItems.append(o)
+        except Exception as e:
+            Sentry.Exception("Failed to SetPluginLocalWebcamSettingsItems, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args")
+
+        # Set the new list
+        WebcamHelper.Get().SetPluginLocalWebcamList(localWebcamSettingItems)
         return CommandResponse.Success({})
 
 
@@ -360,6 +395,10 @@ class CommandHandler:
             return self.ListWebcams()
         elif commandPathLower.startswith("set-default-webcam"):
             return self.SetDefaultCameraName(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("get-local-plugin-webcam-items"):
+            return self.GetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("set-local-plugin-webcam-items"):
+            return self.SetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
         elif commandPathLower.startswith("pause"):
             return self.Pause(jsonObj_CanBeNone)
         elif commandPathLower.startswith("resume"):

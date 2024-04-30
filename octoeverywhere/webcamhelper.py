@@ -1,6 +1,8 @@
 import logging
 import os
 import json
+from typing import List
+
 import urllib3
 
 from .sentry import Sentry
@@ -17,7 +19,7 @@ class WebcamSettingItem:
     #  snapshotUrl OR streamUrl can be None if the values aren't available, but not both.
     #  flipHBool & flipVBool & rotationInt must exist.
     #  rotationInt must be 0, 90, 180, or 270
-    def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0):
+    def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0, enabled:bool = True):
         self._name = ""
         self.Name = name
         self.SnapshotUrl = snapshotUrl
@@ -25,6 +27,8 @@ class WebcamSettingItem:
         self.FlipH = flipHBool
         self.FlipV = flipVBool
         self.Rotation = rotationInt
+        # This is a special flag mostly used for the local plugin webcams to indicate they are no enabled.
+        self.Enabled = enabled
 
 
     @property
@@ -62,6 +66,45 @@ class WebcamSettingItem:
         return True
 
 
+    # Used to serialize the object to a dict that can be used with json.
+    # THESE PROPERTY NAMES CAN'T CHANGE, it's used for the API and it's used to serialize to disk.
+    def Serialize(self, includeUrls:bool = True) -> dict:
+        d = {
+            "Name": self.Name,
+            "FlipH": self.FlipH,
+            "FlipV": self.FlipV,
+            "Rotation": self.Rotation,
+            "Enabled": self.Enabled
+        }
+        if includeUrls:
+            d["SnapshotUrl"] = self.SnapshotUrl
+            d["StreamUrl"] = self.StreamUrl
+        return d
+
+
+    # Used to convert a dict back into a WebcamSettingItem object.
+    # Returns None if there's a failure
+    @staticmethod
+    def Deserialize(d:dict, logger:logging.Logger):
+        try:
+            name = d.get("Name")
+            snapshotUrl = d.get("SnapshotUrl")
+            streamUrl = d.get("StreamUrl")
+            flipH = d.get("FlipH")
+            flipV = d.get("FlipV")
+            rotation = d.get("Rotation")
+            enabled = d.get("Enabled")
+            if name is None or snapshotUrl is None or streamUrl is None or flipH is None or flipV is None or rotation is None or enabled is None:
+                raise Exception("Failed to deserialize WebcamSettingItem, missing values.")
+            i = WebcamSettingItem(str(name), str(snapshotUrl), str(streamUrl), bool(flipH), bool(flipV), int(rotation), bool(enabled))
+            if i.Validate(logger) is False:
+                raise Exception("Failed to validate WebcamSettingItem.")
+            return i
+        except Exception as e:
+            Sentry.Exception("Failed to deserialize WebcamSettingItem", e)
+        return None
+
+
 # The point of this class is to abstract the logic that needs to be done to reliably get a webcam snapshot and stream from many types of
 # printer setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
 # setup. This includes USB based cameras, external IP based cameras, and OctoPrint instances that don't have a snapshot URL defined.
@@ -95,9 +138,12 @@ class WebcamHelper:
     def __init__(self, logger:logging.Logger, webcamPlatformHelperInterface, pluginDataFolderPath:str):
         self.Logger = logger
         self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
+
+        # Init local webcam settings stuffs.
         self.SettingsFilePath = os.path.join(pluginDataFolderPath, "webcam-settings.json")
-        self.DefaultCameraName = None
-        self._LoadDefaultCameraName()
+        self.DefaultCameraName:str = None
+        self.LocalPluginWebcamSettingsObjects:List[WebcamSettingItem] = []
+        self._LoadPluginWebcamSettings()
 
 
     # Returns the snapshot URL from the settings.
@@ -187,10 +233,13 @@ class WebcamHelper:
         return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal(cameraIndex), cameraIndex)
 
 
-    def _GetWebcamStreamInternal(self, cameraIndex:int) -> OctoHttpRequest.Result:
-        # Check if the platform helper has an override. If so, it is responsible for all of the stream getting logic.
+    def _GetWebcamStreamInternal(self, cameraIndex:int = None) -> OctoHttpRequest.Result:
+        # Check if the platform helper has an override.
+        # If so, it CAN BE responsible for all of the snapshot getting logic, but if returns None we should fallback to the default logic.
         if hasattr(self.WebcamPlatformHelperInterface, 'GetStream_Override'):
-            return self.WebcamPlatformHelperInterface.GetStream_Override(cameraIndex)
+            ret = self.WebcamPlatformHelperInterface.GetStream_Override(self._GetWebcamSettingObj(cameraIndex))
+            if ret is not None:
+                return ret
 
         # Try to get the URL from the settings.
         webcamStreamUrl = self.GetWebcamStreamUrl(cameraIndex)
@@ -218,10 +267,13 @@ class WebcamHelper:
         return self._AddOeWebcamTransformHeader(self._EnsureJpegHeaderInfo(self._GetSnapshotInternal(cameraIndex)), cameraIndex)
 
 
-    def _GetSnapshotInternal(self, cameraIndex:int) -> OctoHttpRequest.Result:
-        # Check if the platform helper has an override. If so, it is responsible for all of the snapshot getting logic.
-        if  hasattr(self.WebcamPlatformHelperInterface, 'GetSnapshot_Override'):
-            return self.WebcamPlatformHelperInterface.GetSnapshot_Override(cameraIndex)
+    def _GetSnapshotInternal(self, cameraIndex:int = None) -> OctoHttpRequest.Result:
+        # Check if the platform helper has an override.
+        # If so, it CAN BE responsible for all of the snapshot getting logic, but if returns None we should fallback to the default logic.
+        if hasattr(self.WebcamPlatformHelperInterface, 'GetSnapshot_Override'):
+            ret = self.WebcamPlatformHelperInterface.GetSnapshot_Override(self._GetWebcamSettingObj(cameraIndex))
+            if ret is not None:
+                return ret
 
         # First, try to get the snapshot using the string defined in settings.
         snapshotUrl = self.GetSnapshotUrl(cameraIndex)
@@ -417,12 +469,23 @@ class WebcamHelper:
     # Returns the currently known list of webcams.
     # The order they are returned is the order the use sees them.
     # The default is usually the index 0.
-    def ListWebcams(self):
+    def ListWebcams(self) -> List[WebcamSettingItem]:
         try:
-            a = self.WebcamPlatformHelperInterface.GetWebcamConfig()
-            if a is None or len(a) == 0:
+            # Get the webcams from the platform.
+            ret = self.WebcamPlatformHelperInterface.GetWebcamConfig()
+
+            # Check if there are any plugin local items to return.
+            # Note the cameras returned from ListWebcams() must always be first - the bambu logic depends on this! (see GetSnapshot_Override)
+            pluginLocalWebcamItems = self.GetPluginLocalWebcamList()
+            if pluginLocalWebcamItems is not None and len(pluginLocalWebcamItems) > 0:
+                if ret is None:
+                    ret = []
+                ret.extend(pluginLocalWebcamItems)
+
+            # Ensure we got something
+            if ret is None or len(ret) == 0:
                 return None
-            return a
+            return ret
         except Exception as e:
             Sentry.Exception("WebcamHelper ListWebcams exception.", e)
         return None
@@ -635,37 +698,32 @@ class WebcamHelper:
 
 
     #
-    # Default camera name logic.
+    # Plugin Webcam Logic.
     # The default camera is always set and stored as the name, since the camera index can change over time.
     # But it's always gotten as the index of the current list of cameras.
+    #
+    # The plugin can also have a local list of cameras it will add to the main get cameras result, so that users can
+    # setup their own cameras in the plugin settings on the website. This is used for systems like the Bambu, where there's no other UI for settings.
     #
 
     # Sets the default camera name and writes it to the settings file.
     def SetDefaultCameraName(self, name:str) -> None:
         name = name.lower()
         self.DefaultCameraName = name
-        try:
-            settings = {
-                "DefaultWebcamName" : self.DefaultCameraName
-            }
-            with open(self.SettingsFilePath, encoding="utf-8", mode="w") as f:
-                f.write(json.dumps(settings))
-        except Exception as e:
-            self.Logger.error("SetDefaultCameraName failed "+str(e))
+        self._SavePluginWebcamSettings()
 
 
     # Returns the default camera index. This will always return an int.
     # If there is not a default currently set, this returns the WebcamHelper.c_DefaultWebcamIndex, which is index 0.
-    def GetDefaultCameraIndex(self, webcamItemList) -> int:
+    def GetDefaultCameraIndex(self, webcamItemList:List[WebcamSettingItem]) -> int:
         # If there is no name currently, the default is 0.
         if self.DefaultCameraName is None:
             return WebcamHelper.c_DefaultWebcamIndex
 
         # Try to find the name that was last set.
-        defaultCameraNameLower = self.DefaultCameraName.lower()
         count = 0
         for i in webcamItemList:
-            if i.Name == defaultCameraNameLower:
+            if i.Name.lower() == self.DefaultCameraName:
                 return count
             count += 1
 
@@ -673,11 +731,64 @@ class WebcamHelper:
         return WebcamHelper.c_DefaultWebcamIndex
 
 
-    # Loads the current name from our settings file.
-    def _LoadDefaultCameraName(self) -> None:
+    # Returns a list of any plugin local webcam settings objects.
+    # These objects will be merged into the main list of webcams settings objects
+    def GetPluginLocalWebcamList(self, returnDisabledItems:bool = False) -> List[WebcamSettingItem]:
+        # If there's nothing return or we are returning everything, return the list.
+        if len(self.LocalPluginWebcamSettingsObjects) == 0 or returnDisabledItems:
+            return self.LocalPluginWebcamSettingsObjects
+        # Otherwise return the list of enabled objects.
+        ret = []
+        for i in self.LocalPluginWebcamSettingsObjects:
+            if i.Enabled:
+                ret.append(i)
+        return ret
+
+
+    # Sets the local plugin webcam settings objects.
+    def SetPluginLocalWebcamList(self, newList:List[WebcamSettingItem]) -> bool:
+        # Validate the new list of webcam items.
+        for i in newList:
+            if i.Validate(self.Logger) is False:
+                self.Logger.warn(f"SetPluginLocalWebcamList failed to validate the webcam settings object. {i.Name}")
+                return False
+
+        # Set the new list.
+        self.LocalPluginWebcamSettingsObjects = newList
+
+        # Save the settings
+        return self._SavePluginWebcamSettings()
+
+
+    # Saves the currently set plugin webcam settings to the settings file.
+    def _SavePluginWebcamSettings(self) -> bool:
         try:
-            # Default the setting.
+            # Convert the local webcam settings objects to dicts
+            localWebcamSettingsDict = []
+            for i in self.LocalPluginWebcamSettingsObjects:
+                localWebcamSettingsDict.append(i.Serialize())
+
+            # Create the settings object
+            settings = {
+                "DefaultWebcamName" : self.DefaultCameraName,
+                "LocalPluginWebcamSettings": localWebcamSettingsDict
+            }
+
+            # Save
+            with open(self.SettingsFilePath, encoding="utf-8", mode="w") as f:
+                f.write(json.dumps(settings))
+            return True
+        except Exception as e:
+            self.Logger.error("SetDefaultCameraName failed "+str(e))
+        return False
+
+
+    # Loads the current name from our settings file.
+    def _LoadPluginWebcamSettings(self) -> None:
+        try:
+            # Default the settings.
             self.DefaultCameraName = None
+            self.LocalPluginWebcamSettingsObjects = []
 
             # First check if there's a file.
             if os.path.exists(self.SettingsFilePath) is False:
@@ -687,11 +798,20 @@ class WebcamHelper:
             with open(self.SettingsFilePath, encoding="utf-8") as f:
                 data = json.load(f)
 
-            name = data["DefaultWebcamName"]
-            if name is None or len(name) == 0:
-                return
-            self.DefaultCameraName = name
-            self.Logger.info(f"Webcam settings loaded. Default camera name: {self.DefaultCameraName}")
+            # Get the default webcam name.
+            name:str = data.get("DefaultWebcamName", None)
+            if name is not None and len(name) > 0:
+                self.DefaultCameraName = name.lower()
+
+            # Set the local plugin webcam setting items.
+            items:List[WebcamSettingItem] = data.get("LocalPluginWebcamSettings", None)
+            if items is not None and len(items) > 0:
+                for i in items:
+                    wsi = WebcamSettingItem.Deserialize(i, self.Logger)
+                    if wsi is not None:
+                        self.LocalPluginWebcamSettingsObjects.append(wsi)
+
+            self.Logger.info(f"Webcam settings loaded. Default camera name: {self.DefaultCameraName}, Local Webcam Settings Items: {len(self.LocalPluginWebcamSettingsObjects)}")
         except Exception as e:
             self.Logger.error("_LoadDefaultCameraName failed "+str(e))
 
