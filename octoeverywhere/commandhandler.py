@@ -20,6 +20,23 @@ from .sentry import Sentry
 # ExecuteResume()
 # ExecuteCancel()
 
+
+# Holds the details of a file.
+# The name is required, the rest are optional.
+# The file name can include a folder path, which must use / separators
+class FileDetails():
+    def __init__(self, fileName:str, fileSizeBytes:int = 0) -> None:
+        self.FileName = fileName
+        self.FileSizeBytes = fileSizeBytes
+
+    # This returns the json as defined by the command interface, so it shouldn't change.
+    def Serialize(self) -> dict:
+        return {
+            "FileName" : str(self.FileName),
+            "FileSizeBytes" : int(self.FileSizeBytes)
+        }
+
+
 # This class is responsible for handling OctoStream commands.
 #
 # OctoStream commands are a platform agnostic way for the service to ask the plugin for data.

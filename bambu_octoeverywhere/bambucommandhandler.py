@@ -3,6 +3,7 @@ from octoeverywhere.printinfo import PrintInfoManager
 
 from .bambuclient import BambuClient
 from .bambumodels import BambuPrintErrors
+from .filemanager import FileManager
 
 # This class implements the Platform Command Handler Interface
 class BambuCommandHandler:

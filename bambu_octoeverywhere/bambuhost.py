@@ -119,6 +119,12 @@ class BambuHost:
             self.NotificationHandler.SetPrinterId(printerId)
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
+            # Setup the file manager
+            FileManager.Init(self.Logger, self.Config)
+            import threading
+            t = threading.Thread(target=FileManager.Get().GetFiles)
+            t.start()
+
             # Setup the command handler
             CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger))
 
