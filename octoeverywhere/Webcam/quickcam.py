@@ -11,33 +11,121 @@ import signal
 
 from octoeverywhere.sentry import Sentry
 
-from linux_host.config import Config
+from ..octohttprequest import OctoHttpRequest
+from .webcamsettingitem import WebcamSettingItem
+from .webcamstreaminstance import WebcamStreamInstance
 
-from .bambuclient import BambuClient
 
-# The goal of this class is to handle webcam streaming and snapshots. The idea is since we need to establish a socket and stream to even get snapshots,
-# rather than doing it over and over, we will keep the stream alive for a short period of time and take snapshots, so when the user wants them, they are ready.
+# Indicates the stream type for the QuickCam class.
+# The NotSupported means that the URL parsed isn't supported by QuickCam.
+class QuickCamStreamTypes:
+    NotSupported = 0
+    RTSP = 1
+    WebSocket = 2
+
+
+# This is a helper class that manages active instances of QuickCam and allows all requests for the same URL to share a common stream.
+class QuickCamManager:
+
+    _Instance = None
+
+    @staticmethod
+    def Init(logger:logging.Logger, webcamPlatformHelperInterface):
+        QuickCamManager._Instance = QuickCamManager(logger, webcamPlatformHelperInterface)
+
+
+    @staticmethod
+    def Get():
+        return QuickCamManager._Instance
+
+
+    def __init__(self, logger:logging.Logger, webcamPlatformHelperInterface) -> None:
+        self.Logger = logger
+        self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
+        self.QuickCamMap = {}
+        self.QuickCamMapLock = threading.Lock()
+
+
+    # Given the webcam settings item, this will check if the settings item needs to use any of the supported QuickCam streaming capture methods.
+    # On success, this will return a complete OctoHttpResult object, otherwise None
+    def TryToGetSnapshot(self, webcamSettingsItem:WebcamSettingItem):
+        # To know if we need to use Quick cam, we check the protocols.
+        # We check both the snapshot and streaming URL, since we can get a snapshot from either
+        url = webcamSettingsItem.SnapshotUrl
+        t = QuickCam.GetStreamTypeFromUrl(url)
+        if t == QuickCamStreamTypes.NotSupported:
+            url = webcamSettingsItem.StreamUrl
+            t = QuickCam.GetStreamTypeFromUrl(url)
+            if t == QuickCamStreamTypes.NotSupported:
+                return None
+
+        # If we got here, then this is a URL type we need to use QuickCam for.
+        # Get the QuickCam instance for this URL.
+        qc = self._GetOrCreate(url)
+
+        # Try to get a snapshot.
+        img = qc.GetCurrentImage()
+        if img is None:
+            return None
+
+        # If we get an image, return it!
+        headers = {
+            "Content-Type": "image/jpeg"
+        }
+        return OctoHttpRequest.Result(200, headers, url, False, fullBodyBuffer=img)
+
+
+    # Given the webcam settings item, this will check if the settings item needs to use any of the supported QuickCam streaming capture methods.
+    # On failure, return None
+    # On success, this will return a valid OctoHttpRequest that's fully filled out.
+    # This must return an OctoHttpRequest object with a custom body read stream.
+    def TryGetStream(self, webcamSettingsItem:WebcamSettingItem):
+        # To know if we need to use Quick cam, we check the protocols.
+        # We check both the snapshot and streaming URL, since we can get a snapshot from either
+        url = webcamSettingsItem.StreamUrl
+        t = QuickCam.GetStreamTypeFromUrl(url)
+        if t == QuickCamStreamTypes.NotSupported:
+            return None
+
+        # If we got here, then this is a url type we need to use QuickCam for.
+        # Get the QuickCam instance for this URL.
+        qc = self._GetOrCreate(url)
+
+        # We must create a new instance of this class per stream to ensure all of the vars stay in it's context and the streams are cleaned up properly.
+        # Create the stream instance and start the web request.
+        sm = WebcamStreamInstance(self.Logger, qc)
+        return sm.StartWebRequest()
+
+
+    # Returns a QuickCam instances for this url. If auth is required, the auth should be added to the URL in the http:// style. Ex rtsp://username:password@hostname...
+    # The QuickCam class will be shared across multiple instances, it's thread safe.
+    def _GetOrCreate(self, url:str):
+        with self.QuickCamMapLock:
+            # If it already exists, get it and return it.
+            qc = self.QuickCamMap.get(url, None)
+            if qc is not None:
+                return qc
+
+            # Otherwise create it.
+            qc = QuickCam(self.Logger, url, self.WebcamPlatformHelperInterface)
+            self.QuickCamMap[url] = qc
+            return qc
+
+
+# This class handles webcam streaming from different streaming endpoints that aren't http.
+# Right now it supports RTSP camera feeds and the Bambu Websocket based streaming protocol.
 class QuickCam:
 
     # The amount of time the capture thread will stay connected before it will close.
     # Whenever an image is accessed, the time is reset.
     c_CaptureThreadTimeoutSec = 60
 
-    _Instance = None
 
-    @staticmethod
-    def Init(logger:logging.Logger, config:Config):
-        QuickCam._Instance = QuickCam(logger, config)
-
-
-    @staticmethod
-    def Get():
-        return QuickCam._Instance
-
-
-    def __init__(self, logger:logging.Logger, config:Config ) -> None:
+    def __init__(self, logger:logging.Logger, url:str, webcamPlatformHelperInterface) -> None:
         self.Logger = logger
-        self.Config = config
+        self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
+        self.Type = QuickCam.GetStreamTypeFromUrl(url)
+        self.Url = url
         self.Lock = threading.Lock()
         self.ImageReady = threading.Event()
         self.IsCaptureThreadRunning = False
@@ -45,6 +133,22 @@ class QuickCam:
         self.LastImageRequestTimeSec:float = 0.0
         self.ImageStreamCallbacks = []
         self.ImageStreamCallbackLock = threading.Lock()
+
+
+    # Given a URL, this function returns the quick cam type that will be used and if it's supported.
+    @staticmethod
+    def GetStreamTypeFromUrl(url:str) -> QuickCamStreamTypes:
+        # Ensure there's something to parse
+        if url is None or len(url) == 0:
+            return QuickCamStreamTypes.NotSupported
+        url = url.lower()
+        # Check if the URL is RTSP
+        if url.startswith("rtsps://") or url.startswith("rtsp://"):
+            return QuickCamStreamTypes.RTSP
+        # Or if the URL is a websocket. We will assume it's the Bambu websocket protocol if so.
+        if url.startswith("ws://") or url.startswith("wss://"):
+            return QuickCamStreamTypes.WebSocket
+        return QuickCamStreamTypes.NotSupported
 
 
     # Tries to get the current image from the printer and returns it as a raw jpeg.
@@ -78,12 +182,17 @@ class QuickCam:
     # Used to attach a new stream handler to receive callbacks when an image is ready.
     # Note a call to detach must be called as well!
     def AttachImageStreamCallback(self, callback):
+        # Add our callback to the list.
         with self.ImageStreamCallbackLock:
             self.ImageStreamCallbacks.append(callback)
+
+        # Ensure that the capture thread is running.
+        self._ensureCaptureThreadRunning()
 
 
     # Used to detach a new stream handler to receive callbacks when an image is ready.
     def DetachImageStreamCallback(self, callback):
+        # Remove our callback.
         with self.ImageStreamCallbackLock:
             self.ImageStreamCallbacks.remove(callback)
 
@@ -118,32 +227,6 @@ class QuickCam:
     # Does the image image capture work.
     def _captureThread(self):
         try:
-            # Get the access code and the host name.
-            accessCode = self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
-            ipOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-            if accessCode is None or ipOrHostname is None:
-                raise Exception("QuickCam doesn't have a access code or ip to use.")
-
-            # TODO - Right now it seems the X1 doesn't send back version info on start or with the version command
-            # So we use the existence of the RTSP URL to determine what we can do.
-            # Ideally we would use the printer version in the future.
-            rtspUrl = None
-            verAttempt = 0
-            while True:
-                verAttempt += 1
-                state = BambuClient.Get().GetState()
-                # Wait until the object exists
-                if state is not None:
-                    rtspUrl = state.rtsp_url
-                    break
-                # If we can't get it return, and then the quick cam thread will be started again
-                # When there's another request.
-                if verAttempt > 5:
-                    self.Logger.warn(f"QuickCam wasn't able to get the printer state after {verAttempt} attempts")
-                    return
-                # Sleep for a bit.
-                time.sleep(2.0)
-
             # We allow a few attempts, so if there are any connection issues or errors we buffer them out.
             attempts = 0
             while attempts < 5:
@@ -151,22 +234,21 @@ class QuickCam:
 
                 # Create the camera implementation we need for this device.
                 camImpl = None
-                # Since we have to use the URL....
-                #     IF the URL is empty, it's an X1 with LAN streaming disabled.
-                #     If the URL has an address, it's an X1 with LAN streaming.
-                #     If it's None, it's a P1, A1, or another printer with no RTSP.
-                if rtspUrl is not None:
-                    self.Logger.debug(f"Bambu RTSP URL is: `{rtspUrl}`")
+                if self.Type == QuickCamStreamTypes.RTSP:
+                    self.Logger.debug(f"QuickCam capture thread started for RTSP. {self.Url}")
                     camImpl = QuickCam_RTSP(self.Logger)
-                else:
-                    # Default to the websocket impl, since it's used on the most printers.
+                elif self.Type == QuickCamStreamTypes.WebSocket:
+                    self.Logger.debug(f"QuickCam capture thread started for Websocket. {self.Url}")
                     camImpl = QuickCam_WebSocket(self.Logger)
+                else:
+                    self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
+                    return
 
                 # Wrap the usage into a with, so the connection is always cleaned up
                 with camImpl:
                     try:
                         # Connect to the server.
-                        camImpl.Connect(ipOrHostname, accessCode)
+                        camImpl.Connect(self.Url)
 
                         # Begin the capture loop.
                         while True:
@@ -174,15 +256,14 @@ class QuickCam:
                             # This can return None, which means we should just check the time and spin.
                             img = camImpl.GetImage()
 
-                            # Check if we are done running, if so, leave
+                            # Check if we are done running
                             if time.time() - self.LastImageRequestTimeSec > QuickCam.c_CaptureThreadTimeoutSec:
-                                # TODO - For now, we don't stop the webcam loop while the printer is printing.
-                                # This allows for notifications, Gadget, snapshots, streams, and such to load super easily.
-                                # We need to measure the load on this though.
-                                state = BambuClient.Get().GetState()
-                                if state is None or not state.IsPrinting(True):
-                                    # This will invoke the finally clause and leave.
+                                # We are past our max time between image requests, ask the platform if we should keep running or not.
+                                # The decision is platform specific, but usually if a print is running we want to keep this stream alive for lower latency snapshots.
+                                if self.WebcamPlatformHelperInterface.ShouldQuickCamStreamKeepRunning() is False:
                                     return
+                                # If we don't want to be done, set the last image request time to now, so we don't constantly query the platform.
+                                self.LastImageRequestTimeSec = time.time()
 
                             # Set the image if we got one.
                             if img is not None:
@@ -208,6 +289,29 @@ class QuickCam:
             self.Logger.info("QuickCam capture thread exit.")
 
 
+    # Given a URL in the protocol://username:password@example.com/ format, returns the username and password
+    # This will always return the URL. If a username and password were found, the will be removed.
+    # This will return the username and password if found, otherwise None
+    @staticmethod
+    def ParseOurUsernameAndPasswordFromUrlIfExists(url:str):
+        # Parse the username and password from the URL if it exists.
+        userName = None
+        password = None
+        if url.find("://") != -1:
+            hostnameAndPath = url.split("://")[1]
+            if hostnameAndPath.find("@") != -1:
+                userNameAndPassword = hostnameAndPath.split("@")[0]
+                if userNameAndPassword.find(":") -1:
+                    userName, password = userNameAndPassword.split(":")
+                else:
+                    userName = userNameAndPassword
+                # Remove the username and password from the URL
+                protocolEnd = url.find("://") + 3
+                atSign = url.find("@")
+                url = url[:protocolEnd] + url[atSign+1:]
+        return url, userName, password
+
+
 # Implements the websocket camera version for the P1 and A1 series printers.
 class QuickCam_WebSocket:
 
@@ -226,34 +330,54 @@ class QuickCam_WebSocket:
     # ~~ Interface Function ~~
     # Connects to the server.
     # This will throw an exception if it fails.
-    def Connect(self, ipOrHostname:str, accessCode:str) -> None:
-        # Build the auth packet
-        authData = bytearray()
-        authData += struct.pack("<I", 0x40)
-        authData += struct.pack("<I", 0x3000)
-        authData += struct.pack("<I", 0)
-        authData += struct.pack("<I", 0)
-        name = "bblp"
-        for _, char in enumerate(name):
-            authData += struct.pack("<c", char.encode('ascii'))
-        for _ in range(0, 32 - len(name)):
-            authData += struct.pack("<x")
-        for _, char in enumerate(accessCode):
-            authData += struct.pack("<c", char.encode('ascii'))
-        for _ in range(0, 32 - len(accessCode)):
-            authData += struct.pack("<x")
+    def Connect(self, url:str) -> None:
+
+        # Parse the username and password from the URL if it exists.
+        # This will always return the URL, striped of the username and password if found.
+        (url, userName, password) = QuickCam.ParseOurUsernameAndPasswordFromUrlIfExists(url)
+
+        # Build the auth packet if needed
+        authData = None
+        if userName is not None and password is not None:
+            authData= bytearray()
+            authData += struct.pack("<I", 0x40)
+            authData += struct.pack("<I", 0x3000)
+            authData += struct.pack("<I", 0)
+            authData += struct.pack("<I", 0)
+            for _, char in enumerate(userName):
+                authData += struct.pack("<c", char.encode('ascii'))
+            for _ in range(0, 32 - len(userName)):
+                authData += struct.pack("<x")
+            for _, char in enumerate(password):
+                authData += struct.pack("<c", char.encode('ascii'))
+            for _ in range(0, 32 - len(password)):
+                authData += struct.pack("<x")
 
         # Setup the SSL context to not verify the cert or check the hostname.
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
 
+        # Parse just the hostname from the url.
+        hostname = url
+        port = 80
+        if hostname.find("://") != -1:
+            hostname = hostname.split("://")[1]
+        # Remove any URL path
+        if hostname.find("/") != -1:
+            hostname = hostname.split("/")[0]
+        # Finally, if there's a port, parse it.
+        if hostname.find(":") != -1:
+            hostname, port = hostname.split(":")
+            port = int(port)
+
         # Create the socket connect and wrap it in SSL.
-        self.Socket = socket.create_connection((ipOrHostname, 6000), 5.0)
-        self.SslSocket = ctx.wrap_socket(self.Socket, server_hostname=ipOrHostname)
+        self.Socket = socket.create_connection((hostname, port), 5.0)
+        self.SslSocket = ctx.wrap_socket(self.Socket, server_hostname=hostname)
 
         # Send the auth packet
-        self.SslSocket.write(authData)
+        if authData is not None:
+            self.SslSocket.write(authData)
 
 
     # ~~ Interface Function ~~
@@ -352,13 +476,15 @@ class QuickCam_RTSP:
     # ~~ Interface Function ~~
     # Connects to the server.
     # This will throw an exception if it fails.
-    def Connect(self, ipOrHostname:str, accessCode:str) -> None:
-        # TODO get the address from the bambu state object
+    def Connect(self, url:str) -> None:
 
         # We set the logging level of ffmpeg depending on our logging level
         # The logs are written to stderr even if they aren't errors, which is nice, so
         # we can capture them on timeouts.
         logLevel = "trace" if self.Logger.isEnabledFor(logging.DEBUG) else "warning"
+
+        # For auth, if there's a username and password it will already be in the URL in the http:// basic auth style,
+        # So there's nothing else we need to do.
 
         # Notes
         #   We use 15 fps because it's a good trade off of fps and cpu perf hits
@@ -371,7 +497,7 @@ class QuickCam_RTSP:
                     "-loglevel", logLevel,
                     "-rtsp_transport", "udp",
                     "-use_wallclock_as_timestamps", "1",
-                    "-i", f"rtsps://bblp:{accessCode}@{ipOrHostname}:322/streaming/live/1",
+                    "-i", url,
                     "-filter:v", "fps=15",
                     "-movflags", "+faststart",
                     "-f", "image2pipe", "-"

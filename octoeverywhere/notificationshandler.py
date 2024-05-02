@@ -13,7 +13,7 @@ from .sentry import Sentry
 from .compat import Compat
 from .finalsnap import FinalSnap
 from .repeattimer import RepeatTimer
-from .webcamhelper import WebcamHelper
+from .Webcam.webcamhelper import WebcamHelper
 from .printinfo import PrintInfoManager, PrintInfo
 from .snapshotresizeparams import SnapshotResizeParams
 

@@ -11,7 +11,7 @@ from .octoheaderimpl import HeaderHelper
 from .octoheaderimpl import BaseProtocol
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
-from ..webcamhelper import WebcamHelper
+from ..Webcam.webcamhelper import WebcamHelper
 from ..commandhandler import CommandHandler
 from ..sentry import Sentry
 from ..compat import Compat

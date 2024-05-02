@@ -4,7 +4,7 @@ import sys
 import random
 import string
 
-from octoeverywhere.webcamhelper import WebcamHelper
+from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.commandhandler import CommandHandler

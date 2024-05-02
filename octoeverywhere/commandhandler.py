@@ -3,7 +3,8 @@ import json
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .octohttprequest import OctoHttpRequest
 from .octohttprequest import PathTypes
-from .webcamhelper import WebcamHelper, WebcamSettingItem
+from .Webcam.webcamhelper import WebcamHelper
+from .Webcam.webcamsettingitem import WebcamSettingItem
 from .sentry import Sentry
 
 #

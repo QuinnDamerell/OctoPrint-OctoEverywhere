@@ -9,7 +9,7 @@ import flask
 import requests
 import octoprint.plugin
 
-from octoeverywhere.webcamhelper import WebcamHelper
+from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler

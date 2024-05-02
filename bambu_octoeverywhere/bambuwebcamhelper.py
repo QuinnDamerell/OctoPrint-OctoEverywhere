@@ -1,27 +1,23 @@
 import logging
 import time
-import threading
-
-from octoeverywhere.webcamhelper import WebcamSettingItem
-from octoeverywhere.octohttprequest import OctoHttpRequest
 
 from linux_host.config import Config
 
-from .quickcam import QuickCam
+from octoeverywhere.sentry import Sentry
+from octoeverywhere.Webcam.webcamsettingitem import WebcamSettingItem
+
+from .bambuclient import BambuClient
 
 
 # This class implements the webcam platform helper interface for bambu.
 class BambuWebcamHelper():
 
-    # These don't really matter, but we define them to keep them consistent
-    c_SpecialMockSnapshotPath = "bambu-special-snapshot"
-    c_SpecialMockStreamPath = "bambu-special-stream"
-    c_OeStreamBoundaryString = "oestreamboundary"
-
 
     def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
         self.Config = config
+        self.LastUrlUpdateTimeSec:float = 0.0
+        self.CachedStreamingUrl = None
 
 
     # !! Interface Function !!
@@ -30,115 +26,94 @@ class BambuWebcamHelper():
     # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
     def GetWebcamConfig(self):
-        # Bambu has a special webcam setup where there's only one cam and we need to get in a special way, so we return this one default webcam object.
+        # Bambu has a special webcam setup where there's only one cam, and the streaming system is either RTSP or Websocket based.
         # We do support plugin local webcam items, which are webcams the user can setup from the website and are external webcams.
         # Note! This webcam name is shown on to the user in the UI, so it should be a good name that indicates this is a Bambu built in webcam.
         # Also, if the name changes, the default printer index might also change.
-        return [WebcamSettingItem("Bambu Cam", BambuWebcamHelper.c_SpecialMockSnapshotPath, BambuWebcamHelper.c_SpecialMockStreamPath, False, False, 0)]
+        return [WebcamSettingItem("Bambu Cam", None, self._GetStreamingUrl(), False, False, 0)]
 
 
-    # !! Optional Interface Function !!
-    # If defined, this function must handle ALL snapshot requests for the platform.
-    #
-    # On failure or if this camera doesn't need the override, return None
-    # On success, this will return a valid OctoHttpRequest that's fully filled out.
-    # The snapshot will always already be fully read, and will be FullBodyBuffer var.
-    def GetSnapshot_Override(self, webcamSettingsItem:WebcamSettingItem):
-        # Detect if this request is for our special snapshot logic, if not, return None to use the default webcam handling.
-        if webcamSettingsItem.SnapshotUrl != BambuWebcamHelper.c_SpecialMockSnapshotPath:
-            return None
-
-        # Try to get a snapshot from our QuickCam system.
-        img = QuickCam.Get().GetCurrentImage()
-        if img is None:
-            return None
-
-        # If we get an image, return it!
-        headers = {
-            "Content-Type": "image/jpeg"
-        }
-        return OctoHttpRequest.Result(200, headers, BambuWebcamHelper.c_SpecialMockSnapshotPath, False, fullBodyBuffer=img)
+    # !! Interface Function !!
+    # This function is called to determine if a QuickCam stream should keep running or not.
+    # The idea is since a QuickCam stream can take longer to start, for example, the Bambu Websocket stream on sends 1FPS,
+    # we can keep the stream running while the print is running to lower the latency of getting images.
+    # Most most platforms, this should return true if the print is running or paused, otherwise false.
+    # Also consider something like Gadget, it takes pictures every 20-40 seconds, so the stream will be started frequently if it's not already running.
+    def ShouldQuickCamStreamKeepRunning(self) -> bool:
+        # For Bambu, we want to keep the stream running if the printer is printing.
+        state = BambuClient.Get().GetState()
+        if state is None:
+            return False
+        return state.IsPrinting(True)
 
 
-    # !! Optional Interface Function !!
-    # If defined, this function must handle ALL stream requests for the platform.
-    #
-    # On failure, return None
-    # On success, this will return a valid OctoHttpRequest that's fully filled out.
-    # This must return an OctoHttpRequest object with a custom body read stream.
-    def GetStream_Override(self, webcamSettingsItem:WebcamSettingItem):
-        # Detect if this request is for our special snapshot logic, if not, return None to use the default webcam handling.
-        if webcamSettingsItem.StreamUrl != BambuWebcamHelper.c_SpecialMockStreamPath:
-            return None
+    # Returns the current URL that should be used for snapshots and streaming.
+    def _GetStreamingUrl(self) -> str:
+        # We cache the urls for a little bit once they are generated, so we don't have to re-created them every time
+        # But we do want to refresh them occasionally, so if the access code or IP changes, we update it.
+        self._UpdateUrlsIfNeeded()
 
-        # We must create a new instance of this class per stream to ensure all of the vars stay in it's context
-        # and the streams are cleaned up properly.
-        sm = StreamInstance(self.Logger)
-        return sm.StartWebRequest()
+        # Ensure we got something, if not, warn about it.
+        if self.CachedStreamingUrl is None:
+            self.Logger.error("BambuWebcamHelper failed to get streaming URL, thus we can't stream.")
+            return "none"
+        return self.CachedStreamingUrl
 
 
-# Stream Instance is a class that is created per web stream to handle streaming QuickCam images into the http stream.
-# It must be created per http request so it can manage it's own local vars.
-class StreamInstance:
-    def __init__(self, logger:logging.Logger) -> None:
-        self.Logger = logger
-        self.IsFirstSend = True
-        self.StreamOpenTimeSec = time.time()
-        self.ImageReadyEvent = threading.Event()
-        self.AwaitingImage:bytearray = None
+    # This needs to be thread safe, but we don't use any locks. It's find if multiple threads get the info at the same time.
+    def _UpdateUrlsIfNeeded(self) -> None:
+        # Test if we need to update or use the cached values.
+        if self.CachedStreamingUrl is not None and len(self.CachedStreamingUrl) > 0 and time.time() - self.LastUrlUpdateTimeSec < 30.0:
+            return
 
-
-    def StartWebRequest(self) -> OctoHttpRequest.Result:
-        # First, try to get a snapshot. This will determine if we are able to get a stream or not.
-        # If we can't start the stream, then we don't return success.
-        # We will also use this first image to start the stream, to get it going ASAP.
-        self.AwaitingImage = QuickCam.Get().GetCurrentImage()
-        if self.AwaitingImage is None:
-            return None
-
-        # Note! We must be sure to call DetachImageStreamCallback to remove this stream callback!
-        QuickCam.Get().AttachImageStreamCallback(self._NewImageCallback)
-
-        # We must set the content type so that the web browser knows what kind of stream to expect.
-        headers = {
-            "content-type": f"multipart/x-mixed-replace; boundary={BambuWebcamHelper.c_OeStreamBoundaryString}",
-        }
-        # Return a result object with out callbacks setup for the stream body.
-        return OctoHttpRequest.Result(200, headers, BambuWebcamHelper.c_SpecialMockStreamPath, False, customBodyStreamCallback=self._CustomBodyStreamRead, customBodyStreamClosedCallback=self._CustomBodyStreamClosed)
-
-
-    # Define the callback we will get from QuickCam when there's a new image ready for us to send.
-    def _NewImageCallback(self, imgBuffer:bytearray):
-        self.AwaitingImage = imgBuffer
-        self.ImageReadyEvent.set()
-
-
-    # Define a callback for our http body reading system to call when it needs data.
-    def _CustomBodyStreamRead(self) -> bytearray:
+        # Before we can return the webcam config, we need to know what kind of printer this is.
+        # TODO - Right now it seems the X1 doesn't send back version info on start or with the version command,
+        # so we use the existence of the RTSP URL to determine what we can do.
+        # Ideally we would use the printer version in the future.
+        rtspUrl = None
+        stateGetAttempt = 0
         while True:
-            # See if we can capture an image. There might already be a new image we don't even have to wait for.
-            capturedImage = self.AwaitingImage
-            if capturedImage is not None:
-                # If so, clear the awaiting image and reset the event.
-                self.AwaitingImage = None
-                self.ImageReadyEvent.clear()
+            stateGetAttempt += 1
+            # Wait until the object exists
+            state = BambuClient.Get().GetState()
+            if state is not None:
+                # When the state object is not None, we know we got the state sync.
+                # Now we can check if there's a RTSP url or not, which will indicate what kind of stream we need to use.
+                rtspUrl = state.rtsp_url
+                break
 
-                # Build the buffer to send
-                header = f"--{BambuWebcamHelper.c_OeStreamBoundaryString}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(capturedImage)}\r\n\r\n"
-                imageChunkBuffer = header.encode('utf-8') + capturedImage + b"\r\n" + header.encode('utf-8') + capturedImage + b"\r\n"
+            # If we didn't get the state after a few attempts, we give up and default to the websocket stream.
+            if stateGetAttempt > 5:
+                self.Logger.warn(f"BambuWebcamHelper wasn't able to get the printer state after {stateGetAttempt} attempts")
+                break
 
-                # TODO - I don't know why, but chrome seems to delay the rendering of the image until it gets two?
-                # This could be something in the pipeline not flushing correctly, or other things. But for now, on the first send we double the image to make it render instantly.
-                if self.IsFirstSend:
-                    imageChunkBuffer = imageChunkBuffer + imageChunkBuffer
-                    self.IsFirstSend = False
-                    self.Logger.info(f"QuickCam took {time.time()-self.StreamOpenTimeSec} seconds from stream open to first image sent.")
-                return imageChunkBuffer
-            # If we didn't get an image, wait on the event for a new one.
-            self.ImageReadyEvent.wait()
+            # Sleep for a bit before trying again.
+            time.sleep(2.0)
 
+        # Get the access code and ip from the config file, so we always get the latest.
+        # The BambuClient class will update the value in the config if the IP address of the printer changes, which can happen while we are running.
+        accessCode = self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
+        ipOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
+        if accessCode is None or ipOrHostname is None:
+            self.Logger.error("BambuWebcamHelper failed to get a ip or access code from the config, thus we can't stream.")
+            return
 
-    # Define a callback for when the http stream is closed.
-    def _CustomBodyStreamClosed(self) -> None:
-        # It's important this is called so the stream will be detached!
-        QuickCam.Get().DetachImageStreamCallback(self._NewImageCallback)
+        # If there is a RTSP URL, we know this printer uses the RTSP protocol to stream the webcam.
+        if rtspUrl is not None and len(rtspUrl) > 0:
+            # Use the URL the X1 sent us, but inject the auth into it.
+            protocolEnd = rtspUrl.find("://")
+            if protocolEnd != -1:
+                protocolEnd += 3
+                self.CachedStreamingUrl = rtspUrl[:protocolEnd] + f"bblp:{accessCode}@" + rtspUrl[protocolEnd:]
+                # We should be able to find the IP in the URL, warn if not.
+                if self.CachedStreamingUrl.find(ipOrHostname) == -1:
+                    Sentry.LogError(f"BambuWebcamHelper didn't find the currently known IP of the printer in the RTSP URL returned from the printer. Printer URL:{rtspUrl} Known IP:{ipOrHostname}")
+            else:
+                self.Logger.error(f"BambuWebcamHelper failed to parse the return rtsp URL from the printer, using our own. {rtspUrl}")
+                self.CachedStreamingUrl = f"rtsps://bblp:{accessCode}@{ipOrHostname}:322/streaming/live/1"
+        else:
+            # If there is no RTSP URL, we assume the printer uses the websocket based cam streaming.
+            self.CachedStreamingUrl = f"ws://bblp:{accessCode}@{ipOrHostname}:6000"
+
+        # Set the time we updated the cached values.
+        self.LastUrlUpdateTimeSec = time.time()

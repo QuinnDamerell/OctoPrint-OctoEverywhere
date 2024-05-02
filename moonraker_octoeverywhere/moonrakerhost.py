@@ -6,7 +6,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.octopingpong import OctoPingPong
-from octoeverywhere.webcamhelper import WebcamHelper
+from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere

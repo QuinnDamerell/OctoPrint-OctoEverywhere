@@ -140,9 +140,9 @@ class Installer:
         frontend = Frontend()
         frontend.DoFrontendSetup(context)
 
-        # If this is a bambu setup, make sure ffmpeg is installed since it's required for the X1 webcam.
-        if context.IsBambuSetup:
-            Ffmpeg.EnsureFfmpeg()
+        # We need ffmpeg for the Bambu Connect X1 streaming or any user who wants to use a RTSP camera.
+        # Installing ffmpeg is best effort and not required for the plugin to work.
+        Ffmpeg.TryToInstallFfmpeg(context)
 
         # Before we start the service, check if the secrets config file already exists and if a printer id already exists.
         # This will indicate if this is a fresh install or not.

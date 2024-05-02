@@ -2,13 +2,19 @@ import time
 
 from .Util import Util
 from .Logging import Logger
+from .Context import Context, OsTypes
 
 # A helper class to make sure ffmpeg is installed.
 class Ffmpeg:
 
     # Tries to install ffmpeg, but this won't fail if the install fails.
     @staticmethod
-    def EnsureFfmpeg():
+    def TryToInstallFfmpeg(context:Context):
+
+        # We don't even try installing ffmpeg on K1 or SonicPad.
+        if context.OsType == OsTypes.K1 or context.OsType == OsTypes.SonicPad:
+            return
+
         # Try to install or upgrade.
         Logger.Info("Installing ffmpeg, this might take a moment...")
         startSec = time.time()
@@ -20,5 +26,6 @@ class Ffmpeg:
             Logger.Info(f"Ffmpeg successfully installed/updated. It took {str(round(time.time()-startSec, 2))} seconds.")
             return
 
-        # Warn, but don't throw or stop the installer.
-        Logger.Warn(f"Ffmpeg failed to install. It took {str(round(time.time()-startSec, 2))} seconds. Error: {stdError}")
+        # Tell the user, but this is a best effort, so if it fails we don't care.
+        # Any user who wants to use RTSP and doesn't have ffmpeg installed can use our help docs to install it.
+        Logger.Info(f"We didn't install ffmpeg. It took {str(round(time.time()-startSec, 2))} seconds. Output: {stdError}")

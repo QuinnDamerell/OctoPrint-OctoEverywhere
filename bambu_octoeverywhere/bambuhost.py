@@ -6,7 +6,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.printinfo import PrintInfoManager
-from octoeverywhere.webcamhelper import WebcamHelper
+from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
@@ -24,7 +24,6 @@ from .bambuclient import BambuClient
 from .bambuwebcamhelper import BambuWebcamHelper
 from .bambucommandhandler import BambuCommandHandler
 from .bambustatetranslater import BambuStateTranslator
-from .quickcam import QuickCam
 
 # This file is the main host for the bambu service.
 class BambuHost:
@@ -110,8 +109,7 @@ class BambuHost:
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoPingPong.Get().DisablePrimaryOverride()
 
-            # Setup the webcam helper and QuickCam
-            QuickCam.Init(self.Logger, self.Config)
+            # Setup the webcam helper
             webcamHelper = BambuWebcamHelper(self.Logger, self.Config)
             WebcamHelper.Init(self.Logger, webcamHelper, localStorageDir)
 

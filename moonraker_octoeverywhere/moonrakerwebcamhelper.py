@@ -6,7 +6,7 @@ import json
 import requests
 
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.webcamhelper import WebcamSettingItem, WebcamHelper
+from octoeverywhere.Webcam.webcamhelper import WebcamSettingItem, WebcamHelper
 
 from linux_host.config import Config
 
@@ -109,6 +109,17 @@ class MoonrakerWebcamHelper():
             return [
                 item
             ]
+
+
+    # !! Interface Function !!
+    # This function is called to determine if a QuickCam stream should keep running or not.
+    # The idea is since a QuickCam stream can take longer to start, for example, the Bambu Websocket stream on sends 1FPS,
+    # we can keep the stream running while the print is running to lower the latency of getting images.
+    # Most most platforms, this should return true if the print is running or paused, otherwise false.
+    # Also consider something like Gadget, it takes pictures every 20-40 seconds, so the stream will be started frequently if it's not already running.
+    def ShouldQuickCamStreamKeepRunning(self) -> bool:
+        # TODO - Ideally this should return true if we are printing.
+        return False
 
 
     # Wakes up the auto settings worker.

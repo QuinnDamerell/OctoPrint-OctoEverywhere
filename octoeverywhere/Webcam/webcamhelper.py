@@ -5,105 +5,10 @@ from typing import List
 
 import urllib3
 
-from .sentry import Sentry
-from .octohttprequest import OctoHttpRequest
-
-#
-# A platform agnostic definition of a webcam stream.
-#
-class WebcamSettingItem:
-
-    # The snapshotUrl and streamUrl can be relative or absolute.
-    #
-    #  name must exist.
-    #  snapshotUrl OR streamUrl can be None if the values aren't available, but not both.
-    #  flipHBool & flipVBool & rotationInt must exist.
-    #  rotationInt must be 0, 90, 180, or 270
-    def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0, enabled:bool = True):
-        self._name = ""
-        self.Name = name
-        self.SnapshotUrl = snapshotUrl
-        self.StreamUrl = streamUrl
-        self.FlipH = flipHBool
-        self.FlipV = flipVBool
-        self.Rotation = rotationInt
-        # This is a special flag mostly used for the local plugin webcams to indicate they are no enabled.
-        self.Enabled = enabled
-
-
-    @property
-    def Name(self):
-        return self._name
-
-
-    @Name.setter
-    def Name(self, value):
-        # When the name is set, make sure we convert it to the string style we use internally.
-        # This ensures that the name can be used and is consistent across the platform.
-        if value is not None and len(value) > 0:
-            value = WebcamHelper.MoonrakerToInternalWebcamNameConvert(value)
-        self._name = value
-
-
-    def Validate(self, logger:logging.Logger) -> bool:
-        if self.Name is None or len(self.Name) == 0:
-            logger.error(f"Name value in WebcamSettingItem is None or empty. {self.StreamUrl}")
-            return False
-        if self.Rotation is None or (self.Rotation != 0 and self.Rotation != 90 and self.Rotation != 180 and self.Rotation != 270):
-            logger.error(f"Rotation value in WebcamSettingItem is an invalid int. {self.Name} - {self.Rotation}")
-            return False
-        if (self.SnapshotUrl is None or len(self.SnapshotUrl) == 0) and (self.StreamUrl is None or len(self.StreamUrl) == 0):
-            logger.error(f"Snapshot and StreamUrl values in WebcamSettingItem are none or empty {self.Name}")
-            return False
-        if self.FlipH is None:
-            logger.error(f"FlipH value in WebcamSettingItem is None {self.Name}")
-            return False
-        self.FlipH = bool(self.FlipH)
-        if self.FlipV is None:
-            logger.error(f"FlipV value in WebcamSettingItem is None {self.Name}")
-            return False
-        self.FlipV = bool(self.FlipV)
-        return True
-
-
-    # Used to serialize the object to a dict that can be used with json.
-    # THESE PROPERTY NAMES CAN'T CHANGE, it's used for the API and it's used to serialize to disk.
-    def Serialize(self, includeUrls:bool = True) -> dict:
-        d = {
-            "Name": self.Name,
-            "FlipH": self.FlipH,
-            "FlipV": self.FlipV,
-            "Rotation": self.Rotation,
-            "Enabled": self.Enabled
-        }
-        if includeUrls:
-            d["SnapshotUrl"] = self.SnapshotUrl
-            d["StreamUrl"] = self.StreamUrl
-        return d
-
-
-    # Used to convert a dict back into a WebcamSettingItem object.
-    # Returns None if there's a failure
-    @staticmethod
-    def Deserialize(d:dict, logger:logging.Logger):
-        try:
-            name = d.get("Name")
-            snapshotUrl = d.get("SnapshotUrl")
-            streamUrl = d.get("StreamUrl")
-            flipH = d.get("FlipH")
-            flipV = d.get("FlipV")
-            rotation = d.get("Rotation")
-            enabled = d.get("Enabled")
-            if name is None or snapshotUrl is None or streamUrl is None or flipH is None or flipV is None or rotation is None or enabled is None:
-                raise Exception("Failed to deserialize WebcamSettingItem, missing values.")
-            i = WebcamSettingItem(str(name), str(snapshotUrl), str(streamUrl), bool(flipH), bool(flipV), int(rotation), bool(enabled))
-            if i.Validate(logger) is False:
-                raise Exception("Failed to validate WebcamSettingItem.")
-            return i
-        except Exception as e:
-            Sentry.Exception("Failed to deserialize WebcamSettingItem", e)
-        return None
-
+from ..sentry import Sentry
+from ..octohttprequest import OctoHttpRequest
+from .webcamsettingitem import WebcamSettingItem
+from .quickcam import QuickCamManager
 
 # The point of this class is to abstract the logic that needs to be done to reliably get a webcam snapshot and stream from many types of
 # printer setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
@@ -113,10 +18,6 @@ class WebcamHelper:
     # If no other index is specified, 0 is the default webcam index.
     # This assumption is also made in the service and website, so it can't change.
     c_DefaultWebcamIndex = 0
-
-    # We need to cap this so they aren't crazy long.
-    # However, this COULD mess with teh default camera name logic, since it matches off names.
-    c_MaxWebcamNameLength = 20
 
     # A header we apply to all snapshot and webcam streams so the client can get the correct transforms the user has setup.
     c_OeWebcamTransformHeaderKey = "x-oe-webcam-transform"
@@ -128,6 +29,7 @@ class WebcamHelper:
     @staticmethod
     def Init(logger:logging.Logger, webcamPlatformHelperInterface, pluginDataFolderPath):
         WebcamHelper._Instance = WebcamHelper(logger, webcamPlatformHelperInterface, pluginDataFolderPath)
+        QuickCamManager.Init(logger, webcamPlatformHelperInterface)
 
 
     @staticmethod
@@ -144,26 +46,6 @@ class WebcamHelper:
         self.DefaultCameraName:str = None
         self.LocalPluginWebcamSettingsObjects:List[WebcamSettingItem] = []
         self._LoadPluginWebcamSettings()
-
-
-    # Returns the snapshot URL from the settings.
-    # Can be None if there is no snapshot URL set in the settings!
-    # This URL can be absolute or relative.
-    def GetSnapshotUrl(self, cameraIndex:int = None):
-        obj = self._GetWebcamSettingObj(cameraIndex)
-        if obj is None:
-            return None
-        return obj.SnapshotUrl
-
-
-    # Returns the mjpeg stream URL from the settings.
-    # Can be None if there is no URL set in the settings!
-    # This URL can be absolute or relative.
-    def GetWebcamStreamUrl(self, cameraIndex:int = None):
-        obj = self._GetWebcamSettingObj(cameraIndex)
-        if obj is None:
-            return None
-        return obj.StreamUrl
 
 
     # Returns if flip H is set in the settings.
@@ -234,15 +116,19 @@ class WebcamHelper:
 
 
     def _GetWebcamStreamInternal(self, cameraIndex:int = None) -> OctoHttpRequest.Result:
-        # Check if the platform helper has an override.
-        # If so, it CAN BE responsible for all of the snapshot getting logic, but if returns None we should fallback to the default logic.
-        if hasattr(self.WebcamPlatformHelperInterface, 'GetStream_Override'):
-            ret = self.WebcamPlatformHelperInterface.GetStream_Override(self._GetWebcamSettingObj(cameraIndex))
-            if ret is not None:
-                return ret
+        # Get the webcam settings object for this request.
+        # If there are no webcams, this will return None
+        webcamSettingsObj = self._GetWebcamSettingObj(cameraIndex)
+        if webcamSettingsObj is None:
+            return None
+
+        # First, check if this webcam URL needs to be handled by the QuickCam system.
+        result = QuickCamManager.Get().TryGetStream(webcamSettingsObj)
+        if result is not None:
+            return result
 
         # Try to get the URL from the settings.
-        webcamStreamUrl = self.GetWebcamStreamUrl(cameraIndex)
+        webcamStreamUrl = webcamSettingsObj.StreamUrl
         if webcamStreamUrl is not None:
             # Try to make a standard http call with this stream url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
@@ -268,15 +154,19 @@ class WebcamHelper:
 
 
     def _GetSnapshotInternal(self, cameraIndex:int = None) -> OctoHttpRequest.Result:
-        # Check if the platform helper has an override.
-        # If so, it CAN BE responsible for all of the snapshot getting logic, but if returns None we should fallback to the default logic.
-        if hasattr(self.WebcamPlatformHelperInterface, 'GetSnapshot_Override'):
-            ret = self.WebcamPlatformHelperInterface.GetSnapshot_Override(self._GetWebcamSettingObj(cameraIndex))
-            if ret is not None:
-                return ret
+        # Get the webcam settings object for this request.
+        # If there are no webcams, this will return None
+        webcamSettingsObj = self._GetWebcamSettingObj(cameraIndex)
+        if webcamSettingsObj is None:
+            return None
 
-        # First, try to get the snapshot using the string defined in settings.
-        snapshotUrl = self.GetSnapshotUrl(cameraIndex)
+        # First, check if this webcam URL needs to be handled by the QuickCam system.
+        result = QuickCamManager.Get().TryToGetSnapshot(webcamSettingsObj)
+        if result is not None:
+            return result
+
+        # Next, try to get the snapshot using the string defined in settings.
+        snapshotUrl = webcamSettingsObj.SnapshotUrl
         if snapshotUrl is not None:
             # Try to make a standard http call with this snapshot url
             # Use use this HTTP call helper system because it might be somewhat tricky to know
@@ -290,7 +180,7 @@ class WebcamHelper:
                 return octoHttpResult
 
         # If getting the snapshot from the snapshot URL fails, try getting a single frame from the mjpeg stream
-        streamUrl = self.GetWebcamStreamUrl()
+        streamUrl = webcamSettingsObj.StreamUrl
         if streamUrl is None:
             self.Logger.debug("Snapshot helper failed to get a snapshot from the snapshot URL, but we also don't have a stream URL.")
             return None
@@ -444,6 +334,7 @@ class WebcamHelper:
 
     # Returns the default webcam setting object or None if there isn't one.
     # If there isn't a default webcam name, it's assumed to be the first webcam returned in the list command.
+    # If there are no webcams, this will return None
     def _GetWebcamSettingObj(self, cameraIndex:int = None):
         try:
             # Get the current list of webcam settings.
@@ -814,18 +705,3 @@ class WebcamHelper:
             self.Logger.info(f"Webcam settings loaded. Default camera name: {self.DefaultCameraName}, Local Webcam Settings Items: {len(self.LocalPluginWebcamSettingsObjects)}")
         except Exception as e:
             self.Logger.error("_LoadDefaultCameraName failed "+str(e))
-
-
-    @staticmethod
-    def MoonrakerToInternalWebcamNameConvert(name:str):
-        if name is not None and len(name) > 0:
-            # Enforce max name length.
-            if len(name) > WebcamHelper.c_MaxWebcamNameLength:
-                name = name[WebcamHelper.c_MaxWebcamNameLength]
-            # Ensure the string is only utf8
-            name = name.encode('utf-8', 'ignore').decode('utf-8')
-            # Make the first letter uppercase
-            name = name[0].upper() + name[1:]
-            # If there are any / they will break our UI, so remove them.
-            name = name.replace("/", "")
-        return name
