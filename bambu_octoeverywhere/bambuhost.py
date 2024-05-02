@@ -24,6 +24,7 @@ from .bambuclient import BambuClient
 from .bambuwebcamhelper import BambuWebcamHelper
 from .bambucommandhandler import BambuCommandHandler
 from .bambustatetranslater import BambuStateTranslator
+from .filemanager import FileManager
 
 # This file is the main host for the bambu service.
 class BambuHost:
@@ -121,9 +122,6 @@ class BambuHost:
 
             # Setup the file manager
             FileManager.Init(self.Logger, self.Config)
-            import threading
-            t = threading.Thread(target=FileManager.Get().GetFiles)
-            t.start()
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger))

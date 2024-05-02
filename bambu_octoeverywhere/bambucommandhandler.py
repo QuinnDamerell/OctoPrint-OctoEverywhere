@@ -1,4 +1,6 @@
-from octoeverywhere.commandhandler import CommandResponse
+from typing import List
+
+from octoeverywhere.commandhandler import CommandResponse, FileDetails
 from octoeverywhere.printinfo import PrintInfoManager
 
 from .bambuclient import BambuClient
@@ -210,10 +212,10 @@ class BambuCommandHandler:
 
     # !! Platform Command Handler Interface Function !!
     # This should return a list of all files that are printable.
-    # If not, it must return the correct two error codes accordingly.
-    # This must return a CommandResponse.
-    def ListFiles(self) -> CommandResponse:
-        return CommandResponse.Error(405, "No supported yet.")
+    # If there are no files, return an empty list.
+    # On error, return None
+    def ListFiles(self) -> List[FileDetails]:
+        return FileManager.Get().ListFiles()
 
 
     # !! Platform Command Handler Interface Function !!

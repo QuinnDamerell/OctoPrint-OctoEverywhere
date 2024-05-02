@@ -1,6 +1,8 @@
-import logging
-from ftplib import FTP_TLS
 import ssl
+import logging
+from typing import List
+from ftplib import FTP_TLS
+import ftplib
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import FileDetails
@@ -28,6 +30,16 @@ class ImplicitFTP_TLS(FTP_TLS):
             value = self.context.wrap_socket(value)
         self._sock = value
 
+    # It takes the TLS session information from the initial "control" FTP connection and reuses it also for every second "data" connection that is frequently created and closed for every new data transfer of a file body or a directory list.
+    # https://stackoverflow.com/questions/14659154/ftps-with-python-ftplib-session-reuse-required
+    def ntransfercmd(self, cmd, rest=None):
+        conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
+        if self._prot_p:
+            conn = self.context.wrap_socket(conn,
+                                            server_hostname=self.host,
+                                            session=self.sock.session)  # this is the fix
+        return conn, size
+
 
 # Does all things file related.
 class FileManager:
@@ -49,8 +61,9 @@ class FileManager:
         return FileManager._Instance
 
 
-    # Must return a list of FileDetails or None.
-    def GetFiles(self):
+    # On success, must return a list of FileDetails, empty if there are none.
+    # On failure returns None
+    def ListFiles(self) -> List[FileDetails]:
         try:
             # Try to get the FTP connection.
             ftp = self._GetFtpConnection()
@@ -71,7 +84,8 @@ class FileManager:
             # The Bambu printers don't support the MLSD command, so we have to use the NLST command.
             returnFiles = []
             for name in ftp.nlst():
-                if name.lower().strip().endswith(".gcode"):
+                nameLower = name.lower().strip()
+                if nameLower.endswith(".gcode") or nameLower.endswith(".3mf"):
                     returnFiles.append(FileDetails(name))
             return returnFiles
         except Exception as e:

@@ -337,7 +337,22 @@ class CommandHandler:
 
 
     def ListFiles(self, jsonObjData_CanBeNone:dict):
-        return self.PlatformCommandHandler.ListFiles()
+        try:
+            # Try to get all printable files.
+            files = self.PlatformCommandHandler.ListFiles()
+            if files is None:
+                return CommandResponse.Error(400, "Failed to list files.")
+
+            # Serialize the files
+            fileDicts = []
+            for f in files:
+                fileDicts.append(f.Serialize())
+
+            # Return the result.
+            return CommandResponse.Success({ "Files" : fileDicts })
+        except Exception as e:
+            Sentry.Exception("ListFiles API failed.", e)
+        return CommandResponse.Error(407, "Failed to make call.")
 
 
     def UploadFile(self, jsonObjData_CanBeNone:dict):
@@ -405,7 +420,6 @@ class CommandHandler:
         except Exception as e:
             Sentry.Exception("CommandHandler error while handling command.", e)
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str(e))
-
 
         # Build the result
         resultBytes = None

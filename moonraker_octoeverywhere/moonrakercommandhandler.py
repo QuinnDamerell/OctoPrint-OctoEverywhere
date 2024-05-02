@@ -1,6 +1,7 @@
 import json
+from typing import List
 
-from octoeverywhere.commandhandler import CommandHandler, CommandResponse
+from octoeverywhere.commandhandler import CommandHandler, CommandResponse, FileDetails
 
 from .moonrakerclient import MoonrakerClient, JsonRpcResponse
 from .smartpause import SmartPause
@@ -235,10 +236,10 @@ class MoonrakerCommandHandler:
 
     # !! Platform Command Handler Interface Function !!
     # This should return a list of all files that are printable.
-    # If not, it must return the correct two error codes accordingly.
-    # This must return a CommandResponse.
-    def ListFiles(self) -> CommandResponse:
-        return CommandResponse.Error(405, "No supported yet.")
+    # If there are no files, return an empty list.
+    # On error, return None
+    def ListFiles(self) -> List[FileDetails]:
+        return None
 
 
     # !! Platform Command Handler Interface Function !!
