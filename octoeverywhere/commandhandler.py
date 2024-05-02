@@ -1,4 +1,5 @@
 import json
+import base64
 
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .octohttprequest import OctoHttpRequest
@@ -306,6 +307,39 @@ class CommandHandler:
         return self.PlatformCommandHandler.ExecuteCancel()
 
 
+    def StartPrint(self, jsonObjData_CanBeNone:dict):
+        fileName = None
+        try:
+            fileName = jsonObjData_CanBeNone.get("FileName", None)
+            if fileName is None:
+                raise Exception("No FileName found")
+        except Exception as e:
+            Sentry.Exception("Failed to StartPrint, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args "+str(e))
+        return self.PlatformCommandHandler.ExecuteStartPrint(fileName)
+
+
+    def ListFiles(self, jsonObjData_CanBeNone:dict):
+        return self.PlatformCommandHandler.ListFiles()
+
+
+    def UploadFile(self, jsonObjData_CanBeNone:dict):
+        fileName = None
+        fileBytes = None
+        try:
+            fileName = jsonObjData_CanBeNone.get("FileName", None)
+            if fileName is None:
+                raise Exception("No FileName found")
+            base64EncodedBytes = jsonObjData_CanBeNone.get("FileBytes", None)
+            if base64EncodedBytes is None:
+                raise Exception("No FileBytes found")
+            fileBytes = base64.b64decode(base64EncodedBytes)
+        except Exception as e:
+            Sentry.Exception("Failed to StartPrint, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args "+str(e))
+        return self.PlatformCommandHandler.UploadFile(fileName, fileBytes)
+
+
     #
     # Common Handler Core Logic
     #
@@ -406,6 +440,13 @@ class CommandHandler:
             return self.Resume()
         elif commandPathLower.startswith("cancel"):
             return self.Cancel()
+        elif commandPathLower.startswith("start-print"):
+            return self.StartPrint(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("list-files"):
+            return self.ListFiles(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("upload-file"):
+            return self.UploadFile(jsonObj_CanBeNone)
+
 
         return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
 

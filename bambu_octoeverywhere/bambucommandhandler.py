@@ -197,3 +197,27 @@ class BambuCommandHandler:
             return CommandResponse.Success(None)
         else:
             return CommandResponse.Error(400, "Failed to send command to printer.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This should try to start a print given the file name specified.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def ExecuteStartPrint(self, fileName:str) -> CommandResponse:
+        return CommandResponse.Error(405, "No supported yet.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This should return a list of all files that are printable.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def ListFiles(self) -> CommandResponse:
+        return CommandResponse.Error(405, "No supported yet.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # This should return a list of all files that are printable.
+    # If not, it must return the correct two error codes accordingly.
+    # This must return a CommandResponse.
+    def UploadFile(self, fileName:str, fileBytes:bytes) -> CommandResponse:
+        return CommandResponse.Error(405, "No supported yet.")
