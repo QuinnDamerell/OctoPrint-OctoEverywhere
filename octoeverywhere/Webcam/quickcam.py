@@ -481,24 +481,31 @@ class QuickCam_RTSP:
         # We set the logging level of ffmpeg depending on our logging level
         # The logs are written to stderr even if they aren't errors, which is nice, so
         # we can capture them on timeouts.
-        logLevel = "trace" if self.Logger.isEnabledFor(logging.DEBUG) else "warning"
+        #logLevel = "trace" if self.Logger.isEnabledFor(logging.DEBUG) else "warning"
+        # TODO - anything lower than warning has too much tax on ffmpeg, so we don't use it for now.
+        logLevel = "warning"
+
+        # For FPS, we have found that we can stream and transcode the X1 rtsp stream at a smooth 15 fps on a Pi 4.
+        # But for other RTSP streams like Wzye bridge cams, it's more intensive and we need to drop to 10 fps.
+        # If we don't drop the FPS, the stream will fall behind.
+        fps = 10
+        if url.find("bblp:") != -1:
+            fps = 15
 
         # For auth, if there's a username and password it will already be in the URL in the http:// basic auth style,
         # So there's nothing else we need to do.
 
         # Notes
-        #   We use 15 fps because it's a good trade off of fps and cpu perf hits
-        #      It also decreases the bandwidth needed, which helps on mobile
-        #   We use the default jpeg image quality, for the same reasons above.
+        #   We use the default jpeg image quality, for the same FPS reasons above.
         # pylint: disable=consider-using-with # We handle this on our own.
         self.Process = subprocess.Popen(["ffmpeg",
                     "-hide_banner",
                     "-y",
                     "-loglevel", logLevel,
-                    "-rtsp_transport", "udp",
+                    "-rtsp_transport", "0", # Use a value of 0, so both TCP and UDP can be used.
                     "-use_wallclock_as_timestamps", "1",
                     "-i", url,
-                    "-filter:v", "fps=15",
+                    "-filter:v", f"fps={fps}",
                     "-movflags", "+faststart",
                     "-f", "image2pipe", "-"
                     ],
