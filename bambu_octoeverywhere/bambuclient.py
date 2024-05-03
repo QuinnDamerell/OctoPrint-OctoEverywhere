@@ -107,6 +107,10 @@ class BambuClient:
                 self.Client.tls_insecure_set(True)
                 self.Client.username_pw_set("bblp", self.AccessToken)
 
+                # Since we are local, we can do more aggressive reconnect logic.
+                # The default is min=1 max=120 seconds.
+                self.Client.reconnect_delay_set(min_delay=1, max_delay=5)
+
                 # Setup the callback functions.
                 self.Client.on_connect = self._OnConnect
                 self.Client.on_message = self._OnMessage
@@ -120,7 +124,7 @@ class BambuClient:
                 # Connect to the server
                 # This will throw if it fails, but after that, the loop_forever will handle reconnecting.
                 localBackoffCounter += 1
-                self.Client.connect(ipOrHostname, int(self.PortStr), keepalive=60)
+                self.Client.connect(ipOrHostname, int(self.PortStr), keepalive=5)
 
                 # Note that self.Client.connect will not throw if there's no MQTT server, but not if auth is wrong.
                 # So if it didn't throw, we know there's a server there, but it might not be the right server
@@ -310,7 +314,7 @@ class BambuClient:
                 return False
 
             # Try to publish.
-            state = self.Client.publish(f"device/{self.PrinterSn}/report", json.dumps(msg))
+            state = self.Client.publish(f"device/{self.PrinterSn}/request", json.dumps(msg))
 
             # Wait for the message publish to be acked.
             # This will throw if the publish fails.

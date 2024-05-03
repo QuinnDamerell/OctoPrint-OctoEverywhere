@@ -105,7 +105,7 @@ class NetworkSearch:
                         userdata["SnSubSuccess"] = True
                         logger.debug(f"Bambu {ipOrHostname} Sub success.")
                         # Push the message to get the full state, this is needed on teh P1 and A1
-                        client.publish(f"device/{printerSn}/report", json.dumps( { "pushing": {"sequence_id": "0", "command": "pushall"}}))
+                        client.publish(f"device/{printerSn}/request", json.dumps( { "pushing": {"sequence_id": "0", "command": "pushall"}}))
                         # Check if we are done, this will disconnect if we are.
                         NetworkSearch._BambuConnectionDone(userdata, client)
 
