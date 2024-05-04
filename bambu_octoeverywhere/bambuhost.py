@@ -103,6 +103,12 @@ class BambuHost:
 
             # For bambu, there's no frontend to connect to, so we disable the http relay system.
             OctoHttpRequest.SetDisableHttpRelay(True)
+            # But we still want to set the "local OctoPrint port" to 80, because that's the default port it will try for relative URLs.
+            # Relative URLs for Bambu only come from the alternative webcam streaming system, which the user might be trying to access a webcam stream from this device.
+            # If they don't specify a IP (or localhost) and port, then we will default all relative URLs to the "local OctoPrint port" value.
+            OctoHttpRequest.SetLocalHttpProxyPort(80)
+            OctoHttpRequest.SetLocalOctoPrintPort(80)
+            OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
 
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
