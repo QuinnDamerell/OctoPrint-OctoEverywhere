@@ -220,7 +220,7 @@ install_or_update_system_dependencies()
         # But in general, PY will already be installed, so there's no need to try.
         # On the K1, the only we thing we ensure is that virtualenv is installed via pip.
         # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
-        pip3 install -q --no-cache-dir virtualenv
+        pip3 install -q --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --no-cache-dir virtualenv
     elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
     then
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
@@ -265,11 +265,21 @@ install_or_update_python_env()
 
     # Update pip if needed - we added a note because this takes a while on the sonic pad.
     log_info "Updating PIP if needed... (this can take a few seconds or so)"
-    "${OE_ENV}"/bin/python -m pip install --upgrade pip
+    if [[ $IS_K1_OS -eq 1 ]]
+    then
+        "${OE_ENV}"/bin/python -m pip install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --no-cache-dir --upgrade pip
+    else
+        "${OE_ENV}"/bin/python -m pip install --upgrade pip
+    fi
 
     # Finally, ensure our plugin requirements are installed and updated.
     log_info "Installing or updating required python libs..."
-    "${OE_ENV}"/bin/pip3 install --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
+    if [[ $IS_K1_OS -eq 1 ]]
+    then
+        "${OE_ENV}"/bin/pip3 install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
+    else
+        "${OE_ENV}"/bin/pip3 install --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
+    fi
     log_info "Python libs installed."
 }
 
