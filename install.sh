@@ -198,6 +198,9 @@ ensure_py_venv()
     then
         # The K1 requires we setup the virtualenv like this.
         # --system-site-packages is important for the K1, since it doesn't have much disk space.
+        # Ideally we use /opt/bin/python3, since that version of python will be updated over time.
+        # It installs with the opkg command, if opkg is there.
+        # If not, we will use the version of python built into the system for the existing Creality stuff.
         if [[ -f /opt/bin/python3 ]]
         then
             virtualenv -p /opt/bin/python3 --system-site-packages "${OE_ENV}"
@@ -222,19 +225,23 @@ install_or_update_system_dependencies()
     then
         # The K1 by default doesn't have any package manager. In some cases
         # the user might install opkg via the 3rd party moonraker installer script.
-        # But in general, PY will already be installed, so there's no need to try.
-        # On the K1, the only we thing we ensure is that virtualenv is installed via pip.
-        # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
+        # But in general, PY will already be installed.
+        # We will try to update python from the package manager if possible, otherwise, we will ignore it.
         if [[ -f /opt/bin/opkg ]]
         then
-            opkg install ${CREALITY_DEP_LIST}
+            opkg update || true
+            opkg install ${CREALITY_DEP_LIST} || true
         fi
+        # On the K1, the only we thing we ensure is that virtualenv is installed via pip.
+        # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
+        # 5/14/24 - The trusted hosts had to be added to fix a cert issue with pypi we aren't sure why it started happening all of the sudden.
         pip3 install -q --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --no-cache-dir virtualenv
     elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
     then
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
         # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
-        opkg install ${CREALITY_DEP_LIST}
+        opkg update || true
+        opkg install ${CREALITY_DEP_LIST} || true
         pip3 install -q --no-cache-dir virtualenv
     else
         # It seems a lot of printer control systems don't have the date and time set correctly, and then the fail
