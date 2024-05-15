@@ -86,11 +86,6 @@ class BambuState:
         return BambuState.IsPrintingState(self.gcode_state, includePausedAsPrinting)
 
 
-    # Since there's a lot to consider to figure out if a print is running, this one function acts as common logic across the plugin.
-    def IsPrepareOrSlicing(self) -> bool:
-        return BambuState.IsPrepareOrSlicingState(self.gcode_state)
-
-
     # We use this common method since "is this a printing state?" is complicated and we can to keep all of the logic common in the plugin
     @staticmethod
     def IsPrintingState(state:str, includePausedAsPrinting:bool) -> bool:
@@ -163,7 +158,7 @@ class BambuState:
         # There's a full list of errors here, we only care about some of them
         # https://e.bambulab.com/query.php?lang=en
         # We format the error into a hex the same way the are on the page, to make it easier.
-        # NOTE SOME ERRORS HAVE MULTPLE VALUES, SO GET THEM ALL!
+        # NOTE SOME ERRORS HAVE MULTIPLE VALUES, SO GET THEM ALL!
         # They have different values for the different AMS slots
         h = hex(self.print_error)[2:].rjust(8, '0')
         errorMap = {
