@@ -196,7 +196,12 @@ class BambuStateTranslator:
     def GetCurrentLayerInfo(self):
         state = BambuClient.Get().GetState()
         if state is None:
-            return (None, None)
+            # If we dont have a state yet, return 0,0, which means we can get layer info but we don't know yet.
+            return (0, 0)
+        if state.IsPrepareOrSlicing():
+            # The printer doesn't clear these values when a new print is starting and it's in a prepare or slicing state.
+            # So if we are in that state, return 0,0, to represent we don't know the layer info yet.
+            return (0, 0)
         # We can get accurate and 100% correct layers from Bambu, awesome!
         currentLayer = None
         totalLayers = None

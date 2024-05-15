@@ -219,6 +219,7 @@ class MoonrakerWebcamHelper():
             if result.HasError():
                 if "Namespace 'webcams' not found".lower() in result.ErrorStr.lower():
                     # This happens if there are no webcams configured at all.
+                    self.Logger.debug("server.database.get_item returned no webcam namespace found.")
                     self._ResetValuesToDefaults()
                     return
                 self.Logger.warn("Moonraker webcam helper failed to query for webcams. "+result.GetLoggingErrorStr())

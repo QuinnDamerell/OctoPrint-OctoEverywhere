@@ -481,9 +481,7 @@ class QuickCam_RTSP:
         # We set the logging level of ffmpeg depending on our logging level
         # The logs are written to stderr even if they aren't errors, which is nice, so
         # we can capture them on timeouts.
-        #logLevel = "trace" if self.Logger.isEnabledFor(logging.DEBUG) else "warning"
-        # TODO - anything lower than warning has too much tax on ffmpeg, so we don't use it for now.
-        logLevel = "warning"
+        logLevel = "trace" if self.Logger.isEnabledFor(logging.DEBUG) else "warning"
 
         # For FPS, we have found that we can stream and transcode the X1 rtsp stream at a smooth 15 fps on a Pi 4.
         # But for other RTSP streams like Wzye bridge cams, it's more intensive and we need to drop to 10 fps.

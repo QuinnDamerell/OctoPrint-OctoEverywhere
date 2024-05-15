@@ -73,7 +73,7 @@ class BambuState:
         if self.mc_remaining_time is None or self.LastTimeRemainingWallClock is None:
             return None
         # The slicer holds a constant time while in preparing, so we don't want to fake our countdown either.
-        if self.gcode_state == "SLICING" or self.gcode_state == "PREPARE":
+        if self.IsPrepareOrSlicing():
             # Reset the last wall clock time to now, so when we transition to running, we don't snap to a strange offset.
             self.LastTimeRemainingWallClock = time.time()
             return int(self.mc_remaining_time * 60)
@@ -100,6 +100,11 @@ class BambuState:
             return True
         # Do we need to consider some of the stg_cur states?
         return state == "RUNNING" or BambuState.IsPrepareOrSlicingState(state)
+
+
+    # We use this common method to keep all of the logic common in the plugin
+    def IsPrepareOrSlicing(self) -> bool:
+        return BambuState.IsPrepareOrSlicingState(self.gcode_state)
 
 
     # We use this common method to keep all of the logic common in the plugin
