@@ -88,6 +88,7 @@ PKGLIST="python3 python3-pip virtualenv python3-venv curl"
 # We don't override the default name, since that's used by the Moonraker installer
 # Note that we DON'T want to use the same name as above (not even in this comment) because some parsers might find it.
 # Note we exclude virtualenv python3-venv curl because they can't be installed on the sonic pad via the package manager.
+SONIC_PAD_DEP_LIST="python3 python3-pip"
 CREALITY_DEP_LIST="python3 python3-pip"
 
 
@@ -241,7 +242,7 @@ install_or_update_system_dependencies()
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
         # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
         opkg update || true
-        opkg install ${CREALITY_DEP_LIST} || true
+        opkg install ${SONIC_PAD_DEP_LIST} || true
         pip3 install -q --no-cache-dir virtualenv
     else
         # It seems a lot of printer control systems don't have the date and time set correctly, and then the fail
