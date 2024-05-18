@@ -89,7 +89,7 @@ PKGLIST="python3 python3-pip virtualenv python3-venv curl"
 # Note that we DON'T want to use the same name as above (not even in this comment) because some parsers might find it.
 # Note we exclude virtualenv python3-venv curl because they can't be installed on the sonic pad via the package manager.
 SONIC_PAD_DEP_LIST="python3 python3-pip"
-CREALITY_DEP_LIST="python3 python3-pip"
+CREALITY_DEP_LIST="python3 python3-pillow python3-pip"
 
 
 #
