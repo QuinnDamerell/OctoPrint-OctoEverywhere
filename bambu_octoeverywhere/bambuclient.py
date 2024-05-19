@@ -48,11 +48,10 @@ class BambuClient:
 
         # Get the required args.
         self.Config = config
-        ipOrHostname = config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
         self.PortStr  = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
         self.AccessToken  = config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
         self.PrinterSn  = config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
-        if ipOrHostname is None or self.PortStr is None or self.AccessToken is None or self.PrinterSn is None:
+        if self.PortStr is None or self.AccessToken is None or self.PrinterSn is None:
             raise Exception("Missing required args from the config")
 
         # We use this var to keep track of consecutively failed connections
@@ -147,7 +146,7 @@ class BambuClient:
                     self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
-                    Sentry.Exception("Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
+                    Sentry.Exception(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
@@ -333,13 +332,15 @@ class BambuClient:
             self.ConsecutivelyFailedConnectionAttempts = 0
 
         # On the first few attempts, use the expected IP.
-        # The first attempt will always be attempt 1, since it's reset to 0 and incremented before connecting
+        # The first attempt will always be attempt 1, since it's reset to 0 and incremented before connecting.
+        # The IP can be empty, like if the docker container is used, in which case we should always search for the printer.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        if self.ConsecutivelyFailedConnectionAttempts < 3:
+        if configIpOrHostname is not None and len(configIpOrHostname) > 0 and self.ConsecutivelyFailedConnectionAttempts < 3:
             return configIpOrHostname
 
         # If we fail too many times, try to scan for the printer on the local subnet, the IP could have changed.
         # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
+        self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
         ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.AccessToken, self.PrinterSn)
 
         # If we get an IP back, it is the printer.

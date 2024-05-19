@@ -83,13 +83,14 @@ OE_ENV="${HOME}/octoeverywhere-env"
 # The virtualenv is for our virtual package env we create
 # The curl requirement is for some things in this bootstrap script.
 # python3-venv is required for teh virtualenv command to fully work.
+# This must stay in sync with the dockerfile package installs
 PKGLIST="python3 python3-pip virtualenv python3-venv curl"
 # For the Creality OS, we only need to install these.
 # We don't override the default name, since that's used by the Moonraker installer
 # Note that we DON'T want to use the same name as above (not even in this comment) because some parsers might find it.
 # Note we exclude virtualenv python3-venv curl because they can't be installed on the sonic pad via the package manager.
-CREALITY_DEP_LIST="python3 python3-pip"
-
+CREALITY_DEP_LIST="python3 python3-pip python3-pillow"
+SONIC_PAD_DEP_LIST="python3 python3-pip"
 
 #
 # Console Write Helpers
@@ -241,7 +242,7 @@ install_or_update_system_dependencies()
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
         # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
         opkg update || true
-        opkg install ${CREALITY_DEP_LIST} || true
+        opkg install ${SONIC_PAD_DEP_LIST} || true
         pip3 install -q --no-cache-dir virtualenv
     else
         # It seems a lot of printer control systems don't have the date and time set correctly, and then the fail
@@ -266,6 +267,9 @@ install_or_update_system_dependencies()
         log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
         sudo apt install --yes zlib1g-dev 2> /dev/null || true
         sudo apt install --yes zlib-devel 2> /dev/null || true
+        sudo apt install --yes python-imaging 2> /dev/null || true
+        sudo apt install --yes python3-pil 2> /dev/null || true
+        sudo apt install --yes python3-pillow 2> /dev/null || true
     fi
 
     log_info "System package install complete."

@@ -1,0 +1,60 @@
+name: Publish Docker image
+
+# Only make and deploy new docker images on tagged releases.
+on:
+  release:
+    types: [published]
+
+jobs:
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      # This is needed for the attestation step
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # Required for docker multi arch building.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Required for docker multi arch building.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: octoeverywhere/octoeverywhere
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # These are the platform our ubuntu image base supports
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
+          file: ./Dockerfile
+          push: true
+          tags: octoeverywhere/octoeverywhere:latest
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # This isn't working, so it's disabled for now.
+      # - name: Generate artifact attestation
+      #   uses: actions/attest-build-provenance@v1
+      #   with:
+      #     subject-name: octoeverywhere/octoeverywhere
+      #     subject-digest: ${{ steps.push.outputs.digest }}
+      #     push-to-registry: true

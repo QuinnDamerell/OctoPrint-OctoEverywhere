@@ -30,3 +30,4 @@ jobs:
         pylint ./bambu_octoeverywhere/
         pylint ./linux_host/
         pylint ./py_installer/
+        pylint ./docker_octoeverywhere/
