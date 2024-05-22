@@ -27,7 +27,7 @@ You must map the `/data` folder in your docker container to a directory on your 
 Once the docker container is running, you need to look at the logs to find the linking URL.
 
 Docker Compose:
-`docker-compose logs | grep https://octoeverywhere.com/getstarted`
+`docker compose logs | grep https://octoeverywhere.com/getstarted`
 
 Docker:
 `docker logs bambu-connect | grep https://octoeverywhere.com/getstarted`
@@ -41,7 +41,7 @@ Using docker compose is the easiest way to run OctoEverywhere's Bambu Connect us
 - Install [Docker and Docker Compose](https://docs.docker.com/compose/install/linux/)
 - Clone this repo
 - Edit the `./docker-compose.yml` file to enter your environment vars
-- Run `docker-compose up -d`
+- Run `docker compose up -d`
 - Follow the "Linking Your Bambu Connect Plugin" to link the plugin to your account.
 
 ## Using Docker
