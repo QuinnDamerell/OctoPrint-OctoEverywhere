@@ -44,6 +44,7 @@ class BambuClient:
         self.Version:BambuVersion = None
         self.HasDoneFirstFullStateSync = False
         self.ReportSubscribeMid = None
+        self.IsPendingSubscribe = False
         self._CleanupStateOnDisconnect()
 
         # Get the required args.
@@ -183,6 +184,7 @@ class BambuClient:
         self.Version = None
         self.HasDoneFirstFullStateSync = False
         self.ReportSubscribeMid = None
+        self.IsPendingSubscribe = False
 
 
     # Fired when the MQTT connection is made.
@@ -192,15 +194,24 @@ class BambuClient:
         # We must do this before anything else, otherwise we won't get responses for things like
         # the full state sync. The result of the subscribe will be reported to _OnSubscribe
         # Note that at least for my P1P, if the SN is incorrect, the MQTT connection is closed with no _OnSubscribe callback.
+        # Thus we set the self.IsPendingSubscribe flag, so we can give the user a better error message.
+        self.IsPendingSubscribe = True
         (result, self.ReportSubscribeMid) = self.Client.subscribe(f"device/{self.PrinterSn}/report")
         if result != mqtt.MQTT_ERR_SUCCESS or self.ReportSubscribeMid is None:
             # If we can't sub, disconnect, since we can't do anything.
+            self.Logger.warn(f"Failed to subscribe to the MQTT subscription using the serial number '{self.PrinterSn}'. Result: {result}. Disconnecting.")
             self.Client.disconnect()
 
 
     # Fired when the MQTT connection is lost
     def _OnDisconnect(self, client, userdata, disconnect_flags, reason_code, properties):
-        self.Logger.warn("Bambu printer connection lost. We will try to reconnect in a few seconds.")
+        # If the serial number is wrong in the subscribe call, instead of returning an error the Bambu Lab printers just disconnect.
+        # So if we were pending a subscribe call, give the user a better error message so they know the likely cause.
+        if self.IsPendingSubscribe:
+            self.Logger.error("Bambu printer mqtt connection lost when trying to sub for events.")
+            self.Logger.error(f"THIS USUALLY MEANS THE PRINTER SERIAL NUMBER IS WRONG. We tried to use the serial number '{self.PrinterSn}'. Double check the SN is correct.")
+        else:
+            self.Logger.warn("Bambu printer connection lost. We will try to reconnect in a few seconds.")
         # Clear the state since we lost the connection and won't stay synced.
         self._CleanupStateOnDisconnect()
 
