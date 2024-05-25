@@ -225,6 +225,13 @@ class BambuClient:
                 Sentry.Exception("MQTT leaked exception.", Exception(msg))
             else:
                 self.Logger.error(f"MQTT log error: {msg}")
+        elif level == mqtt.MQTT_LOG_WARNING:
+            # Report warnings.
+            self.Logger.error(f"MQTT log warn: {msg}")
+        else:
+            # Report everything else if debug is enabled.
+            if self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug(f"MQTT log: {msg}")
 
 
     # Fried when the MQTT subscribe result has come back.
