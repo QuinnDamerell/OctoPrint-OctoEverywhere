@@ -36,7 +36,8 @@ class NetworkSearch:
     def ScanForInstances_Bambu(logger:logging.Logger, accessCode:str, printerSn:str, portStr:str = None) -> List[str]:
         def callback(ip:str):
             return NetworkSearch.ValidateConnection_Bambu(logger, ip, accessCode, printerSn, portStr, timeoutSec=5)
-        return NetworkSearch._ScanForInstances(logger, callback)
+        # We want to return if any one IP is found, since there can only be one printer that will match the printer 100% correct.
+        return NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=1)
 
 
     # The final two steps can happen in different orders, so we need to wait for both the sub success and state object to be received.
@@ -190,7 +191,7 @@ class NetworkSearch:
     # testConFunction must be a function func(ip:str) -> NetworkValidationResult
     # Returns a list of IPs that reported Success() == True
     @staticmethod
-    def _ScanForInstances(logger:logging.Logger, testConFunction) -> List[str]:
+    def _ScanForInstances(logger:logging.Logger, testConFunction, returnAfterNumberFound = 0) -> List[str]:
         foundIps = []
         try:
             localIp = NetworkSearch._TryToGetLocalIp()
@@ -207,25 +208,78 @@ class NetworkSearch:
                 return foundIps
             ipPrefix = localIp[:lastDot+1]
 
+            # In the past, we did this wide with 255 threads.
+            # We got some feedback that the system was hanging on lower powered systems, but then I also found a bug where
+            # if an exception was thrown in the thread, it would hang the system.
+            # I fixed that but also lowered the concurrent thread count to 100, which seems more comfortable.
+            totalThreads = 100
+            outstandingIpsToCheck = []
             counter = 0
+            while counter < 255:
+                # The first IP will be 1, the last 255
+                counter += 1
+                outstandingIpsToCheck.append(ipPrefix + str(counter))
+
+            # Start the threads
+            # We must use arrays so they get captured by ref in the threads.
             doneThreads = [0]
-            totalThreads = 255
+            hasFoundRequestedNumberOfIps = [False]
             threadLock = threading.Lock()
             doneEvent = threading.Event()
-            while counter <= totalThreads:
-                fullIp = ipPrefix + str(counter)
-                def threadFunc(ip):
+            counter = 0
+            while counter < totalThreads:
+                def threadFunc(threadId):
                     try:
-                        result = testConFunction(ip)
+                        # Loop until we run out of IPs or the test is done by the bool flag.
+                        while True:
+                            # Get the next IP
+                            ip = "none"
+                            with threadLock:
+                                # If there are no IPs left, this thread is done.
+                                if len(outstandingIpsToCheck) == 0:
+                                    # This will invoke the finally block.
+                                    return
+                                # If enough IPs have been found, we are done.
+                                if hasFoundRequestedNumberOfIps[0] is True:
+                                    return
+                                # Get the next IP.
+                                ip = outstandingIpsToCheck.pop()
+
+                            # Outside of lock, test the IP
+                            result = testConFunction(ip)
+
+                            # re-lock and set the result.
+                            with threadLock:
+                                # If successful, add the IP to the found list.
+                                if result.Success():
+                                    # Enure we haven't already found the requested number of IPs,
+                                    # because then the result list might have already been returned
+                                    # and we don't want to mess with it.
+                                    if hasFoundRequestedNumberOfIps[0] is True:
+                                        return
+
+                                    # Add the IP to the list
+                                    foundIps.append(ip)
+
+                                    # Test if we have found all of the IPs we wanted to find.
+                                    if returnAfterNumberFound != 0 and len(foundIps) >= returnAfterNumberFound:
+                                        hasFoundRequestedNumberOfIps[0] = True
+                                        # We set this now, which allows the function to return the result list
+                                        # but the other threads will run until the current test ip is done.
+                                        # That's ok since we protect the result list from being added to.
+                                        doneEvent.set()
+                    except Exception as e:
+                        # Report the error.
+                        logger.error(f"Server scan failed for {ip} "+str(e))
+                    finally:
+                        # Important - when we leave for any reason, mark this thread done.
                         with threadLock:
-                            if result.Success():
-                                foundIps.append(ip)
                             doneThreads[0] += 1
+                            logger.debug(f"Thread {threadId} done. Done: {doneThreads[0]}; Total: {totalThreads}")
+                            # If all of the threads are done, we are done.
                             if doneThreads[0] == totalThreads:
                                 doneEvent.set()
-                    except Exception as e:
-                        logger.error(f"Server scan failed for {ip} "+str(e))
-                t = threading.Thread(target=threadFunc, args=[fullIp])
+                t = threading.Thread(target=threadFunc, args=(counter,))
                 t.start()
                 counter += 1
             doneEvent.wait()

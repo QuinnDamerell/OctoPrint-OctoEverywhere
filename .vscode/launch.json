@@ -119,7 +119,7 @@
                 // The module requires this json object to be passed.
                 // Normally the install.sh script runs, ensure everything is installed, creates a virtural env, and then runs this modlue giving it these args.
                 // But for debugging, we can skip that assuming it's already been ran.
-                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -bambu\"}"
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -bambu -debug\"}"
             ]
         },
         {

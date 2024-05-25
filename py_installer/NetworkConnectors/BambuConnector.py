@@ -34,7 +34,7 @@ class BambuConnector:
                     Logger.Info(f"Keeping the existing Bambu Lab printer connection setup. {ip} - {printerSn}")
                     return
 
-        ipOrHostname, port, accessToken, printerSn = self._SetupNewBambuConnection()
+        ipOrHostname, port, accessToken, printerSn = self._SetupNewBambuConnection(context)
         Logger.Info(f"You Bambu printer was found and authentication was successful! IP: {ipOrHostname}")
 
         # Ensure the X1 camera is setup.
@@ -49,7 +49,7 @@ class BambuConnector:
 
     # Helps the user setup a bambu connection via auto scanning or manual setup.
     # Returns (ip:str, port:str, accessToken:str, printerSn:str)
-    def _SetupNewBambuConnection(self):
+    def _SetupNewBambuConnection(self, context:Context):
         while True:
             Logger.Blank()
             Logger.Blank()
@@ -61,6 +61,9 @@ class BambuConnector:
             Logger.Info("OctoEverywhere Bambu Connect needs to connect to your Bambu Lab printer to provide remote access.")
             Logger.Info("Bambu Connect needs your printer's Access Code and Serial Number to connect to your printer.")
             Logger.Info("If you have any trouble, we are happy to help! Contact us at support@octoeverywhere.com")
+
+            # Try to get an an existing access code or SN, so the user doesn't have to re-enter them if they are already there.
+            oldConfigAccessCode, oldConfigPrinterSn = ConfigHelper.TryToGetBambuData(context)
 
             # Get the access code.
             accessCode = None
@@ -75,6 +78,19 @@ class BambuConnector:
                 Logger.Blank()
                 Logger.Info("The access code is case sensitive - make sure to enter it exactly as shown on your printer.")
                 Logger.Blank()
+
+                # If there is already an access code, ask if the user wants to use it.
+                if oldConfigAccessCode is not None and len(oldConfigAccessCode) > 0:
+                    Logger.Info(f"Your previously entered Access Code is: '{oldConfigAccessCode}'")
+                    if Util.AskYesOrNoQuestion("Do you want to continue using this Access Code?"):
+                        accessCode = oldConfigAccessCode
+                        break
+                    # Set it to None so we wont ask again.
+                    oldConfigAccessCode = None
+                    Logger.Blank()
+                    Logger.Blank()
+
+                # Ask for the access code.
                 accessCode = input("Enter your printer's Access Code: ")
 
                 # Validate
@@ -112,6 +128,19 @@ class BambuConnector:
                 Logger.Warn("Follow this link for a step-by-step guide to find the Serial Number for your printer:")
                 Logger.Warn("https://octoeverywhere.com/s/bambu-sn")
                 Logger.Blank()
+
+                # If there is already an sn, ask if the user wants to use it.
+                if oldConfigPrinterSn is not None and len(oldConfigPrinterSn) > 0:
+                    Logger.Info(f"Your previously entered Serial Number is: '{oldConfigPrinterSn}'")
+                    if Util.AskYesOrNoQuestion("Do you want to continue using this Serial Number?"):
+                        printerSn = oldConfigPrinterSn
+                        break
+                    # Set it to None so we wont ask again.
+                    oldConfigPrinterSn = None
+                    Logger.Blank()
+                    Logger.Blank()
+
+                # Ask for the sn.
                 printerSn = input("Enter your printer's Serial Number: ")
 
                 # The SN should always be upper case letters.
