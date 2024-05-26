@@ -28,6 +28,9 @@ class JsonRpcResponse:
     OE_ERROR_WS_NOT_CONNECTED = 99990001
     OE_ERROR_TIMEOUT = 99990002
     OE_ERROR_EXCEPTION = 99990003
+    # Range helpers.
+    OE_ERROR_MIN = OE_ERROR_WS_NOT_CONNECTED
+    OE_ERROR_MAX = OE_ERROR_EXCEPTION
 
     def __init__(self, resultObj, errorCode = 0, errorStr : str = None) -> None:
         self.Result = resultObj
@@ -43,6 +46,9 @@ class JsonRpcResponse:
 
     def GetErrorCode(self) -> int:
         return self.ErrorCode
+
+    def IsErrorCodeOeError(self) -> bool:
+        return self.ErrorCode >= JsonRpcResponse.OE_ERROR_MIN and self.ErrorCode <= JsonRpcResponse.OE_ERROR_MAX
 
     def GetErrorStr(self) -> str:
         return self.ErrorStr

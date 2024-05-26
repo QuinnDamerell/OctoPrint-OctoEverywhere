@@ -203,60 +203,35 @@ class MoonrakerWebcamHelper():
 
             # First, try to use the newer webcam API.
             # It seems that even if the frontend still uses the older DB based entry, it will still showup in this new API.
+            # So we do this first, since it's the most correct if it exists.
             if self._TryToFindWebcamFromApi():
                 # On success, we found the webcam we want, so we are done.
                 return
 
-            # Fallback to the old database system.
-            # TODO - This should eventually be removed.
-            result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
-                {
-                    "namespace": "webcams",
-                }
-            )
-
-            # If we failed don't do anything.
-            if result.HasError():
-                if "Namespace 'webcams' not found".lower() in result.ErrorStr.lower():
-                    # This happens if there are no webcams configured at all.
-                    self.Logger.debug("server.database.get_item returned no webcam namespace found.")
-                    self._ResetValuesToDefaults()
-                    return
-                self.Logger.warn("Moonraker webcam helper failed to query for webcams. "+result.GetLoggingErrorStr())
+            # Fallback to try the old common Moonraker DB webcams
+            # Note we must keep this around, because some printers are stuck on older version of Moonraker / frontends
+            # that use these APIs, and they can't be updated.
+            if self._TryToFindWebcamFromMoonrakerDb():
+                # On success, we found the webcam we want, so we are done.
                 return
 
-            res = result.GetResult()
-            if "value" not in res:
-                self.Logger.warn("Moonraker webcam helper failed to find value in result.")
+            # Finally fallback to the old way Fluidd stored webcams, in it's own custom db namespace.
+            # Note we must keep this around, because some printers are stuck on older version of Moonraker / frontends
+            # that use these APIs, and they can't be updated.
+            if self._TryToFindWebcamFromFluiddCustomDb():
+                # On success, we found the webcam we want, so we are done.
                 return
-
-            # To help debugging, log the result.
-            if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Returned webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
-
-            value = res["value"]
-            if len(value) > 0:
-                # Parse everything we got back.
-                webcamSettingItems = []
-                for guid in value:
-                    webcamSettingsObj = value[guid]
-                    webcamSettings = self._TryToParseWebcamDbEntry(webcamSettingsObj)
-                    if webcamSettings is not None:
-                        webcamSettingItems.append(webcamSettings)
-
-                # If we found anything, set them!
-                if len(webcamSettingItems) > 0:
-                    self._SetNewValues(webcamSettingItems)
-                    return
 
             # We failed to find a webcam in the list that's valid or there are no webcams in the list.
             # Revert to defaults
+            self.Logger.debug("Failed to find any configured webcams, setting defaults.")
             self._ResetValuesToDefaults()
 
         except Exception as e:
             Sentry.Exception("Webcam helper - _DoAutoSettingsUpdate exception. ", e)
 
 
+    # Tries to find the webcam config using the new Moonraker webcam APIs.
     def _TryToFindWebcamFromApi(self) -> bool:
         # It seems that even if the frontend still uses the older DB based entry, it will still showup in this new API.
         result = MoonrakerClient.Get().SendJsonRpcRequest("server.webcams.list")
@@ -298,16 +273,109 @@ class MoonrakerWebcamHelper():
             return False
 
         # Set whatever we found.
+        self.Logger.debug("Using webcam values found in from the new Webcam APIs")
         self._SetNewValues(webcamSettingsItemResults)
 
         # Return success.
         return True
 
 
+    # Given a Moonraker webcam API result list item, this will try to parse it.
+    # If successful, this will return a valid AbstractWebcamSettings object.
+    # If the parse fails or the params are wrong, this will return None
+    def _TryToParseWebcamApiItem(self, webcamApiItem) -> WebcamSettingItem:
+        try:
+            # This new converged logic is amazing, see this doc for the full schema
+            # https://moonraker.readthedocs.io/en/latest/web_api/#webcam-apis
+
+            # Skip if it's not set to enabled.
+            if "enabled" in webcamApiItem and webcamApiItem["enabled"] is False:
+                return None
+
+            # Parse the settings.
+            webcamSettings = WebcamSettingItem()
+            if "name" in webcamApiItem:
+                webcamSettings.Name = webcamApiItem["name"]
+            if "stream_url" in webcamApiItem:
+                webcamSettings.StreamUrl = webcamApiItem["stream_url"]
+            if "snapshot_url" in webcamApiItem:
+                webcamSettings.SnapshotUrl = webcamApiItem["snapshot_url"]
+            if "flip_horizontal" in webcamApiItem:
+                webcamSettings.FlipH = webcamApiItem["flip_horizontal"]
+            if "flip_vertical" in webcamApiItem:
+                webcamSettings.FlipV = webcamApiItem["flip_vertical"]
+            if "rotation" in webcamApiItem:
+                webcamSettings.Rotation = webcamApiItem["rotation"]
+
+            # Validate and return if we found good settings.
+            if self._ValidateAndFixupWebCamSettings(webcamSettings) is False:
+                return None
+
+            # If the settings are validated, return success!
+            return webcamSettings
+        except Exception as e:
+            Sentry.Exception("Webcam helper _TryToParseWebcamApiItem exception. ", e)
+        return None
+
+
+    # Tries to find the webcam config using the older Moonraker common db entry.
+    def _TryToFindWebcamFromMoonrakerDb(self) -> bool:
+        # Query the common moonraker webcam database namespace.
+        result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
+            {
+                "namespace": "webcams",
+            }
+        )
+
+        # If we failed don't do anything.
+        if result.HasError():
+            # If the error was due to some issue talking to moonraker, we don't want to rest the webcam config to the defaults, SO WE RETURN True.
+            # When the connection is re-established, we will force sync the webcam settings.
+            if result.IsErrorCodeOeError():
+                self.Logger.warn("Moonraker webcam helper failed to query DB for webcams due to a coms issue. We won't reset the config. "+result.GetLoggingErrorStr())
+                return True
+            # If this happens, it means there are no webcams configured in this DB entry
+            if "Namespace 'webcams' not found".lower() in result.ErrorStr.lower():
+                self.Logger.debug("server.database.get_item returned no webcam namespace found.")
+                return False
+            self.Logger.warn("Moonraker webcam helper failed to query DB for webcams. "+result.GetLoggingErrorStr())
+            return False
+
+        res = result.GetResult()
+        if "value" not in res:
+            self.Logger.warn("Moonraker webcam helper failed to find value in DB result.")
+            return False
+
+        # To help debugging, log the result.
+        if self.Logger.isEnabledFor(logging.DEBUG):
+            self.Logger.debug("Returned webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
+
+        value = res["value"]
+        if len(value) == 0:
+            return False
+
+        # Parse everything we got back.
+        webcamSettingItems = []
+        for guid in value:
+            webcamSettingsObj = value[guid]
+            webcamSettings = self._TryToParseMoonrakerWebcamDbEntry(webcamSettingsObj)
+            if webcamSettings is not None:
+                webcamSettingItems.append(webcamSettings)
+
+        # If we didn't get any webcams, return we didn't find anything.
+        if len(webcamSettingItems) == 0:
+            return False
+
+        # Set the webcams we found!
+        self.Logger.debug("Using webcam values found in from the older moonraker common DB webcam entry")
+        self._SetNewValues(webcamSettingItems)
+        return True
+
+
     # Given a Moonraker webcam db entry, this will try to parse it.
     # If successful, this will return a valid WebcamSettingItem object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseWebcamDbEntry(self, webcamSettingsObj) -> WebcamSettingItem:
+    def _TryToParseMoonrakerWebcamDbEntry(self, webcamSettingsObj) -> WebcamSettingItem:
         try:
             # Skip if it's not set to enabled.
             if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:
@@ -355,32 +423,102 @@ class MoonrakerWebcamHelper():
         return None
 
 
-    # Given a Moonraker webcam API result list item, this will try to parse it.
-    # If successful, this will return a valid AbstractWebcamSettings object.
-    # If the parse fails or the params are wrong, this will return None
-    def _TryToParseWebcamApiItem(self, webcamApiItem) -> WebcamSettingItem:
-        try:
-            # This new converged logic is amazing, see this doc for the full schema
-            # https://moonraker.readthedocs.io/en/latest/web_api/#webcam-apis
+    # Tries to find the webcam config using the older Fluidd common namespace db entry.
+    def _TryToFindWebcamFromFluiddCustomDb(self) -> bool:
+        # Older versions of Fluidd had their own DB entries in a custom namespace.
+        # The format is something like this:
+        # https://github.com/fluidd-core/fluidd/blob/8f091c2c75c6646cd29ab288863a379b7ca6c63e/src/store/webcams/actions.ts#L34
+        result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
+            {
+                "namespace": "fluidd",
+                "key": "cameras"
+            }
+        )
 
+        # If we failed don't do anything.
+        if result.HasError():
+            # If the error was due to some issue talking to moonraker, we don't want to rest the webcam config to the defaults, SO WE RETURN True.
+            # When the connection is re-established, we will force sync the webcam settings.
+            if result.IsErrorCodeOeError():
+                self.Logger.warn("Moonraker webcam helper failed to query DB for webcams due to a coms issue. We won't reset the config. "+result.GetLoggingErrorStr())
+                return True
+            # If this happens, it means there are no webcams configured in this DB entry
+            if "not found".lower() in result.ErrorStr.lower():
+                self.Logger.debug("server.database.get_item for custom FLUIDD namespace returned no webcam namespace found.")
+                return False
+            self.Logger.warn("Moonraker webcam helper failed to FLUIDD DB query for webcams. "+result.GetLoggingErrorStr())
+            return False
+
+        res = result.GetResult()
+        if "value" not in res:
+            self.Logger.warn("Moonraker webcam helper failed to find value in result FLUIDD DB.")
+            return False
+
+        # To help debugging, log the result.
+        if self.Logger.isEnabledFor(logging.DEBUG):
+            self.Logger.debug("Returned FLUIDD webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
+
+        value = res["value"]
+        if len(value) == 0:
+            return False
+
+        # Parse everything we got back.
+        webcamSettingItems = []
+        for guid in value:
+            webcamSettingsObj = value[guid]
+            webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
+            if webcamSettings is not None:
+                webcamSettingItems.append(webcamSettings)
+
+        # If we found anything, set them!
+        if len(webcamSettingItems) == 0:
+            return False
+
+        self.Logger.debug("Using webcam values found in from the old FLUIDD custom namespace db entry")
+        self._SetNewValues(webcamSettingItems)
+        return True
+
+
+    # Given a Fluidd namespace webcam db entry, this will try to parse it.
+    # If successful, this will return a valid WebcamSettingItem object.
+    # If the parse fails or the params are wrong, this will return None
+    def _TryToParseFluiddCustomWebcamDbEntry(self, webcamSettingsObj) -> WebcamSettingItem:
+        try:
             # Skip if it's not set to enabled.
-            if "enabled" in webcamApiItem and webcamApiItem["enabled"] is False:
+            if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:
                 return None
 
-            # Parse the settings.
             webcamSettings = WebcamSettingItem()
-            if "name" in webcamApiItem:
-                webcamSettings.Name = webcamApiItem["name"]
-            if "stream_url" in webcamApiItem:
-                webcamSettings.StreamUrl = webcamApiItem["stream_url"]
-            if "snapshot_url" in webcamApiItem:
-                webcamSettings.SnapshotUrl = webcamApiItem["snapshot_url"]
-            if "flip_horizontal" in webcamApiItem:
-                webcamSettings.FlipH = webcamApiItem["flip_horizontal"]
-            if "flip_vertical" in webcamApiItem:
-                webcamSettings.FlipV = webcamApiItem["flip_vertical"]
-            if "rotation" in webcamApiItem:
-                webcamSettings.Rotation = webcamApiItem["rotation"]
+            if "name" in webcamSettingsObj:
+                webcamSettings.Name = webcamSettingsObj["name"]
+
+            # There seems to only be one URL, which can be the snapshot URL or the stream URL.
+            # Our _ValidateAndFixupWebCamSettings requires a stream url to be set, but it will try to figure out the snapshot URL
+            # if it's not set. So we will always set the URL for the stream, and sometimes the snapshot.
+            # Note: It seems that most of the time, this URL is a stream URL.
+            if "url" in webcamSettingsObj:
+                url:str = webcamSettingsObj["url"]
+
+                # Try to detect if this is a snapshot or stream URL
+                urlLower = url.lower()
+                if urlLower.find("snapshot") != -1:
+                    webcamSettings.SnapshotUrl = url
+                    # For the stream url, always use the basic URL. If we can find "snapshot" replace it with "stream"
+                    # The url might be like .../webcam/snapshot or .../webcam/action=snapshot in which case, stream might work.
+                    webcamSettings.StreamUrl = urlLower.replace("snapshot", "stream")
+                else:
+                    # Assume it's a stream URL, and try to set it. The validation system will handle getting the snapshot url from it.
+                    webcamSettings.StreamUrl = url
+
+            # Set the flip values.
+            if "flipX" in webcamSettingsObj:
+                webcamSettings.FlipH = webcamSettingsObj["flipX"]
+            if "flipY" in webcamSettingsObj:
+                webcamSettings.FlipV = webcamSettingsObj["flipY"]
+
+            # Set rotation
+            if "rotate" in webcamSettingsObj:
+                webcamSettings.Rotation = webcamSettingsObj["rotate"]
 
             # Validate and return if we found good settings.
             if self._ValidateAndFixupWebCamSettings(webcamSettings) is False:
@@ -389,7 +527,7 @@ class MoonrakerWebcamHelper():
             # If the settings are validated, return success!
             return webcamSettings
         except Exception as e:
-            Sentry.Exception("Webcam helper _TryToParseWebcamApiItem exception. ", e)
+            Sentry.Exception("Webcam helper _TryToParseFluiddCustomWebcamDbEntry exception. ", e)
         return None
 
 
@@ -450,50 +588,54 @@ class MoonrakerWebcamHelper():
         return False
 
 
-    # Tries to find the snapshot URL, if it's successful, it returns the url
-    # If it fails, it return None
-    def _TryToFigureOutSnapshotUrl(self, streamUrl):
+    # Tries to find the snapshot URL.
+    # If successful, it returns the snapshot URL
+    # If failed, it return None
+    def _TryToFigureOutSnapshotUrl(self, streamUrl:str) -> str:
         # If we have no snapshot url, see if we can figure one out.
         # We know most all webcam interfaces use the "mjpegstreamer" web url signatures.
         # So if we find "action=stream" as in "http://127.0.0.1/webcam/?action=stream", try to get a snapshot.
+        # Modern webcam servers also use .../webcam/stream and .../webcam/snapshot, so we will try that as well.
+        # Update, the easiest way to do this is if we find "stream", just replace it with "snapshot", and see if it still works.
+        c_streamAction = "stream"
+        c_snapshotAction = "snapshot"
+
+        # See if stream exists.
         streamUrlLower = streamUrl.lower()
-        c_streamAction = "action=stream"
-        c_snapshotAction = "action=snapshot"
-        indexOfStreamSuffix = streamUrlLower.find(c_streamAction)
+        if streamUrlLower.find(c_streamAction) == -1:
+            self.Logger.debug("FAILED to find a snapshot url from stream URL, no stream suffix found.")
+            return None
 
-        if indexOfStreamSuffix != -1:
-            # We found the action=stream, try replacing it and see if we hit a valid endpoint.
-            # keep the original string around, so we can return it if things work out.
-            possibleSnapshotUrl = streamUrl[:indexOfStreamSuffix] + c_snapshotAction + streamUrl[indexOfStreamSuffix + len(c_streamAction):]
-            try:
-                # Make sure the path is a full URL
-                # If not, assume localhost port 80.
-                testSnapshotUrl = possibleSnapshotUrl
-                if testSnapshotUrl.lower().startswith("http") is False:
-                    if testSnapshotUrl.startswith("/") is False:
-                        testSnapshotUrl = "/"+testSnapshotUrl
-                    testSnapshotUrl = "http://127.0.0.1"+testSnapshotUrl
-                self.Logger.debug("Trying to find a snapshot url, testing: %s - from stream URL: %s", testSnapshotUrl, streamUrl)
+        # We found the stream, try replacing it and see if we hit a valid endpoint.
+        # Use the lower version to ensure the match, the case of a URL shouldn't matter.
+        possibleSnapshotUrl = streamUrlLower.replace(c_streamAction, c_snapshotAction)
+        try:
+            # Make sure the path is a full URL. If not, assume localhost port 80.
+            absoluteSnapshotUrl = possibleSnapshotUrl
+            if absoluteSnapshotUrl.lower().startswith("http") is False:
+                if absoluteSnapshotUrl.startswith("/") is False:
+                    absoluteSnapshotUrl = "/"+absoluteSnapshotUrl
+                absoluteSnapshotUrl = "http://127.0.0.1"+absoluteSnapshotUrl
+            self.Logger.debug("Trying to find a snapshot url, testing: %s - from stream URL: %s", absoluteSnapshotUrl, streamUrl)
 
-                # We can't use .head because that only pulls the headers from nginx, it doesn't get the full headers.
-                # So we use .get with a timeout.
-                with requests.get(testSnapshotUrl, timeout=20) as response:
-                    # Check for success
-                    if response.status_code != 200:
-                        return None
+            # We can't use .head because that only pulls the headers from nginx, it doesn't get the full headers.
+            # So we use .get with a timeout.
+            with requests.get(absoluteSnapshotUrl, timeout=20) as response:
+                # Check for success
+                if response.status_code != 200:
+                    self.Logger.debug(f"Test snapshot attempt returned http status {response.status_code}. Url: {absoluteSnapshotUrl}")
+                    return None
 
-                    # This is a good sign, check the content type.
-                    contentTypeHeaderKey = "content-type"
-                    if contentTypeHeaderKey in response.headers:
-                        if "image" in response.headers[contentTypeHeaderKey].lower():
-                            # Success!
-                            self.Logger.debug("Found a valid snapshot URL! Url: %s, Content-Type: %s", testSnapshotUrl, response.headers[contentTypeHeaderKey])
-                            return possibleSnapshotUrl
-
-            except Exception:
-                pass
-        # On any failure, return None
-        self.Logger.debug("FAILED to find a snapshot url from stream URL")
+                # This is a good sign, check the content type.
+                contentTypeHeaderKey = "content-type"
+                if contentTypeHeaderKey in response.headers:
+                    if "image" in response.headers[contentTypeHeaderKey].lower():
+                        # Success!
+                        self.Logger.debug("Found a valid snapshot URL! Url: %s, Content-Type: %s", absoluteSnapshotUrl, response.headers[contentTypeHeaderKey])
+                        return possibleSnapshotUrl
+            self.Logger.debug(f"We made the web request for the stream URL but didn't get a valid result. {streamUrl}")
+        except Exception as e:
+            self.Logger.debug(f"FAILED to find a snapshot url from stream URL. Url: {streamUrl}, Error: {str(e)}")
         return None
 
 
