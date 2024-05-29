@@ -8,6 +8,7 @@ from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer
 from .octopingpong import OctoPingPong
 from .threaddebug import ThreadDebug
+from .dnstest import DnsTest
 
 #
 # This class is responsible for connecting and maintaining a connection to a server.
@@ -151,6 +152,12 @@ class OctoServerCon:
             self.TempDisableLowestLatencyEndpoint = True
             self.Logger.info("Blocking lowest latency endpoint, since we failed while the WS connect was happening.")
         self.Logger.error("OctoEverywhere Ws error: " +str(err))
+
+        # TODO - remove this code after debugging some DNS issues.
+        # We added this logic to do an active test of the DNS names.
+        if "failure in name resolution" in str(err):
+            dnsTest = DnsTest(self.Logger)
+            dnsTest.RunTestSync()
 
 
     def OnMsg(self, ws, msg):
