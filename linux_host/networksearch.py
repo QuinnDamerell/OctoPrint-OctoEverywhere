@@ -147,11 +147,13 @@ class NetworkSearch:
             # Try to connect, this will throw if it fails to find any server to connect to.
             failedToConnect = True
             try:
+                logger.debug(f"Connecting to Bambu on {ipOrHostname}:{port}...")
                 client.connect(ipOrHostname, port, keepalive=60)
                 failedToConnect = False
                 client.loop_start()
             except Exception as e:
                 logger.debug(f"Bambu {ipOrHostname} - connection failure {e}")
+            logger.debug(f"Connection exit for Bambu on {ipOrHostname}:{port}")
 
             # Wait for the timeout.
             if not failedToConnect:
