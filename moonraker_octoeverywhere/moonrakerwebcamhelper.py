@@ -428,6 +428,7 @@ class MoonrakerWebcamHelper():
         # Older versions of Fluidd had their own DB entries in a custom namespace.
         # The format is something like this:
         # https://github.com/fluidd-core/fluidd/blob/8f091c2c75c6646cd29ab288863a379b7ca6c63e/src/store/webcams/actions.ts#L34
+        self.Logger.debug("Webcam helper is trying to get webcam settings from the custom fluidd namespace...")
         result = MoonrakerClient.Get().SendJsonRpcRequest("server.database.get_item",
             {
                 "namespace": "fluidd",
@@ -440,7 +441,7 @@ class MoonrakerWebcamHelper():
             # If the error was due to some issue talking to moonraker, we don't want to rest the webcam config to the defaults, SO WE RETURN True.
             # When the connection is re-established, we will force sync the webcam settings.
             if result.IsErrorCodeOeError():
-                self.Logger.warn("Moonraker webcam helper failed to query DB for webcams due to a coms issue. We won't reset the config. "+result.GetLoggingErrorStr())
+                self.Logger.warn("Moonraker webcam helper failed to query DB for FLUIDD webcams due to a coms issue. We won't reset the config. "+result.GetLoggingErrorStr())
                 return True
             # If this happens, it means there are no webcams configured in this DB entry
             if "not found".lower() in result.ErrorStr.lower():
@@ -472,6 +473,7 @@ class MoonrakerWebcamHelper():
 
         # If we found anything, set them!
         if len(webcamSettingItems) == 0:
+            self.Logger.debug("No valid webcam config objects found in the FLUIDD custom namespace db entry.")
             return False
 
         self.Logger.debug("Using webcam values found in from the old FLUIDD custom namespace db entry")
