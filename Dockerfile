@@ -3,10 +3,11 @@
 FROM alpine:3.20.0
 
 # We will base ourselves in root, becuase why not.
-WORKDIR /app
+WORKDIR /root
 
 # Define some user vars we will use for the image.
 # These are read in the docker_octoeverywhere module, so they must not change!
+ENV USER=root
 ENV REPO_DIR=/app/octoeverywhere
 ENV VENV_DIR=/app/octoeverywhere-env
 # This is a special dir that the user MUST mount to the host, so that the data is persisted.
@@ -15,7 +16,7 @@ ENV DATA_DIR=/data/
 
 # Install the required packages.
 # Any packages here should be mirrored in the install script - and any optaionl pillow packages done inline.
-RUN apk add curl ffmpeg jq python3 py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow
+RUN apk add --no-cache curl ffmpeg jq python3 py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow
 
 #
 # We decided to not run the installer, since the point of the installer is to setup the env, build the launch args, and setup the serivce.
@@ -32,4 +33,4 @@ RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q -r ${REP
 # For docker, we use our docker_octoeverywhere host to handle the runtime setup and launch of the serivce.
 WORKDIR ${REPO_DIR}
 # Use the full path to the venv, we msut use this [] notation for our ctlc handler to work in the contianer
-ENTRYPOINT ["/app/octoeverywhere-env/bin/python", "-m", "docker_octoeverywhere"]
+ENTRYPOINT ["/root/octoeverywhere-env/bin/python", "-m", "docker_octoeverywhere"]
