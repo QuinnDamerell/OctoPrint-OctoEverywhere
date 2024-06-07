@@ -1,4 +1,4 @@
-# Start with the lastest ubuntu, for a solid base,
+# Start with the lastest alpine, for a solid base,
 # since we need some advance binaries for things like pillow and ffmpeg.
 FROM alpine:3.20.0
 
