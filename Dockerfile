@@ -8,8 +8,8 @@ WORKDIR /root
 # Define some user vars we will use for the image.
 # These are read in the docker_octoeverywhere module, so they must not change!
 ENV USER=root
-ENV REPO_DIR=/app/octoeverywhere
-ENV VENV_DIR=/app/octoeverywhere-env
+ENV REPO_DIR=/root/octoeverywhere
+ENV VENV_DIR=/root/octoeverywhere-env
 # This is a special dir that the user MUST mount to the host, so that the data is persisted.
 # If this is not mounted, the printer will need to be re-linked everytime the container is remade.
 ENV DATA_DIR=/data/
