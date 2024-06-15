@@ -50,7 +50,6 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          # These are the platform our ubuntu image base supports
           platforms: linux/amd64,linux/arm/v7,linux/arm64
           file: ./Dockerfile
           push: true
