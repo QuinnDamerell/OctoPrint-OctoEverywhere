@@ -1,6 +1,6 @@
-# Start with the lastest ubuntu, for a solid base,
+# Start with the lastest alpine, for a solid base,
 # since we need some advance binaries for things like pillow and ffmpeg.
-FROM ubuntu:latest
+FROM alpine:3.20.0
 
 # We will base ourselves in root, becuase why not.
 WORKDIR /root
@@ -16,8 +16,7 @@ ENV DATA_DIR=/data/
 
 # Install the required packages.
 # Any packages here should be mirrored in the install script - and any optaionl pillow packages done inline.
-RUN apt update
-RUN apt install -y curl ffmpeg jq python3 python3-pip python3-venv virtualenv libjpeg-dev zlib1g-dev python3-pil python3-pillow
+RUN apk add --no-cache curl ffmpeg jq python3 py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow
 
 #
 # We decided to not run the installer, since the point of the installer is to setup the env, build the launch args, and setup the serivce.
