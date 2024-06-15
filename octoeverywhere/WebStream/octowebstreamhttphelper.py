@@ -22,6 +22,7 @@ from ..Proto import HttpInitialContext
 from ..Proto import DataCompression
 from ..Proto import MessagePriority
 from ..Proto import OeAuthAllowed
+from ..Proto.PathTypes import PathTypes
 
 #
 # A helper object that handles http request for the web stream system.
@@ -172,7 +173,8 @@ class OctoWebStreamHttpHelper:
             octoHttpResult = CommandHandler.Get().HandleCommand(httpInitialContext, self.UploadBuffer)
         else:
             # This is a normal web request, first ensure they are allowed.
-            if OctoHttpRequest.GetDisableHttpRelay():
+            # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
+            if OctoHttpRequest.GetDisableHttpRelay() and httpInitialContext.PathType() != PathTypes.Absolute:
                 self.Logger.warn("OctoWebStreamHttpHelper got a request but the http relay is disabled.")
                 self.WebStream.SetClosedDueToFailedRequestConnection()
                 self.WebStream.Close()

@@ -49,14 +49,15 @@ class OctoWebStreamWsHelper:
         self.IsWsObjOpened = False
         self.IsWsObjClosed = False
 
-        # Ensure that the http relay is enabled
-        if OctoHttpRequest.GetDisableHttpRelay():
-            raise Exception("Web stream ws was attempted to be started when the http relay is disabled.")
-
         # Capture the initial http context
         self.HttpInitialContext = webStreamOpenMsg.HttpInitialContext()
         if self.HttpInitialContext is None:
             raise Exception("Web stream ws helper got a open message with no http context")
+
+        # Ensure that the http relay is enabled
+        # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
+        if OctoHttpRequest.GetDisableHttpRelay() and self.HttpInitialContext.PathType() != PathTypes.PathTypes.Absolute:
+            raise Exception("Web stream ws was attempted to be started when the http relay is disabled.")
 
         # Parse the headers, filter them, and keep them locally.
         # This is required for klipper clients, since they need to send the X-API-Key header with the API key.
