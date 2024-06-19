@@ -10,8 +10,7 @@ from .Configure import Configure
 from .Paths import Paths
 from .Service import Service
 from .Util import Util
-from .Ffmpeg import Ffmpeg
-from .ZStandard import ZStandard
+from .OptionalDepsInstaller import OptionalDepsInstaller
 
 #
 # This class is responsible for doing updates for all local, companions, and bambu connect plugins on this local system.
@@ -32,7 +31,7 @@ class Updater:
         Logger.Header("Starting Update Logic")
 
         # Since this takes a while, kick it off now. The pip install can take upwards of 30 seconds.
-        ZStandard.TryToInstallZStandardAsync(context)
+        OptionalDepsInstaller.TryToInstallDepsAsync(context)
 
         # Enumerate all service file to find any local plugins, Sonic Pad plugins, companion service files, and bambu service files, since all service files contain this name.
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
@@ -49,12 +48,9 @@ class Updater:
             Logger.Warn("No local, companion, or Bambu Connect plugins were found on this device.")
             raise Exception("No local, companion, or Bambu Connect plugins were found on this device.")
 
-        # On any system, try to install or update ffmpeg.
-        Ffmpeg.TryToInstallFfmpeg(context)
-
         # Before we restart the plugins, wait for the zstandard install to be done.
         # Give the updater extra time to work, since it's much shorter
-        ZStandard.WaitForInstallToComplete(timeoutSec=20.0)
+        OptionalDepsInstaller.WaitForInstallToComplete(timeoutSec=30.0)
 
         Logger.Info("We found the following plugins to update:")
         for s in foundOeServices:
