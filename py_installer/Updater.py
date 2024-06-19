@@ -54,7 +54,7 @@ class Updater:
 
         # Before we restart the plugins, wait for the zstandard install to be done.
         # Give the updater extra time to work, since it's much shorter
-        ZStandard.WaitForInstallToComplete(timeoutSec==20.0)
+        ZStandard.WaitForInstallToComplete(timeoutSec=20.0)
 
         Logger.Info("We found the following plugins to update:")
         for s in foundOeServices:
