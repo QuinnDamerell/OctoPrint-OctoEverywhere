@@ -14,6 +14,7 @@ from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
@@ -169,6 +170,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Set the printer id to Sentry.
         Sentry.SetPrinterId(printerId)
+
+        # Setup compression
+        Compression.Init(self._logger, self.get_plugin_data_folder())
 
         # Init the static local auth helper
         LocalAuth.Init(self._logger, self._user_manager)

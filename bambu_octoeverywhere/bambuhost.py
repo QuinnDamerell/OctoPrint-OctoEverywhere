@@ -5,6 +5,7 @@ from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
+from octoeverywhere.compression import Compression
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octopingpong import OctoPingPong
@@ -94,6 +95,9 @@ class BambuHost:
             Telemetry.Init(self.Logger)
             if DevLocalServerAddress_CanBeNone is not None:
                 Telemetry.SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
+
+            # Init compression
+            Compression.Init(self.Logger, localStorageDir)
 
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)

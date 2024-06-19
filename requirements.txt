@@ -17,6 +17,7 @@ dnspython>=2.3.0
 httpx>=0.24.1,<0.26.0
 urllib3>=1.26.15,<2.0.0
 sentry-sdk>=1.19.1,<2
+#zstandard>=0.22.0,<0.23.0
 # The following are required only for Moonraker
 configparser
 # Only used for Bambu Connect

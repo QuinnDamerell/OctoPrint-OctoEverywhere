@@ -16,12 +16,17 @@ jobs:
       uses: actions/setup-python@v2
       with:
         python-version: ${{ matrix.python-version }}
+
     - name: Install dependencies
+      # We always install zstandard by hand, since it's an optional lib.
+      # Ideally this version will stay in sync with Compression.ZStandardPipPackageString
       run: |
         python -m pip install --upgrade pip
         pip install pylint
         pip install octoprint
         pip install -r requirements.txt
+        pip install "zstandard>=0.21.0,<0.23.0"
+
     - name: Analysing the code with pylint
       run: |
         pylint ./octoeverywhere/

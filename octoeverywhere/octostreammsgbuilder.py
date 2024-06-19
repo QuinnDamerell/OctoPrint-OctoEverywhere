@@ -4,12 +4,13 @@ from .Proto import MessageContext
 from .Proto import HandshakeSyn
 from .Proto import OctoStreamMessage
 from .Proto import OsType
+from .Proto.DataCompression import DataCompression
 
 # A helper class that builds our OctoStream messages as flatbuffers.
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion, osType:OsType.OsType):
+    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion, osType:OsType.OsType, receiveCompressionType:DataCompression):
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -39,6 +40,7 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddRsaChallenge(builder, rasChallengeOffset)
         HandshakeSyn.AddRasChallengeVersion(builder, rasKeyVersionInt)
         HandshakeSyn.AddOsType(builder, osType)
+        HandshakeSyn.AddReceiveCompressionType(builder, receiveCompressionType)
         synOffset = HandshakeSyn.End(builder)
 
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)

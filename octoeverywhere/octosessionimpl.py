@@ -17,6 +17,7 @@ from .serverauth import ServerAuthHelper
 from .sentry import Sentry
 from .ostypeidentifier import OsTypeIdentifier
 from .threaddebug import ThreadDebug
+from .compression import Compression
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
@@ -25,6 +26,7 @@ from .Proto import WebStreamMsg
 from .Proto import OctoNotification
 from .Proto import OctoNotificationTypes
 from .Proto import OctoSummon
+from .Proto.DataCompression import DataCompression
 
 class OctoSession:
 
@@ -243,10 +245,16 @@ class OctoSession:
                 raise Exception("Rsa challenge generation failed.")
             rasChallengeKeyVerInt = ServerAuthHelper.c_ServerAuthKeyVersion
 
+            # Define which type of compression we can receive (beyond None)
+            # Ideally this is zstandard lib, but all client must support zlib, so we can fallback to it.
+            receiveCompressionType = DataCompression.Zlib
+            if Compression.Get().CanUseZStandardLib:
+                receiveCompressionType = DataCompression.ZStandard
+
             # Build the message
             buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType())
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType)
 
             # Send!
             self.OctoStream.SendMsg(buf)

@@ -31,6 +31,11 @@ RUN ${VENV_DIR}/bin/python -m pip install --upgrade pip
 COPY ./ ${REPO_DIR}/
 RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q -r ${REPO_DIR}/requirements.txt
 
+# Install the optional pacakges for zstandard compression.
+# THIS VERSION STRING MUST STAY IN SYNC with Compression.ZStandardPipPackageString
+RUN apk add zstd
+RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q "zstandard>=0.21.0,<0.23.0"
+
 # For docker, we use our docker_octoeverywhere host to handle the runtime setup and launch of the serivce.
 WORKDIR ${REPO_DIR}
 # Use the full path to the venv, we msut use this [] notation for our ctlc handler to work in the contianer

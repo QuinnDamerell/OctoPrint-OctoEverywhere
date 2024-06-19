@@ -27,7 +27,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/ui.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/compress.zip
 
 ## Before checking in:
 - Run in py2 env

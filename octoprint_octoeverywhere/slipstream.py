@@ -1,6 +1,5 @@
 import threading
 import time
-import zlib
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.compat import Compat
@@ -9,6 +8,7 @@ from octoeverywhere.octohttprequest import PathTypes
 from octoeverywhere.WebStream.octoheaderimpl import HeaderHelper
 from octoeverywhere.WebStream.octoheaderimpl import BaseProtocol
 from octoeverywhere.octostreammsgbuilder import OctoStreamMsgBuilder
+from octoeverywhere.compression import Compression, CompressionContext
 
 from .localauth import LocalAuth
 
@@ -140,6 +140,9 @@ class Slipstream:
         # We have our path, check if it's in the map
         with self.Lock:
             if path in self.Cache:
+                # Note that this object can be updated!
+                # There's only once case right now, there's logic that will compare the cache header and convert the
+                # Object into a 304 response, which will strip some headers and the body buffer.
                 self.Logger.debug("Slipstream returning cached content for "+path)
                 return self.Cache[path]
 
@@ -207,16 +210,19 @@ class Slipstream:
         with self.Lock:
             self.Cache[Slipstream.IndexCachePath] = indexResult
 
+        # It's no ideal that we need to de-compress this, but it's fine since we are in the background.
+        indexBodyStr = None
+        with CompressionContext(self.Logger) as compressionContext:
+            # For decompression, we give the pre-compressed size and the compression type. The True indicates this it the only message, so it's all here.
+            indexBodyBytes = Compression.Get().Decompress(compressionContext, indexBodyBuffer, indexResult.BodyBufferPreCompressSize, True, indexResult.BodyBufferCompressionType)
+            indexBodyStr = indexBodyBytes.decode(encoding="utf-8")
+
         # Set the result to None to make sure we don't use it anymore.
         indexResult = None
 
         # Now process the index to see if there's more we should cache.
         # We explicitly look for known files in the index should reference that are large.
         # If we don't find them, no big deal.
-        # It's no ideal that we need to de-compress this, but it's fine since we are in the background.
-        # PY2 zlib.decompress can't accept a bytearray, so we must convert them before compressing.
-        # This isn't ideal, but not a big deal since this is in the background.
-        indexBodyStr = zlib.decompress(indexBodyBuffer).decode(errors="ignore")
         for subPath in Slipstream.OptionalPartialCachePaths:
             # This function will try to find the full url or path in the index body, including the query string.
             fullPath = self.TryToFindFullUrl(indexBodyStr, subPath)
@@ -239,7 +245,7 @@ class Slipstream:
 
     # On success returns the fully ready OctoHttpResult object.
     # On failure, returns None
-    def _GetCacheReadyOctoHttpResult(self, url):
+    def _GetCacheReadyOctoHttpResult(self, url) -> OctoHttpRequest.Result:
         success = False
         try:
             # Take the starting time.
@@ -302,13 +308,18 @@ class Slipstream:
                 return None
 
             # Do the compression.
-            # See the compression chat in the main http stream class for tradeoffs about complexity.
             ogSize = len(buffer)
             compressStart = time.time()
-            buffer = zlib.compress(buffer, 7)
+            compressResult = None
+            with CompressionContext(self.Logger) as compressionContext:
+                # It's important to set the full compression size, because the compression system will use
+                # it to better optimize the compression and know that we will be sending the full data.
+                compressionContext.SetTotalCompressedSizeOfData(len(buffer))
+                compressResult = Compression.Get().Compress(compressionContext, buffer)
+                buffer = compressResult.Bytes
 
             # Set the buffer into the response so the http request logic can use it.
-            octoHttpResult.SetFullBodyBuffer(buffer, True, ogSize)
+            octoHttpResult.SetFullBodyBuffer(buffer, compressResult.CompressionType, ogSize)
 
             requestDuration = compressStart - start
             compressDuration = time.time() - compressStart

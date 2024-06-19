@@ -11,6 +11,7 @@ from .Paths import Paths
 from .Service import Service
 from .Util import Util
 from .Ffmpeg import Ffmpeg
+from .ZStandard import ZStandard
 
 #
 # This class is responsible for doing updates for all local, companions, and bambu connect plugins on this local system.
@@ -30,6 +31,9 @@ class Updater:
     def DoUpdate(self, context:Context):
         Logger.Header("Starting Update Logic")
 
+        # Since this takes a while, kick it off now. The pip install can take upwards of 30 seconds.
+        ZStandard.TryToInstallZStandardAsync(context)
+
         # Enumerate all service file to find any local plugins, Sonic Pad plugins, companion service files, and bambu service files, since all service files contain this name.
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
@@ -47,6 +51,10 @@ class Updater:
 
         # On any system, try to install or update ffmpeg.
         Ffmpeg.TryToInstallFfmpeg(context)
+
+        # Before we restart the plugins, wait for the zstandard install to be done.
+        # Give the updater extra time to work, since it's much shorter
+        ZStandard.WaitForInstallToComplete(timeoutSec==20.0)
 
         Logger.Info("We found the following plugins to update:")
         for s in foundOeServices:

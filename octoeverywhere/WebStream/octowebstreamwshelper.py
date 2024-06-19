@@ -1,19 +1,20 @@
 # namespace: WebStream
 
-import threading
 import time
-import zlib
+import threading
 
 import websocket
 
-from .octoheaderimpl import HeaderHelper
-from ..sentry import Sentry
-from ..octohttprequest import OctoHttpRequest
 from ..mdns import MDns
-from ..octostreammsgbuilder import OctoStreamMsgBuilder
-from ..localip import LocalIpHelper
-from ..websocketimpl import Client
+from ..sentry import Sentry
 from ..compat import Compat
+from ..websocketimpl import Client
+from ..localip import LocalIpHelper
+from ..compression import Compression, CompressionContext
+from .octoheaderimpl import HeaderHelper
+from ..octohttprequest import OctoHttpRequest
+from ..octostreammsgbuilder import OctoStreamMsgBuilder
+
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
 from ..Proto import WebSocketDataTypes
@@ -42,6 +43,7 @@ class OctoWebStreamWsHelper:
         self.FirstWsMessageSentToLocal = False
         self.ResolvedLocalHostnameUrl = None
         self.LookingForConnectMsgAttempts = 0
+        self.CompressionContext = CompressionContext(self.Logger)
 
         # These vars indicate if the actual websocket is opened or closed.
         # This is different from IsClosed, which is tracking if the webstream closed status.
@@ -240,13 +242,19 @@ class OctoWebStreamWsHelper:
             except Exception as _ :
                 pass
 
+        # Ensure the compressor is cleaned up
+        try:
+            self.CompressionContext.__exit__(None, None, None)
+        except Exception as e:
+            Sentry.Exception("Websocket stream helper failed to clean up the compression context.", e)
+
 
     # Called when a new message has arrived for this stream from the server.
     # This function should throw on critical errors, that will reset the connection.
     # Returning true will case the websocket to close on return.
     # This function is called on it's own thread from the web stream, so it's ok to block
     # as long as it gets cleaned up when the socket closes.
-    def IncomingServerMessage(self, webStreamMsg):
+    def IncomingServerMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg):
 
         # We can get messages from this web stream before the actual websocket has opened and is ready for messages.
         # If this happens, when we try to send the message on the socket and we will get an error saying "the socket is closed" (which is incorrect, it's not open yet).
@@ -267,10 +275,9 @@ class OctoWebStreamWsHelper:
             buffer = bytearray(0)
 
         # If the message is compressed, decompress it.
-        if webStreamMsg.DataCompression() == DataCompression.DataCompression.Brotli:
-            raise Exception("IncomingServerMessage Failed - Brotli decompress not possible.")
-        elif webStreamMsg.DataCompression() == DataCompression.DataCompression.Zlib:
-            buffer = zlib.decompress(buffer)
+        compressionType = webStreamMsg.DataCompression()
+        if compressionType != DataCompression.DataCompression.None_:
+            buffer = Compression.Get().Decompress(self.CompressionContext, buffer, webStreamMsg.OriginalDataSize(), False, compressionType)
 
         # Get the send type.
         sendType = 0
@@ -366,15 +373,14 @@ class OctoWebStreamWsHelper:
                     Sentry.Exception("Websocket stream helper failed to parse websocket for config hash mod.", ex)
 
 
-            # Some messages are large, so compression helps.
-            # We also don't consider the message type, since binary messages can very easily be
-            # text as well, and the cost of compression in terms of CPU is low.
-            usingCompression = len(buffer) > 200
+            # Figure out if we should compress the data.
+            usingCompression = len(buffer) >= Compression.MinSizeToCompress
             originalDataSize = 0
+            compressionResult = None
             if usingCompression:
-                # See notes about the quality and such in the readContentFromBodyAndMakeDataVector.
                 originalDataSize = len(buffer)
-                buffer = zlib.compress(buffer, 3)
+                compressionResult = Compression.Get().Compress(self.CompressionContext, buffer)
+                buffer = compressionResult.Bytes
 
             # Send the message along!
             builder = OctoStreamMsgBuilder.CreateBuffer(len(buffer) + 200)
@@ -390,7 +396,7 @@ class OctoWebStreamWsHelper:
             WebStreamMsg.AddIsControlFlagsOnly(builder, False)
             WebStreamMsg.AddWebsocketDataType(builder, sendType)
             if usingCompression:
-                WebStreamMsg.AddDataCompression(builder, DataCompression.DataCompression.Zlib)
+                WebStreamMsg.AddDataCompression(builder, compressionResult.CompressionType)
                 WebStreamMsg.AddOriginalDataSize(builder, originalDataSize)
             if dataOffset is not None:
                 WebStreamMsg.AddData(builder, dataOffset)

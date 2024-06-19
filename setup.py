@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "3.3.7"
+plugin_version = "3.4.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -64,6 +64,10 @@ plugin_license = "AGPLv3"
 # urllib3
 #   There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
 #   This must be less than 2.0.0, because 2.0.0 requires open ssl 1.1.1+, which the sonic pad doesn't have.
+# zstandard
+#   zstandard gives us great compression that's super fast, but it requires a native lib to installed. The PY package will come with a lib and or try to build it, but we can also install it via apt-get.
+#   For the complexity, we can't list it as a required install, since it won't work on some platforms. So instead we will try to install it during runtime, and then it will be used after the following restart.
+#   The package version is defined in octoeverywhere.compression.ZStandardPipPackageString
 #
 # Other lib version notes:
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
@@ -83,7 +87,8 @@ plugin_requires = [
     "dnspython>=2.3.0",
     "httpx>=0.24.1,<0.26.0",
     "urllib3>=1.26.18,<2.0.0",
-    "sentry-sdk>=1.19.1,<2"
+    "sentry-sdk>=1.19.1,<2",
+    #"zstandard" - optional lib see notes
     ]
 
 ### --------------------------------------------------------------------------------------------------------------------

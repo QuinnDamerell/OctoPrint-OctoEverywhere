@@ -1,5 +1,4 @@
 {
-    "python.pythonPath": "py3venv/bin/python",
     "cSpell.words": [
         "ABNF",
         "accesscontrol",
@@ -41,6 +40,7 @@
         "crowsnest",
         "crypo",
         "Damerell",
+        "decompressor",
         "deps",
         "devel",
         "devs",
@@ -64,6 +64,7 @@
         "frontendsetup",
         "fsensor",
         "fstring",
+        "FULLDICT",
         "gcode",
         "geteuid",
         "getpwnam",
@@ -97,6 +98,7 @@
         "localip",
         "Mailsail",
         "mainsailconfighandler",
+        "mbps",
         "mdns",
         "microreads",
         "mjpeg",
@@ -156,6 +158,7 @@
         "permissioned",
         "PKGLIST",
         "platformcompat",
+        "precompute",
         "printerevent",
         "printerid",
         "printernotifications",
@@ -245,15 +248,13 @@
         "zhops",
         "zmoves",
         "zoffset",
+        "zstandard",
+        "zstandarddictionary",
         "zvalue"
-    ],
-    "python.linting.pylintEnabled": true,
-    "python.linting.enabled": true,
-    "python.linting.pylintArgs": [
-        "--rcfile",
-        "${workspaceFolder}/.pylintrc"
     ],
     "cSpell.enableFiletypes": [
         "shellscript"
-    ]
+    ],
+    "pylint.showNotification": true,
+    "pylint.lintOnChange": true,
 }

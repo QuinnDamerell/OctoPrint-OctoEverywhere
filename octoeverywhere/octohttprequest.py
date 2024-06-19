@@ -7,7 +7,10 @@ from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .mdns import MDns
 from .compat import Compat
+
 from .Proto.PathTypes import PathTypes
+from .Proto.DataCompression import DataCompression
+
 
 class OctoHttpRequest:
     LocalHttpProxyPort = 80
@@ -85,7 +88,7 @@ class OctoHttpRequest:
             self._requestLibResponseObj = requestLibResponseObj
             self._didFallback:bool = didFallback
             self._fullBodyBuffer = fullBodyBuffer
-            self._isZlibCompressed:bool = False
+            self._bodyCompressionType = DataCompression.None_
             self._fullBodyBufferPreCompressedSize:int = 0
             self.SetFullBodyBuffer(fullBodyBuffer)
             self._customBodyStreamCallback = customBodyStreamCallback
@@ -117,9 +120,9 @@ class OctoHttpRequest:
             return self._fullBodyBuffer
 
         @property
-        def IsBodyBufferZlibCompressed(self) -> bool:
-            # There must be a buffer and the flag must be set.
-            return self._isZlibCompressed and self._fullBodyBuffer is not None
+        def BodyBufferCompressionType(self) -> DataCompression:
+            # Defaults to None
+            return self._bodyCompressionType
 
         @property
         def BodyBufferPreCompressSize(self) -> int:
@@ -130,12 +133,19 @@ class OctoHttpRequest:
 
         # Note the buffer can be bytes or bytearray object!
         # A bytes object is more efficient, but bytearray can be edited.
-        def SetFullBodyBuffer(self, buffer, isZlibCompressed:bool = False, preCompressedSize:int = 0):
+        def SetFullBodyBuffer(self, buffer, compressionType:DataCompression = DataCompression.None_, preCompressedSize:int = 0):
             self._fullBodyBuffer = buffer
-            self._isZlibCompressed = isZlibCompressed
+            self._bodyCompressionType = compressionType
             self._fullBodyBufferPreCompressedSize = preCompressedSize
-            if isZlibCompressed and preCompressedSize <= 0:
+            if compressionType != DataCompression.None_ and preCompressedSize <= 0:
                 raise Exception("The pre-compression full size must be set if the buffer is compressed.")
+
+        # It's important we clear all of the vars that are set above.
+        # This is used by the system that updates the request object with a 304 if the cache headers match.
+        def ClearFullBodyBuffer(self):
+            self._fullBodyBuffer = None
+            self._bodyCompressionType = DataCompression.None_
+            self._fullBodyBufferPreCompressedSize = 0
 
         # Since most things use request Stream=True, this is a helpful util that will read the entire
         # content of a request and return it. Note if the request has no defined length, this will read

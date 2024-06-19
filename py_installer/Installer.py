@@ -14,6 +14,7 @@ from .TimeSync import TimeSync
 from .Frontend import Frontend
 from .Uninstall import Uninstall
 from .Ffmpeg import Ffmpeg
+from .ZStandard import ZStandard
 
 class Installer:
 
@@ -113,6 +114,9 @@ class Installer:
             uninstall.DoUninstall(context)
             return
 
+        # Since this runs an async thread, kick it off now so it can start working.
+        ZStandard.TryToInstallZStandardAsync(context)
+
         # Next step is to discover and fill out the moonraker config file path and service file name.
         # If we are doing an companion or bambu setup, we need the user to help us input the details to the external moonraker IP or bambu printer.
         # This is the hardest part of the setup, because it's highly dependent on the system and different moonraker setups.
@@ -153,6 +157,10 @@ class Installer:
 
         # Just before we start (or restart) the service, ensure all of the permission are set correctly
         permissions.EnsureFinalPermissions(context)
+
+        # If there was an install running, wait for it to finish now, before the service starts.
+        # For most installs, the user will take longer to add the info than it takes to install zstandard.
+        ZStandard.WaitForInstallToComplete()
 
         # We are fully configured, create the service file and it's dependent files.
         service = Service()

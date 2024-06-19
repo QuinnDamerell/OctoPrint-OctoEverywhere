@@ -381,7 +381,11 @@ class CommandHandler:
                 }).encode(encoding="utf-8")
 
         # Build the full result
-        return OctoHttpRequest.Result(200, {}, OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path()), False, fullBodyBuffer=resultBytes)
+        # Make sure to set the content type, so the response can be compressed.
+        headers = {
+            "Content-Type": "text/json"
+        }
+        return OctoHttpRequest.Result(200, headers, OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path()), False, fullBodyBuffer=resultBytes)
 
 
     # The goal here is to keep as much of the common logic as common as possible.

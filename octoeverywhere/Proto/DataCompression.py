@@ -6,3 +6,4 @@ class DataCompression(object):
     None_ = 0
     Brotli = 1
     Zlib = 2
+    ZStandard = 3

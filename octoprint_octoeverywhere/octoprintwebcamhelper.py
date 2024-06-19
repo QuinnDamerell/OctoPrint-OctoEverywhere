@@ -39,7 +39,7 @@ class OctoPrintWebcamHelper():
             self.Logger.info("OctoPrintWebcamHelper has no OctoPrintSettingsObject. Returning default address.")
             baseUrl = f"http://{OctoHttpRequest.GetLocalhostAddress()}"
             return [
-                WebcamSettingItem(f"{baseUrl}/webcam/?action=snapshot", f"{baseUrl}/webcam/?action=stream", False, False, 0)
+                WebcamSettingItem("Dev", f"{baseUrl}/webcam/?action=snapshot", f"{baseUrl}/webcam/?action=stream")
             ]
 
         # Since OctoPrint 1.9.0+ needs to call plugins to return webcam settings, we want to reduce how often we make the call.

@@ -9,6 +9,7 @@ from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
@@ -36,10 +37,10 @@ from .octoprintwebcamhelper import OctoPrintWebcamHelper
 
 # For local setups, use these vars to configure things.
 LocalServerAddress = None
-#LocalServerAddress = "octoeverywhere.dev"
+#LocalServerAddress = "192.168.1.3"
 
 OctoPrintIp = None
-OctoPrintIp = "192.168.1.12"
+OctoPrintIp = "192.168.1.10"
 
 OctoPrintPort = None
 OctoPrintPort = 80
@@ -169,6 +170,9 @@ if __name__ == '__main__':
     if LocalServerAddress is not None:
         Telemetry.SetServerProtocolAndDomain("http://"+LocalServerAddress)
 
+    # Setup compression
+    Compression.Init(logger, PluginFilePathRoot)
+
     # Init the mdns client
     MDns.Init(logger, PluginFilePathRoot)
     #MDns.Get().Test()
@@ -181,7 +185,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, SignalHandler)
 
     # Dev props
-    OctoEverywhereWsUri = "ws://starport-v1.octoeverywhere.com/octoclientws"
+    OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
