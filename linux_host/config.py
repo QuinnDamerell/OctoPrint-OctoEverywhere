@@ -56,6 +56,9 @@ class Config:
     SectionBambu = "bambu"
     BambuAccessToken = "access_token"
     BambuPrinterSn = "printer_serial_number"
+    # Used if the user is logged into Bambu Cloud
+    BambuCloudContext = "cloud_context"
+    BambuCloudRegion = "cloud_region"
 
 
     # This allows us to add comments into our config.
@@ -240,9 +243,13 @@ class Config:
             if self.Config.has_section(section) is False:
                 self.Config.add_section(section)
             if value is None:
-                # If we are setting to None, delete the key if it exists.
+                # None is a special case, if we are setting it, delete the key if it exists.
                 if key in self.Config[section].keys():
                     del self.Config[section][key]
+                else:
+                    # If there was no key, return early, since we did nothing.
+                    # This is a common case, since we use GetStr(..., ..., None) often to get the value if it exists.
+                    return
             else:
                 # If not none, set the key
                 self.Config[section][key] = value

@@ -13,7 +13,17 @@ from octoeverywhere.sentry import Sentry
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
 
+from .bambucloud import BambuCloud, LoginStatus
 from .bambumodels import BambuState, BambuVersion
+
+
+class ConnectionContext:
+    def __init__(self, isCloud:bool, ipOrHostname:str, userName:str, accessToken:str):
+        self.IsCloud = isCloud
+        self.IpOrHostname = ipOrHostname
+        self.UserName = userName
+        self.AccessToken = accessToken
+
 
 # Responsible for connecting to and maintaining a connection to the Bambu Printer.
 # Also responsible for dispatching out MQTT update messages.
@@ -50,9 +60,10 @@ class BambuClient:
         # Get the required args.
         self.Config = config
         self.PortStr  = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
-        self.AccessToken  = config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
+        self.LanAccessCode  = config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
         self.PrinterSn  = config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
-        if self.PortStr is None or self.AccessToken is None or self.PrinterSn is None:
+        # The port and SN are required, but the Access Code isn't, since sometimes it's not there for cloud connections.
+        if self.PortStr is None or self.PrinterSn is None:
             raise Exception("Missing required args from the config")
 
         # We use this var to keep track of consecutively failed connections
@@ -103,9 +114,6 @@ class BambuClient:
                 # We always connect locally. We use encryption, but the printer doesn't have a trusted
                 # cert root, so we have to disable the cert root checks.
                 self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-                self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
-                self.Client.tls_insecure_set(True)
-                self.Client.username_pw_set("bblp", self.AccessToken)
 
                 # Since we are local, we can do more aggressive reconnect logic.
                 # The default is min=1 max=120 seconds.
@@ -119,12 +127,24 @@ class BambuClient:
                 self.Client.on_log = self._OnLog
 
                 # Get the IP to try on this connect
-                ipOrHostname = self._GetIpOrHostnameToTry()
+                connectionContext = self._GetConnectionContextToTry()
+                if connectionContext.IsCloud:
+                    self.Logger.info("Trying to connect to printer via Bambu Cloud...")
+                    # We are connecting to Bambu Cloud, setup MQTT for it.
+                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+                else:
+                    # We are trying to connect to the printer locally, so configure mqtt for a LAN connection.
+                    self.Logger.info("Trying to connect to printer via LAN...")
+                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+                    self.Client.tls_insecure_set(True)
+
+                # Set the username and access token.
+                self.Client.username_pw_set(connectionContext.UserName, connectionContext.AccessToken)
 
                 # Connect to the server
                 # This will throw if it fails, but after that, the loop_forever will handle reconnecting.
                 localBackoffCounter += 1
-                self.Client.connect(ipOrHostname, int(self.PortStr), keepalive=5)
+                self.Client.connect(connectionContext.IpOrHostname, int(self.PortStr), keepalive=5)
 
                 # Note that self.Client.connect will not throw if there's no MQTT server, but not if auth is wrong.
                 # So if it didn't throw, we know there's a server there, but it might not be the right server
@@ -185,6 +205,14 @@ class BambuClient:
         self.HasDoneFirstFullStateSync = False
         self.ReportSubscribeMid = None
         self.IsPendingSubscribe = False
+        # For some reason, the Bambu Cloud MQTT server will fire a disconnect message but doesn't actually disconnect.
+        # So we always call disconnect to ensure we force it, to ensure our connection loop closes.
+        try:
+            c = self.Client
+            if c is not None:
+                c.disconnect()
+        except Exception as e:
+            self.Logger.debug(f"_CleanupStateOnDisconnect exception on mqtt disconnect during cleanup. {e}")
 
 
     # Fired when the MQTT connection is made.
@@ -342,24 +370,35 @@ class BambuClient:
         return False
 
 
-    # Gets the IP or hostname that should be used for the next connection attempt.
-    def _GetIpOrHostnameToTry(self) -> str:
+    # Returns a connection context object we should try to for this connection attempt.
+    # The connection context can indicate we are trying to connect to the Bambu Cloud or the local printer,
+    # depending on the plugin config and what's available.
+    def _GetConnectionContextToTry(self) -> ConnectionContext:
         # Increment and reset if it's too high.
+        # This will restart the process of trying cloud connect and falling back.
         self.ConsecutivelyFailedConnectionAttempts += 1
-        if self.ConsecutivelyFailedConnectionAttempts > 5:
+        if self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
 
-        # On the first few attempts, use the expected IP.
+        # On the first few attempts, use the expected IP or the cloud config.
         # The first attempt will always be attempt 1, since it's reset to 0 and incremented before connecting.
         # The IP can be empty, like if the docker container is used, in which case we should always search for the printer.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        if configIpOrHostname is not None and len(configIpOrHostname) > 0 and self.ConsecutivelyFailedConnectionAttempts < 3:
-            return configIpOrHostname
+        if self.ConsecutivelyFailedConnectionAttempts < 4:
+            # If we are using a Bambu cloud connection, try to return a connection object for it.
+            # We always try to do this for the first few attempts, since if it's setup as a Cloud connection, a LAN connection most likely won't work.
+            cloudContext = self._TryToGetCloudConnectContext()
+            if cloudContext is not None:
+                return cloudContext
+
+            # If we aren't using a cloud connection or it failed, return the LAN hostname
+            if configIpOrHostname is not None and len(configIpOrHostname) > 0:
+                return self._GetLanConnectionContext(configIpOrHostname)
 
         # If we fail too many times, try to scan for the printer on the local subnet, the IP could have changed.
         # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
-        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.AccessToken, self.PrinterSn)
+        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn)
 
         # If we get an IP back, it is the printer.
         # The scan above will only return an IP if the printer was successfully connected to, logged into, and fully authorized with the Access Token and Printer SN.
@@ -369,10 +408,46 @@ class BambuClient:
             ip = ips[0]
             self.Logger.info(f"We found a new IP for this printer. [{configIpOrHostname} -> {ip}] Updating the config and using it to connect.")
             self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ip)
-            return ip
+            return self._GetLanConnectionContext(ip)
 
         # If we don't find anything, just use the config IP.
-        return configIpOrHostname
+        return self._GetLanConnectionContext(configIpOrHostname)
+
+
+    def _GetLanConnectionContext(self, ipOrHostname) -> ConnectionContext:
+        # The username is always the same, we use the local LAN access token.
+        return ConnectionContext(False, ipOrHostname, "bblp", self.LanAccessCode)
+
+
+    # Returns a Bambu Cloud based connection context if it can be made, otherwise None
+    def _TryToGetCloudConnectContext(self) -> ConnectionContext:
+        bCloud = BambuCloud.Get()
+        if bCloud.HasContext() is False:
+            return None
+
+        # Try to login and get the access token.
+        # Force the login to ensure the access token is current.
+        accessTokenResult = BambuCloud.Get().GetAccessToken(forceLogin=True)
+
+        # If we failed, make sure to log the reason, so it's obvious for the user.
+        if accessTokenResult.Status != LoginStatus.Success:
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.error("                 Failed To Log Into Bambu Cloud")
+            if accessTokenResult.Status == LoginStatus.BadUserNameOrPassword:
+                self.Logger.error("The email address or password is wrong. Re-run the Bambu Connect installer or use the docker files to update the email address and password.")
+            elif accessTokenResult.Status == LoginStatus.TwoFactorAuthEnabled:
+                self.Logger.error("To factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or LAN Only mode must be used on the printer.")
+            else:
+                self.Logger.error("Unknown error, we will try again later.")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+
+            # We do a delay here, so we don't pound on the service. If we can't login for one of these reasons, we probably can't recover.
+            time.sleep(60.0 ^ self.ConsecutivelyFailedConnectionAttempts)
+            return None
+
+        # Return the connection object.
+        accessToken = accessTokenResult.AccessToken
+        return ConnectionContext(True, bCloud.GetMqttHostname(), bCloud.GetUserNameFromAccessToken(accessToken), accessToken)
 
 
 # A class returned as the result of all commands.

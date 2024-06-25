@@ -21,6 +21,7 @@ from linux_host.secrets import Secrets
 from linux_host.version import Version
 from linux_host.logger import LoggerInit
 
+from .bambucloud import BambuCloud
 from .bambuclient import BambuClient
 from .bambuwebcamhelper import BambuWebcamHelper
 from .bambucommandhandler import BambuCommandHandler
@@ -131,6 +132,9 @@ class BambuHost:
 
             # Setup the command handler
             CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger))
+
+            # Setup the cloud if it's setup in the config.
+            BambuCloud.Init(self.Logger, self.Config)
 
             # Setup and start the Bambu Client
             BambuClient.Init(self.Logger, self.Config, stateTranslator)
