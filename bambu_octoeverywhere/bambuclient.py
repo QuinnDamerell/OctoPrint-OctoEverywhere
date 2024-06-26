@@ -431,18 +431,18 @@ class BambuClient:
 
         # If we failed, make sure to log the reason, so it's obvious for the user.
         if accessTokenResult.Status != LoginStatus.Success:
-            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.error("                 Failed To Log Into Bambu Cloud")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.error("                                                     Failed To Log Into Bambu Cloud")
             if accessTokenResult.Status == LoginStatus.BadUserNameOrPassword:
-                self.Logger.error("The email address or password is wrong. Re-run the Bambu Connect installer or use the docker files to update the email address and password.")
+                self.Logger.error("The email address or password is wrong. Re-run the Bambu Connect installer or use the docker files to update your email address and password.")
             elif accessTokenResult.Status == LoginStatus.TwoFactorAuthEnabled:
                 self.Logger.error("To factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or LAN Only mode must be used on the printer.")
             else:
                 self.Logger.error("Unknown error, we will try again later.")
-            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
             # We do a delay here, so we don't pound on the service. If we can't login for one of these reasons, we probably can't recover.
-            time.sleep(60.0 ^ self.ConsecutivelyFailedConnectionAttempts)
+            time.sleep(600.0 * self.ConsecutivelyFailedConnectionAttempts)
             return None
 
         # Return the connection object.

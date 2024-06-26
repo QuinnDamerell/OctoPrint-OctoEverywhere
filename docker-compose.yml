@@ -3,26 +3,44 @@ services:
   octoeverywhere-bambu-connect:
     image: octoeverywhere/octoeverywhere:latest
     environment:
-        # https://octoeverywhere.com/s/access-code
-      - ACCESS_CODE=XXXXXXXX
         # https://octoeverywhere.com/s/bambu-sn
       - SERIAL_NUMBER=XXXXXXXXXXXXXXX
         # Find using the printer's display
       - PRINTER_IP=192.168.1.1
+
+      # ~~~ If connecting with Bambu Cloud Mode ~~~
+      # https://octoeverywhere.com/s/bambu-setup
+      - BAMBU_CLOUD_ACCOUNT_EMAIL=XXXXXXXX
+      - BAMBU_CLOUD_ACCOUNT_PASSWORD=XXXXXXXX
+      #- BAMBU_CLOUD_REGION=china # Optional, use if your Bambu account is in the China region
+
+      # ~~~ OR If connecting with LAN Only Mode ~~~
+      # https://octoeverywhere.com/s/access-code
+      # - ACCESS_CODE=XXXXXXXX
+      # - LAN_ONLY_MODE=TRUE
     volumes:
       # Specify a path mapping for the required persistent storage
-      - /some/path/on/your/computer:/data
+      - /local/computer/data/folder:/data
 
   # Add as many printers as you want!
   # octoeverywhere-bambu-connect-2:
   #   image: octoeverywhere/octoeverywhere:latest
   #   environment:
-  #       # https://octoeverywhere.com/s/access-code
-  #     - ACCESS_CODE=XXXXXXXX
   #       # https://octoeverywhere.com/s/bambu-sn
   #     - SERIAL_NUMBER=XXXXXXXXXXXXXXX
   #       # Find using the printer's display
   #     - PRINTER_IP=192.168.1.2
+
+  #     # ~~~ If connecting with Bambu Cloud Mode ~~~
+  #     # https://octoeverywhere.com/s/bambu-setup
+  #     - BAMBU_CLOUD_ACCOUNT_EMAIL=XXXXXXXX
+  #     - BAMBU_CLOUD_ACCOUNT_PASSWORD=XXXXXXXX
+  #     #- BAMBU_CLOUD_REGION=china # Optional, use if your Bambu account is in the China region
+
+  #     # ~~~ OR If connecting with LAN Only Mode ~~~
+  #     # https://octoeverywhere.com/s/access-code
+  #     # - ACCESS_CODE=XXXXXXXX
+  #     # - LAN_ONLY_MODE=TRUE
   #   volumes:
   #     # Specify a path mapping for the required persistent storage
-  #     - /some/path/on/your/computer/printer2:/data
+  #     - /local/computer/data/folder2:/data

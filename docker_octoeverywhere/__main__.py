@@ -16,6 +16,8 @@ import subprocess
 from linux_host.startup import Startup
 from linux_host.config import Config
 
+from bambu_octoeverywhere.bambucloud import BambuCloud
+
 # pylint: disable=logging-fstring-interpolation
 
 if __name__ == '__main__':
@@ -70,28 +72,9 @@ if __name__ == '__main__':
         logger.info(f"Init config object: {configPath}")
         config = Config(configPath)
 
-        # If there is a arg passed, always update or set it.
-        # This allows users to update the values after the image has ran the first time.
-        accessCode = os.environ.get("ACCESS_CODE", None)
-        if accessCode is not None:
-            logger.info(f"Setting Access Code: {accessCode}")
-            config.SetStr(Config.SectionBambu, Config.BambuAccessToken, accessCode)
-        # Ensure something is set now.
-        if config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None) is None:
-            logger.error("")
-            logger.error("")
-            logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            logger.error("             You must pass the printer's Access Code as an env var.")
-            logger.error("  Use `docker run -e ACCESS_CODE=<code>` or add it to your docker-compose file.")
-            logger.error("")
-            logger.error("      To find your Access Code -> https://octoeverywhere.com/s/access-code")
-            logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            logger.error("")
-            logger.error("")
-            # Sleep some, so we don't restart super fast and then exit.
-            time.sleep(5.0)
-            sys.exit(1)
 
+        # The serial number is always required, in both Bambu Cloud and LAN mode.
+        # So we always get that first.
         printerSn = os.environ.get("SERIAL_NUMBER", None)
         if printerSn is not None:
             logger.info(f"Setting Serial Number: {printerSn}")
@@ -112,14 +95,103 @@ if __name__ == '__main__':
             time.sleep(5.0)
             sys.exit(1)
 
-        #
-        # If we got here, the access token and serial number are set or were already set.
-        # We should be able to launch!
-        #
+        # Bambu updated the printer and broke LAN access unless the printer is in LAN mode.
+        # The work around was to connect to the Bambu Cloud instead of directly to the printer.
+        # The biggest downside of this is that we need to get the user's email address and password for Bambu Cloud.
+        # BUT the user can also do the LAN only mode, if they want to.
+        isLanOnlyMode = os.environ.get("LAN_ONLY_MODE", False)
+        isAccessCodeRequired = True
+        if isLanOnlyMode:
+            # In LAN only mode we only need the Serial number and access code.
+            logger.info("Connection Mode: LAN Only (Use the env var LAN_ONLY_MODE=FALSE to enable Bambu Cloud mode.)")
+            # This is LAN only mode, where we need the user to get us the Access Code. (In the cloud mode, we can get it from the Bambu Cloud API)
+            # If there is a arg passed, always update or set it.
+            # This allows users to update the values after the image has ran the first time.
+            accessCode = os.environ.get("ACCESS_CODE", None)
+            if accessCode is not None:
+                logger.info(f"Setting Access Code: {accessCode}")
+                config.SetStr(Config.SectionBambu, Config.BambuAccessToken, accessCode)
+            # Ensure something is set now.
+            if config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None) is None:
+                logger.error("")
+                logger.error("")
+                logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logger.error("             You must pass the printer's Access Code as an env var.")
+                logger.error("  Use `docker run -e ACCESS_CODE=<code>` or add it to your docker-compose file.")
+                logger.error("")
+                logger.error("      To find your Access Code -> https://octoeverywhere.com/s/access-code")
+                logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logger.error("")
+                logger.error("")
+                # Sleep some, so we don't restart super fast and then exit.
+                time.sleep(5.0)
+                sys.exit(1)
+        else:
+            logger.info("Connection Mode: Bambu Cloud (Use the env var LAN_ONLY_MODE=TRUE to enable LAN Only mode.)")
+            # In Bambu Cloud mode, we need the user's email and password.
+            bambuCloud = BambuCloud(logger, config)
+            # Get any existing values.
+            (bambuCloudEmail, bambuCloudPassword) = bambuCloud.GetContext(expectContextToExist=False)
+            bambuCloudEmail = os.environ.get("BAMBU_CLOUD_ACCOUNT_EMAIL", bambuCloudEmail)
+            bambuCloudPassword = os.environ.get("BAMBU_CLOUD_ACCOUNT_PASSWORD", bambuCloudPassword)
 
-        # TEMP - Until we fix the issue where the plugin doesn't know the local LAN network address range, we need the
-        # user to pass the printer's IP to the plugin, since the auto scanning doesn't work.
-        # When this is fixed, we no longer need it to be passed.
+            # Ensure the context is already set or the user passed the email and password.
+            if bambuCloudEmail is None:
+                logger.error("")
+                logger.error("")
+                logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logger.error("            You must pass your Bambu Cloud account email address as an env var.")
+                logger.error("Use `docker run -e BAMBU_CLOUD_ACCOUNT_EMAIL=<email>` or add it to your docker-compose file.")
+                logger.error("")
+                logger.error("         Your Bambu email address and password are KEPT LOCALLY, encrypted on disk")
+                logger.error("                 and are NEVER SENT to the OctoEverywhere service.")
+                logger.error("")
+                logger.error("       For Help And More Details -> https://octoeverywhere.com/s/bambu-setup")
+                logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logger.error("")
+                logger.error("")
+                # Sleep some, so we don't restart super fast and then exit.
+                time.sleep(5.0)
+                sys.exit(1)
+            if bambuCloudPassword is None:
+                logger.error("")
+                logger.error("")
+                logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logger.error("                 You must pass your Bambu Cloud account password as an env var.")
+                logger.error("Use `docker run -e BAMBU_CLOUD_ACCOUNT_PASSWORD=<password>` or add it to your docker-compose file.")
+                logger.error("")
+                logger.error("          Your Bambu email address and password are KEPT LOCALLY, encrypted on disk")
+                logger.error("                     and are NEVER SENT to the OctoEverywhere service.")
+                logger.error("")
+                logger.error("          For Help And More Details -> https://octoeverywhere.com/s/bambu-setup")
+                logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+                logger.error("")
+                logger.error("")
+                # Sleep some, so we don't restart super fast and then exit.
+                time.sleep(5.0)
+                sys.exit(1)
+
+            # Update the context now, since it might have changed.
+            logger.info(f"Setting Bambu Cloud Context: {bambuCloudEmail}")
+            if bambuCloud.SetContext(bambuCloudEmail, bambuCloudPassword) is False:
+                # This should never happen. If it does allow the setup to continue, but log the error.
+                logger.error("Failed to set the Bambu Cloud context.")
+
+            # The region is optional.
+            bambuCloudRegion = os.environ.get("BAMBU_CLOUD_REGION", None)
+            if bambuCloudRegion is not None:
+                bambuCloudRegion = bambuCloudRegion.lower().trim()
+                if bambuCloudRegion != "china":
+                    logger.warning("The BAMBU_CLOUD_REGION should only be set to 'china' if the account is in the China region. For all other accounts it should not be set.")
+                logger.info(f"Setting Bambu Cloud Region To: {bambuCloudRegion}")
+                config.SetStr(Config.SectionBambu, Config.BambuCloudRegion, bambuCloudRegion)
+            # Ensure something is set now.
+            if config.GetStr(Config.SectionBambu, Config.BambuCloudRegion, None) is None:
+                logger.info("Setting Bambu Cloud to the default value for world wide accounts.")
+                config.SetStr(Config.SectionBambu, Config.BambuCloudRegion, "worldwide")
+
+        # For now, we also need the user to supply the printer's IP address, since we can't auto scan the network in docker.
+        # We also need this for the Bambu Cloud mode, since we can't get it from the Bambu Cloud API and we can't scan for the printer.
         printerId = os.environ.get("PRINTER_IP", None)
         if printerId is not None:
             logger.info(f"Setting Printer IP: {printerId}")
@@ -129,10 +201,10 @@ if __name__ == '__main__':
             logger.error("")
             logger.error("")
             logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            logger.error("           You must pass the printer's IP Address as an env var.")
+            logger.error("            You must pass the printer's IP Address as an env var.")
             logger.error(" Use `docker run -e PRINTER_IP=<ip address>` or add it to your docker-compose file.")
             logger.error("")
-            logger.error("          To find your Ip Address, use the display on your printer.")
+            logger.error("    To find your printer's IP Address -> https://octoeverywhere.com/s/bambu-ip")
             logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             logger.error("")
             logger.error("")

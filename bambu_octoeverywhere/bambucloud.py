@@ -65,7 +65,7 @@ class BambuCloud:
             url = self._GetBambuCloudApi("/v1/user-service/user/login")
 
             # Get the context.
-            email, password = self._GetContext()
+            email, password = self.GetContext()
             if email is None or password is None:
                 self.Logger.error("Login Bambu Cloud failed to get context from the config.")
                 return LoginStatus.BadUserNameOrPassword
@@ -75,10 +75,15 @@ class BambuCloud:
 
             # Check the response.
             if response.status_code != 200:
+                body = ""
+                try:
+                    body = json.dumps(response.json())
+                except Exception:
+                    pass
                 if response.status_code == 400:
-                    self.Logger.error("Login Bambu Cloud failed with status code: 400 bad request. The user name or password are probably wrong or has changed.")
+                    self.Logger.error(f"Login Bambu Cloud failed with status code: 400 bad request. The user name or password are probably wrong or has changed. Response: {body}")
                     return LoginStatus.BadUserNameOrPassword
-                self.Logger.error(f"Login Bambu Cloud failed with status code: {response.status_code}")
+                self.Logger.error(f"Login Bambu Cloud failed with status code: {response.status_code}, Response: {body}")
                 return LoginStatus.UnknownError
 
             # If the user has two factor auth enabled, this will still return 200, but there will be a tfaKey field with a string.
@@ -255,16 +260,17 @@ class BambuCloud:
     # Returns if there's a user context in the config file.
     # This doesn't check if the user context is valid, just that it's there.
     def HasContext(self) -> bool:
-        (e, p) = self._GetContext()
+        (e, p) = self.GetContext()
         return e is not None and p is not None
 
 
     # Sets the user's context from the config file.
-    def _GetContext(self):
+    def GetContext(self, expectContextToExist = True):
         try:
             token = self.Config.GetStr(Config.SectionBambu, Config.BambuCloudContext, None)
             if token is None:
-                self.Logger.error("No Bambu Cloud context found in the config file.")
+                if expectContextToExist:
+                    self.Logger.error("No Bambu Cloud context found in the config file.")
                 return (None, None)
             f = Fernet(b"iyqYOs9QPwO5J6jW30uPJIxywhf7yLrvaRXLp5gi9OA=")
             jsonStr = f.decrypt(token.encode())
