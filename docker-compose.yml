@@ -1,12 +1,11 @@
-version: '2'
 services:
   octoeverywhere-bambu-connect:
     image: octoeverywhere/octoeverywhere:latest
     environment:
         # https://octoeverywhere.com/s/bambu-sn
       - SERIAL_NUMBER=XXXXXXXXXXXXXXX
-        # Find using the printer's display
-      - PRINTER_IP=192.168.1.1
+        # Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
+      - PRINTER_IP=XXX.XXX.XXX.XXX
 
       # ~~~ If connecting with Bambu Cloud Mode ~~~
       # https://octoeverywhere.com/s/bambu-setup
@@ -20,16 +19,17 @@ services:
       # - LAN_ONLY_MODE=TRUE
     volumes:
       # Specify a path mapping for the required persistent storage
-      - /local/computer/data/folder:/data
+      # This can also be an absolue path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
+      - ./data:/data
 
-  # Add as many printers as you want!
+  # Add as many printers as you want! Just make the name `octoeverywhere-bambu-connect` unique!
   # octoeverywhere-bambu-connect-2:
   #   image: octoeverywhere/octoeverywhere:latest
   #   environment:
   #       # https://octoeverywhere.com/s/bambu-sn
   #     - SERIAL_NUMBER=XXXXXXXXXXXXXXX
-  #       # Find using the printer's display
-  #     - PRINTER_IP=192.168.1.2
+  #       # Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
+  #     - PRINTER_IP=XXX.XXX.XXX.XXX
 
   #     # ~~~ If connecting with Bambu Cloud Mode ~~~
   #     # https://octoeverywhere.com/s/bambu-setup
@@ -43,4 +43,4 @@ services:
   #     # - LAN_ONLY_MODE=TRUE
   #   volumes:
   #     # Specify a path mapping for the required persistent storage
-  #     - /local/computer/data/folder2:/data
+  #     - ./data:/data
