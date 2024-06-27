@@ -36,6 +36,9 @@ RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q -r ${REP
 RUN apk add zstd
 RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q "zstandard>=0.21.0,<0.23.0"
 
+# Also install the crypto package used only for Bmabu Connect
+RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q "cryptography>=42.0.8"
+
 # For docker, we use our docker_octoeverywhere host to handle the runtime setup and launch of the serivce.
 WORKDIR ${REPO_DIR}
 # Use the full path to the venv, we msut use this [] notation for our ctlc handler to work in the contianer

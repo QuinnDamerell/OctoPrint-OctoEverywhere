@@ -24,4 +24,4 @@ configparser
 
 # Only used for Bambu Connect
 paho-mqtt>=2.0.0
-cryptography>=42.0.8
+#cryptography>=42.0.8 - Installed by the PY Installer / Dockerfile, since this breaks Creality printers.
