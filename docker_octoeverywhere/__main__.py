@@ -99,7 +99,7 @@ if __name__ == '__main__':
         # The work around was to connect to the Bambu Cloud instead of directly to the printer.
         # The biggest downside of this is that we need to get the user's email address and password for Bambu Cloud.
         # BUT the user can also do the LAN only mode, if they want to.
-        isLanOnlyMode = os.environ.get("LAN_ONLY_MODE", False)
+        isLanOnlyMode = bool(os.environ.get("LAN_ONLY_MODE", "").lower() in ("true", "1", "yes"))
         isAccessCodeRequired = True
         if isLanOnlyMode:
             # In LAN only mode we only need the Serial number and access code.
