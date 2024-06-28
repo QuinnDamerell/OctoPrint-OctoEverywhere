@@ -1,0 +1,57 @@
+name: Publish Docker image
+
+# Triggers on our test branch for building docker.
+on:
+  push:
+    branches:
+      - docker-build
+
+jobs:
+  push_to_registry:
+    name: Test Build Docker
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      # This is needed for the attestation step
+      id-token: write
+      attestations: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      # Required for docker multi arch building.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Required for docker multi arch building.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: octoeverywhere/octoeverywhere
+          tags: |
+            # set latest tag
+            type=raw,value=latest
+            # set versioned tag
+            type=semver,pattern={{version}}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
+          file: ./Dockerfile
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

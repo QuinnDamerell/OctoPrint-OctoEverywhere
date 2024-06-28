@@ -16,8 +16,8 @@ ENV DATA_DIR=/data/
 
 # Install the required packages.
 # Any packages here should be mirrored in the install script - and any optaionl pillow packages done inline.
-# GCC, python3-dev, and musl-dev are required for pillow, and jpeg-dev and zlib-dev are required for jpeg support.
-RUN apk add --no-cache curl ffmpeg jq python3 python3-dev gcc musl-dev py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow
+# GCC, python3-dev, and musl-dev are required for pillow, and jpeg-dev and zlib-dev are required for jpeg support. libffi-dev, rust, cargo, pkgconfig libressl-dev are requried to build the PY cryptography lib.
+RUN apk add --no-cache curl ffmpeg jq python3 python3-dev gcc musl-dev py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow libffi-dev rust cargo pkgconfig libressl-dev
 
 #
 # We decided to not run the installer, since the point of the installer is to setup the env, build the launch args, and setup the serivce.
