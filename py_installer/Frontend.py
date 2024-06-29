@@ -36,13 +36,14 @@ class Frontend:
             Logger.Debug("Skipping frontend setup, there's no frontend for bambu connect.")
             return
 
-        Logger.Header("Starting Web Interface Setup")
+        Logger.Debug("Starting Web Interface Setup")
 
         # Try to get the existing configured port.
         (currentPort, frontendHint_CanBeNone) = ConfigHelper.TryToGetFrontendDetails(context)
         if currentPort is not None:
             # There is already a config with a port setup.
             # Ask if the user wants to keep the current setup.
+            Logger.Blank()
             Logger.Blank()
             Logger.Info("A web interface is already setup:")
             msg = ""
@@ -109,7 +110,7 @@ class Frontend:
                 except Exception as _:
                     Logger.Warn("Invalid input, try again.")
         else:
-            Logger.Info("No web interfaces could be detected.")
+            Logger.Debug("No web interfaces could be detected.")
 
 
         # If we are here, the user selected m to do a manual frontend setup.

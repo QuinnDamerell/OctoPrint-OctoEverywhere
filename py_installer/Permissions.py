@@ -22,7 +22,7 @@ class Permissions:
             if context.UserName is None or len(context.UserName) == 0:
                 # Since the install script does a cd ~, we know if the user home path starts with /root/, the user is root.
                 if context.UserHomePath is not None and context.UserHomePath.lower().startswith("/root/"):
-                    Logger.Info("No user passed, but we detected the user is root.")
+                    Logger.Debug("No user passed, but we detected the user is root.")
                     context.UserName = Permissions.c_RootUserName
 
 

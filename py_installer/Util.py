@@ -29,21 +29,21 @@ class Util:
     @staticmethod
     def EnsureDirExists(dirPath, context:Context, setPermissionsToUser = False):
         # Ensure it exists.
-        Logger.Header("Enuring path and permissions ["+dirPath+"]...")
+        Logger.Debug("Enuring path and permissions ["+dirPath+"]...")
         if os.path.exists(dirPath) is False:
-            Logger.Info("Dir doesn't exist, creating...")
+            Logger.Debug("Dir doesn't exist, creating...")
             os.mkdir(dirPath)
         else:
-            Logger.Info("Dir already exists.")
+            Logger.Debug("Dir already exists.")
 
         if setPermissionsToUser:
-            Logger.Info("Setting owner permissions to the service user ["+context.UserName+"]...")
+            Logger.Debug("Setting owner permissions to the service user ["+context.UserName+"]...")
             uid = pwd.getpwnam(context.UserName).pw_uid
             gid = pwd.getpwnam(context.UserName).pw_gid
             # pylint: disable=no-member # Linux only
             os.chown(dirPath, uid, gid)
 
-        Logger.Info("Directory setup successfully.")
+        Logger.Debug("Directory setup successfully.")
 
 
     # Ensures that all files and dirs down stream of this root dir path are owned by the requested user.

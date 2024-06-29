@@ -164,7 +164,7 @@ class ConfigHelper:
         if ConfigHelper.DoesConfigFileExist(context, configFolderPath) is False:
             if createIfNotExisting:
                 # Fallthrough, the Config class will create a file if none exists.
-                Logger.Info("Creating main plugin config file.")
+                Logger.Debug("Creating main plugin config file.")
             else:
                 return None
         # Get the config folder path.

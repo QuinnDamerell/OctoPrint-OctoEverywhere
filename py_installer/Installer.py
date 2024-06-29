@@ -1,6 +1,8 @@
 import sys
 import traceback
 
+from octoeverywhere.telemetry import Telemetry
+
 from .Linker import Linker
 from .Logging import Logger
 from .Service import Service
@@ -54,6 +56,7 @@ class Installer:
 
         # As soon as we have the user home make the log file.
         Logger.InitFile(context.UserHomePath, context.UserName)
+        Telemetry.Init(Logger.GetPyLogger())
 
         # Parse the original CmdLineArgs
         Logger.Debug("Parsing script cmd line args.")
@@ -62,7 +65,7 @@ class Installer:
         # Figure out the OS type we are installing on.
         # This can be a normal debian device, Sonic Pad, K1, or others.
         context.DetectOsType()
-        Logger.Info(f"Os Type Detected: {context.OsType}")
+        Logger.Debug(f"Os Type Detected: {context.OsType}")
 
         # Print this again now that the debug cmd flag is parsed, since it might be useful.
         if context.Debug:
