@@ -253,7 +253,7 @@ class BambuVersion:
                 self.PrinterName = esp32_map.get((self.HardwareVersion, self.ProjectName), BambuPrinters.Unknown)
 
         if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
-            Sentry.LogError(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}", {
+            Sentry.LogError(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
                 "CPU": str(self.Cpu),
                 "ProjectName": str(self.ProjectName),
                 "HardwareVersion": str(self.HardwareVersion),
