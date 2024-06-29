@@ -239,7 +239,7 @@ class BambuVersion:
                     # Add more mappings here as needed
                 }
                 self.PrinterName = rv1126_map.get(self.HardwareVersion, BambuPrinters.Unknown)
-            
+
             elif self.Cpu is BambuCPUs.ESP32 and self.ProjectName is not None:
                 # Map for ESP32 CPU
                 esp32_map = {
