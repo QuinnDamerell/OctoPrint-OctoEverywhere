@@ -232,24 +232,28 @@ class BambuVersion:
         # Now that we have info, map the printer type.
         if self.Cpu is not BambuCPUs.Unknown and self.HardwareVersion is not None:
             if self.Cpu is BambuCPUs.RV1126:
-                if self.HardwareVersion == "AP05":
-                    self.PrinterName = BambuPrinters.X1C
-                elif self.HardwareVersion == "AP02":
-                    self.PrinterName = BambuPrinters.X1E
-            if self.Cpu is BambuCPUs.ESP32 and self.ProjectName is not None:
-                if self.HardwareVersion == "AP04":
-                    if self.ProjectName == "C11":
-                        self.PrinterName = BambuPrinters.P1P
-                    if self.ProjectName == "C12":
-                        self.PrinterName = BambuPrinters.P1S
-                if self.HardwareVersion == "AP05":
-                    if self.ProjectName == "N1":
-                        self.PrinterName = BambuPrinters.A1Mini
-                    if self.ProjectName == "N2S":
-                        self.PrinterName = BambuPrinters.A1
+                # Map for RV1126 CPU
+                rv1126_map = {
+                    "AP05": BambuPrinters.X1C,
+                    "AP02": BambuPrinters.X1E,
+                    # Add more mappings here as needed
+                }
+                self.PrinterName = rv1126_map.get(self.HardwareVersion, BambuPrinters.Unknown)
+            
+            elif self.Cpu is BambuCPUs.ESP32 and self.ProjectName is not None:
+                # Map for ESP32 CPU
+                esp32_map = {
+                    ("AP04", "C11"): BambuPrinters.P1P,
+                    ("AP04", "C12"): BambuPrinters.P1S,
+                    ("AP05", "N1"): BambuPrinters.A1Mini,
+                    ("AP05", "N2S"): BambuPrinters.A1,
+                    ("AP07", "N1"): BambuPrinters.A1Mini,
+                    # Add more mappings here as needed
+                }
+                self.PrinterName = esp32_map.get((self.HardwareVersion, self.ProjectName), BambuPrinters.Unknown)
 
         if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
-            Sentry.LogError(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
+            Sentry.LogError(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}", {
                 "CPU": str(self.Cpu),
                 "ProjectName": str(self.ProjectName),
                 "HardwareVersion": str(self.HardwareVersion),
