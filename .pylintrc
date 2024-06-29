@@ -81,7 +81,7 @@ persistent=yes
 
 # Min Python version to use for version dependend checks. Will default to the
 # version used to run pylint.
-py-version=3.9
+# py-version=3.9
 
 # When enabled, pylint would attempt to guess common misconfiguration and emit
 # user-friendly hints instead of false-positive error messages.
@@ -124,7 +124,7 @@ disable=raw-checker-failed,
 # either give multiple identifier separated by comma (,) or put this option
 # multiple time (only on the command line, not in the configuration file where
 # it should appear only once). See also the "--disable" option for examples.
-enable=c-extension-no-member
+enable=c-extension-no-member,trailing-whitespace
 
 
 [REPORTS]
