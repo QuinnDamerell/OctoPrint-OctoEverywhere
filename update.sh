@@ -58,6 +58,11 @@ runAsRepoOwner()
     fi
 }
 
+# Ensure we are cd'd into the repo dir. It's possible to run the update script outside of the repo dir.
+# If it's ran from a different git repo, the git commands will try to effect it.
+repoDir=$(readlink -f $(dirname "$0"))
+cd $repoDir
+
 # Pull the repo to get the top of master.
 echo "Updating repo and fetching the latest released tag..."
 runAsRepoOwner "git fetch --tags"
