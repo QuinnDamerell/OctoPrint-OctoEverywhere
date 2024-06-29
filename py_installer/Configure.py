@@ -137,4 +137,4 @@ class Configure:
             bc.EnsureBambuConnection(context)
 
         # Report
-        Logger.Info(f'Configured. Service: {context.ServiceName}, Path: {context.ServiceFilePath}, LocalStorage: {context.LocalFileStorageFolder}, Config Dir: {context.ConfigFolder}, Logs: {context.LogsFolder}')
+        Logger.Debug(f'Configured. Service: {context.ServiceName}, Path: {context.ServiceFilePath}, LocalStorage: {context.LocalFileStorageFolder}, Config Dir: {context.ConfigFolder}, Logs: {context.LogsFolder}')

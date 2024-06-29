@@ -245,34 +245,36 @@ install_or_update_system_dependencies()
         opkg install ${SONIC_PAD_DEP_LIST} || true
         pip3 install -q --no-cache-dir virtualenv
     else
+        # Print this before the date update, since it might prompt for the user's password.
+        log_info "Installing required system packages..."
+        log_important "You might be asked for your system password - this is required to install the required system packages."
+
         # It seems a lot of printer control systems don't have the date and time set correctly, and then the fail
         # getting packages and other downstream things. We will will use our HTTP API to set the current UTC time.
         # Note that since cloudflare will auto force http -> https, we use https, but ignore cert errors, that could be
         # caused by an incorrect date.
         # Note some companion systems don't have curl installed, so this will fail.
-        log_info "Ensuring the system date and time is correct..."
+        #log_info "Ensuring the system date and time is correct..."
         sudo date -s `curl --insecure 'https://octoeverywhere.com/api/util/date' 2>/dev/null` || true
 
         # These we require to be installed in the OS.
         # Note we need to do this before we create our virtual environment
-        log_important "You might be asked for your system password - this is required to install the required system packages."
-        log_info "Installing required system packages..."
-        sudo apt update 1>/dev/null` 2>/dev/null` || true
-        sudo apt install --yes ${PKGLIST}
+        sudo apt update 1>/dev/null 2>/dev/null || true
+        sudo apt install --yes ${PKGLIST} 2>/dev/null
 
         # The PY lib Pillow depends on some system packages that change names depending on the OS.
         # The easiest way to do this was just to try to install them and ignore errors.
         # Most systems already have the packages installed, so this only fixes edge cases.
         # Notes on Pillow deps: https://pillow.readthedocs.io/en/latest/installation.html
         log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
-        sudo apt install --yes zlib1g-dev 2> /dev/null || true
-        sudo apt install --yes zlib-devel 2> /dev/null || true
-        sudo apt install --yes python-imaging 2> /dev/null || true
-        sudo apt install --yes python3-pil 2> /dev/null || true
-        sudo apt install --yes python3-pillow 2> /dev/null || true
+        sudo apt install --yes zlib1g-dev 2>/dev/null || true
+        sudo apt install --yes zlib-devel 2>/dev/null || true
+        sudo apt install --yes python-imaging 2>/dev/null || true
+        sudo apt install --yes python3-pil 2>/dev/null || true
+        sudo apt install --yes python3-pillow 2>/dev/null || true
     fi
 
-    log_info "System package install complete."
+    #log_info "System package install complete."
 }
 
 #
@@ -300,7 +302,7 @@ install_or_update_python_env()
     else
         "${OE_ENV}"/bin/pip3 install --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
     fi
-    log_info "Python libs installed."
+    #log_info "Python libs installed."
 }
 
 #
@@ -410,7 +412,7 @@ USERNAME=${USER}
 USER_HOME=${HOME}
 CMD_LINE_ARGS=${@}
 PY_LAUNCH_JSON="{\"OE_REPO_DIR\":\"${OE_REPO_DIR}\",\"OE_ENV\":\"${OE_ENV}\",\"USERNAME\":\"${USERNAME}\",\"USER_HOME\":\"${USER_HOME}\",\"CMD_LINE_ARGS\":\"${CMD_LINE_ARGS}\"}"
-log_info "Bootstrap done. Starting python installer..."
+#log_info "Bootstrap done. Starting python installer..."
 
 # Now launch into our py setup script, that does everything else required.
 # Since we use a module for file includes, we need to set the path to the root of the module

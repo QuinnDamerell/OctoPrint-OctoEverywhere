@@ -2,9 +2,10 @@ import os
 import json
 from enum import Enum
 
+from octoeverywhere.telemetry import Telemetry
+
 from .Logging import Logger
 from .Paths import Paths
-
 
 # Indicates the OS type this installer is running on.
 class OsTypes(Enum):
@@ -239,23 +240,23 @@ class Context:
                     Logger.Warn("Skipping sudo actions. ! This will not result in a valid install! ")
                     self.SkipSudoActions = True
                 elif rawArgLower == "noatuoselect":
-                    Logger.Info("Disabling Moonraker instance auto selection.")
+                    Logger.Debug("Disabling Moonraker instance auto selection.")
                     self.DisableAutoMoonrakerInstanceSelection = True
                 elif rawArgLower == "observer":
                     # This is the legacy flag
-                    Logger.Info("Setup running in companion setup mode.")
+                    Logger.Debug("Setup running in companion setup mode.")
                     self.IsCompanionSetup = True
                 elif rawArgLower == "companion":
-                    Logger.Info("Setup running in companion setup mode.")
+                    Logger.Debug("Setup running in companion setup mode.")
                     self.IsCompanionSetup = True
                 elif rawArgLower == "bambu":
-                    Logger.Info("Setup running in Bambu Connect setup mode.")
+                    Logger.Debug("Setup running in Bambu Connect setup mode.")
                     self.IsBambuSetup = True
                 elif rawArgLower == "update" or rawArgLower == "upgrade":
-                    Logger.Info("Setup running in update mode.")
+                    Logger.Debug("Setup running in update mode.")
                     self.IsUpdateMode = True
                 elif rawArgLower == "uninstall":
-                    Logger.Info("Setup running in uninstall mode.")
+                    Logger.Debug("Setup running in uninstall mode.")
                     self.IsUninstallMode = True
                 else:
                     raise Exception("Unknown argument found. Use install.sh -help for options.")
@@ -265,6 +266,7 @@ class Context:
                 if self.MoonrakerConfigFilePath is None:
                     self.MoonrakerConfigFilePath = a
                     Logger.Debug("Moonraker config file path found as argument:"+self.MoonrakerConfigFilePath)
+                    Telemetry.Write("Installer-MoonrakerConfigPassed", 1)
                 elif self.MoonrakerServiceFileName is None:
                     self.MoonrakerServiceFileName = a
                     Logger.Debug("Moonraker service file name found as argument:"+self.MoonrakerServiceFileName)

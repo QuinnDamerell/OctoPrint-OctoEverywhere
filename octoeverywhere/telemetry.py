@@ -1,4 +1,6 @@
+import logging
 import threading
+
 import requests
 
 # A helper class for reporting telemetry.
@@ -7,7 +9,7 @@ class Telemetry:
     ServerProtocolAndDomain = "https://octoeverywhere.com"
 
     @staticmethod
-    def Init(logger):
+    def Init(logger:logging.Logger):
         Telemetry.Logger = logger
 
     # Sends a telemetry data point to the service. These data points are suggestions, they are filtered and limited
@@ -20,13 +22,13 @@ class Telemetry:
     #
     # Example: Telemetry.Write("Test", 1, { "FieldKey":"FieldValue", "FieldKey2":1.5 }, { "TagKey":"TagValue" })
     @staticmethod
-    def Write(measureStr, valueInt, fieldsOpt, tagsOpt):
-        thread = threading.Thread(target=Telemetry.WriteSync, args=(measureStr, valueInt, fieldsOpt, tagsOpt, ))
+    def Write(measureStr:str, valueInt:int, fieldsOpt:dict=None, tagsOpt:dict=None):
+        thread = threading.Thread(target=Telemetry._WriteSync, args=(measureStr, valueInt, fieldsOpt, tagsOpt, ))
         thread.start()
 
     # Same as Write(), but it blocks on the request. True is returned on success, otherwise False.
     @staticmethod
-    def WriteSync(measureStr, valueInt, fieldsOpt, tagsOpt):
+    def _WriteSync(measureStr:str, valueInt:int, fieldsOpt:dict=None, tagsOpt:dict=None):
         try:
             # Ensure a value is set and ensure it's an int.
             if valueInt is None :
@@ -61,5 +63,5 @@ class Telemetry:
 
 
     @staticmethod
-    def SetServerProtocolAndDomain(protocolAndDomain):
+    def SetServerProtocolAndDomain(protocolAndDomain:str):
         Telemetry.ServerProtocolAndDomain = protocolAndDomain

@@ -16,7 +16,7 @@ class Service:
 
         # We always re-write the service file, to make sure it's current.
         if os.path.exists(context.ServiceFilePath):
-            Logger.Info("Service file already exists, recreating.")
+            Logger.Debug("Service file already exists, recreating.")
 
         # Create the service file.
 
@@ -87,16 +87,16 @@ class Service:
             return
 
         Logger.Debug("Service config file contents to write: "+s)
-        Logger.Info("Creating service file "+context.ServiceFilePath+"...")
+        Logger.Debug("Creating service file "+context.ServiceFilePath+"...")
         with open(context.ServiceFilePath, "w", encoding="utf-8") as serviceFile:
             serviceFile.write(s)
 
-        Logger.Info("Registering service...")
+        Logger.Debug("Registering service...")
         Util.RunShellCommand("systemctl enable "+context.ServiceName)
         Util.RunShellCommand("systemctl daemon-reload")
 
         # Stop and start to restart any running services.
-        Logger.Info("Starting service...")
+        Logger.Debug("Starting service...")
         Service.RestartDebianService(context.ServiceName)
 
         Logger.Info("Service setup and start complete!")
@@ -133,15 +133,15 @@ start_service() {{
             return
 
         Logger.Debug("Service config file contents to write: "+s)
-        Logger.Info("Creating service file "+context.ServiceFilePath+"...")
+        Logger.Debug("Creating service file "+context.ServiceFilePath+"...")
         with open(context.ServiceFilePath, "w", encoding="utf-8") as serviceFile:
             serviceFile.write(s)
 
         # Make the script executable.
-        Logger.Info("Making the service executable...")
+        Logger.Debug("Making the service executable...")
         Util.RunShellCommand(f"chmod +x {context.ServiceFilePath}")
 
-        Logger.Info("Starting the service...")
+        Logger.Debug("Starting the service...")
         Service.RestartSonicPadService(context.ServiceFilePath)
 
         Logger.Info("Service setup and start complete!")
@@ -211,26 +211,26 @@ exit $?
 
         # Write the run script
         Logger.Debug("Run script file contents to write: "+runScriptContents)
-        Logger.Info("Creating service run script...")
+        Logger.Debug("Creating service run script...")
         with open(runScriptFilePath, "w", encoding="utf-8") as runScript:
             runScript.write(runScriptContents)
 
         # Make the script executable.
-        Logger.Info("Making the run script executable...")
+        Logger.Debug("Making the run script executable...")
         Util.RunShellCommand(f"chmod +x {runScriptFilePath}")
 
         # The file name is specific to the K1 and it's set in the Configure step.
         Logger.Debug("Service config file contents to write: "+serviceFileContents)
-        Logger.Info("Creating service file "+context.ServiceFilePath+"...")
+        Logger.Debug("Creating service file "+context.ServiceFilePath+"...")
         with open(context.ServiceFilePath, "w", encoding="utf-8") as serviceFile:
             serviceFile.write(serviceFileContents)
 
         # Make the script executable.
-        Logger.Info("Making the service executable...")
+        Logger.Debug("Making the service executable...")
         Util.RunShellCommand(f"chmod +x {context.ServiceFilePath}")
 
         # Use the common restart logic.
-        Logger.Info("Starting the service...")
+        Logger.Debug("Starting the service...")
         Service.RestartK1Service(context.ServiceFilePath)
 
         Logger.Info("Service setup and start complete!")

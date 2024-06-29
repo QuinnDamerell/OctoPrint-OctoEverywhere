@@ -32,7 +32,7 @@ class Discovery:
         if context.MoonrakerConfigFilePath is not None:
             if os.path.exists(context.MoonrakerConfigFilePath):
                 if context.MoonrakerServiceFileName is not None and len(context.MoonrakerServiceFileName) > 0:
-                    Logger.Info(f"Installer script was passed a valid Moonraker config and service name. [{context.MoonrakerServiceFileName}:{context.MoonrakerConfigFilePath}]")
+                    Logger.Debug(f"Installer script was passed a valid Moonraker config and service name. [{context.MoonrakerServiceFileName}:{context.MoonrakerConfigFilePath}]")
                     return
 
         # If we are here, we either have no service file name but a config path, or neither.
@@ -58,7 +58,7 @@ class Discovery:
                 if p.MoonrakerConfigFilePath == context.MoonrakerConfigFilePath:
                     # Update the context and return!
                     context.MoonrakerServiceFileName = p.ServiceFileName
-                    Logger.Info(f"The given moonraker config was found with a service file pair. [{context.MoonrakerServiceFileName}:{context.MoonrakerConfigFilePath}]")
+                    Logger.Debug(f"The given moonraker config was found with a service file pair. [{context.MoonrakerServiceFileName}:{context.MoonrakerConfigFilePath}]")
                     return
             Logger.Warn(f"Moonraker config path [{context.MoonrakerConfigFilePath}] was given, but no found pair matched it.")
 
@@ -67,7 +67,7 @@ class Discovery:
             # Update the context and return!
             context.MoonrakerConfigFilePath = pairList[0].MoonrakerConfigFilePath
             context.MoonrakerServiceFileName = pairList[0].ServiceFileName
-            Logger.Info(f"Only one moonraker instance was found, so we are using it! [{context.MoonrakerServiceFileName}:{context.MoonrakerConfigFilePath}]")
+            Logger.Debug(f"Only one moonraker instance was found, so we are using it! [{context.MoonrakerServiceFileName}:{context.MoonrakerConfigFilePath}]")
             return
 
         # If there are many found, as the user which they 0want to use.
