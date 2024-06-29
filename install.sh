@@ -266,7 +266,7 @@ install_or_update_system_dependencies()
         # The easiest way to do this was just to try to install them and ignore errors.
         # Most systems already have the packages installed, so this only fixes edge cases.
         # Notes on Pillow deps: https://pillow.readthedocs.io/en/latest/installation.html
-        #log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
+        log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
         sudo apt install --yes zlib1g-dev 2>/dev/null || true
         sudo apt install --yes zlib-devel 2>/dev/null || true
         sudo apt install --yes python-imaging 2>/dev/null || true
