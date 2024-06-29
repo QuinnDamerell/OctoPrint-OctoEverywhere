@@ -212,7 +212,7 @@ class Sentry:
         # Filter the exception
         if e is not RuntimeError or "can't start new thread" not in str(e):
             return False
-
+broken syncta
         # If we can't restart, return false, and the normal exception handling will occur.
         if Sentry.RestartProcessOnCantCreateThreadBug is False:
             return False
