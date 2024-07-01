@@ -137,8 +137,11 @@ class MoonrakerWebcamHelper():
                 needToFindAutoSettings = len(self.AutoSettingsResults) == 0
 
         if forceUpdate or needToFindAutoSettings or timeSinceLastWakeSec > MoonrakerWebcamHelper.c_MinTimeBetweenWebcamActivityInvokesSec:
+            self.Logger.info(f"Kicking the webcam setting read thread due to a request. Forced: {forceUpdate}, NeedAutoSettings: {needToFindAutoSettings}, TimeSinceLastWake: {timeSinceLastWakeSec} sec.")
             self.AutoSettingsLastWake = time.time()
             self.AutoSettingsWorkerEvent.set()
+        else:
+            self.Logger.debug(f"Ignoring the webcam setting read thread due to a request. Forced: {forceUpdate}, NeedAutoSettings: {needToFindAutoSettings}, TimeSinceLastWake: {timeSinceLastWakeSec} sec.")
 
 
     # This is the main worker thread that keeps track of webcam settings.
