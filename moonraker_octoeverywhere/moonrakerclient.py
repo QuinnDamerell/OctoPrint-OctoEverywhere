@@ -1058,7 +1058,9 @@ class MoonrakerCompat:
                     (objectHeight - firstLayerHeight) / layerHeight + 1)
                 )
             if totalLayers == 0:
-                self.Logger.error("GetCurrentLayerInfo failed to get a total layer count.")
+                if self.Logger.isEnabledFor(logging.DEBUG):
+                    self.Logger.debug("GetCurrentLayerInfo failed to get a total layer count. "+json.dumps(printStats))
+                self.Logger.warn("GetCurrentLayerInfo failed to get a total layer count.")
                 return (0,0)
 
             # Next, try to get the current layer.
