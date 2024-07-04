@@ -8,6 +8,7 @@ from .Logging import Logger
 from .Paths import Paths
 
 # Indicates the OS type this installer is running on.
+# These can't changed, only added to, since they are using to write on disk and such.
 class OsTypes(Enum):
     Debian = 1
     SonicPad = 2
@@ -285,6 +286,12 @@ class Context:
 
 
     def DetectOsType(self):
+        self._DetectOsType()
+        # TODO - Remove. Send telemetry about the OS type while we try to debug an issue on an unknown OS.
+        Telemetry.Write("Installer-OsType", 1, fieldsOpt={ "OsType": self.OsType })
+
+
+    def _DetectOsType(self):
         #
         # Note! This should closely resemble the ostype.py class in the plugin and the logic in the ./install.sh script!
         #
