@@ -1,6 +1,6 @@
 import os
 import json
-from enum import Enum
+from enum import IntEnum
 
 from octoeverywhere.telemetry import Telemetry
 
@@ -9,7 +9,7 @@ from .Paths import Paths
 
 # Indicates the OS type this installer is running on.
 # These can't changed, only added to, since they are using to write on disk and such.
-class OsTypes(Enum):
+class OsTypes(IntEnum):
     Debian = 1
     SonicPad = 2
     K1 = 3 # Both the K1 and K1 Max
