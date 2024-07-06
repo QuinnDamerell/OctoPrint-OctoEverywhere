@@ -288,7 +288,7 @@ class Context:
     def DetectOsType(self):
         self._DetectOsType()
         # TODO - Remove. Send telemetry about the OS type while we try to debug an issue on an unknown OS.
-        Telemetry.Write("Installer-OsType", 1, fieldsOpt={ "OsType": self.OsType })
+        Telemetry.Write("Installer-OsType", int(self.OsType))
 
 
     def _DetectOsType(self):
