@@ -1,6 +1,7 @@
 import os
 
 from linux_host.config import Config
+from bambu_octoeverywhere.bambucloud import BambuCloud
 
 from .Logging import Logger
 from .Context import Context
@@ -123,6 +124,23 @@ class ConfigHelper:
         except Exception as e:
             Logger.Error("Failed to write bambu details to config. "+str(e))
             raise Exception("Failed to write bambu details to config") from e
+
+
+    # Given a context, this will try to find the config file and see if the bambu data is in it.
+    # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
+    # Returns (email:str, password:str)
+    @staticmethod
+    def TryToGetBambuCloudData(context:Context = None, configFolderPath:str = None):
+        try:
+            # Load the config, if this returns None, there is no existing file.
+            c = ConfigHelper._GetConfig(context, configFolderPath)
+            if c is None:
+                return (None, None)
+            BambuCloud.Init(Logger.GetPyLogger(), c)
+            return BambuCloud.Get().GetContext()
+        except Exception as e:
+            Logger.Warn("Failed to parse bambu cloud details from existing config. "+str(e))
+        return (None, None)
 
 
     #
