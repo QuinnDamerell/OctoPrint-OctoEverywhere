@@ -226,6 +226,7 @@
         "uipopupinvoker",
         "unauth",
         "unauthed",
+        "Unobfuscate",
         "updatemanager",
         "urandom",
         "userdata",

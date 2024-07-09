@@ -20,7 +20,7 @@ Note if you put your printer in "LAN Only Mode" you **can** still use Bambu Stud
 
 For OctoEverywhere to connect to your 3D printer through Bambu Cloud, you just need to supply your Bambu Cloud account info to the local plugin.
 
-**Rest assured, your Bambu Cloud email address and password are stored locally, encrypted on disk, and are never sent to the OctoEverywhere service.**
+**Rest assured, your Bambu Cloud email address and password are stored locally, secured on disk, and are never sent to the OctoEverywhere service.**
 
 If you use Facebook, Google, or Apple to login to Bambu Cloud, [follow this guide to set a password on your account.](https://intercom.help/octoeverywhere/en/articles/9529936-bambu-cloud-with-bambu-connect)
 
@@ -40,7 +40,7 @@ To use the Bambu Connect plugin, you need to get the following information.
 - If you're connecting with Bambu Cloud...
     - Your Bambu Cloud account email address
     - Your Bambu Cloud account password
-    - **Note:** Your Bambu Cloud email address and password are stored locally, encrypted on disk, and never sent to the OctoEverywhere service.
+    - **Note:** Your Bambu Cloud email address and password are stored locally, secured on disk, and never sent to the OctoEverywhere service.
     - Learn more here: https://octoeverywhere.com/s/bambu-setup
 - Or if you're connecting in LAN Only Mode...
     - Your printer's Access Code - https://octoeverywhere.com/s/access-code
@@ -88,6 +88,7 @@ Pull the docker container locally:
 Run the docker container passing the required information:
 
 `docker run --name bambu-connect -e SERIAL_NUMBER=<serial number> -e PRINTER_IP=<ip address> -e BAMBU_CLOUD_ACCOUNT_EMAIL="<email>" -e BAMBU_CLOUD_ACCOUNT_PASSWORD="<password>" -v ./data:/data -d octoeverywhere/octoeverywhere`
+`docker run --name bambu-connect -e SERIAL_NUMBER=test -e PRINTER_IP=1.1.1.1 -e LAN_ONLY_MODE=1 -v /data:/data -d octoeverywhere-local`
 
 Follow the "Linking Your Bambu Connect Plugin" to link the plugin to your account.
 

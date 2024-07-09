@@ -16,8 +16,8 @@ ENV DATA_DIR=/data/
 
 # Install the required packages.
 # Any packages here should be mirrored in the install script - and any optaionl pillow packages done inline.
-# GCC, python3-dev, and musl-dev are required for pillow, and jpeg-dev and zlib-dev are required for jpeg support. libffi-dev, rust, cargo, pkgconfig libressl-dev are requried to build the PY cryptography lib.
-RUN apk add --no-cache curl ffmpeg jq python3 python3-dev gcc musl-dev py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow libffi-dev rust cargo pkgconfig libressl-dev
+# GCC, python3-dev, and musl-dev are required for pillow, and jpeg-dev and zlib-dev are required for jpeg support.
+RUN apk add --no-cache curl ffmpeg jq python3 python3-dev gcc musl-dev py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow
 
 #
 # We decided to not run the installer, since the point of the installer is to setup the env, build the launch args, and setup the serivce.
@@ -35,9 +35,6 @@ RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q -r ${REP
 # THIS VERSION STRING MUST STAY IN SYNC with Compression.ZStandardPipPackageString
 RUN apk add zstd
 RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q "zstandard>=0.21.0,<0.23.0"
-
-# Also install the crypto package used only for Bmabu Connect
-RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q "cryptography>=42.0.8"
 
 # For docker, we use our docker_octoeverywhere host to handle the runtime setup and launch of the serivce.
 WORKDIR ${REPO_DIR}

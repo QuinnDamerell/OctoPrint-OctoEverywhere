@@ -1,11 +1,11 @@
 import json
+import codecs
 import base64
 import logging
 import threading
 from enum import Enum
 
 import requests
-from cryptography.fernet import Fernet
 
 from linux_host.config import Config
 
@@ -248,9 +248,11 @@ class BambuCloud:
             # So at least it's not just plain text.
             data = {"email":email, "p":p}
             j = json.dumps(data)
-            f = Fernet(b"iyqYOs9QPwO5J6jW30uPJIxywhf7yLrvaRXLp5gi9OA=")
-            token = f.encrypt(j.encode())
-            self.Config.SetStr(Config.SectionBambu, Config.BambuCloudContext, token.decode())
+            # In the past we used the crypo lib to actually do crypto with a static key here in the code.
+            # But the crypo lib had a lot of native lib requirements and it caused install issues.
+            # Since we were using a static key anyways, we will just do this custom obfuscation function.
+            token = self._ObfuscateString(j)
+            self.Config.SetStr(Config.SectionBambu, Config.BambuCloudContext, token)
             return True
         except Exception as e:
             Sentry.Exception("Bambu Cloud set email exception", e)
@@ -272,8 +274,7 @@ class BambuCloud:
                 if expectContextToExist:
                     self.Logger.error("No Bambu Cloud context found in the config file.")
                 return (None, None)
-            f = Fernet(b"iyqYOs9QPwO5J6jW30uPJIxywhf7yLrvaRXLp5gi9OA=")
-            jsonStr = f.decrypt(token.encode())
+            jsonStr = self._UnobfuscateString(token)
             data = json.loads(jsonStr)
             e = data.get("email", None)
             p = data.get("p", None)
@@ -284,3 +285,18 @@ class BambuCloud:
         except Exception as e:
             Sentry.Exception("Bambu Cloud login exception", e)
         return (None, None)
+
+
+    # The goal here is just to obfuscate the string with a unique algo, so the email and password aren't just plain text in the config file.
+    def _ObfuscateString(self, s:str) -> str:
+        # First, base64 encode the string.
+        base64Str = base64.b64encode(s.encode(encoding="utf-8"))
+        # First, next, rotate it.
+        return codecs.encode(base64Str.decode(encoding="utf-8"), 'rot13')
+
+
+    def _UnobfuscateString(self, s:str) -> str:
+        # Un-rotate
+        base64String = codecs.decode(s, 'rot13')
+        # Un-base64 encode
+        return base64.b64decode(base64String).decode(encoding="utf-8")

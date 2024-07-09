@@ -72,27 +72,6 @@ class OptionalDepsInstaller:
         # Try to install ffmpeg, this is required for RTSP streaming.
         OptionalDepsInstaller._DoFfmpegInstall(context)
 
-        # This is only required for Bambu Connect. We can't put it in the requirements file because it doesn't work on the k1.
-        OptionalDepsInstaller._InstallCrypto(context)
-
-
-    @staticmethod
-    def _InstallCrypto(context:Context) -> None:
-        try:
-            # This is only required for Bambu Connect and will not install on the Creality OSes.
-            if context.OsType == OsTypes.K1 or context.OsType == OsTypes.SonicPad:
-                return
-
-            # Now try to install the PY package.
-            # Only allow blocking up to 20 seconds, so we don't hang the installer too long.
-            startSec = time.time()
-            OptionalDepsInstaller._ThreadStatus = "Installing python crypto libs..."
-            result = subprocess.run([sys.executable, '-m', 'pip', 'install', "cryptography>=42.0.8"], timeout=60.0, check=False, capture_output=True)
-            Logger.Debug(f"Cryptography PIP install result. Code: {result.returncode}, StdOut: {result.stdout}, StdErr: {result.stderr}, Time: {time.time()-startSec}")
-            OptionalDepsInstaller._ThreadStatus = "Python crypto libs install complete"
-        except Exception as e:
-            Logger.Debug(f"Error installing cryptography. {str(e)}")
-
 
     @staticmethod
     def _InstallZStandard(context:Context) -> None:
