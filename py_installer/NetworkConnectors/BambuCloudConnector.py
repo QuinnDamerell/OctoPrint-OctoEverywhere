@@ -5,86 +5,17 @@ from py_installer.Logging import Logger
 from py_installer.Context import Context
 from py_installer.ConfigHelper import ConfigHelper
 
-from .BambuCloudConnector import BambuCloudConnector
-
 # A class that helps the user discover, connect, and setup the details required to connect to a remote Bambu Lab printer.
-class BambuConnector:
+class BambuCloudConnector:
 
 
     def EnsureBambuConnection(self, context:Context):
         Logger.Debug("Running bambu connect ensure config logic.")
 
-        # As of June of 2024, Bambu updated the firmware of the printers to only support direct connections while in LAN only mode.
-        # So now, we must give the user a choice, about how they want to setup Bambu Connect.
-        # Gather any data we have currently.
-        email, password = ConfigHelper.TryToGetBambuCloudData(context)
-        #accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
-
-        # If either of these are set, this setup is using the cloud, so use it to ensure the connection.
-        if email is not None or password is not None:
-            bcc = BambuCloudConnector()
-            bcc.EnsureBambuConnection(context)
-        # We only get the access code for the lan only setup, so for now, we use it to determine which type this install is.
-        # TODO - As a temp measure to help users from old setups go to the new one, we always ask if there's an access code.
-        # if accessCode is not None:
-        #     self._EnsureBambuConnection_Internal(self, context)
-
-        # If neither are set, this is a first time install, so we need to ask the user how they want to setup Bambu Connect.
-        Logger.Blank()
-        Logger.Blank()
-        Logger.Blank()
-        Logger.Header("##################################")
-        Logger.Header("     Bambu Lab Printer Setup")
-        Logger.Header("##################################")
-        Logger.Blank()
-        Logger.Warn("As of June of 2024, Bambu updated the printer firmware to only allow local network access for")
-        Logger.Warn("3rd party services when the printer is in LAN only mode. We support two connection methods.")
-        Logger.Info("  1) Allow access via the Bambu Cloud.")
-        Logger.Info("  2) Allow local access by enabling LAN only mode on your printer.")
-        Logger.Blank()
-        Logger.Header("Access Via Bambu Cloud")
-        Logger.Info("Requires you to provide your Bambu Cloud email address and password.")
-        Logger.Info("Rest assured, your Bambu Cloud email address and password are stored locally, secured on disk, and are never sent to the OctoEverywhere service.")
-        Logger.Blank()
-        Logger.Info(" - OR -")
-        Logger.Blank()
-        Logger.Header("Access Locally via LAN Only Mode")
-        Logger.Info("You must have LAN only mode enabled on your printer, which will disconnect the Bambu Cloud.")
-        Logger.Info("However, you CAN still use Bambu Studio and Bambu Handy when your on the same network.")
-
-        useBambuCloud = None
-        while useBambuCloud is None:
-            Logger.Blank()
-            Logger.Header("Which would you like to use?")
-            Logger.Info("  1) Access via Bambu Cloud")
-            Logger.Info("  2) Local access with LAN Only Mode")
-            Logger.Blank()
-            decision:str = input("Enter the option number: ")
-            try:
-                i = int(decision.strip())
-                if i == 1:
-                    useBambuCloud = True
-                    break
-                elif i == 2:
-                    useBambuCloud = False
-                    break
-            except Exception:
-                continue
-            Logger.Error("Invalid input, try again.")
-
-        if useBambuCloud:
-            bcc = BambuCloudConnector()
-            bcc.EnsureBambuConnection(context)
-        else:
-            self._EnsureBambuConnection_Internal(context)
-
-
-    def _EnsureBambuConnection_Internal(self, context:Context):
-        ip, port = ConfigHelper.TryToGetCompanionDetails(context)
-        accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
-
         # For Bambu printers, we need the IP or Hostname, the port is static,
         # and we also need the printer SN and access token.
+        ip, port = ConfigHelper.TryToGetCompanionDetails(context)
+        accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
         if ip is not None and port is not None and accessCode is not None and printerSn is not None:
             # Check if we can still connect. This can happen if the IP address changes, the user might need to setup the printer again.
             Logger.Info(f"Existing bambu config found. IP: {ip} - {printerSn}")
@@ -122,6 +53,11 @@ class BambuConnector:
         while True:
             Logger.Blank()
             Logger.Blank()
+            Logger.Blank()
+            Logger.Header("##################################")
+            Logger.Header("     Bambu Lab Printer Setup")
+            Logger.Header("##################################")
+            Logger.Blank()
             Logger.Info("OctoEverywhere Bambu Connect needs to connect to your Bambu Lab printer to provide remote access.")
             Logger.Info("Bambu Connect needs your printer's Access Code and Serial Number to connect to your printer.")
             Logger.Info("If you have any trouble, we are happy to help! Contact us at support@octoeverywhere.com")
@@ -132,6 +68,7 @@ class BambuConnector:
             # Get the access code.
             accessCode = None
             while True:
+                Logger.Blank()
                 Logger.Blank()
                 Logger.Header("We need your Bambu Lab printer's Access Code to connect.")
                 Logger.Info("The Access Code can be found using the screen on your printer, in the Network settings.")
@@ -248,7 +185,6 @@ class BambuConnector:
             Logger.Info(f"   Access Code:   {accessCode}")
             Logger.Info(f"   Serial Number: {printerSn}")
             Logger.Blank()
-            Logger.Warn("Remember that your Bambu Lab 3D printer must be in LAN Only Mode and restarted after the change.")
             Logger.Header("Make sure your printer is on a full booted and verify the values above are correct.")
             Logger.Blank()
             if not Util.AskYesOrNoQuestion("Are the Access Code and Serial Number correct?"):
