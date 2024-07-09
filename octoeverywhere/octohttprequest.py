@@ -449,7 +449,7 @@ class OctoHttpRequest:
             # use capture the main result object, so we can use it eventually if all fallbacks fail.
             result = None
             if response is not None:
-                OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)
+                result = OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)
             return OctoHttpRequest.AttemptResult(False, result)
 
         # We don't have another fallback, so we need to end this.
