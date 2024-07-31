@@ -16,6 +16,7 @@ from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
@@ -185,6 +186,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Init the mdns helper
         MDns.Init(self._logger, self.get_plugin_data_folder())
+
+        # Init device id
+        DeviceId.Init(self._logger)
 
         # Init the print info manager.
         PrintInfoManager.Init(self._logger, self.get_plugin_data_folder())

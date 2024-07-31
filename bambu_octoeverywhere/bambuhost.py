@@ -3,6 +3,7 @@ import traceback
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.compression import Compression
@@ -102,6 +103,9 @@ class BambuHost:
 
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
+
+            # Init device id
+            DeviceId.Init(self.Logger)
 
             # Setup the print info manager.
             PrintInfoManager.Init(self.Logger, localStorageDir)

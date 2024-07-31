@@ -10,7 +10,7 @@ from .Proto.DataCompression import DataCompression
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion, osType:OsType.OsType, receiveCompressionType:DataCompression):
+    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion, osType:OsType.OsType, receiveCompressionType:DataCompression, deviceId:str):
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -19,8 +19,11 @@ class OctoStreamMsgBuilder:
         privateKeyOffset = builder.CreateString(privateKey)
         pluginVersionOffset = builder.CreateString(pluginVersion)
         localIpOffset = None
+        deviceIdOffset = None
         if localIp is not None:
             localIpOffset = builder.CreateString(localIp)
+        if deviceId is not None:
+            deviceIdOffset = builder.CreateString(deviceId)
 
         # Setup the data vectors
         rasChallengeOffset = builder.CreateByteVector(rsaChallenge)
@@ -41,6 +44,8 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddRasChallengeVersion(builder, rasKeyVersionInt)
         HandshakeSyn.AddOsType(builder, osType)
         HandshakeSyn.AddReceiveCompressionType(builder, receiveCompressionType)
+        if deviceIdOffset is not None:
+            HandshakeSyn.AddDeviceId(builder, deviceIdOffset)
         synOffset = HandshakeSyn.End(builder)
 
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)

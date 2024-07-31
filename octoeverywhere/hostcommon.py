@@ -1,5 +1,5 @@
-import random
 import string
+import secrets
 
 # Common functions that the hosts might need to use.
 class HostCommon:
@@ -25,12 +25,12 @@ class HostCommon:
     # Returns a new printer Id. This needs to be crypo-random to make sure it's not predictable.
     @staticmethod
     def GeneratePrinterId():
-        return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(HostCommon.c_OctoEverywherePrinterIdMaxLength))
+        return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(HostCommon.c_OctoEverywherePrinterIdMaxLength))
 
     # Returns a new private key. This needs to be crypo-random to make sure it's not predictable.
     @staticmethod
     def GeneratePrivateKey():
-        return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(HostCommon.c_OctoEverywherePrivateKeyMinLength))
+        return ''.join(secrets.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(HostCommon.c_OctoEverywherePrivateKeyMinLength))
 
     @staticmethod
     def IsPrinterIdValid(printerId):

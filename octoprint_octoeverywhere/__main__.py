@@ -1,7 +1,7 @@
 import logging
 import signal
 import sys
-import random
+import secrets
 import string
 
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
@@ -11,6 +11,7 @@ from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.notificationshandler import NotificationsHandler
@@ -146,7 +147,7 @@ def SignalHandler(sig, frame):
     sys.exit(0)
 
 def GeneratePrinterId():
-    return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(40))
+    return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(40))
 
 
 if __name__ == '__main__':
@@ -176,6 +177,9 @@ if __name__ == '__main__':
     # Init the mdns client
     MDns.Init(logger, PluginFilePathRoot)
     #MDns.Get().Test()
+
+    # Init device id
+    DeviceId.Init(logger)
 
     # This is a tool to help track stuck or leaked threads.
     #threadDebugger = ThreadDebug()

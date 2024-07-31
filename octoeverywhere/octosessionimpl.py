@@ -18,6 +18,7 @@ from .sentry import Sentry
 from .ostypeidentifier import OsTypeIdentifier
 from .threaddebug import ThreadDebug
 from .compression import Compression
+from .deviceid import DeviceId
 
 from .Proto import OctoStreamMessage
 from .Proto import HandshakeAck
@@ -251,10 +252,14 @@ class OctoSession:
             if Compression.Get().CanUseZStandardLib:
                 receiveCompressionType = DataCompression.ZStandard
 
+            # If possible, get a device ID for this plugin.
+            # This will return None if no device id can be found.
+            deviceId = DeviceId.Get().GetId()
+
             # Build the message
             buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId)
 
             # Send!
             self.OctoStream.SendMsg(buf)

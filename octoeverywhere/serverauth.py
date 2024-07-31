@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 import rsa
 
@@ -30,7 +30,7 @@ class ServerAuthHelper:
         self.Logger = logger
 
         # Generate our random challenge string.
-        self.Challenge =  ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(ServerAuthHelper.c_ServerAuthChallengeLength))
+        self.Challenge =  ''.join(secrets.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(ServerAuthHelper.c_ServerAuthChallengeLength))
 
     # Returns a string that is our challenge encrypted with the public RSA key.
     def GetEncryptedChallenge(self):

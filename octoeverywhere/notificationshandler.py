@@ -2,7 +2,7 @@ import math
 import time
 import io
 import threading
-import random
+import secrets
 import string
 import logging
 
@@ -142,7 +142,7 @@ class NotificationsHandler:
 
         # Each time a print starts, we generate a fixed length random id to identify it.
         # This id is used to globally identify the print for the user, so it needs to have high entropy.
-        printId = ''.join(random.choices(string.ascii_uppercase + string.ascii_lowercase + string.digits, k=NotificationsHandler.PrintIdLength))
+        printId = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(NotificationsHandler.PrintIdLength))
 
         # Always make a new print info for this new print.
         # This is where we will store all of the vars for this print, and it's also written to disk if we need to recover the info.

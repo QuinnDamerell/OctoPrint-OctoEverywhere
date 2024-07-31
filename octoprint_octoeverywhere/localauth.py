@@ -1,4 +1,4 @@
-import random
+import secrets
 import string
 
 from octoprint.access.permissions import Permissions
@@ -42,7 +42,7 @@ class LocalAuth:
         # But it will never call ValidateApiKey anyways.
         self.OctoPrintUserManager = userManager
         # Create a new random API key each time OctoPrint is started so we don't have to write it to disk and it changes over time.
-        self.ApiKey = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(LocalAuth._ApiGeneratedKeyLength))
+        self.ApiKey = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(LocalAuth._ApiGeneratedKeyLength))
 
 
     # Used only for testing without actual OctoPrint, this can set the API key
