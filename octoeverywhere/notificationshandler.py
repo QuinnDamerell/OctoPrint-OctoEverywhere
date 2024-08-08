@@ -6,16 +6,16 @@ import secrets
 import string
 import logging
 
-import requests
-
 from .gadget import Gadget
 from .sentry import Sentry
 from .compat import Compat
 from .finalsnap import FinalSnap
 from .repeattimer import RepeatTimer
+from .httpsessions import HttpSessions
 from .Webcam.webcamhelper import WebcamHelper
 from .printinfo import PrintInfoManager, PrintInfo
 from .snapshotresizeparams import SnapshotResizeParams
+from .debugprofiler import DebugProfiler, DebugProfilerFeatures
 
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -1037,67 +1037,69 @@ class NotificationsHandler:
     # Sends the event
     # Returns True on success, otherwise False
     def _sendEventThreadWorker(self, event:str, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
-        try:
-            # Build the common even args.
-            requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat=progressOverwriteFloat, useFinalSnapSnapshot=useFinalSnapSnapshot)
+        # The profiler will do nothing if it's not enabled.
+        with DebugProfiler(self.Logger, DebugProfilerFeatures.NotificationHandlerEvent):
+            try:
+                # Build the common even args.
+                requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat=progressOverwriteFloat, useFinalSnapSnapshot=useFinalSnapSnapshot)
 
-            # Handle the result indicating we don't have the proper var to send yet.
-            if requestArgs is None:
-                self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
-                return False
-
-            # Break out the response
-            args = requestArgs[0]
-            files = requestArgs[1]
-
-            # Setup the url
-            eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
-
-            # Use fairly aggressive retry logic on notifications if they fail to send.
-            # This is important because they power some of the other features of OctoEverywhere now, so having them as accurate as possible is ideal.
-            attempts = 0
-            while attempts < 6:
-                attempts += 1
-                statusCode = 0
-                try:
-                    # Since we are sending the snapshot, we must send a multipart form.
-                    # Thus we must use the data and files fields, the json field will not work.
-                    r = requests.post(eventApiUrl, data=args, files=files, timeout=5*60)
-
-                    # Capture the status code.
-                    statusCode = r.status_code
-
-                    # Check for success.
-                    if statusCode == 200:
-                        self.Logger.info("NotificationsHandler successfully sent '"+event+"'")
-                        return True
-
-                except Exception as e:
-                    # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors, server not connectable, etc.
-                    self.Logger.warn("Failed to send notification due to a connection error. "+str(e))
-
-                # On failure, log the issue.
-                self.Logger.warn(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
-
-                # If the error is in the 400 class, don't retry since these are all indications there's something
-                # wrong with the request, which won't change. But we don't want to include anything above or below that.
-                if statusCode > 399 and statusCode < 500:
+                # Handle the result indicating we don't have the proper var to send yet.
+                if requestArgs is None:
+                    self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
                     return False
 
-                # We have quite a few reties and back off a decent amount. As said above, we want these to be reliable as possible, even if they are late.
-                # We want the first few retires to be quick, so the notifications happens ASAP. This will help in teh case where the server is updating, it should be
-                # back withing 2-4 seconds, but 20 is a good time to wait.
-                # If it's still failing, we want to allow the system some time to do a do a fail over or something, thus we give the retry timer more time.
-                if attempts < 3: # Attempt 1 and 2 will wait 20 seconds.
-                    time.sleep(20)
-                else: # Attempt 3, 4, 5 will wait longer.
-                    time.sleep(60 * attempts)
+                # Break out the response
+                args = requestArgs[0]
+                files = requestArgs[1]
 
-            # We never sent it successfully.
-            self.Logger.error("NotificationsHandler failed to send event "+str(event)+" due to a network issues after many retries.")
+                # Setup the url
+                eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
 
-        except Exception as e:
-            Sentry.Exception("NotificationsHandler failed to send event code "+str(event), e)
+                # Use fairly aggressive retry logic on notifications if they fail to send.
+                # This is important because they power some of the other features of OctoEverywhere now, so having them as accurate as possible is ideal.
+                attempts = 0
+                while attempts < 6:
+                    attempts += 1
+                    statusCode = 0
+                    try:
+                        # Since we are sending the snapshot, we must send a multipart form.
+                        # Thus we must use the data and files fields, the json field will not work.
+                        r = HttpSessions.GetSession(eventApiUrl).post(eventApiUrl, data=args, files=files, timeout=5*60)
+
+                        # Capture the status code.
+                        statusCode = r.status_code
+
+                        # Check for success.
+                        if statusCode == 200:
+                            self.Logger.info("NotificationsHandler successfully sent '"+event+"'")
+                            return True
+
+                    except Exception as e:
+                        # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors, server not connectable, etc.
+                        self.Logger.warn("Failed to send notification due to a connection error. "+str(e))
+
+                    # On failure, log the issue.
+                    self.Logger.warn(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
+
+                    # If the error is in the 400 class, don't retry since these are all indications there's something
+                    # wrong with the request, which won't change. But we don't want to include anything above or below that.
+                    if statusCode > 399 and statusCode < 500:
+                        return False
+
+                    # We have quite a few reties and back off a decent amount. As said above, we want these to be reliable as possible, even if they are late.
+                    # We want the first few retires to be quick, so the notifications happens ASAP. This will help in teh case where the server is updating, it should be
+                    # back withing 2-4 seconds, but 20 is a good time to wait.
+                    # If it's still failing, we want to allow the system some time to do a do a fail over or something, thus we give the retry timer more time.
+                    if attempts < 3: # Attempt 1 and 2 will wait 20 seconds.
+                        time.sleep(20)
+                    else: # Attempt 3, 4, 5 will wait longer.
+                        time.sleep(60 * attempts)
+
+                # We never sent it successfully.
+                self.Logger.error("NotificationsHandler failed to send event "+str(event)+" due to a network issues after many retries.")
+
+            except Exception as e:
+                Sentry.Exception("NotificationsHandler failed to send event code "+str(event), e)
 
         return False
 

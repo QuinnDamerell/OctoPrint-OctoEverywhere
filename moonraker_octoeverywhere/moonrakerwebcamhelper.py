@@ -6,6 +6,7 @@ import json
 import requests
 
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.debugprofiler import DebugProfiler, DebugProfilerFeatures
 from octoeverywhere.Webcam.webcamhelper import WebcamSettingItem, WebcamHelper
 
 from linux_host.config import Config
@@ -148,39 +149,43 @@ class MoonrakerWebcamHelper():
     # This also keeps checking the auto settings option in the config, so we know if the user changes it.
     # Note that there's a moonraker command `notify_webcams_changed` we listen for. When it first we will force this update loop to run.
     def _WebcamSettingsUpdateWorker(self):
-        isFirstRun = True
-        while True:
-            try:
-                # Adjust the delay of our first run on plugin start.
-                delayTimeSec = MoonrakerWebcamHelper.c_DelayBetweenAutoSettingsCheckSec
-                if isFirstRun:
-                    delayTimeSec = MoonrakerWebcamHelper.c_DelayForFirstRunAutoSettingsCheckSec
-                    isFirstRun = False
+        with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWebcamHelper) as profiler:
+            isFirstRun = True
+            while True:
+                try:
+                    # Adjust the delay of our first run on plugin start.
+                    delayTimeSec = MoonrakerWebcamHelper.c_DelayBetweenAutoSettingsCheckSec
+                    if isFirstRun:
+                        delayTimeSec = MoonrakerWebcamHelper.c_DelayForFirstRunAutoSettingsCheckSec
+                        isFirstRun = False
 
-                # Start the loop by clearing and waiting on the value. This means our first wake up will usually be either webcam activity
-                # or the moonraker client telling us the websocket is connected. Note we also do a shorter time on first run, so if klippy isn't
-                # in a ready state, we still try to check.
-                self.AutoSettingsWorkerEvent.clear()
-                self.AutoSettingsWorkerEvent.wait(delayTimeSec)
+                    # Start the loop by clearing and waiting on the value. This means our first wake up will usually be either webcam activity
+                    # or the moonraker client telling us the websocket is connected. Note we also do a shorter time on first run, so if klippy isn't
+                    # in a ready state, we still try to check.
+                    self.AutoSettingsWorkerEvent.clear()
+                    self.AutoSettingsWorkerEvent.wait(delayTimeSec)
 
-                # Force a config reload, so if the user changed this setting, we respect it.
-                self.Config.ReloadFromFile()
-                newAutoSettings = self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings)
+                    # Force a config reload, so if the user changed this setting, we respect it.
+                    self.Config.ReloadFromFile()
+                    newAutoSettings = self.Config.GetBool(Config.WebcamSection, Config.WebcamAutoSettings, MoonrakerWebcamHelper.c_DefaultAutoSettings)
 
-                # Log if the value changed.
-                if self.EnableAutoSettings != newAutoSettings:
-                    self.Logger.info("Webcam auto settings detection value updated: "+str(newAutoSettings))
-                    self.EnableAutoSettings = newAutoSettings
+                    # Log if the value changed.
+                    if self.EnableAutoSettings != newAutoSettings:
+                        self.Logger.info("Webcam auto settings detection value updated: "+str(newAutoSettings))
+                        self.EnableAutoSettings = newAutoSettings
 
-                # Do an update if we should.
-                if self.EnableAutoSettings:
-                    self._DoAutoSettingsUpdate()
-                else:
-                    # Otherwise, update our in memory values with what's in the config.
-                    self._ReadManuallySetValues()
+                    # Do an update if we should.
+                    if self.EnableAutoSettings:
+                        self._DoAutoSettingsUpdate()
+                    else:
+                        # Otherwise, update our in memory values with what's in the config.
+                        self._ReadManuallySetValues()
 
-            except Exception as e:
-                Sentry.Exception("Webcam helper - _WebcamSettingsUpdateWorker exception. ", e)
+                    # Report the profile time if needed.
+                    profiler.ReportIfNeeded()
+
+                except Exception as e:
+                    Sentry.Exception("Webcam helper - _WebcamSettingsUpdateWorker exception. ", e)
 
 
     # Reads the values currently set in the config and sets them into our local settings.

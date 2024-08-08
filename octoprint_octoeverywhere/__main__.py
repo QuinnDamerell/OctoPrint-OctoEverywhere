@@ -9,6 +9,7 @@ from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.deviceid import DeviceId
@@ -163,6 +164,9 @@ if __name__ == '__main__':
 
     # Set our compat mode
     Compat.SetIsOctoPrint(True)
+
+    # Setup the HttpSession cache early, so it can be used whenever
+    HttpSessions.Init(logger)
 
     # Init Sentry, but it won't report since we are in dev mode.
     Sentry.SetLogger(logger)

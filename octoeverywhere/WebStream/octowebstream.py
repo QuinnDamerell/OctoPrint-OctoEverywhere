@@ -12,6 +12,7 @@ from .octowebstreamwshelper import OctoWebStreamWsHelper
 from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
 from ..Proto import MessagePriority
+from ..debugprofiler import DebugProfiler, DebugProfilerFeatures
 
 #
 # Represents a web stream, which is how we send http request and web socket messages.
@@ -123,12 +124,14 @@ class OctoWebStream(threading.Thread):
 
     # This is our main thread, where we will process all incoming messages.
     def run(self):
-        try:
-            self.mainThread()
-        except Exception as e:
-            Sentry.Exception("Exception in web stream ["+str(self.Id)+"] connect loop.", e)
-            traceback.print_exc()
-            self.OctoSession.OnSessionError(0)
+        # Enable the profiler if needed- it will do nothing if not enabled.
+        with DebugProfiler(self.Logger, DebugProfilerFeatures.WebStream):
+            try:
+                self.mainThread()
+            except Exception as e:
+                Sentry.Exception("Exception in web stream ["+str(self.Id)+"] connect loop.", e)
+                traceback.print_exc()
+                self.OctoSession.OnSessionError(0)
 
 
     def mainThread(self):

@@ -298,73 +298,68 @@ class OctoPingPong:
             # We have to make two calls, because the first call will query DNS, open the TCP connection, start SSL, and get a connection in the pool.
             # The extra stuff above will add an extra 100-150 more MS to the call.
             # For the first call we hit the actual API to get data back.
-            s = requests.Session()
-            response = s.get(pingInfoApiUrl, timeout=10)
+            with requests.Session() as s:
+                with s.get(pingInfoApiUrl, timeout=10) as response:
+                    # Check for failure
+                    if response.status_code != 200:
+                        return None
 
-            # Check for failure
-            if response.status_code != 200:
-                return None
+                    # Parse and check.
+                    obj = response.json()
+                    if "Result" not in obj:
+                        self.Logger.warn("OctoPingPong server response had no result obj.")
+                        return None
+                    if "Servers" not in obj["Result"]:
+                        self.Logger.warn("OctoPingPong server response had no servers obj.")
+                        return None
+                    servers = obj["Result"]["Servers"]
+                    if "ThisServer" not in obj["Result"]:
+                        self.Logger.warn("OctoPingPong server response had no ThisServer obj.")
+                        return None
+                    thisServer = obj["Result"]["ThisServer"]
+                    if "EnablePluginAutoLowestLatency" not in obj["Result"]:
+                        self.Logger.warn("OctoPingPong server response had no EnablePluginAutoLowestLatency obj.")
+                        return None
+                    enablePluginAutoLowestLatency = obj["Result"]["EnablePluginAutoLowestLatency"]
+                    if servers is None or len(servers) == 0:
+                        return None
+                    if thisServer is None:
+                        return None
 
-            # Parse and check.
-            obj = response.json()
-            if "Result" not in obj:
-                self.Logger.warn("OctoPingPong server response had no result obj.")
-                return None
-            if "Servers" not in obj["Result"]:
-                self.Logger.warn("OctoPingPong server response had no servers obj.")
-                return None
-            servers = obj["Result"]["Servers"]
-            if "ThisServer" not in obj["Result"]:
-                self.Logger.warn("OctoPingPong server response had no ThisServer obj.")
-                return None
-            thisServer = obj["Result"]["ThisServer"]
-            if "EnablePluginAutoLowestLatency" not in obj["Result"]:
-                self.Logger.warn("OctoPingPong server response had no EnablePluginAutoLowestLatency obj.")
-                return None
-            enablePluginAutoLowestLatency = obj["Result"]["EnablePluginAutoLowestLatency"]
-            if servers is None or len(servers) == 0:
-                return None
-            if thisServer is None:
-                return None
+                    # Close this response so the connection gets put back into the pool
+                    response.close()
 
-            # Close this response so the connection gets put back into the pool
-            response.close()
+                    # Now using the same session, use the direct ping call.
+                    # The session will prevent all of the overhead and should have a pooled open connection
+                    # So this is as close to an actual realtime ping as we can get.
+                    #
+                    results = []
+                    for _ in range(0, 3):
+                        # Do the test.
+                        start = time.time()
+                        response = s.get(pingDirectApiUrl, timeout=10)
+                        end = time.time()
+                        # Close the response so it's back in the pool.
+                        response.close()
+                        # Only consider 200s valid, otherwise the request might have never made it to the server.
+                        if response.status_code == 200:
+                            elapsedTimeMs = (end - start) * 1000.0
+                            results.append(elapsedTimeMs)
+                        # Give the new test a few ms before starting again.
+                        time.sleep(0.05)
 
-            # Now using the same session, use the direct ping call.
-            # The session will prevent all of the overhead and should have a pooled open connection
-            # So this is as close to an actual realtime ping as we can get.
-            #
-            results = []
-            for _ in range(0, 3):
-                # Do the test.
-                start = time.time()
-                response = s.get(pingDirectApiUrl, timeout=10)
-                end = time.time()
-                # Close the response so it's back in the pool.
-                response.close()
-                # Only consider 200s valid, otherwise the request might have never made it to the server.
-                if response.status_code == 200:
-                    elapsedTimeMs = (end - start) * 1000.0
-                    results.append(elapsedTimeMs)
-                # Give the new test a few ms before starting again.
-                time.sleep(0.05)
+                    # Ensure we got at least one result
+                    if len(results) == 0:
+                        return None
 
-            # Close the session to clean up all connections
-            # (not required, this will be auto closed, but we do it anyways)
-            s.close()
+                    # Since the lowest time is the fastest the server responded, that's all we care about.
+                    minElapsedTimeMs = None
+                    for result in results:
+                        if minElapsedTimeMs is None or result < minElapsedTimeMs:
+                            minElapsedTimeMs = result
 
-            # Ensure we got at least one result
-            if len(results) == 0:
-                return None
-
-            # Since the lowest time is the fastest the server responded, that's all we care about.
-            minElapsedTimeMs = None
-            for result in results:
-                if minElapsedTimeMs is None or result < minElapsedTimeMs:
-                    minElapsedTimeMs = result
-
-            # Success.
-            return [minElapsedTimeMs, servers, thisServer, enablePluginAutoLowestLatency]
+                    # Success.
+                    return [minElapsedTimeMs, servers, thisServer, enablePluginAutoLowestLatency]
 
         except Exception as e:
             self.Logger.info("Failed to call _DoPing "+str(e))

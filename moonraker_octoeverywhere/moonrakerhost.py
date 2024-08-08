@@ -8,6 +8,7 @@ from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.compression import Compression
 from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
@@ -86,6 +87,9 @@ class MoonrakerHost:
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
             self.Logger.info("Plugin Version: %s", pluginVersionStr)
+
+            # Setup the HttpSession cache early, so it can be used whenever
+            HttpSessions.Init(self.Logger)
 
             # As soon as we have the plugin version, setup Sentry
             # Enabling profiling and no filtering, since we are the only PY in this process.

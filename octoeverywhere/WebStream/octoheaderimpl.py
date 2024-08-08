@@ -3,6 +3,7 @@ import logging
 from ..sentry import Sentry
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..octohttprequest import OctoHttpRequest
+from ..Proto.HttpInitialContext import HttpInitialContext
 
 # Indicates the base protocol, not if it's secure or not.
 class BaseProtocol:
@@ -17,7 +18,7 @@ class HeaderHelper:
 
     # Called by slipstream and the main http class to gather and add required headers.
     @staticmethod
-    def GatherRequestHeaders(logger, httpInitialContextOptional, protocol) :
+    def GatherRequestHeaders(logger, httpInitialContextOptional:HttpInitialContext, protocol) :
 
         hostAddress = OctoHttpRequest.GetLocalhostAddress()
 
@@ -33,6 +34,7 @@ class HeaderHelper:
                 i += 1
 
                 # Get the values & validate
+                # These Key() and Value() calls are relatively what expensive, so we only call them once.
                 name = OctoStreamMsgBuilder.BytesToString(header.Key())
                 value = OctoStreamMsgBuilder.BytesToString(header.Value())
                 if name is None or value is None:
@@ -77,7 +79,7 @@ class HeaderHelper:
                     value = "http://" + hostAddress
 
                 # Add the header. (use the original case)
-                sendHeaders[OctoStreamMsgBuilder.BytesToString(header.Key())] = value
+                sendHeaders[name] = value
 
         # The `X-Forwarded-Host` tells the OctoPrint web server we are talking to what it's actual
         # hostname and port are. This allows it to set outbound urls and references to be correct to the right host.

@@ -20,7 +20,6 @@ from ..Proto import WebStreamMsg
 from ..Proto import MessageContext
 from ..Proto import HttpInitialContext
 from ..Proto import DataCompression
-from ..Proto import MessagePriority
 from ..Proto import OeAuthAllowed
 from ..Proto.PathTypes import PathTypes
 
@@ -1008,6 +1007,7 @@ class OctoWebStreamHttpHelper:
             # Note, whatever size we pass in will be allocated as a buffer, filled, and then sliced.
             # So if we pass in a huge value, we will get a big buffer allocated.
             # So if we know the size, we should use it, so that the buffer allocated it the same amount that's returned.
+            # Also note, any improvements made here should be updated in ReadAllContentFromStreamResponse as well!
             data = response.raw.read(readSize)
 
             # If we got a data buffer return it.
@@ -1143,11 +1143,13 @@ class OctoWebStreamHttpHelper:
     # To speed up page load, we will defer lower pri requests while higher priority requests
     # are executing.
     def checkForDelayIfNotHighPri(self):
+        # This isn't used at all right now.
+        pass
         # Allow anything above Normal priority to always execute
-        if self.WebStreamOpenMsg.MsgPriority() < MessagePriority.MessagePriority.Normal:
-            return
-        # Otherwise, we want to block for a bit if there's a high pri stream processing.
-        self.WebStream.BlockIfHighPriStreamActive()
+        # if self.WebStreamOpenMsg.MsgPriority() < MessagePriority.MessagePriority.Normal:
+        #     return
+        # # Otherwise, we want to block for a bit if there's a high pri stream processing.
+        # self.WebStream.BlockIfHighPriStreamActive()
 
     # Formatting helper.
     def _FormatFloat(self, value:float) -> str:

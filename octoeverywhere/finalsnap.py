@@ -5,6 +5,7 @@ import threading
 
 from .sentry import Sentry
 from .repeattimer import RepeatTimer
+from .debugprofiler import DebugProfiler, DebugProfilerFeatures
 
 # A helper class to try to capture a better "print completed" image by taking images before the complete notification
 # so we have images from shortly before the notification fires. This is needed because most printers will move the
@@ -13,13 +14,15 @@ from .repeattimer import RepeatTimer
 class FinalSnap:
 
     # The default interval that we will snap an image at.
-    c_defaultSnapIntervalSec = 1
+    # We can't do this too often, or low powered devices will suffer.
+    c_defaultSnapIntervalSec = 2
 
     # This is how many snapshots we will keep in our buffer.
     # Thus, the amount of time we will keep in our buffer is seconds = (c_snapshotBufferDepth * c_defaultSnapIntervalSec)
     # We must keep this buffer a little larger, for the extrude command logic to have enough buffer to operate in.
     # This buffer must also be large enough to have data for the c_onCompleteSnapDelaySec time.
-    c_snapshotBufferDepth = 40
+    # This buffer can't be too large, or we will use too much memory on low end hardware
+    c_snapshotBufferDepth = 20
 
     # When the on complete notification fires, this is how long we will try to go back in time to fetch a snapshot,
     # if we don't have a last extrude command sent time.
@@ -33,6 +36,7 @@ class FinalSnap:
         self.NotificationHandler = notificationHandler
         self.SnapLock = threading.Lock()
         self.SnapHistory = []
+        self.Profiler = None
         self.Timer = RepeatTimer(self.Logger, FinalSnap.c_defaultSnapIntervalSec, self._snapCallback)
         self.Timer.start()
         self.Logger.info("Starting FinalSnap")
@@ -97,6 +101,11 @@ class FinalSnap:
     # Fires when we should take a new snapshot.
     def _snapCallback(self):
         try:
+            # Setup the profiler, which will no-op if not enabled.
+            # It must be created on this thread.
+            if self.Profiler is None:
+                self.Profiler = DebugProfiler(self.Logger, DebugProfilerFeatures.FinalSnap)
+
             # Try to get a snapshot.
             snapshot = self.NotificationHandler.GetNotificationSnapshot()
             if snapshot is None:
@@ -127,6 +136,9 @@ class FinalSnap:
                 while len(self.SnapHistory) > desiredBufferDepth:
                     # Remove the oldest image, which is the image at the end of the list.
                     self.SnapHistory.pop()
+
+            # Report if needed
+            self.Profiler.ReportIfNeeded()
 
         except Exception as e:
             Sentry.Exception("FinalSnap::_snapCallback failed to get snapshot.", e)

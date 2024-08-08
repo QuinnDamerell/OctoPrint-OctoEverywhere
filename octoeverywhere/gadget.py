@@ -4,11 +4,11 @@ import time
 import json
 import logging
 
-import requests
-
 from .sentry import Sentry
 from .snapshotresizeparams import SnapshotResizeParams
 from .repeattimer import RepeatTimer
+from .debugprofiler import DebugProfiler, DebugProfilerFeatures
+from .httpsessions import HttpSessions
 
 class Gadget:
 
@@ -32,6 +32,7 @@ class Gadget:
         self.PrinterStateInterface = printerStateInterface
         self.Lock = threading.Lock()
         self.Timer = None
+        self.Profiler = None
         self.DefaultProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
         self.FailedConnectionAttempts = 0
 
@@ -173,6 +174,11 @@ class Gadget:
 
     def _timerCallback(self):
         try:
+            # Setup the profiler, which will no-op if not enabled.
+            # It must be created on this thread.
+            if self.Profiler is None:
+                self.Profiler = DebugProfiler(self.Logger, DebugProfilerFeatures.Gadget)
+
             # Before we do anything, update the timer interval to the default, incase there's some error
             # and we don't update it properly. In all cases either an error should update this or the response
             # from the inspect call.
@@ -240,7 +246,7 @@ class Gadget:
                 # Since we are sending the snapshot, we must send a multipart form.
                 # Thus we must use the data and files fields, the json field will not work.
                 # Set a timeout, but make it long, so the server has time to process.
-                r = requests.post(gadgetApiUrl, data=args, files=files, timeout=10*60)
+                r = HttpSessions.GetSession(gadgetApiUrl).post(gadgetApiUrl, data=args, files=files, timeout=10*60)
 
                 # Check for success. Anything but a 200 we will consider a connection failure.
                 if r.status_code != 200:
@@ -340,6 +346,9 @@ class Gadget:
 
             # Reset the failed attempts counter
             self.FailedConnectionAttempts = 0
+
+            # Report if needed
+            self.Profiler.ReportIfNeeded()
 
         except Exception as e:
             Sentry.Exception("Exception in gadget timer", e)

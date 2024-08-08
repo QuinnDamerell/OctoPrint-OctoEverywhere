@@ -14,6 +14,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.exceptions import NoSentryReportException
+from octoeverywhere.debugprofiler import DebugProfiler, DebugProfilerFeatures
 
 from linux_host.config import Config
 
@@ -117,6 +118,7 @@ class MoonrakerClient:
         self.WebSocketConnected = False
         self.WebSocketKlippyReady = False
         self.WebSocketLock = threading.Lock()
+        self.WebSocketDebugProfiler:DebugProfiler = None # Must be created on the thread.
         self.WsThread = threading.Thread(target=self._WebSocketWorkerThread)
         self.WsThreadRunning = False
         self.WsThread.daemon = True
@@ -495,6 +497,7 @@ class MoonrakerClient:
 
     def _WebSocketWorkerThread(self):
         self.Logger.info("Moonraker client starting websocket connection thread.")
+        self.WebSocketDebugProfiler = DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsThread)
         while True:
             try:
                 # Every time we connect, call the function to update the host and port if required.
@@ -716,14 +719,20 @@ class MoonrakerClient:
             # Raise again which will cause the websocket to close and reset.
             raise e
 
+        self.WebSocketDebugProfiler.ReportIfNeeded()
+
 
     def _NonResponseMsgQueueWorker(self):
         try:
-            while True:
-                # Wait for a message to process.
-                msg = self.NonResponseMsgQueue.get()
-                # Process and then wait again.
-                self._OnWsNonResponseMessage(msg)
+            # The profiler will do nothing if it's not enabled.
+            with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsMsgThread) as profiler:
+                while True:
+                    # Wait for a message to process.
+                    msg = self.NonResponseMsgQueue.get()
+                    # Process and then wait again.
+                    self._OnWsNonResponseMessage(msg)
+                    # Let the profiler report if needed
+                    profiler.ReportIfNeeded()
         except Exception as e:
             Sentry.Exception("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
         self._RestartWebsocket()

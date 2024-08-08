@@ -14,6 +14,7 @@ from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.deviceid import DeviceId
@@ -148,6 +149,9 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Report the current setup.
         self._logger.info("OctoPrint host:" +str(self.OctoPrintLocalHost) + " port:" + str(self.OctoPrintLocalPort))
+
+        # Setup the HttpSession cache early, so it can be used whenever
+        HttpSessions.Init(self._logger)
 
         # Setup Sentry to capture issues.
         # We can't enable tracing or profiling in OctoPrint, because it picks up a lot of OctoPrint functions.

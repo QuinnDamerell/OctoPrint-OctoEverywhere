@@ -3,10 +3,11 @@ import logging
 
 import requests
 
-from .localip import LocalIpHelper
-from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .mdns import MDns
 from .compat import Compat
+from .localip import LocalIpHelper
+from .httpsessions import HttpSessions
+from .octostreammsgbuilder import OctoStreamMsgBuilder
 
 from .Proto.PathTypes import PathTypes
 from .Proto.DataCompression import DataCompression
@@ -157,15 +158,39 @@ class OctoHttpRequest:
             if self._requestLibResponseObj is None:
                 raise Exception("ReadAllContentFromStreamResponse was called on a result with no request lib Response object.")
             buffer = None
-            # We can't simply use response.content, since streaming was enabled.
-            # We need to use iter_content, since it will keep returning data until all is read.
-            # We use a high chunk count, so most of the time it will read all of the content in one go.
+
+            # In the past, we used iter_content, but it has a lot of overhead and also doesn't read all available data, it will only read a chunk if the transfer encoding is chunked.
+            # This isn't great because it's slow and also we don't need to reach each chunk, process it, just to dump it in a buffer and read another.
+            #
+            # For more comments, read doBodyRead, but using read is way more efficient.
+            # The only other thing to note is that read will allocate the full buffer size passed, even if only some of it is filled.
             try:
-                for chunk in self._requestLibResponseObj.iter_content(10000000):
+                # Ideally we use the content size, but if we can't we use our default.
+                # The default size is tuned to fit about one 1080 jpeg image.
+                # Since this function is mostly used for snapshots, that's a good default.
+                perReadSizeBytes = 490 * 1024
+                contentLengthStr = self._requestLibResponseObj.headers.get("Content-Length", None)
+                if contentLengthStr is not None:
+                    perReadSizeBytes = int(contentLengthStr)
+
+                while True:
+                    # Read data
+                    data = self._requestLibResponseObj.raw.read(perReadSizeBytes)
+
+                    # Check if we are done.
+                    if data is None or len(data) == 0:
+                        # This is weird, but there can be lingering data in response.content, so add that if there is any.
+                        # See doBodyRead for more details.
+                        if len(self._requestLibResponseObj.content) > 0:
+                            buffer += self._requestLibResponseObj.content
+                        # Break out when we are done.
+                        break
+
+                    # If we aren't done, append the buffer.
                     if buffer is None:
-                        buffer = chunk
+                        buffer = data
                     else:
-                        buffer += chunk
+                        buffer += data
             except Exception as e:
                 lengthStr =  "[buffer is None]" if buffer is None else str(len(buffer))
                 logger.warn(f"ReadAllContentFromStreamResponse got an exception. We will return the current buffer length of {lengthStr}, exception: {e}")
@@ -417,7 +442,7 @@ class OctoHttpRequest:
             # This means that response.content will not be valid and we will always use the iter_content. But it also means
             # iter_content will ready into memory on demand and throw when the stream is consumed. This is important, because
             # our logic relies on the exception when the stream is consumed to end the http response stream.
-            response = requests.request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=allowRedirects, stream=True, verify=False)
+            response = HttpSessions.GetSession(url).request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=allowRedirects, stream=True, verify=False)
         except Exception as e:
             logger.info(attemptName + " http URL threw an exception: "+str(e))
 
@@ -432,7 +457,7 @@ class OctoHttpRequest:
             else:
                 logger.warn(url + " http call returned no response on Windows. Trying again with no headers.")
             try:
-                response = requests.request(method, url, headers={}, data=data, timeout=1800, allow_redirects=False, stream=True, verify=False)
+                response = HttpSessions.GetSession(url).request(method, url, headers={}, data=data, timeout=1800, allow_redirects=False, stream=True, verify=False)
             except Exception as e:
                 logger.info(attemptName + " http NO HEADERS URL threw an exception: "+str(e))
 
