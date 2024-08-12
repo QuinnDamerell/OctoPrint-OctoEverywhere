@@ -180,7 +180,7 @@ if __name__ == '__main__':
             # The region is optional.
             bambuCloudRegion = os.environ.get("BAMBU_CLOUD_REGION", None)
             if bambuCloudRegion is not None:
-                bambuCloudRegion = bambuCloudRegion.lower().trim()
+                bambuCloudRegion = bambuCloudRegion.lower().strip()
                 if bambuCloudRegion != "china":
                     logger.warning("The BAMBU_CLOUD_REGION should only be set to 'china' if the account is in the China region. For all other accounts it should not be set.")
                 logger.info(f"Setting Bambu Cloud Region To: {bambuCloudRegion}")
