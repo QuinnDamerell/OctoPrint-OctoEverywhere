@@ -81,14 +81,10 @@ These three values must be set at environment vars when you first run the contai
     - ACCESS_CODE=(code)
     - LAN_ONLY_MODE=TRUE
 
-Pull the docker container locally:
-
-`docker pull octoeverywhere/octoeverywhere`
-
 Run the docker container passing the required information:
 
 `docker run --name bambu-connect -e SERIAL_NUMBER=<serial number> -e PRINTER_IP=<ip address> -e BAMBU_CLOUD_ACCOUNT_EMAIL="<email>" -e BAMBU_CLOUD_ACCOUNT_PASSWORD="<password>" -v ./data:/data -d octoeverywhere/octoeverywhere`
-`docker run --name bambu-connect -e SERIAL_NUMBER=test -e PRINTER_IP=1.1.1.1 -e LAN_ONLY_MODE=1 -v /data:/data -d octoeverywhere-local`
+`docker run --name bambu-connect -e SERIAL_NUMBER=test -e PRINTER_IP=1.1.1.1 -e LAN_ONLY_MODE=1 -v /data:/data -d octoeverywhere/octoeverywhere`
 
 Follow the "Linking Your Bambu Connect Plugin" to link the plugin to your account.
 

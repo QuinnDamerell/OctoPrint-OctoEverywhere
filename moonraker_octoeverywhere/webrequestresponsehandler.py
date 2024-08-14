@@ -69,7 +69,7 @@ class MoonrakerWebRequestResponseHandler:
             elif contextObject.Type == ResponseHandlerContext.CameraStreamerWebRTCSdp:
                 return self._HandleWebRtcSdpResponse(octoHttpResult, bodyBuffer)
             else:
-                self.Logger.Error("MoonrakerWebRequestResponseHandler tired to handle a context with an unknown Type? "+str(contextObject.Type))
+                self.Logger.error("MoonrakerWebRequestResponseHandler tired to handle a context with an unknown Type? "+str(contextObject.Type))
         except Exception as e:
             Sentry.Exception("MainsailConfigHandler exception while handling mainsail config.", e)
         return bodyBuffer
