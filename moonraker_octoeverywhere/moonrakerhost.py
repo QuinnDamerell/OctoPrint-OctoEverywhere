@@ -188,7 +188,7 @@ class MoonrakerHost:
             FileMetadataCache.Init(self.Logger, MoonrakerClient.Get())
 
             # Setup the command handler
-            CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger))
+            CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger), self)
 
             # If we have a local dev server, set it in the notification handler.
             if DevLocalServerAddress_CanBeNone is not None:
@@ -281,6 +281,17 @@ class MoonrakerHost:
         return None
 
 
+    # This is a destructive action! It will remove the printer id and private key from the system and restart the plugin.
+    def Rekey(self, reason:str):
+        #pylint: disable=logging-fstring-interpolation
+        self.Logger.error(f"HOST REKEY CALLED {reason} - Clearing keys...")
+        # It's important we clear the key, or we will reload, fail to connect, try to rekey, and restart again!
+        self.Secrets.SetPrinterId(None)
+        self.Secrets.SetPrivateKey(None)
+        self.Logger.error("Key clear complete, restarting plugin.")
+        HostCommon.RestartPlugin()
+
+
     #
     # StatusChangeHandler Interface - Called by the OctoEverywhere logic when the server connection has been established.
     #
@@ -316,6 +327,13 @@ class MoonrakerHost:
 
 
     #
+    # StatusChangeHandler Interface - Called by the OctoEverywhere handshake when a rekey is required.
+    #
+    def OnRekeyRequired(self):
+        self.Rekey("Handshake Failed")
+
+
+    #
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient every time the moonraker websocket is open and authed - BUT possibly not connected to klippy.
     # At this point it's ok to query things in moonraker like db items, webcam info, and such. But API calls that have to do with the physical printer will fail, since klippy might not be ready yet.
     #
@@ -341,3 +359,10 @@ class MoonrakerHost:
     #
     def OnMoonrakerClientConnected(self):
         pass
+
+
+    #
+    # Command Host Interface - Called by the command handler, when called the plugin must clear it's keys and restart to generate new ones.
+    #
+    def OnRekeyCommand(self):
+        self.Rekey("Command")

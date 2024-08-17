@@ -206,7 +206,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         printerStateObject.SetNotificationHandler(self.NotificationHandler)
 
         # Create our command handler and our platform specific command handler.
-        CommandHandler.Init(self._logger, self.NotificationHandler, OctoPrintCommandHandler(self._logger, self._printer, printerStateObject, self))
+        CommandHandler.Init(self._logger, self.NotificationHandler, OctoPrintCommandHandler(self._logger, self._printer, printerStateObject, self), self)
 
         # Create the smart pause handler
         SmartPause.Init(self._logger, self._printer, self._printer_profile_manager.get_current_or_default())
@@ -693,6 +693,32 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def OnPluginUpdateRequired(self):
         self._logger.error("The OctoEverywhere service told us we must update before we can connect.")
         self.SetPluginUpdateRequired(True)
+
+
+    #
+    # StatusChangeHandler Interface - Called by the OctoEverywhere handshake when a rekey is required.
+    #
+    def OnRekeyRequired(self):
+        self.Rekey("Handshake Failure")
+
+
+    #
+    # Command Host Interface - Called by the command handler, when called the plugin must clear it's keys and restart to generate new ones.
+    #
+    def OnRekeyCommand(self):
+        self.Rekey("Commanded")
+
+
+    # This is a destructive action! It will remove the printer id and private key from the system and restart the plugin.
+    def Rekey(self, reason:str):
+        #pylint: disable=logging-fstring-interpolation
+        self._logger.error(f"HOST REKEY CALLED {reason} - Clearing keys...")
+        # It's important we clear the key, or we will reload, fail to connect, try to rekey, and restart again!
+        self.SaveToSettingsIfUpdated("PrinterKey", "")
+        self.SaveToSettingsIfUpdated("Pid", "")
+        self._logger.error("Key clear complete, restarting plugin.")
+        HostCommon.RestartPlugin()
+
 
     # Our main worker
     def main(self):

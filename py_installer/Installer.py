@@ -2,6 +2,7 @@ import sys
 import traceback
 
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.httpsessions import HttpSessions
 
 from .Linker import Linker
 from .Logging import Logger
@@ -56,6 +57,9 @@ class Installer:
 
         # As soon as we have the user home make the log file.
         Logger.InitFile(context.UserHomePath, context.UserName)
+
+        # Next we init the http sessions and telemetry, telemetry relies on the http sessions logic.
+        HttpSessions.Init(Logger.GetPyLogger())
         Telemetry.Init(Logger.GetPyLogger())
 
         # Parse the original CmdLineArgs

@@ -1,3 +1,4 @@
+import os
 import string
 import secrets
 
@@ -47,3 +48,12 @@ class HostCommon:
             sourceGetArg = "isFromKlipper=true"
         # Note this must have at least one ? and arg because users of it might append &source=blah
         return HostCommon.c_OctoEverywhereAddPrinterUrl + "?" + sourceGetArg + "&" + "printerid=" + printerId
+
+
+    # This will restart the plugin or if running in OctoPrint restart OctoPrint!
+    # Only use if absolutely needed!
+    @staticmethod
+    def RestartPlugin():
+        # Use os exit, to ensure the process is killed and restarted.
+        # pylint: disable=protected-access
+        os._exit(0)

@@ -150,6 +150,10 @@ class OctoSession:
                 backoffModifierSec = 43200 # 1 month
                 self.OctoStream.OnPluginUpdateRequired()
 
+            # Check if a rekey was requested, if so, the plugin needs to rekey and restart.
+            if handshakeAck.RequiresRekey():
+                self.OctoStream.OnRekeyRequired()
+
             self.OnSessionError(backoffModifierSec)
 
 

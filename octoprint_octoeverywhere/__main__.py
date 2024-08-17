@@ -221,7 +221,7 @@ if __name__ == '__main__':
     NotificationHandlerInstance = NotificationsHandler(logger, MockPrinterStateObject(logger))
 
     # Setup the api command handler if needed for testing.
-    CommandHandler.Init(logger, NotificationHandlerInstance, None)
+    CommandHandler.Init(logger, NotificationHandlerInstance, None, None)
     # Note this will throw an exception because we don't have a flask context setup.
     # result = apiCommandHandler.HandleApiCommand("status", None)
     # Setup the command handler

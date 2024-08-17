@@ -85,8 +85,15 @@ class HandshakeAck(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
+    # HandshakeAck
+    def RequiresRekey(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(18))
+        if o != 0:
+            return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
 def HandshakeAckStart(builder: octoflatbuffers.Builder):
-    builder.StartObject(7)
+    builder.StartObject(8)
 
 def Start(builder: octoflatbuffers.Builder):
     HandshakeAckStart(builder)
@@ -138,6 +145,12 @@ def HandshakeAckAddRsaChallengeResult(builder: octoflatbuffers.Builder, rsaChall
 
 def AddRsaChallengeResult(builder: octoflatbuffers.Builder, rsaChallengeResult: int):
     HandshakeAckAddRsaChallengeResult(builder, rsaChallengeResult)
+
+def HandshakeAckAddRequiresRekey(builder: octoflatbuffers.Builder, requiresRekey: bool):
+    builder.PrependBoolSlot(7, requiresRekey, 0)
+
+def AddRequiresRekey(builder: octoflatbuffers.Builder, requiresRekey: bool):
+    HandshakeAckAddRequiresRekey(builder, requiresRekey)
 
 def HandshakeAckEnd(builder: octoflatbuffers.Builder) -> int:
     return builder.EndObject()

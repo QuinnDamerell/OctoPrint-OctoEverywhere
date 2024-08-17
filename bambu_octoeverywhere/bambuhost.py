@@ -139,7 +139,7 @@ class BambuHost:
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
             # Setup the command handler
-            CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger))
+            CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger), self)
 
             # Setup the cloud if it's setup in the config.
             BambuCloud.Init(self.Logger, self.Config)
@@ -220,6 +220,17 @@ class BambuHost:
         return None
 
 
+    # This is a destructive action! It will remove the printer id and private key from the system and restart the plugin.
+    def Rekey(self, reason:str):
+        #pylint: disable=logging-fstring-interpolation
+        self.Logger.error(f"HOST REKEY CALLED {reason} - Clearing keys...")
+        # It's important we clear the key, or we will reload, fail to connect, try to rekey, and restart again!
+        self.Secrets.SetPrinterId(None)
+        self.Secrets.SetPrivateKey(None)
+        self.Logger.error("Key clear complete, restarting plugin.")
+        HostCommon.RestartPlugin()
+
+
     # UiPopupInvoker Interface function - Sends a UI popup message for various uses.
     # Must stay in sync with the OctoPrint handler!
     # title - string, the title text.
@@ -264,3 +275,17 @@ class BambuHost:
     def OnPluginUpdateRequired(self):
         self.Logger.error("!!! A Plugin Update Is Required -- If This Plugin Isn't Updated It Might Stop Working !!!")
         self.Logger.error("!!! Please use the update manager in Mainsail of Fluidd to update this plugin         !!!")
+
+
+    #
+    # StatusChangeHandler Interface - Called by the OctoEverywhere handshake when a rekey is required.
+    #
+    def OnRekeyRequired(self):
+        self.Rekey("Handshake Failed")
+
+
+    #
+    # Command Host Interface - Called by the command handler, when called the plugin must clear it's keys and restart to generate new ones.
+    #
+    def OnRekeyCommand(self):
+        self.Rekey("Command")

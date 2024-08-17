@@ -400,7 +400,7 @@ class QuickCam_WebSocket:
             # If the expected image size is 0, then this is the first read of 16 bytes for the header.
             if self.ExpectedImageSize == 0:
                 if len(data) != 16:
-                    raise Exception("QuickCam capture thread got a first payload that was longer than 16.")
+                    raise Exception(f"QuickCam capture thread got a first payload that was not 16 bytes. len:{len(data)}, bytes:{data.hex()}")
                 self.ExpectedImageSize = int.from_bytes(data[0:3], byteorder='little')
             # Otherwise, we are building an image
             else:

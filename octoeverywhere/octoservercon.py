@@ -215,6 +215,14 @@ class OctoServerCon:
             self.StatusChangeHandler.OnPluginUpdateRequired()
 
 
+    # Called by the server con if the plugin needs to be rekeyed.
+    # This is a destructive action, it will clear the printer id and private key, and force restart the plugin.
+    def OnRekeyRequired(self):
+        # This will be null for secondary connections
+        if self.StatusChangeHandler is not None:
+            self.StatusChangeHandler.OnRekeyRequired()
+
+
     # A summon request can be sent by the services if the user is connected to a different
     # server than we are connected to. In such a case we will multi connect a temp non-primary connection
     # to the request server as well, that will be to service the user.

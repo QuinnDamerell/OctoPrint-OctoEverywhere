@@ -52,8 +52,8 @@ class CommandHandler:
 
 
     @staticmethod
-    def Init(logger, notificationHandler, platCommandHandler):
-        CommandHandler._Instance = CommandHandler(logger, notificationHandler, platCommandHandler)
+    def Init(logger, notificationHandler, platCommandHandler, hostCommandHandler):
+        CommandHandler._Instance = CommandHandler(logger, notificationHandler, platCommandHandler, hostCommandHandler)
 
 
     @staticmethod
@@ -61,10 +61,11 @@ class CommandHandler:
         return CommandHandler._Instance
 
 
-    def __init__(self, logger, notificationHandler, platCommandHandler):
+    def __init__(self, logger, notificationHandler, platCommandHandler, hostCommandHandler):
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PlatformCommandHandler = platCommandHandler
+        self.HostCommandHandler = hostCommandHandler
 
 
     #
@@ -306,6 +307,15 @@ class CommandHandler:
         return self.PlatformCommandHandler.ExecuteCancel()
 
 
+    def Rekey(self):
+        self.Logger.warn("Rekey command received!")
+        resultBool = self.HostCommandHandler.OnRekeyCommand()
+        if resultBool:
+            return CommandResponse.Success()
+        else:
+            return CommandResponse.Error(400, "Failed to process rekey command.")
+
+
     #
     # Common Handler Core Logic
     #
@@ -410,7 +420,8 @@ class CommandHandler:
             return self.Resume()
         elif commandPathLower.startswith("cancel"):
             return self.Cancel()
-
+        elif commandPathLower.startswith("rekey"):
+            return self.Rekey()
         return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
 
 
@@ -418,7 +429,7 @@ class CommandHandler:
 class CommandResponse():
 
     @staticmethod
-    def Success(resultDict:dict):
+    def Success(resultDict:dict = None):
         if resultDict is None:
             resultDict = {}
         return CommandResponse(200, resultDict, None)
