@@ -1069,7 +1069,8 @@ class MoonrakerCompat:
             if totalLayers == 0:
                 if self.Logger.isEnabledFor(logging.DEBUG):
                     self.Logger.debug("GetCurrentLayerInfo failed to get a total layer count. "+json.dumps(printStats))
-                self.Logger.warn("GetCurrentLayerInfo failed to get a total layer count.")
+                # Dont log, this seems to be somewhat common on some printers like the K1 and others.
+                #self.Logger.warn("GetCurrentLayerInfo failed to get a total layer count.")
                 return (0,0)
 
             # Next, try to get the current layer.
