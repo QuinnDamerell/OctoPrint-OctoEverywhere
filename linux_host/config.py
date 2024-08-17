@@ -20,6 +20,10 @@ class Config:
     LogFileMaxSizeMbKey = "max_file_size_mb"
     LogFileMaxCountKey = "max_file_count"
 
+    GeneralSection = "general"
+    GeneralBedCooldownThresholdTempC = "bed_cooldown_threshold_temp_celsius"
+    GeneralBedCooldownThresholdTempCDefault = 40.0
+
 
     #
     # Used for the local Moonraker plugin and companions.
@@ -79,6 +83,7 @@ class Config:
         { "Target": WebcamFlipH,  "Comment": "Flips the webcam image horizontally. Valid values are True or False"},
         { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
+        { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification.."},
     ]
 
 
@@ -161,6 +166,29 @@ class Config:
             self.Logger.error(f"Config settings error! {key} failed to get as int. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, str(defaultValue))
             return int(defaultValue)
+
+
+    # Gets a value from the config given the header and key.
+    # If the value isn't set, the default value is returned and the default value is saved into the config.
+    # If the default value is None, the default will not be written into the config.
+    def GetFloat(self, section:str, key:str, defaultValue) -> float:
+        # Use a try catch, so if a user sets an invalid value, it doesn't crash us.
+        result = None
+        try:
+            # If None is passed as the default, don't str it.
+            if defaultValue is not None:
+                defaultValue = str(defaultValue)
+
+            result = self.GetStr(section, key, defaultValue)
+            # If None is returned, don't int it, return None.
+            if result is None:
+                return None
+
+            return float(result)
+        except Exception as e:
+            self.Logger.error(f"Config settings error! {key} failed to get as float. Value was `{result}`. Resetting to default. "+str(e))
+            self.SetStr(section, key, str(defaultValue))
+            return float(defaultValue)
 
 
     # Gets a value from the config given the header and key.

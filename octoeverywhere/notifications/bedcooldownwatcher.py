@@ -16,6 +16,11 @@ class BedCooldownWatcher:
 
 
     def __init__(self, logger:logging.Logger, notificationHandler, printerStateInterface):
+
+        # Default the  the bed is under ~100F, we will consider it cooled down.
+        # This can be changed in the config by the user.
+        self.CooldownThresholdTempC:float = 40.0
+
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PrinterStateInterface = printerStateInterface
@@ -46,6 +51,11 @@ class BedCooldownWatcher:
             self._stopTimerUnderLock()
 
 
+    # Sets the temp that the bed must be under to be considered cooled down.
+    def SetBedCooldownThresholdTemp(self, tempC:float):
+        self.Logger.debug(f"Bed cooldown watcher, setting threshold temp to {tempC}")
+        self.CooldownThresholdTempC = tempC
+
 
     def _stopTimerUnderLock(self):
         if self.Timer is not None:
@@ -72,8 +82,8 @@ class BedCooldownWatcher:
             isFirstTimerRead = self.IsFirstTimerRead
             self.IsFirstTimerRead = False
 
-            # When the bed is under ~90F, we will consider it cooled down.
-            if bedTempCelsiusFloat > 33:
+            # Check if we are cooled down yet.
+            if bedTempCelsiusFloat > self.CooldownThresholdTempC:
                 # Keep waiting.
                 self.Logger.debug(f"Bed cooldown watcher, bed temp is {bedTempCelsiusFloat}. Waiting...")
                 return

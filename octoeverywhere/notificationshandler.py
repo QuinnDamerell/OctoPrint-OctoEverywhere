@@ -209,6 +209,11 @@ class NotificationsHandler:
         return self._IsPingTimerRunning()
 
 
+    # Sets the cooldown threshold temp
+    def SetBedCooldownThresholdTemp(self, tempC:float):
+        self.BedCooldownWatcher.SetBedCooldownThresholdTemp(tempC)
+
+
     # A special case used by moonraker and bambu to restore the state of an ongoing print that we don't know of.
     # What we want to do is check moonraker or bambu's current state and our current state, to see if there's anything that needs to be synced.
     # Remember that we might be syncing because our service restarted during a print, or moonraker restarted, so we might already have

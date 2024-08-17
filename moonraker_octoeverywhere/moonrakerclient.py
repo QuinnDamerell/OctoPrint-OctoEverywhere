@@ -100,7 +100,8 @@ class MoonrakerClient:
         self.JsonRpcWaitingContexts = {}
 
         # Setup the Moonraker compat helper object.
-        self.MoonrakerCompat = MoonrakerCompat(self.Logger, printerId)
+        cooldownThresholdTempC = self.Config.GetFloat(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
+        self.MoonrakerCompat = MoonrakerCompat(self.Logger, printerId, cooldownThresholdTempC)
 
         # Setup the non response message thread
         # See _NonResponseMsgQueueWorker to why this is needed.
@@ -786,7 +787,7 @@ class JsonRpcWaitingContext:
 # common OctoEverywhere logic.
 class MoonrakerCompat:
 
-    def __init__(self, logger:logging.Logger, printerId:str) -> None:
+    def __init__(self, logger:logging.Logger, printerId:str, bedCooldownThresholdTempC:float) -> None:
         self.Logger = logger
 
         # This indicates if we are ready to process notifications, so we don't
@@ -800,6 +801,7 @@ class MoonrakerCompat:
         # We pass our self as the Printer State Interface
         self.NotificationHandler = NotificationsHandler(self.Logger, self)
         self.NotificationHandler.SetPrinterId(printerId)
+        self.NotificationHandler.SetBedCooldownThresholdTemp(bedCooldownThresholdTempC)
 
 
     def SetOctoKey(self, octoKey:str):
