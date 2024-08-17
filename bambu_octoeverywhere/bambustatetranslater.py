@@ -260,3 +260,14 @@ class BambuStateTranslator:
         if state.stg_cur == 1 or state.stg_cur == 2 or state.stg_cur == 7 or state.stg_cur == 9 or state.stg_cur == 11 or state.stg_cur == 14:
             return True
         return False
+
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # Returns the current hotend temp and bed temp as a float in celsius if they are available, otherwise None.
+    def GetTemps(self):
+        state = BambuClient.Get().GetState()
+        if state is None:
+            return (None, None)
+
+        # These will be None if they are unknown.
+        return (state.nozzle_temper, state.bed_temper)

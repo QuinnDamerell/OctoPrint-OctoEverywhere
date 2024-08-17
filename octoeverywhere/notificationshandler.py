@@ -16,6 +16,7 @@ from .Webcam.webcamhelper import WebcamHelper
 from .printinfo import PrintInfoManager, PrintInfo
 from .snapshotresizeparams import SnapshotResizeParams
 from .debugprofiler import DebugProfiler, DebugProfilerFeatures
+from .notifications.bedcooldownwatcher import BedCooldownWatcher
 
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
@@ -60,6 +61,7 @@ class NotificationsHandler:
         self.FirstLayerTimer = None
         self.FinalSnapObj:FinalSnap = None
         self.Gadget = Gadget(logger, self, self.PrinterStateInterface)
+        self.BedCooldownWatcher = BedCooldownWatcher(logger, self, self.PrinterStateInterface)
 
         # Define all the vars we use locally in the notification handler
         self.PrintCookie = ""
@@ -349,6 +351,7 @@ class NotificationsHandler:
         self._updateCurrentFileName(fileName)
         self._updateToKnownDuration(durationSecStr)
         self.StopTimers()
+        self.BedCooldownWatcher.Start()
         self._sendEvent("failed", { "Reason": reason})
 
 
@@ -360,6 +363,7 @@ class NotificationsHandler:
         self._updateCurrentFileName(fileName)
         self._updateToKnownDuration(durationSecStr)
         self.StopTimers()
+        self.BedCooldownWatcher.Start()
         self._sendEvent("done", useFinalSnapSnapshot=True)
 
 
@@ -408,6 +412,10 @@ class NotificationsHandler:
             return
 
         self.StopTimers()
+
+        # Start the cooldown watcher because on it's first check, if the bed is already cool,
+        # it won't fire any notifications.
+        self.BedCooldownWatcher.Start()
 
         # This might be spammy from OctoPrint, so limit how often we bug the user with them.
         if self._shouldSendSpammyEvent("on-error"+str(error), 30.0) is False:
@@ -538,6 +546,13 @@ class NotificationsHandler:
         self.PingTimerHoursReported += 1
 
         self._sendEvent("timerprogress", { "HoursCount": str(self.PingTimerHoursReported) })
+
+
+    # Called by the bed cooldown watcher when the bed is done cooling down.
+    def OnBedCooldownComplete(self, bedTempCelsius:float):
+        if self._shouldIgnoreEvent():
+            return
+        self._sendEvent("bedcooldowncomplete", { "BedTempC": str(round(float(bedTempCelsius), 2)) })
 
 
     #

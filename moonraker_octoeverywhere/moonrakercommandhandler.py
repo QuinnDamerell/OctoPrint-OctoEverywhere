@@ -116,6 +116,7 @@ class MoonrakerCommandHandler:
         timeLeftSec = MoonrakerClient.Get().GetMoonrakerCompat().GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(result)
 
         # Get the current temps if possible.
+        # Shared code with MoonrakerClient.GetTemps
         hotendActual = 0.0
         hotendTarget = 0.0
         bedTarget = 0.0

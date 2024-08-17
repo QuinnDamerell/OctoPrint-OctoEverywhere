@@ -108,6 +108,12 @@ class MockPrinterStateObject:
         return False
 
 
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # Returns the current hotend temp and bed temp as a float in celsius if they are available, otherwise None.
+    def GetTemps(self):
+        return (None, None)
+
+
 # A mock of the popup UI interface.
 NotificationHandlerInstance = None
 class StatusChangeHandlerStub():

@@ -1132,6 +1132,41 @@ class MoonrakerCompat:
         return self.CheckIfPrinterIsWarmingUp_WithPrintStats(result)
 
 
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # Returns the current hotend temp and bed temp as a float in celsius if they are available, otherwise None.
+    def GetTemps(self):
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
+        {
+            "objects": {
+                "extruder": None,       # Needed for temps
+                "heater_bed": None,     # Needed for temps
+            }
+        })
+        # Validate
+        if result.HasError():
+            self.Logger.error("MoonrakerCommandHandler failed GetTemps() query. "+result.GetLoggingErrorStr())
+            return (None, None)
+
+        # Get the result.
+        res = result.GetResult()
+
+        # Get the current temps if possible.
+        # Shared code with MoonrakerCommandHandler.GetCurrentJobStatus
+        hotendActual = None
+        bedActual = None
+        if "status" in res and "extruder" in res["status"]:
+            extruder = res["status"]["extruder"]
+            if "temperature" in extruder:
+                hotendActual = round(float(extruder["temperature"]), 2)
+        if "status" in res and "heater_bed" in res["status"]:
+            heater_bed = res["status"]["heater_bed"]
+            if "temperature" in heater_bed:
+                bedActual = round(float(heater_bed["temperature"]), 2)
+
+        return (hotendActual, bedActual)
+
+
+
     #
     # Helpers
     #

@@ -25,10 +25,10 @@ class BambuState:
         self.total_layer_num:int = None
         self.subtask_name:str = None
         self.mc_percent:int = None
-        self.nozzle_temper:int = None
-        self.nozzle_target_temper:int = None
-        self.bed_temper:int = None
-        self.bed_target_temper:int = None
+        self.nozzle_temper:float = None
+        self.nozzle_target_temper:float = None
+        self.bed_temper:float = None
+        self.bed_target_temper:float = None
         self.mc_remaining_time:int = None
         self.project_id:str = None
         self.print_error:int = None

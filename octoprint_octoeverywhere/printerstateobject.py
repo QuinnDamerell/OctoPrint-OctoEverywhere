@@ -125,3 +125,27 @@ class PrinterStateObject:
 
         # We aren't warming up.
         return False
+
+
+    # ! Interface Function ! The entire interface must change if the function is changed.
+    # Returns the current hotend temp and bed temp as a float in celsius if they are available, otherwise None.
+    def GetTemps(self):
+        # Get the current temps if possible.
+        # Note there will be no objects in the dic if the printer isn't connected or in other cases.
+        currentTemps = self.OctoPrintPrinterObject.get_current_temperatures()
+        hotendActual = None
+        bedActual = None
+        if self._Exists(currentTemps, "tool0"):
+            tool0 = currentTemps["tool0"]
+            if self._Exists(tool0, "actual"):
+                hotendActual = round(float(tool0["actual"]), 2)
+        if self._Exists(currentTemps, "bed"):
+            bed = currentTemps["bed"]
+            if self._Exists(bed, "actual"):
+                bedActual = round(float(bed["actual"]), 2)
+        return (hotendActual, bedActual)
+
+
+    # A helper for checking if things exist in dicts.
+    def _Exists(self, dictObj:dict, key:str):
+        return key in dictObj and dictObj[key] is not None
