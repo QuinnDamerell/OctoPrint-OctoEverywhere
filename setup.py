@@ -78,16 +78,16 @@ plugin_license = "AGPLv3"
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
-    "websocket_client>=1.6.0,<1.7.99",
+    "websocket_client>=1.6.0,<1.8.99",
     "requests>=2.31.0",
     "octoflatbuffers==24.3.26",
     "pillow",
-    "certifi>=2023.11.17",
+    "certifi>=2024.7.4",
     "rsa>=4.9",
     "dnspython>=2.3.0",
-    "httpx>=0.24.1,<0.26.0",
-    "urllib3>=1.26.18,<2.0.0",
-    "sentry-sdk>=1.19.1,<2",
+    "httpx>=0.24.1,<0.27.99",
+    "urllib3>=2.0.7",
+    "sentry-sdk>=1.40.0,<2",
     #"zstandard" - optional lib see notes
     ]
 
