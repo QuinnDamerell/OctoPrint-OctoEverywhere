@@ -16,7 +16,7 @@ from .Webcam.webcamhelper import WebcamHelper
 from .printinfo import PrintInfoManager, PrintInfo
 from .snapshotresizeparams import SnapshotResizeParams
 from .debugprofiler import DebugProfiler, DebugProfilerFeatures
-from .notifications.bedcooldownwatcher import BedCooldownWatcher
+from .Notifications.bedcooldownwatcher import BedCooldownWatcher
 
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.

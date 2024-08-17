@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "3.5.4"
+plugin_version = "3.5.6"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -103,7 +103,7 @@ plugin_additional_data = []
 
 # Any additional python packages you need to install with your plugin that are not contained in <plugin_package>.*
 # For OctoEverywhere, we need to include or common packages shared between hosts, so OctoPrint copies them into the package folder as well.
-plugin_additional_packages = [ "octoeverywhere", "octoeverywhere.Proto", "octoeverywhere.WebStream", "octoeverywhere.Webcam" ]
+plugin_additional_packages = [ "octoeverywhere", "octoeverywhere.Proto", "octoeverywhere.WebStream", "octoeverywhere.Webcam", "octoeverywhere.Notifications" ]
 
 # Any python packages within <plugin_package>.* you do NOT want to install with your plugin
 plugin_ignored_packages = []
