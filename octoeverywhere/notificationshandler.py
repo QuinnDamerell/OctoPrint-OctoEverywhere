@@ -126,6 +126,9 @@ class NotificationsHandler:
         # Ensure there's no final snap running.
         self._getFinalSnapSnapshotAndStop()
 
+        # Ensure the bed cooldown watcher is stopped.
+        self.BedCooldownWatcher.Stop()
+
         # The print cookie can only be None on class init.
         # We pass None so we don't call the PrintInfoManager, which might create a new print info on disk.
         # There might be a print info on disk we want to restore when the host connects to the printer.
