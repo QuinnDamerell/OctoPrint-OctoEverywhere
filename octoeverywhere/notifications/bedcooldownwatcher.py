@@ -8,11 +8,13 @@ from ..repeattimer import RepeatTimer
 # A simple class to watch for the bed to cooldown and then fires a notification.
 class BedCooldownWatcher:
 
-    # The amount of time between checks.
-    c_checkIntervalSec = 2
+    # The amount of time between checks in seconds.
+    c_checkIntervalSec = 5
 
     # The max amount of time we will allow this to keep watching.
-    c_maxWatcherRuntimeSec = 60 * 20
+    # In some cases like enclosed printers, the bed cooldown might take a very long time.
+    # We cancel this watcher when a new print starts, so it's safe to have a long runtime.
+    c_maxWatcherRuntimeSec = 60 * 60
 
 
     def __init__(self, logger:logging.Logger, notificationHandler, printerStateInterface):

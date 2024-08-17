@@ -83,7 +83,7 @@ class Config:
         { "Target": WebcamFlipH,  "Comment": "Flips the webcam image horizontally. Valid values are True or False"},
         { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
-        { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification.."},
+        { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification."},
     ]
 
 
