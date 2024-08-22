@@ -465,17 +465,14 @@ class OctoHttpRequest:
         if response is not None and response.status_code != 404:
             # We got a valid response, we are done.
             # Return true and the result object, so it can be returned.
-            return OctoHttpRequest.AttemptResult(True, OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response))
+            return OctoHttpRequest.AttemptResult(True, OctoHttpRequest._buildHttRequestResultFromResponse(response, url, isFallback))
 
         # Check if we have another fallback URL to try.
         if nextFallbackUrl is not None:
             # We have more fallbacks to try.
             # Return false so we keep going, but also return this response if we had one. This lets
             # use capture the main result object, so we can use it eventually if all fallbacks fail.
-            result = None
-            if response is not None:
-                result = OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)
-            return OctoHttpRequest.AttemptResult(False, result)
+            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest._buildHttRequestResultFromResponse(response, url, isFallback))
 
         # We don't have another fallback, so we need to end this.
         if mainResult is not None:
@@ -483,6 +480,17 @@ class OctoHttpRequest:
             logger.info(attemptName + " failed and we have no more fallbacks. Returning the main URL response.")
             return OctoHttpRequest.AttemptResult(True, mainResult)
         else:
+            if response is not None:
+                logger.error(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
+                return OctoHttpRequest.AttemptResult(True, OctoHttpRequest._buildHttRequestResultFromResponse(response, url, isFallback))
+
             # Otherwise return the failure.
             logger.error(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
             return OctoHttpRequest.AttemptResult(True, None)
+
+
+    @staticmethod
+    def _buildHttRequestResultFromResponse(response:requests.Response, url:str, isFallback:bool) -> Result:
+        if response is None:
+            return None
+        return OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)

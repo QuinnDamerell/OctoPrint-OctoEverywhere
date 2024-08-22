@@ -85,8 +85,10 @@ class MDns:
         hostname = url[protocolEnd:hostnameEnd]
         self.LogDebug("Found hostname "+hostname+" in url "+url)
 
-        # Check if there is a .local hostname. Anything else we will ignore.
-        if ".local" not in hostname.lower():
+        # Check if the hostname ends with .local, which is a special domain that we can resolve.
+        # We can't do a string contains, because there can be DNS names like "something.local.hostname.com"
+        hostnameLower = hostname.lower()
+        if hostnameLower.endswith(".local") or hostnameLower.endswith(".internal"):
             self.LogDebug("No local domain found in "+url)
             return None
 
