@@ -88,7 +88,7 @@ class MDns:
         # Check if the hostname ends with .local, which is a special domain that we can resolve.
         # We can't do a string contains, because there can be DNS names like "something.local.hostname.com"
         hostnameLower = hostname.lower()
-        if hostnameLower.endswith(".local") or hostnameLower.endswith(".internal"):
+        if hostnameLower.endswith(".local") is False and hostnameLower.endswith(".internal") is False:
             self.LogDebug("No local domain found in "+url)
             return None
 
@@ -175,7 +175,7 @@ class MDns:
 
                 # Since we do caching, we allow the lifetime of the lookup to be longer, so we have a better chance of getting it.
                 # Don't allow this to throw, so we don't get nosy exceptions on lookup failures.
-                answers = self.dnsResolver.resolve(domain, lifetime=3.0,  raise_on_no_answer=False, source=localAdapterIp)
+                answers = self.dnsResolver.resolve(domain, lifetime=1.0, raise_on_no_answer=False, source=localAdapterIp)
 
                 # Look get the list of IPs returned from the query. Sometimes, there's a multiples. For example, we have seen if docker is installed
                 # there are sometimes 172.x addresses.

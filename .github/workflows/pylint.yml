@@ -28,7 +28,7 @@ jobs:
         pip install -r requirements.txt
         pip install "zstandard>=0.21.0,<0.23.0"
 
-    - name: Analysing the code with pylint
+    - name: Analyzing the code with PYLint
       run: |
         pylint ./octoeverywhere/
         pylint ./octoprint_octoeverywhere/
