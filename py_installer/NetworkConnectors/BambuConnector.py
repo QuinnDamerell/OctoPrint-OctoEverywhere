@@ -17,13 +17,13 @@ class BambuConnector:
         # As of June of 2024, Bambu updated the firmware of the printers to only support direct connections while in LAN only mode.
         # So now, we must give the user a choice, about how they want to setup Bambu Connect.
         # Gather any data we have currently.
-        email, password = ConfigHelper.TryToGetBambuCloudData(context)
-        #accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
+        # email, password = ConfigHelper.TryToGetBambuCloudData(context)
+        # #accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
 
-        # If either of these are set, this setup is using the cloud, so use it to ensure the connection.
-        if email is not None or password is not None:
-            bcc = BambuCloudConnector()
-            bcc.EnsureBambuConnection(context)
+        # # If either of these are set, this setup is using the cloud, so use it to ensure the connection.
+        # if email is not None or password is not None:
+        #     bcc = BambuCloudConnector()
+        #     bcc.EnsureBambuConnection(context)
         # We only get the access code for the lan only setup, so for now, we use it to determine which type this install is.
         # TODO - As a temp measure to help users from old setups go to the new one, we always ask if there's an access code.
         # if accessCode is not None:
@@ -33,33 +33,40 @@ class BambuConnector:
         Logger.Blank()
         Logger.Blank()
         Logger.Blank()
+        Logger.Blank()
+        Logger.Blank()
+        Logger.Blank()
+        Logger.Blank()
+        Logger.Blank()
+        Logger.Blank()
+        Logger.Blank()
         Logger.Header("##################################")
         Logger.Header("     Bambu Lab Printer Setup")
         Logger.Header("##################################")
         Logger.Blank()
-        Logger.Warn("As of June of 2024, Bambu updated the printer firmware to only allow local network access for")
-        Logger.Warn("3rd party services when the printer is in LAN only mode. We support two connection methods.")
-        Logger.Info("  1) Allow access via the Bambu Cloud.")
-        Logger.Info("  2) Allow local access by enabling LAN only mode on your printer.")
+        Logger.Info("In June of 2024, Bambu Lab released a printer firmware update that only allows 3rd party services to access your")
+        Logger.Info("printer locally it's in LAN-only mode.")
         Logger.Blank()
-        Logger.Header("Access Via Bambu Cloud")
-        Logger.Info("Requires you to provide your Bambu Cloud email address and password.")
-        Logger.Info("Rest assured, your Bambu Cloud email address and password are stored locally, secured on disk, and are never sent to the OctoEverywhere service.")
+        Logger.Info("Thus, now you must choose a connection method:")
         Logger.Blank()
-        Logger.Info(" - OR -")
+        Logger.Header("Setup Access Via Bambu Cloud")
+        Logger.Info("Our plugin will connect to your printer via the Bambu Cloud. You must provide your Bambu Cloud email address and password.")
+        Logger.Info("Your Bambu Cloud email address and password are stored locally and are never sent to the OctoEverywhere service.")
         Logger.Blank()
-        Logger.Header("Access Locally via LAN Only Mode")
-        Logger.Info("You must have LAN only mode enabled on your printer, which will disconnect the Bambu Cloud.")
-        Logger.Info("However, you CAN still use Bambu Studio and Bambu Handy when your on the same network.")
+        Logger.Purple(" - OR -")
+        Logger.Blank()
+        Logger.Header("Setup With Local Access Using LAN Only Mode")
+        Logger.Info("LAN-only mode must be enabled on your printer, which will disconnect it from the Bambu Cloud. However you CAN still use")
+        Logger.Info("use Bambu Studio and Bambu Handy when your on the same network. No Bambu Cloud email or password are required.")
 
         useBambuCloud = None
         while useBambuCloud is None:
             Logger.Blank()
             Logger.Header("Which would you like to use?")
-            Logger.Info("  1) Access via Bambu Cloud")
-            Logger.Info("  2) Local access with LAN Only Mode")
+            Logger.Info("  1) Setup Access Via Bambu Cloud")
+            Logger.Info("  2) Setup Local Access In LAN-Only Mode")
             Logger.Blank()
-            decision:str = input("Enter the option number: ")
+            decision:str = input("Enter which option you want to use: ")
             try:
                 i = int(decision.strip())
                 if i == 1:
