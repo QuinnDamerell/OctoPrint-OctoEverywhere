@@ -1,7 +1,7 @@
 import os
 
 from linux_host.config import Config
-from bambu_octoeverywhere.bambucloud import BambuCloud
+from linux_host.bambucloud import BambuCloud
 
 from .Logging import Logger
 from .Context import Context
@@ -22,7 +22,7 @@ class ConfigHelper:
     def TryToGetFrontendDetails(context:Context):
         try:
             # Load the config, if this returns None, there is no existing file.
-            c = ConfigHelper._GetConfig(context)
+            c = ConfigHelper.GetConfig(context)
             if c is None:
                 return (None, None)
             # Use a default of None so if they don't exist, they aren't added to the config.
@@ -40,7 +40,7 @@ class ConfigHelper:
     def WriteFrontendDetails(context:Context, portStr:str, frontendHint_CanBeNone:str):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper.GetConfig(context, createIfNotExisting=True)
             # Write the new values
             c.SetStr(Config.RelaySection, Config.RelayFrontEndPortKey, portStr)
             c.SetStr(Config.RelaySection, Config.RelayFrontEndTypeHintKey, frontendHint_CanBeNone)
@@ -61,7 +61,7 @@ class ConfigHelper:
     def TryToGetCompanionDetails(context:Context = None, configFolderPath:str = None):
         try:
             # Load the config, if this returns None, there is no existing file.
-            c = ConfigHelper._GetConfig(context, configFolderPath)
+            c = ConfigHelper.GetConfig(context, configFolderPath)
             if c is None:
                 return (None, None)
             # Use a default of None so if they don't exist, they aren't added to the config.
@@ -79,7 +79,7 @@ class ConfigHelper:
     def WriteCompanionDetails(context:Context, ipOrHostname:str, portStr:str):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper.GetConfig(context, createIfNotExisting=True)
             # Write the new values
             c.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ipOrHostname)
             c.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, portStr)
@@ -99,7 +99,7 @@ class ConfigHelper:
     def TryToGetBambuData(context:Context = None, configFolderPath:str = None):
         try:
             # Load the config, if this returns None, there is no existing file.
-            c = ConfigHelper._GetConfig(context, configFolderPath)
+            c = ConfigHelper.GetConfig(context, configFolderPath)
             if c is None:
                 return (None, None)
             # Use a default of None so if they don't exist, they aren't added to the config.
@@ -117,7 +117,7 @@ class ConfigHelper:
     def WriteBambuDetails(context:Context, accessToken:str, printerSn:str):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper.GetConfig(context, createIfNotExisting=True)
             # Write the new values
             c.SetStr(Config.SectionBambu, Config.BambuAccessToken, accessToken)
             c.SetStr(Config.SectionBambu, Config.BambuPrinterSn, printerSn)
@@ -133,7 +133,7 @@ class ConfigHelper:
     def TryToGetBambuCloudData(context:Context = None, configFolderPath:str = None):
         try:
             # Load the config, if this returns None, there is no existing file.
-            c = ConfigHelper._GetConfig(context, configFolderPath)
+            c = ConfigHelper.GetConfig(context, configFolderPath)
             if c is None:
                 return (None, None)
             BambuCloud.Init(Logger.GetPyLogger(), c)
@@ -178,7 +178,7 @@ class ConfigHelper:
     # If the file doesn't exist and createIfNotExisting is False, None is returned.
     # Otherwise a new config will be created.
     @staticmethod
-    def _GetConfig(context:Context = None, configFolderPath:str = None, createIfNotExisting:bool = False):
+    def GetConfig(context:Context = None, configFolderPath:str = None, createIfNotExisting:bool = False) -> Config:
         if ConfigHelper.DoesConfigFileExist(context, configFolderPath) is False:
             if createIfNotExisting:
                 # Fallthrough, the Config class will create a file if none exists.

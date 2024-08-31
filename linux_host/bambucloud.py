@@ -7,9 +7,9 @@ from enum import Enum
 
 import requests
 
-from linux_host.config import Config
-
 from octoeverywhere.sentry import Sentry
+
+from .config import Config
 
 
 # The result of a login request.
@@ -29,6 +29,7 @@ class AccessTokenResult():
 
 
 # A class that interacts with the Bambu Cloud.
+# This class is shared by the Bambu Plugin and also the installer.
 # This github has a community made API docs:
 # https://github.com/Doridian/OpenBambuAPI/blob/main/cloud-http.md
 class BambuCloud:

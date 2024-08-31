@@ -16,18 +16,16 @@ class BambuConnector:
 
         # As of June of 2024, Bambu updated the firmware of the printers to only support direct connections while in LAN only mode.
         # So now, we must give the user a choice, about how they want to setup Bambu Connect.
-        # Gather any data we have currently.
-        # email, password = ConfigHelper.TryToGetBambuCloudData(context)
-        # #accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
 
-        # # If either of these are set, this setup is using the cloud, so use it to ensure the connection.
-        # if email is not None or password is not None:
-        #     bcc = BambuCloudConnector()
-        #     bcc.EnsureBambuConnection(context)
-        # We only get the access code for the lan only setup, so for now, we use it to determine which type this install is.
-        # TODO - As a temp measure to help users from old setups go to the new one, we always ask if there's an access code.
-        # if accessCode is not None:
-        #     self._EnsureBambuConnection_Internal(self, context)
+        # Check if this context is already setup in a cloud mode, if so, let it ensure the connection is still good.
+        if BambuCloudConnector.IsBambuCloudSetup(context):
+            BambuCloudConnector.EnsureBambuCloudConnection(context)
+            return
+
+        # If it's not a cloud setup, check if we have a access code and printer sn, if we do, it's a LAN setup.
+        accessCode, printerSn = ConfigHelper.TryToGetBambuData(context)
+        if accessCode is not None and printerSn is not None:
+            self._EnsureBambuConnection_Internal(self, context)
 
         # If neither are set, this is a first time install, so we need to ask the user how they want to setup Bambu Connect.
         Logger.Blank()
@@ -79,9 +77,10 @@ class BambuConnector:
                 continue
             Logger.Error("Invalid input, try again.")
 
+        # Switch based on the decision.
         if useBambuCloud:
             bcc = BambuCloudConnector()
-            bcc.EnsureBambuConnection(context)
+            bcc.SetupBambuCloudConnection(context)
         else:
             self._EnsureBambuConnection_Internal(context)
 
