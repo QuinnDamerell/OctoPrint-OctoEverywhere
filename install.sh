@@ -30,7 +30,8 @@
 #
 
 # Set this to terminate on error.
-set -e
+# We don't do this anymore, because some commands return non-zero exit codes, but still are successful.
+# set -e
 
 
 #
