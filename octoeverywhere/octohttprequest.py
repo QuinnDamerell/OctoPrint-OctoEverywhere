@@ -58,7 +58,7 @@ class OctoHttpRequest:
 
     # Based on the URL passed, this will return PathTypes.Relative or PathTypes.Absolute
     @staticmethod
-    def GetPathType(url):
+    def GetPathType(url:str) -> PathTypes:
         if url.find("://") != -1:
             # If there is a protocol, it's for sure absolute.
             return PathTypes.Absolute

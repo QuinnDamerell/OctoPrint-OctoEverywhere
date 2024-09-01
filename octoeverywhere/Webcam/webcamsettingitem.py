@@ -17,7 +17,7 @@ class WebcamSettingItem:
     #  snapshotUrl OR streamUrl can be None if the values aren't available, but not both.
     #  flipHBool & flipVBool & rotationInt must exist.
     #  rotationInt must be 0, 90, 180, or 270
-    def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0, enabled:bool = True):
+    def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0, enabled:bool = True, useLowResourceStream:bool = False):
         self._name = ""
         self.Name = name
         self.SnapshotUrl = snapshotUrl
@@ -27,6 +27,8 @@ class WebcamSettingItem:
         self.Rotation = rotationInt
         # This is a special flag mostly used for the local plugin webcams to indicate they are no enabled.
         self.Enabled = enabled
+        self.UseLowResourceStream = useLowResourceStream
+        self.UseLowResourceStream = True # TODO
 
 
     @property

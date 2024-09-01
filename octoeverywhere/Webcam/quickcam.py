@@ -22,6 +22,7 @@ class QuickCamStreamTypes:
     NotSupported = 0
     RTSP = 1
     WebSocket = 2
+    LowResourceStream = 3
 
 
 # This is a helper class that manages active instances of QuickCam and allows all requests for the same URL to share a common stream.
@@ -52,16 +53,16 @@ class QuickCamManager:
         # To know if we need to use Quick cam, we check the protocols.
         # We check both the snapshot and streaming URL, since we can get a snapshot from either
         url = webcamSettingsItem.SnapshotUrl
-        t = QuickCam.GetStreamTypeFromUrl(url)
+        t = QuickCam.GetStreamTypeFromUrl(url, webcamSettingsItem)
         if t == QuickCamStreamTypes.NotSupported:
             url = webcamSettingsItem.StreamUrl
-            t = QuickCam.GetStreamTypeFromUrl(url)
+            t = QuickCam.GetStreamTypeFromUrl(url, webcamSettingsItem)
             if t == QuickCamStreamTypes.NotSupported:
                 return None
 
         # If we got here, then this is a URL type we need to use QuickCam for.
         # Get the QuickCam instance for this URL.
-        qc = self._GetOrCreate(url)
+        qc = self._GetOrCreate(url, webcamSettingsItem)
 
         # Try to get a snapshot.
         img = qc.GetCurrentImage()
@@ -83,13 +84,13 @@ class QuickCamManager:
         # To know if we need to use Quick cam, we check the protocols.
         # We check both the snapshot and streaming URL, since we can get a snapshot from either
         url = webcamSettingsItem.StreamUrl
-        t = QuickCam.GetStreamTypeFromUrl(url)
+        t = QuickCam.GetStreamTypeFromUrl(url, webcamSettingsItem)
         if t == QuickCamStreamTypes.NotSupported:
             return None
 
         # If we got here, then this is a url type we need to use QuickCam for.
         # Get the QuickCam instance for this URL.
-        qc = self._GetOrCreate(url)
+        qc = self._GetOrCreate(url, webcamSettingsItem)
 
         # We must create a new instance of this class per stream to ensure all of the vars stay in it's context and the streams are cleaned up properly.
         # Create the stream instance and start the web request.
@@ -99,7 +100,7 @@ class QuickCamManager:
 
     # Returns a QuickCam instances for this url. If auth is required, the auth should be added to the URL in the http:// style. Ex rtsp://username:password@hostname...
     # The QuickCam class will be shared across multiple instances, it's thread safe.
-    def _GetOrCreate(self, url:str):
+    def _GetOrCreate(self, url:str, webcamSettingsItem:WebcamSettingItem):
         with self.QuickCamMapLock:
             # If it already exists, get it and return it.
             qc = self.QuickCamMap.get(url, None)
@@ -107,7 +108,7 @@ class QuickCamManager:
                 return qc
 
             # Otherwise create it.
-            qc = QuickCam(self.Logger, url, self.WebcamPlatformHelperInterface)
+            qc = QuickCam(self.Logger, url, webcamSettingsItem, self.WebcamPlatformHelperInterface)
             self.QuickCamMap[url] = qc
             return qc
 
@@ -121,10 +122,10 @@ class QuickCam:
     c_CaptureThreadTimeoutSec = 60
 
 
-    def __init__(self, logger:logging.Logger, url:str, webcamPlatformHelperInterface) -> None:
+    def __init__(self, logger:logging.Logger, url:str, webcamSettingsItem:WebcamSettingItem, webcamPlatformHelperInterface) -> None:
         self.Logger = logger
         self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
-        self.Type = QuickCam.GetStreamTypeFromUrl(url)
+        self.Type = QuickCam.GetStreamTypeFromUrl(url, webcamSettingsItem)
         self.Url = url
         self.Lock = threading.Lock()
         self.ImageReady = threading.Event()
@@ -137,8 +138,14 @@ class QuickCam:
 
     # Given a URL, this function returns the quick cam type that will be used and if it's supported.
     @staticmethod
-    def GetStreamTypeFromUrl(url:str) -> QuickCamStreamTypes:
-        # Ensure there's something to parse
+    def GetStreamTypeFromUrl(url:str, webcamSettingsItem:WebcamSettingItem) -> QuickCamStreamTypes:
+
+        # First, check if a low resource stream was requested.
+        # For this to work, the request flag must be set in the webcam settings object and there must be a snapshot URL that's http, https, or a relative stream.
+        if webcamSettingsItem.UseLowResourceStream and webcamSettingsItem.SnapshotUrl is not None and len(webcamSettingsItem.SnapshotUrl) > 0 and (webcamSettingsItem.SnapshotUrl.startswith("http") or webcamSettingsItem.SnapshotUrl.startswith("/")):
+            return QuickCamStreamTypes.LowResourceStream
+
+        # Ensure there's a URL to check.
         if url is None or len(url) == 0:
             return QuickCamStreamTypes.NotSupported
         url = url.lower()
@@ -240,6 +247,9 @@ class QuickCam:
                 elif self.Type == QuickCamStreamTypes.WebSocket:
                     self.Logger.debug(f"QuickCam capture thread started for Websocket. {self.Url}")
                     camImpl = QuickCam_WebSocket(self.Logger)
+                elif self.Type == QuickCamStreamTypes.LowResourceStream:
+                    self.Logger.debug(f"QuickCam capture thread started for LowResourceStream. {self.Url}")
+                    camImpl = QuickCam_LowResource(self.Logger)
                 else:
                     self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
                     return
@@ -720,3 +730,57 @@ class QuickCam_RTSP:
                 self.Process.__exit__(t, v, tb)
         except Exception:
             pass
+
+
+# Implements the webcam streaming for low resource devices.
+class QuickCam_LowResource:
+
+    def __init__(self, logger:logging.Logger):
+        self.Logger = logger
+        self.Url = None
+        self.UrlType = None
+        # self.Socket = None
+        # self.SslSocket = None
+
+        # # Image getting stuff
+        # self.ImageBuffer = bytearray()
+        # self.ExpectedImageSize = 0
+        # self.JpegStartSequence = bytearray([0xff, 0xd8, 0xff, 0xe0])
+        # self.JpegEndSequence = bytearray([0xff, 0xd9])
+
+
+    # ~~ Interface Function ~~
+    # Connects to the server.
+    # This will throw an exception if it fails.
+    def Connect(self, url:str) -> None:
+        self.Url = url
+        self.UrlType = OctoHttpRequest.GetPathType(url)
+
+
+    # ~~ Interface Function ~~
+    # Gets an image from the server. This should block until an image is ready.
+    # This can return None to indicate there's no image but the connection is still good, this allows the host to check if we should still be running.
+    # To indicate connection is closed or needs to be closed, this should throw.
+    def GetImage(self) -> bytearray:
+        # Make the http request for the snapshot.
+        result = OctoHttpRequest.MakeHttpCall(self.Logger, self.Url,  self.UrlType, "GET", {})
+        if result is None:
+            raise Exception("Failed to make http query, no result.")
+        if result.StatusCode != 200:
+            raise Exception(f"Failed to make http query, status code {result.StatusCode}")
+        # TODO should we check the content type?
+        if result.FullBodyBuffer is not None:
+            return result.FullBodyBuffer
+        result.ReadAllContentFromStreamResponse(self.Logger)
+        return result.FullBodyBuffer
+
+
+    # Allows us to using the with: scope.
+    def __enter__(self):
+        return self
+
+
+    # Allows us to using the with: scope.
+    # Must not throw!
+    def __exit__(self, t, v, tb):
+        pass
