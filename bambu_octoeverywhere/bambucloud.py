@@ -209,8 +209,9 @@ class BambuCloud:
             if accessCode is None:
                 self.Logger.error("Bambu Cloud SyncBambuCloudInfo didn't find an access code.")
                 return False
-            # Update the access code if it's changed.
-            if self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, "") != accessCode:
+            # It turns out that sometimes the Access Code from the service wrong, so we only update
+            # it if there's no access token set, so the user can override it in the config.
+            if self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None) is None:
                 self.Config.SetStr(Config.SectionBambu, Config.BambuAccessToken, accessCode)
                 self.Logger.info("Bambu Cloud SyncBambuCloudInfo updated the access code.")
             return True

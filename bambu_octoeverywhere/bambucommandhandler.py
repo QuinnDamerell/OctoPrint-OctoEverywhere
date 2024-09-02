@@ -11,6 +11,49 @@ class BambuCommandHandler:
         self.Logger = logger
 
 
+    # This map contains UI ready strings that map to a subset of sub-stages we can send which are more specific than the state.
+    # These need to be UI ready, since they will be shown directly.
+    # Some known stages are excluded, because we don't want to show them.
+    # Here's a full list: https://github.com/davglass/bambu-cli/blob/398c24057c71fc6bcc5dbd818bdcacc20833f61c/lib/const.js#L104
+    SubStageMap = {
+        1:  "Auto Bed Leveling",
+        2:  "Bed Preheating",
+        3:  "Sweeping XY Mech Mode",
+        4:  "Changing Filament",
+        5:  "M400 Pause",
+        6:  "Filament Runout",
+        7:  "Heating Hotend",
+        8:  "Calibrating Extrusion",
+        9:  "Scanning Bed Surface",
+        10: "Inspecting First Layer",
+        11: "Identifying Build Plate",
+        12: "Calibrating Micro Lidar",
+        13: "Homing Toolhead",
+        14: "Cleaning Nozzle",
+        15: "Checking Temperature",
+        16: "Paused By User",
+        17: "Front Cover Falling",
+        18: "Calibrating Micro Lidar",
+        19: "Calibrating Extrusion Flow",
+        20: "Nozzle Temperature Malfunction",
+        21: "Bed Temperature Malfunction",
+        22: "Filament Unloading",
+        23: "Skip Step Pause",
+        24: "Filament Loading",
+        25: "Motor Noise Calibration",
+        26: "AMS lost",
+        27: "Low Speed Of Heat Break Fan",
+        28: "Chamber Temperature Control Error",
+        29: "Cooling Chamber",
+        30: "Paused By Gcode",
+        31: "Motor Noise Showoff",
+        32: "Nozzle Filament Covered Detected Pause",
+        33: "Cutter Error",
+        34: "First Layer Error",
+        35: "Nozzle Clogged"
+    }
+
+
     # !! Platform Command Handler Interface Function !!
     #
     # This must return the common "JobStatus" dict or None on failure.
@@ -52,16 +95,10 @@ class BambuCommandHandler:
             elif gcodeState == "RUNNING" or gcodeState == "SLICING":
                 # Only check stg_cur in the known printing state, because sometimes it doesn't get reset to idle when transitioning to an error.
                 stg = bambuState.stg_cur
-                # Here's a full list: https://github.com/davglass/bambu-cli/blob/398c24057c71fc6bcc5dbd818bdcacc20833f61c/lib/const.js#L104
-                # stg==255 is used as a kind of intenum unknown state when the print is first starting and finishing.
-                # We can't really use it because it can happen at different points in time and it's not clear what the real state is.
                 if stg == 2 or stg == 7:
                     state = "warmingup"
-                elif stg == 14:
-                    state = "cleaningnozzle"
-                elif stg == 1:
-                    state = "autobedlevel"
                 else:
+                    # These are all a subset of printing states.
                     state = "printing"
             elif gcodeState == "PAUSE":
                 state = "paused"
@@ -79,6 +116,11 @@ class BambuCommandHandler:
             else:
                 self.Logger.warn(f"Unknown gcode_state state in print state: {gcodeState}")
 
+        # If we have a mapped sub state, set it.
+        subState_CanBeNone = None
+        if bambuState.stg_cur is not None:
+            if bambuState.stg_cur in BambuCommandHandler.SubStageMap:
+                subState_CanBeNone = BambuCommandHandler.SubStageMap[bambuState.stg_cur]
 
         # Get current layer info
         # None = The platform doesn't provide it.
@@ -137,6 +179,7 @@ class BambuCommandHandler:
         # Build the object and return.
         return {
             "State": state,
+            "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
             "CurrentPrint":
             {
