@@ -71,6 +71,7 @@ class CompressionContext:
         compressor = None
         streamReader = None
         decompressor = None
+
         with self.ResourceLock:
             self.IsClosed = True
 
@@ -106,6 +107,9 @@ class CompressionContext:
 
     # This is the callback from stream_writer that get called when it has data to write.
     def write(self, data):
+        # A bytearray is a better option if we are continuously appending data, since we can allocate a bigger buffer
+        # and copy into it. But 99% of the time we are only doing one compress callback at a time, in which case it's
+        # better to just take the buffer given to us and use it.
         if self.CompressionByteBuffer is None:
             self.CompressionByteBuffer = data
         else:

@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "3.5.9"
+plugin_version = "3.6.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -80,7 +80,7 @@ plugin_license = "AGPLv3"
 plugin_requires = [
     "websocket_client>=1.6.0,<1.7.99",
     "requests>=2.31.0",
-    "octoflatbuffers==24.3.26",
+    "octoflatbuffers==24.3.27",
     "pillow",
     "certifi>=2023.11.17",
     "rsa>=4.9",

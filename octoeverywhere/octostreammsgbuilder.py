@@ -51,7 +51,7 @@ class OctoStreamMsgBuilder:
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)
 
     @staticmethod
-    def CreateBuffer(size):
+    def CreateBuffer(size) -> octoflatbuffers.Builder:
         return octoflatbuffers.Builder(size)
 
     @staticmethod
