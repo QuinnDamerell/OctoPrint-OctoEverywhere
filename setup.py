@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "3.6.0"
+plugin_version = "3.6.1"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -52,12 +52,11 @@ plugin_license = "AGPLv3"
 #
 # On 4/13/2023 we updated to only support PY3, which frees us up from a lot of package issues. A lot the packages we depend on only support PY3 now.
 #
-# websocket_client
-# 	For the websocket_client, some older versions seem to have a thread issue that causes the 24 hour disconnect logic to fail, and eventually makes the thread limit get hit.
-# 	Version 1.4.0 also has an SSL error in it. https://github.com/websocket-client/websocket-client/issues/857
-#	Update: We also found a bug where the ping timer doesn't get cleaned up: https://github.com/websocket-client/websocket-client/pull/918
-#   Thus we need version 1.6.0 or higher.
-#   The sonic pad runs python 3.7.8 as of 12/18/2023 and websocket_client>=1.7 doesn't support it. So we must keep our version at 1.6 at least for now.
+# octowebsocket_client
+#   We forked this package so we could add a flag to disable websocket frame masking when sending messages, which got us a 30% CPU reduction.
+#   For a full list of changes, reasons, and version details, see the repo readme.md
+#   For the source lib, we must be on version 1.6 due to a bug before that version.
+#   We also must remain compatible with Python 3.7 for the Sonic pad. For now we are pulling the latest changes and fixing any 3.7 issues.
 # dnspython
 #	We depend on a feature that was released with 2.3.0, so we need to require at least that.
 #   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
@@ -78,7 +77,7 @@ plugin_license = "AGPLv3"
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
-    "websocket_client>=1.6.0,<1.7.99",
+    "octowebsocket_client==1.8.2",
     "requests>=2.31.0",
     "octoflatbuffers==24.3.27",
     "pillow",

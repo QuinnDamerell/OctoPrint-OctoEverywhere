@@ -7,7 +7,7 @@ import logging
 import math
 import configparser
 
-import websocket
+import octowebsocket
 
 from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
@@ -749,7 +749,7 @@ class MoonrakerClient:
         if Client.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
             pass
-        elif isinstance(exception, websocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
+        elif isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
             # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
             self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
         else:
