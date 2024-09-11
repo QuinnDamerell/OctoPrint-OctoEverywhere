@@ -77,7 +77,7 @@ plugin_license = "AGPLv3"
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
-    "octowebsocket_client==1.8.2",
+    "octowebsocket_client==1.8.3",
     "requests>=2.31.0",
     "octoflatbuffers==24.3.27",
     "pillow",

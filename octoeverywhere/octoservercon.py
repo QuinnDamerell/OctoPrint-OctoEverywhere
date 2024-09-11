@@ -381,10 +381,10 @@ class OctoServerCon:
                 runForTimeChecker.Stop()
 
 
-    def SendMsg(self, msgBytes):
+    def SendMsg(self, buffer:bytearray, msgStartOffsetBytes:int, msgSize:int):
         # When we send any message, consider it user activity.
         self.LastUserActivityTime = datetime.now()
-        self.Ws.Send(msgBytes, True)
+        self.Ws.Send(buffer, msgStartOffsetBytes, msgSize, True)
 
 
     def GetWsId(self, ws):

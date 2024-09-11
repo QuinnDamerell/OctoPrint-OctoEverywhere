@@ -56,9 +56,9 @@ class OctoSession:
         self.OctoStream.OnSessionError(self.SessionId, backoffModifierSec)
 
 
-    def Send(self, msg):
+    def Send(self, buffer:bytearray, msgStartOffsetBytes:int, msgSize:int):
         # The message is already encoded, pass it along to the socket.
-        self.OctoStream.SendMsg(msg)
+        self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSize)
 
 
     def HandleSummonRequest(self, msg):
@@ -261,12 +261,12 @@ class OctoSession:
             deviceId = DeviceId.Get().GetId()
 
             # Build the message
-            buf = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
+            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
                 rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId)
 
             # Send!
-            self.OctoStream.SendMsg(buf)
+            self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSizeBytes)
         except Exception as e:
             Sentry.Exception("Failed to send handshake syn.", e)
             self.OnSessionError(0)

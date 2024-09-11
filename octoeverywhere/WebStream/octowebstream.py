@@ -241,7 +241,7 @@ class OctoWebStream(threading.Thread):
 
 
     # Called by the helpers to send messages to the server.
-    def SendToOctoStream(self, buffer, isCloseFlagSet = False, silentlyFail = False):
+    def SendToOctoStream(self, buffer:bytearray, msgStartOffsetBytes:int, msgSize:int, isCloseFlagSet = False, silentlyFail = False):
         # Make sure we aren't closed. If we are, don't allow the message to be sent.
         with self.StateLock:
             if self.IsClosed is True:
@@ -263,7 +263,7 @@ class OctoWebStream(threading.Thread):
 
         # Send now
         try:
-            self.OctoSession.Send(buffer)
+            self.OctoSession.Send(buffer, msgStartOffsetBytes, msgSize)
         except Exception as e:
             Sentry.Exception("Web stream "+str(self.Id)+ " failed to send a message to the OctoStream.", e)
 
