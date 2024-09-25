@@ -279,7 +279,7 @@ class Client:
             if isinstance(e, octowebsocket.WebSocketAddressException) and "Name or service not known" in str(e):
                 return True
             # We don't care.
-            if isinstance(e. WebSocketConnectionClosedException):
+            if isinstance(e, octowebsocket.WebSocketConnectionClosedException):
                 return True
         except Exception:
             pass
