@@ -300,7 +300,7 @@ class OctoWebStreamWsHelper:
         if self.IsWsObjClosed or self.IsClosed or localWs is None:
             return True
         # Send using the known non-null local ws object.
-        localWs.SendWithOptCode(buffer, sendType)
+        localWs.SendWithOptCode(buffer, optCode=sendType)
 
         # Log for perf tracking
         if self.FirstWsMessageSentToLocal is False:
@@ -401,10 +401,10 @@ class OctoWebStreamWsHelper:
             if dataOffset is not None:
                 WebStreamMsg.AddData(builder, dataOffset)
             webStreamMsgOffset = WebStreamMsg.End(builder)
-            outputBuf = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
+            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
 
             # Send it!
-            self.WebStream.SendToOctoStream(outputBuf)
+            self.WebStream.SendToOctoStream(buffer, msgStartOffsetBytes, msgSizeBytes)
         except Exception as e:
             Sentry.Exception(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service.", e)
             self.WebStream.Close()

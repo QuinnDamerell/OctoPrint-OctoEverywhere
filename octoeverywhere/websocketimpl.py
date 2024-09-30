@@ -150,7 +150,7 @@ class Client:
         # Always ensure we close the send queue.
         try:
             # Push an empty buffer to the send queue, which will close it.
-            self.SendQueue.put(SendQueueContext(None, None))
+            self.SendQueue.put(SendQueueContext(None))
         except Exception as e:
             Sentry.Exception("Exception while trying to close the send queue.", e)
 
@@ -189,19 +189,22 @@ class Client:
         self._Close()
 
 
-    def Send(self, msgBytes, isData):
+    def Send(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, isData:bool = True):
         if isData:
-            self.SendWithOptCode(msgBytes, octowebsocket.ABNF.OPCODE_BINARY)
+            self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, octowebsocket.ABNF.OPCODE_BINARY)
         else:
-            self.SendWithOptCode(msgBytes, octowebsocket.ABNF.OPCODE_TEXT)
+            self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, octowebsocket.ABNF.OPCODE_TEXT)
 
 
-    def SendWithOptCode(self, msgBytes, opcode):
+    # Sends a buffer, with an optional message start offset and size.
+    # If the message start offset and size are not provided, it's assumed the buffer starts at 0 and the size is the full buffer.
+    # Providing a bytearray with room in the front allows the system to avoid copying the buffer.
+    def SendWithOptCode(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, optCode = octowebsocket.ABNF.OPCODE_BINARY):
         try:
             # Make sure we have a buffer, this is invalid and it will also shutdown our send thread.
-            if msgBytes is None:
+            if buffer is None:
                 raise Exception("We tired to send a message to the websocket with a None buffer.")
-            self.SendQueue.put(SendQueueContext(msgBytes, opcode))
+            self.SendQueue.put(SendQueueContext(buffer, msgStartOffsetBytes, msgSize, optCode))
         except Exception as e:
             # If any exception happens during sending, we want to report the error
             # and shutdown the entire websocket.
@@ -220,7 +223,7 @@ class Client:
                 # Important! We don't want to use the frame mask because it adds about 30% CPU usage on low end devices.
                 # The frame masking was only need back when websockets were used over the internet without SSL.
                 # Our server, OctoPrint, and Moonraker all accept unmasked frames, so its safe to do this for all WS.
-                self.Ws.send(context.Buffer, context.OptCode, False)
+                self.Ws.send(context.Buffer, context.OptCode, False, context.MsgStartOffsetBytes, context.MsgSize)
         except Exception as e:
             # If any exception happens during sending, we want to report the error
             # and shutdown the entire websocket.
@@ -287,6 +290,8 @@ class Client:
 
 
 class SendQueueContext():
-    def __init__(self, buffer, optCode) -> None:
+    def __init__(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, optCode = octowebsocket.ABNF.OPCODE_BINARY) -> None:
         self.Buffer = buffer
+        self.MsgStartOffsetBytes = msgStartOffsetBytes
+        self.MsgSize = msgSize
         self.OptCode = optCode

@@ -64,7 +64,15 @@ class OctoStreamMsgBuilder:
 
         # Finalize the message. We use the size prefixed
         builder.FinishSizePrefixed(streamMsgOffset)
-        return builder.Output()
+
+        # Instead of using Output, which will create a copy of the buffer that's trimmed, we return the fully built buffer
+        # with the header offset set and size. Flatbuffers are built backwards, so there's usually space in the front were we can add data
+        # without creating a new buffer!
+        # Note that the buffer is a bytearray
+        buffer = builder.Bytes
+        msgStartOffsetBytes = builder.Head()
+        return (buffer, msgStartOffsetBytes, len(buffer) - msgStartOffsetBytes)
+        #return builder.Output()
 
     @staticmethod
     def BytesToString(buf) -> str:

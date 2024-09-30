@@ -346,11 +346,12 @@ class MoonrakerClient:
 
             # Print for debugging.
             if MoonrakerClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Ws ->: %s",+jsonStr)
+                self.Logger.debug("Ws ->: %s",jsonStr)
 
-            # Send under lock.
             try:
-                localWs.Send(jsonStr, False)
+                # Since we must encode the data, which will create a copy, we might as well just send the buffer as normal,
+                # without adding the extra space for the header. We can add the header here or in the WS lib, it's the same amount of work.
+                localWs.Send(jsonStr.encode("utf-8"), isData=False)
             except Exception as e:
                 Sentry.Exception("Moonraker client exception in websocket send.", e)
                 return False
