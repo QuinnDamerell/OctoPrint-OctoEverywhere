@@ -1,6 +1,6 @@
 # Bambu Connect Docker Support
 
-OctoEverywhere's docker image only works for [Bambu Connect](https://octoeverywhere.com/bambu?source=github_docker_readme) for Bambu Lab 3D printers. If you are using OctoPrint or Klipper, [follow our getting started guide](https://octoeverywhere.com/getstarted?source=github_docker_readme) to install the OctoEverywhere plugin.
+OctoEverywhere's docker image only works with [Bambu Connect](https://octoeverywhere.com/bambu?source=github_docker_readme) for Bambu Lab 3D printers. If you are using OctoPrint or Klipper, [follow our getting started guide to install the OctoEverywhere plugin.](https://octoeverywhere.com/getstarted?source=github_docker_readme)
 
 Official Docker Image: https://hub.docker.com/r/octoeverywhere/octoeverywhere
 
@@ -40,7 +40,7 @@ Using docker compose is the easiest way to run OctoEverywhere's Bambu Connect us
 
 - Install [Docker and Docker Compose](https://docs.docker.com/compose/install/linux/)
 - Clone this repo
-- Edit the `./docker-compose.yml` file to enter your environment vars
+- Edit the `./docker-compose.yml` file to enter your environment information.
 - Run `docker compose up -d`
 - Follow the "Linking Your Bambu Connect Plugin" to link the plugin to your account.
 
@@ -50,7 +50,6 @@ Docker compose is a fancy wrapper to run docker containers. You can also run doc
 
 Use a command like this example, but update the required vars.
 
-`docker pull octoeverywhere/octoeverywhere`
 `docker run --name bambu-connect -e ACCESS_CODE=<code> -e SERIAL_NUMBER=<serial number> -e PRINTER_IP=<ip address> -v /your/local/path:/data -d octoeverywhere/octoeverywhere`
 
 Follow the "Linking Your Bambu Connect Plugin" to link the plugin to your account.
