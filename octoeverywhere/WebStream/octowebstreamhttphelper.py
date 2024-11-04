@@ -359,7 +359,7 @@ class OctoWebStreamHttpHelper:
                     nonCompressedBodyReadSize = 0
                     lastBodyReadLength = 0
                     dataOffset = None
-                    compressBody = False
+                    # Note that compressBody will be set to false in the special case below.
                 else:
                     # Start by reading data from the response.
                     # This function will return a read length of 0 and a null data offset if there's nothing to read.
@@ -398,6 +398,14 @@ class OctoWebStreamHttpHelper:
                 #  - The data offset is ever None, this means we have read the entire body as far as the request system is concerned.
                 #  - We have an expected length and we have hit it or gone over it.
                 isLastMessage = dataOffset is None or (contentLength is not None and nonCompressedContentReadSizeBytes >= contentLength)
+
+                # Special Case - If this request has no body, we need to make sure we the `compressBody` flag is set to false.
+                # For example, if this request is not 200 but has no content, compressBody might be set but we didn't read any body, so we didn't compress anything,
+                # and thus self.CompressionType will not be set.
+                if isLastMessage and nonCompressedContentReadSizeBytes == 0:
+                    # TODO - Remove this log after we are sure this is working correctly.
+                    self.Logger.warn(self.getLogMsgPrefix()+" read no body so we will turned off the compressBody flag.")
+                    compressBody = False
 
                 # If this is the first response in the stream, we need to send the initial http context and status code.
                 httpInitialContextOffset = None
