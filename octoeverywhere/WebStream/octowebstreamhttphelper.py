@@ -403,8 +403,7 @@ class OctoWebStreamHttpHelper:
                 # For example, if this request is not 200 but has no content, compressBody might be set but we didn't read any body, so we didn't compress anything,
                 # and thus self.CompressionType will not be set.
                 if isLastMessage and nonCompressedContentReadSizeBytes == 0:
-                    # TODO - Remove this log after we are sure this is working correctly.
-                    self.Logger.warn(self.getLogMsgPrefix()+" read no body so we will turned off the compressBody flag.")
+                    self.Logger.debug(self.getLogMsgPrefix()+" read no body so we will turned off the compressBody flag.")
                     compressBody = False
 
                 # If this is the first response in the stream, we need to send the initial http context and status code.

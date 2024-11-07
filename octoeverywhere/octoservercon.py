@@ -183,6 +183,7 @@ class OctoServerCon:
         self.Logger.info("Handshake complete, server con "+self.GetConnectionString()+", successfully connected to OctoEverywhere!")
 
         # Only primary connections have this handler.
+        # For secondary connections, octoKey and connectedAccounts will be None.
         if self.StatusChangeHandler is not None:
             self.StatusChangeHandler.OnPrimaryConnectionEstablished(octoKey, connectedAccounts)
 
