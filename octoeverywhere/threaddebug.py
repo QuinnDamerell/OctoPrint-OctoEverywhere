@@ -32,14 +32,14 @@ class ThreadDebug:
             # pylint: disable=protected-access
             for threadId, stack in sys._current_frames().items():
                 trace = ""
-                for filename, _, name, _ in traceback.extract_stack(stack):
+                for filename, lineno, name, line in traceback.extract_stack(stack):
                     parts = filename.split("\\")
                     if len(parts) == 0:
                         parts  = filename.split("/")
                     if len(parts) > 0:
-                        trace += ", "+parts[len(parts)-1]+":"+name
+                        trace += f", {parts[len(parts)-1]}:{lineno}={name}:{line}"
                     else:
-                        trace += ", "+filename+":"+name
+                        trace += f", {filename}:{lineno}={name}:{line}"
                 logger.info("ThreadDump- Id: "+str(threadId) + " -> "+str(trace))
         except Exception as e:
             logger.error("Exception in ThreadDebug : "+str(e))
