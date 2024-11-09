@@ -125,7 +125,8 @@ class OctoPrintCommandHandler:
                 {
                     "Progress" : progress,
                     "DurationSec" : durationSec,
-                    "TimeLeftSec" : timeLeftSec,
+                    # In some system buggy cases, the time left can be super high and won't fit into a int32, so we cap it.
+                    "TimeLeftSec" : min(timeLeftSec, 2147483600),
                     "FileName" : fileName,
                     "EstTotalFilUsedMm" : estTotalFilamentUsageMm,
                     "CurrentLayer": None, # OctoPrint doesn't provide these.
