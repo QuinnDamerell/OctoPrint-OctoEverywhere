@@ -433,6 +433,8 @@ class OctoHttpRequest:
             #
             # Note we use a long timeout because some api calls can hang for a while.
             # For example when plugins are installed, some have to compile which can take some time.
+            # timeout note! This value also effects how long a body read can be. This can effect unknown body chunk stream reads can hang while waiting on a chunk.
+            # But whatever this timeout value is will be the max time a body read can take, and then the chunk will fail and the stream will close.
             #
             # See the note about allowRedirects above MakeHttpCall.
             #

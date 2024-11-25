@@ -291,9 +291,9 @@ class OctoWebStream(threading.Thread):
             WebStreamMsg.AddIsCloseMsg(builder, True)
             WebStreamMsg.AddCloseDueToRequestConnectionFailure(builder, self.ClosedDueToRequestConnectionError)
             webStreamMsgOffset = WebStreamMsg.End(builder)
-            outputBuf = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
+            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
             # Set the flag to silently fail, since the message might have already been sent by the helper.
-            self.SendToOctoStream(outputBuf, True, True)
+            self.SendToOctoStream(buffer, msgStartOffsetBytes, msgSizeBytes, True, True)
         except Exception as e:
             # This is bad, log it and kill the stream.
             Sentry.Exception("Exception thrown while trying to send close message for web stream "+str(self.Id), e)
