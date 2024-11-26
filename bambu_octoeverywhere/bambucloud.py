@@ -17,7 +17,8 @@ class LoginStatus(Enum):
     Success               = 0  # This is the only successful value
     TwoFactorAuthEnabled  = 1
     BadUserNameOrPassword = 2
-    UnknownError          = 3
+    EmailCodeRequired     = 3
+    UnknownError          = 4
 
 
 # The result of a get access token request.
@@ -61,17 +62,19 @@ class BambuCloud:
             # We also don't gain anything by storing the access token, since we need to hit an API anyways to make sure it's still valid and working.
             self.Logger.info("Logging into Bambu Cloud...")
 
-            # Get the correct URL.
-            url = self._GetBambuCloudApi("/v1/user-service/user/login")
-
             # Get the context.
             email, password = self.GetContext()
             if email is None or password is None:
                 self.Logger.error("Login Bambu Cloud failed to get context from the config.")
                 return LoginStatus.BadUserNameOrPassword
 
+            # Mocks the login request form bambu/orca slicer.
+            data = {'account': email, 'password': password, "apiError": ""}
+
             # Make the request.
-            response = requests.post(url, json={'account': email, 'password': password}, timeout=30)
+            response = self._DoBambuCloudApiRequest("POST", "/v1/user-service/user/login", data)
+
+            raise Exception(" TODO - We never finished this because we can't login with the email code. We also need to convert GetDeviceList to use _DoBambuCloudApiRequest ")
 
             # Check the response.
             if response.status_code != 200:
@@ -88,10 +91,18 @@ class BambuCloud:
 
             # If the user has two factor auth enabled, this will still return 200, but there will be a tfaKey field with a string.
             j = response.json()
-            tfaKey = j.get('tfaKey', None)
-            if tfaKey is not None and len(tfaKey) > 0:
+            loginType = j.get("loginType", None)
+            if loginType is None:
+                # This is unexpected, but if we get an access token we don't care.
+                self.Logger.warn("Bambu cloud loginType not found")
+            elif loginType == 'tfa':
                 self.Logger.error("Login Bambu Cloud failed because two factor auth is enabled. Bambu Lab's APIs don't allow us to support two factor at this time.")
                 return LoginStatus.TwoFactorAuthEnabled
+            elif loginType == 'verifyCode':
+                self.Logger.error("Login Bambu Cloud failed because an email two factor code is required. Bambu Lab's APIs don't allow us to support two factor at this time.")
+                return LoginStatus.EmailCodeRequired
+            else:
+                self.Logger.warn(f"Bambu cloud loginType unknown. {loginType}")
 
             # Try to get the access token
             accessToken = j.get('accessToken', None)
@@ -240,6 +251,35 @@ class BambuCloud:
         if self._IsRegionChina():
             return "https://api.bambulab.cn" + urlPathAndParams
         return "https://api.bambulab.com" + urlPathAndParams
+
+
+    def _DoBambuCloudApiRequest(self, method:str, urlPathAndParams:str, jsonPayload:dict = None) -> requests.Response:
+        try:
+            # Get the correct URL.
+            url = self._GetBambuCloudApi(urlPathAndParams)
+
+            # We need to add some headers to allow the request to go through.
+            # These headers are emulated from Bambu/Orca slicer.
+            sendHeaders = {
+                    'User-Agent': 'bambu_network_agent/01.09.05.01',
+                    'X-BBL-Client-Name': 'OrcaSlicer',
+                    'X-BBL-Client-Type': 'slicer',
+                    'X-BBL-Client-Version': '01.09.05.51',
+                    'X-BBL-Language': 'en-US',
+                    'X-BBL-OS-Type': 'linux',
+                    'X-BBL-OS-Version': '6.2.0',
+                    'X-BBL-Agent-Version': '01.09.05.01',
+                    'X-BBL-Executable-info': '{}',
+                    'X-BBL-Agent-OS-Type': 'linux',
+                    'accept': 'application/json',
+                    'Content-Type': 'application/json'
+                }
+
+            # Make the request.
+            return requests.request(method, url, json=jsonPayload, headers=sendHeaders, timeout=30)
+        except Exception as e:
+            Sentry.Exception("_DoBambuCloudApiRequest exception", e)
+        return None
 
 
     # Sets the user's context into the config file.

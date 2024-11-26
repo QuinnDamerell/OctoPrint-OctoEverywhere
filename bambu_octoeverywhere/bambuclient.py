@@ -436,7 +436,9 @@ class BambuClient:
             if accessTokenResult.Status == LoginStatus.BadUserNameOrPassword:
                 self.Logger.error("The email address or password is wrong. Re-run the Bambu Connect installer or use the docker files to update your email address and password.")
             elif accessTokenResult.Status == LoginStatus.TwoFactorAuthEnabled:
-                self.Logger.error("To factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or LAN Only mode must be used on the printer.")
+                self.Logger.error("Two factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or the local connection mode.")
+            elif accessTokenResult.Status == LoginStatus.EmailCodeRequired:
+                self.Logger.error("This account requires an email code to login. Bambu Lab doesn't allow us to support this, so you must use the local connection mode.")
             else:
                 self.Logger.error("Unknown error, we will try again later.")
             self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
