@@ -2,14 +2,15 @@
 # since we need some advance binaries for things like pillow and ffmpeg.
 FROM alpine:3.20.0
 
-# We will base ourselves in root, becuase why not.
-WORKDIR /root
+RUN adduser -Ss /bin/bash app -h /app -g root -u 1001
+
+WORKDIR /app
 
 # Define some user vars we will use for the image.
 # These are read in the docker_octoeverywhere module, so they must not change!
-ENV USER=root
-ENV REPO_DIR=/root/octoeverywhere
-ENV VENV_DIR=/root/octoeverywhere-env
+ENV USER=app
+ENV REPO_DIR=/app/octoeverywhere
+ENV VENV_DIR=/app/octoeverywhere-env
 # This is a special dir that the user MUST mount to the host, so that the data is persisted.
 # If this is not mounted, the printer will need to be re-linked everytime the container is remade.
 ENV DATA_DIR=/data/
@@ -36,7 +37,10 @@ RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q -r ${REP
 RUN apk add zstd
 RUN ${VENV_DIR}/bin/pip3 install --require-virtualenv --no-cache-dir -q "zstandard>=0.21.0,<0.23.0"
 
+# Ensure directories have correct ownership. Having the group set to root(0) and writable by group will allow this to run on openshift
+RUN chown -R 1001:0 /app && chmod -R g+wx /app
+
 # For docker, we use our docker_octoeverywhere host to handle the runtime setup and launch of the serivce.
 WORKDIR ${REPO_DIR}
 # Use the full path to the venv, we msut use this [] notation for our ctlc handler to work in the contianer
-ENTRYPOINT ["/root/octoeverywhere-env/bin/python", "-m", "docker_octoeverywhere"]
+ENTRYPOINT ["/app/octoeverywhere-env/bin/python", "-m", "docker_octoeverywhere"]
