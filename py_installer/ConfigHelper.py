@@ -120,6 +120,8 @@ class ConfigHelper:
             # Write the new values
             c.SetStr(Config.SectionBambu, Config.BambuAccessToken, accessToken)
             c.SetStr(Config.SectionBambu, Config.BambuPrinterSn, printerSn)
+            # The installer can only setup local connections right now, which is preferred since cloud doesn't work well.
+            c.SetStr(Config.SectionBambu, Config.BambuConnectionMode, Config.BambuConnectionModeDefault)
         except Exception as e:
             Logger.Error("Failed to write bambu details to config. "+str(e))
             raise Exception("Failed to write bambu details to config") from e

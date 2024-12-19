@@ -133,8 +133,8 @@ class BambuClient:
                     # We are connecting to Bambu Cloud, setup MQTT for it.
                     self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS)
                 else:
-                    # We are trying to connect to the printer locally, so configure mqtt for a LAN connection.
-                    self.Logger.info("Trying to connect to printer via LAN...")
+                    # We are trying to connect to the printer locally, so configure mqtt for a local connection.
+                    self.Logger.info("Trying to connect to printer via local connection...")
                     self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
                     self.Client.tls_insecure_set(True)
 
@@ -380,20 +380,25 @@ class BambuClient:
         if self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
 
+        # Get the connection mode set by the user. This defaults to local, but the user can explicitly set it to either.
+        connectionMode = self.Config.GetStr(Config.SectionBambu, Config.BambuConnectionMode, Config.BambuConnectionModeDefault)
+        if connectionMode == Config.BambuConnectionModeValueCloud:
+            # If the mode is set to cloud, try to connect via it.
+            # If a context can't be created, there's something wrong with the account info
+            # or a Bambu service issue. Since we have the local info, we can try it as well.
+            cloudContext = self._TryToGetCloudConnectContext()
+            if cloudContext is not None:
+                return cloudContext
+            self.Logger.warning("We tried to connect via Bambu Cloud, but failed. We will try a local connection.")
+
         # On the first few attempts, use the expected IP or the cloud config.
         # The first attempt will always be attempt 1, since it's reset to 0 and incremented before connecting.
         # The IP can be empty, like if the docker container is used, in which case we should always search for the printer.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
         if self.ConsecutivelyFailedConnectionAttempts < 4:
-            # If we are using a Bambu cloud connection, try to return a connection object for it.
-            # We always try to do this for the first few attempts, since if it's setup as a Cloud connection, a LAN connection most likely won't work.
-            cloudContext = self._TryToGetCloudConnectContext()
-            if cloudContext is not None:
-                return cloudContext
-
-            # If we aren't using a cloud connection or it failed, return the LAN hostname
+            # If we aren't using a cloud connection or it failed, return the local hostname
             if configIpOrHostname is not None and len(configIpOrHostname) > 0:
-                return self._GetLanConnectionContext(configIpOrHostname)
+                return self._GetLocalConnectionContext(configIpOrHostname)
 
         # If we fail too many times, try to scan for the printer on the local subnet, the IP could have changed.
         # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
@@ -408,13 +413,13 @@ class BambuClient:
             ip = ips[0]
             self.Logger.info(f"We found a new IP for this printer. [{configIpOrHostname} -> {ip}] Updating the config and using it to connect.")
             self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ip)
-            return self._GetLanConnectionContext(ip)
+            return self._GetLocalConnectionContext(ip)
 
         # If we don't find anything, just use the config IP.
-        return self._GetLanConnectionContext(configIpOrHostname)
+        return self._GetLocalConnectionContext(configIpOrHostname)
 
 
-    def _GetLanConnectionContext(self, ipOrHostname) -> ConnectionContext:
+    def _GetLocalConnectionContext(self, ipOrHostname) -> ConnectionContext:
         # The username is always the same, we use the local LAN access token.
         return ConnectionContext(False, ipOrHostname, "bblp", self.LanAccessCode)
 
@@ -436,7 +441,9 @@ class BambuClient:
             if accessTokenResult.Status == LoginStatus.BadUserNameOrPassword:
                 self.Logger.error("The email address or password is wrong. Re-run the Bambu Connect installer or use the docker files to update your email address and password.")
             elif accessTokenResult.Status == LoginStatus.TwoFactorAuthEnabled:
-                self.Logger.error("To factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or LAN Only mode must be used on the printer.")
+                self.Logger.error("Two factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or the local connection mode.")
+            elif accessTokenResult.Status == LoginStatus.EmailCodeRequired:
+                self.Logger.error("This account requires an email code to login. Bambu Lab doesn't allow us to support this, so you must use the local connection mode.")
             else:
                 self.Logger.error("Unknown error, we will try again later.")
             self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")

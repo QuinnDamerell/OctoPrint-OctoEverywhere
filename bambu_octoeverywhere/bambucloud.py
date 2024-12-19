@@ -17,7 +17,8 @@ class LoginStatus(Enum):
     Success               = 0  # This is the only successful value
     TwoFactorAuthEnabled  = 1
     BadUserNameOrPassword = 2
-    UnknownError          = 3
+    EmailCodeRequired     = 3
+    UnknownError          = 4
 
 
 # The result of a get access token request.

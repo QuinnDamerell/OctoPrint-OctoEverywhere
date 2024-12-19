@@ -9,8 +9,19 @@ services:
       - SERIAL_NUMBER=XXXXXXXXXXXXXXX
         # Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
       - PRINTER_IP=XXX.XXX.XXX.XXX
+
+      # Optionally: If you want to connect via the Bambu Cloud, you can specify the following environment variables.
+      # By default the plugin will use the local connection mode, which is preferred.
+      # Bambu Cloud might not work for all printers and account types due to limitations by Bambu Labs. :(
+      #
+      # If you use Bambu Cloud, you MUST disable 2 factor authentication, because Bambu does not allow us to support it.
+      # Your Bambu email address and password are KEPT LOCALLY, securely on disk, and are NEVER SENT to the OctoEverywhere service
+      # - BAMBU_CLOUD_ACCOUNT_EMAIL=quinn@test.com
+      # - BAMBU_CLOUD_ACCOUNT_PASSWORD=supersecretpassword
+      # - CONNECTION_MODE=cloud
+
     volumes:
-      # This can also be an absolue path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
+      # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
       - ./data:/data
 
   # Add as many printers as you want!
@@ -23,6 +34,17 @@ services:
   #     - SERIAL_NUMBER=XXXXXXXXXXXXXXX
   #       # Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
   #     - PRINTER_IP=XXX.XXX.XXX.XXX
+  #
+  #    # Optionally: If you want to connect via the Bambu Cloud, you can specify the following environment variables.
+  #    # By default the plugin will use the local connection mode, which is preferred.
+  #    # Bambu Cloud might not work for all printers and account types due to limitations by Bambu Labs. :(
+  #    #
+  #    # If you use Bambu Cloud, you MUST disable 2 factor authentication, because Bambu does not allow us to support it.
+  #    # Your Bambu email address and password are KEPT LOCALLY, securely on disk, and are NEVER SENT to the OctoEverywhere service
+  #    # - BAMBU_CLOUD_ACCOUNT_EMAIL=quinn@test.com
+  #    # - BAMBU_CLOUD_ACCOUNT_PASSWORD=supersecretpassword
+  #    # - CONNECTION_MODE=cloud
+  #
   #   volumes:
   #     # Specify a path mapping for the required persistent storage
   #     - ./data:/data

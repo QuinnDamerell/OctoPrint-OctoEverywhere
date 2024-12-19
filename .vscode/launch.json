@@ -36,7 +36,7 @@
             ]
         },
         {
-            "name": "Bambu Connect - P1S",
+            "name": "Bambu Connect - X1C",
             "type": "debugpy",
             "request": "launch",
             "module": "bambu_octoeverywhere",
@@ -51,7 +51,7 @@
             ]
         },
         {
-            "name": "Bambu Connect - X1C",
+            "name": "Bambu Connect - P1S",
             "type": "debugpy",
             "request": "launch",
             "module": "bambu_octoeverywhere",
@@ -128,6 +128,24 @@
             "request": "launch",
             "module": "octoprint_octoeverywhere",
             "justMyCode": true
+        },
+        {
+            "name": "Docker Container Bootstrap & Run",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "docker_octoeverywhere",
+            "justMyCode": false,
+            "env": {
+                "VENV_DIR": "/home/pi/octoeverywhere-env",
+                "REPO_DIR": "/home/pi/octoeverywhere",
+                "DATA_DIR": "/home/pi/.octoeverywhere-docker-bootstrap", // This path needs to be created.
+                //"SERIAL_NUMBER": "serial",
+                //"ACCESS_CODE": "test123"
+                //"PRINTER_IP": "127.0.0.1",
+                //"CONNECTION_MODE": "cloud",
+                //"BAMBU_CLOUD_ACCOUNT_EMAIL":"quinn@test.com",
+                //"BAMBU_CLOUD_ACCOUNT_PASSWORD": "test123",
+            },
         },
     ]
 }
