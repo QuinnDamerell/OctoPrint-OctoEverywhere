@@ -59,7 +59,6 @@ if __name__ == '__main__':
 
     try:
         # First, read the required env vars that are set in the dockerfile.
-        logger.info(f"Env Vars: {os.environ}")
         virtualEnvPath = EnsureIsPath(os.environ.get("VENV_DIR", None))
         repoRootPath = EnsureIsPath(os.environ.get("REPO_DIR", None))
         dataPath = EnsureIsPath(os.environ.get("DATA_DIR", None))
