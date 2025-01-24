@@ -39,7 +39,6 @@ class NetworkSearch:
         def callback(ip:str):
             # TODO - This is a quick hack to slow down the scan so it doesn't eat a lot of CPU load on the device while the printer is off
             # and the plugin is trying to find it. But it's important this scan also be fast, for the installer.
-            logger.Info("sleeping for "+str(delaySec)+" seconds")
             time.sleep(delaySec)
             return NetworkSearch.ValidateConnection_Bambu(logger, ip, accessCode, printerSn, portStr, timeoutSec=5)
         # We want to return if any one IP is found, since there can only be one printer that will match the printer 100% correct.

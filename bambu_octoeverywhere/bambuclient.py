@@ -379,6 +379,7 @@ class BambuClient:
     def _GetConnectionContextToTry(self) -> ConnectionContext:
         # Increment and reset if it's too high.
         # This will restart the process of trying cloud connect and falling back.
+        countReset = False
         self.ConsecutivelyFailedConnectionAttempts += 1
         if self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
@@ -395,10 +396,10 @@ class BambuClient:
             self.Logger.warning("We tried to connect via Bambu Cloud, but failed. We will try a local connection.")
 
         # On the first few attempts, use the expected IP or the cloud config.
-        # The first attempt will always be attempt 1, since it's reset to 0 and incremented before connecting.
+        # Every time we reset the count, we will try a network scan to see if we can find the printer guessing it's IP might have changed.
         # The IP can be empty, like if the docker container is used, in which case we should always search for the printer.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        if self.ConsecutivelyFailedConnectionAttempts < 4:
+        if countReset is False:
             # If we aren't using a cloud connection or it failed, return the local hostname
             if configIpOrHostname is not None and len(configIpOrHostname) > 0:
                 return self._GetLocalConnectionContext(configIpOrHostname)
@@ -408,7 +409,7 @@ class BambuClient:
         # Note we don't want to do this too often since it's CPU intensive and the printer might just be off.
         # We use a lower thread count and delay before each action to reduce the required load.
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
-        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=5, delaySec=1.0)
+        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=25, delaySec=0.2)
 
         # If we get an IP back, it is the printer.
         # The scan above will only return an IP if the printer was successfully connected to, logged into, and fully authorized with the Access Token and Printer SN.
