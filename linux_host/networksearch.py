@@ -1,4 +1,5 @@
 import ssl
+import time
 import json
 import socket
 import logging
@@ -32,12 +33,17 @@ class NetworkSearch:
 
 
     # Scans the local IP LAN subset for Bambu servers that successfully authorize given the access code and printer sn.
+    # Thread count and delay can be used to control how aggressive the scan is.
     @staticmethod
-    def ScanForInstances_Bambu(logger:logging.Logger, accessCode:str, printerSn:str, portStr:str = None) -> List[str]:
+    def ScanForInstances_Bambu(logger:logging.Logger, accessCode:str, printerSn:str, portStr:str = None, threadCount:int=None, delaySec:float=0.0) -> List[str]:
         def callback(ip:str):
+            # This is a quick fix to slow down the scan so it doesn't eat a lot of CPU load on the device while the printer is off
+            # and the plugin is trying to find it. But it's important this scan also be fast, for the installer.
+            if delaySec > 0:
+                time.sleep(delaySec)
             return NetworkSearch.ValidateConnection_Bambu(logger, ip, accessCode, printerSn, portStr, timeoutSec=5)
         # We want to return if any one IP is found, since there can only be one printer that will match the printer 100% correct.
-        return NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=1)
+        return NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=1, threadCount=threadCount)
 
 
     # The final two steps can happen in different orders, so we need to wait for both the sub success and state object to be received.
@@ -193,7 +199,7 @@ class NetworkSearch:
     # testConFunction must be a function func(ip:str) -> NetworkValidationResult
     # Returns a list of IPs that reported Success() == True
     @staticmethod
-    def _ScanForInstances(logger:logging.Logger, testConFunction, returnAfterNumberFound = 0) -> List[str]:
+    def _ScanForInstances(logger:logging.Logger, testConFunction, returnAfterNumberFound:int = 0, threadCount:int = None) -> List[str]:
         foundIps = []
         try:
             localIp = NetworkSearch._TryToGetLocalIp()
@@ -215,6 +221,8 @@ class NetworkSearch:
             # if an exception was thrown in the thread, it would hang the system.
             # I fixed that but also lowered the concurrent thread count to 100, which seems more comfortable.
             totalThreads = 100
+            if threadCount is not None:
+                totalThreads = threadCount
             outstandingIpsToCheck = []
             counter = 0
             while counter < 255:

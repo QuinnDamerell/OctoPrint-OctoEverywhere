@@ -155,23 +155,26 @@ class BambuClient:
             except Exception as e:
                 if isinstance(e, ConnectionRefusedError):
                     # This means there was no open socket at the given IP and port.
-                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                    # This happens when the printer is offline, so we only need to log sometimes.
+                    self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
                 elif isinstance(e, TimeoutError):
                     # This means there was no open socket at the given IP and port.
-                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                    self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
                 elif isinstance(e, OSError) and ("Network is unreachable" in str(e) or "No route to host" in str(e)):
                     # This means the IP doesn't route to a device.
-                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
+                    self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. "+str(e))
                 elif isinstance(e, socket.timeout) and "timed out" in str(e):
                     # This means the IP doesn't route to a device.
-                    self.Logger.error(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
+                    self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
                     Sentry.Exception(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
-            localBackoffCounter = min(localBackoffCounter, 5)
+            # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
+            # Right now we allow it to ramp up to 30 seconds between retries.
+            localBackoffCounter = min(localBackoffCounter, 6)
             time.sleep(5 * localBackoffCounter)
 
 
@@ -376,9 +379,11 @@ class BambuClient:
     def _GetConnectionContextToTry(self) -> ConnectionContext:
         # Increment and reset if it's too high.
         # This will restart the process of trying cloud connect and falling back.
+        doPrinterSearch = False
         self.ConsecutivelyFailedConnectionAttempts += 1
         if self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
+            doPrinterSearch = True
 
         # Get the connection mode set by the user. This defaults to local, but the user can explicitly set it to either.
         connectionMode = self.Config.GetStr(Config.SectionBambu, Config.BambuConnectionMode, Config.BambuConnectionModeDefault)
@@ -392,18 +397,21 @@ class BambuClient:
             self.Logger.warning("We tried to connect via Bambu Cloud, but failed. We will try a local connection.")
 
         # On the first few attempts, use the expected IP or the cloud config.
-        # The first attempt will always be attempt 1, since it's reset to 0 and incremented before connecting.
+        # Every time we reset the count, we will try a network scan to see if we can find the printer guessing it's IP might have changed.
         # The IP can be empty, like if the docker container is used, in which case we should always search for the printer.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        if self.ConsecutivelyFailedConnectionAttempts < 4:
+        if doPrinterSearch is False:
             # If we aren't using a cloud connection or it failed, return the local hostname
             if configIpOrHostname is not None and len(configIpOrHostname) > 0:
                 return self._GetLocalConnectionContext(configIpOrHostname)
 
         # If we fail too many times, try to scan for the printer on the local subnet, the IP could have changed.
         # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
+        # Note we don't want to do this too often since it's CPU intensive and the printer might just be off.
+        # We use a lower thread count and delay before each action to reduce the required load.
+        # Using this config, it takes about 30 seconds to scan for the printer.
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
-        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn)
+        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=25, delaySec=0.2)
 
         # If we get an IP back, it is the printer.
         # The scan above will only return an IP if the printer was successfully connected to, logged into, and fully authorized with the Access Token and Printer SN.
