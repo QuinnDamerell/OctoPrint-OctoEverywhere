@@ -11,7 +11,7 @@ services:
       - PRINTER_IP=XXX.XXX.XXX.XXX
         # Set timezone to proper timezone for logs using standard timezones:
         # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
-      - TZ=America/NewYork
+      - TZ=America/New_York
 
       # Optionally: If you want to connect via the Bambu Cloud, you can specify the following environment variables.
       # By default the plugin will use the local connection mode, which is preferred.
