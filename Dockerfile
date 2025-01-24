@@ -22,6 +22,13 @@ ENV DATA_DIR=/data/
 # GCC, python3-dev, and musl-dev are required for pillow, and jpeg-dev and zlib-dev are required for jpeg support.
 RUN apk add --no-cache curl ffmpeg jq python3 python3-dev gcc musl-dev py3-pip py3-virtualenv jpeg-dev libjpeg-turbo-dev zlib-dev py3-pillow libffi-dev
 
+# Timezone setup steps
+# These steps are necessary to add timezone support to the container and allow for setting the timezone
+# This allows the log files to show the correct local time
+RUN apk add --no-cache tzdata
+ENV TZ=Etc/GMT
+RUN cp /usr/share/zoneinfo/Etc/GMT /etc/localtime
+
 #
 # We decided to not run the installer, since the point of the installer is to setup the env, build the launch args, and setup the service.
 # Instead, we will manually run the smaller subset of commands that are required to get the env setup in docker.
