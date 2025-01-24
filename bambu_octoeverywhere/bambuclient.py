@@ -379,10 +379,11 @@ class BambuClient:
     def _GetConnectionContextToTry(self) -> ConnectionContext:
         # Increment and reset if it's too high.
         # This will restart the process of trying cloud connect and falling back.
-        countReset = False
+        doPrinterSearch = False
         self.ConsecutivelyFailedConnectionAttempts += 1
         if self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
+            doPrinterSearch = True
 
         # Get the connection mode set by the user. This defaults to local, but the user can explicitly set it to either.
         connectionMode = self.Config.GetStr(Config.SectionBambu, Config.BambuConnectionMode, Config.BambuConnectionModeDefault)
@@ -399,7 +400,7 @@ class BambuClient:
         # Every time we reset the count, we will try a network scan to see if we can find the printer guessing it's IP might have changed.
         # The IP can be empty, like if the docker container is used, in which case we should always search for the printer.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        if countReset is False:
+        if doPrinterSearch is False:
             # If we aren't using a cloud connection or it failed, return the local hostname
             if configIpOrHostname is not None and len(configIpOrHostname) > 0:
                 return self._GetLocalConnectionContext(configIpOrHostname)
