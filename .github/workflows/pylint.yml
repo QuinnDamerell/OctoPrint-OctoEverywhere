@@ -6,12 +6,12 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # We must limit the OS to ubuntu-22.04 instead of the default ubuntu-latest, to keep PY3.7 available.
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         # The sonic pad runs 3.7, so it's important to keep it here to make sure all of our required dependencies work
-        # Github removed support for 3.7, so we need to find another way to test it.
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
