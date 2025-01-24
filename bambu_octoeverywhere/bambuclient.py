@@ -409,6 +409,7 @@ class BambuClient:
         # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
         # Note we don't want to do this too often since it's CPU intensive and the printer might just be off.
         # We use a lower thread count and delay before each action to reduce the required load.
+        # Using this config, it takes about 30 seconds to scan for the printer.
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
         ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=25, delaySec=0.2)
 
