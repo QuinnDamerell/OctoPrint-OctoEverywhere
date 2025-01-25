@@ -17,6 +17,9 @@ class Paths:
     # They will be the standard Klipper setup, such as printer_data/config, printer_data/logs, etc.
     CrealityOsUserDataPath_K1 = "/usr/data"
 
+    # For the K2, this is the path we know we will find the printer configs and printer log locations.
+    # They will be the standard Klipper setup, such as printer_data/config, printer_data/logs, etc.
+    CrealityOsUserDataPath_K2 = "/mnt/UDISK"
 
     # Returns the correct service file folder path based on the OS
     @staticmethod

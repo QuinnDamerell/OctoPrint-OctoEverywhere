@@ -35,8 +35,8 @@ class Configure:
             # For the SonicIt is moonraker_service or moonraker_service.<number>
             if "." in context.MoonrakerServiceFileName:
                 serviceSuffixStr = context.MoonrakerServiceFileName.split(".")[1]
-        elif context.OsType == OsTypes.K1:
-            # For the k1, there's only every one moonraker instance, so this isn't needed.
+        elif context.OsType == OsTypes.K1 or context.OsType == OsTypes.K2:
+            # For the k1 and k2, there's only every one moonraker instance, so this isn't needed.
             pass
         else:
             # Now we need to figure out the instance suffix we need to use.
@@ -71,7 +71,7 @@ class Configure:
             # For now we assume the folder structure is the standard Klipper folder config,
             # thus the full moonraker config path will be .../something_data/config/moonraker.conf
             # Based on that, we will define the config folder and the printer data root folder.
-            # Note that the K1 uses this standard folder layout as well.
+            # Note that the K1 and K2 uses this standard folder layout as well.
             context.ConfigFolder = Util.GetParentDirectory(context.MoonrakerConfigFilePath)
             context.RootFolder = Util.GetParentDirectory(context.ConfigFolder)
             Logger.Debug("Printer data folder: "+context.RootFolder)
@@ -79,8 +79,8 @@ class Configure:
 
         # This is the name of our service we create. If the port is the default port, use the default name.
         # Otherwise, add the port to keep services unique.
-        if context.OsType == OsTypes.SonicPad:
-            # For Sonic Pad, since the service is setup differently, follow the conventions of it.
+        if context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K2:
+            # For Sonic Pad and K2, since the service is setup differently, follow the conventions of it.
             # Both the service name and the service file name must match.
             # The format is <name>_service<number>
             # NOTE! For the Update class to work, the name must start with Configure.c_ServiceCommonNamePrefix
