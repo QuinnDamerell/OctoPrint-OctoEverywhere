@@ -73,7 +73,7 @@ plugin_license = "AGPLv3"
 #   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
 #   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
 #   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it. We had a user having an issue that updated to 0.24.0, and it resolved the issue.
-#   sentry-sdk - We use the same version as OctoPrint, so we don't have to worry about mismatched versions.
+#   sentry-sdk - We don't use Sentry right now, so we disabled it. It was conflicting with the new OctoPrint RC, so if we add it back, we need to address that.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
@@ -86,7 +86,7 @@ plugin_requires = [
     "dnspython>=2.3.0",
     "httpx>=0.24.1,<0.26.0",
     "urllib3>=1.26.18,<2.0.0",
-    "sentry-sdk>=1.19.1,<2",
+    #"sentry-sdk>=TODO",
     #"zstandard" - optional lib see notes
     ]
 
