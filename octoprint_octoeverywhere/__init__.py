@@ -77,6 +77,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     def get_wizard_version(self):
         return 10
 
+    # Turns on auto escaping for the template.
+    # Improves security, recommended here: https://community.octoprint.org/t/how-do-i-improve-my-plugins-security-by-enabling-autoescape/61067
+    def is_template_autoescaped(self):
+        return True
+
     def get_wizard_details(self):
         # Do some sanity checking logic, since this has been sensitive in the past.
         printerUrl = self.GetAddPrinterUrl()
