@@ -1187,8 +1187,8 @@ class OctoWebStreamHttpHelper:
         if self.UnknownBodyChunkReadContext is None:
             context = UnknownBodyChunkReadContext(httpResult)
             context.Thread = threading.Thread(target=self.doUnknownBodyChunkReadThread)
-            context.Thread.start()
             self.UnknownBodyChunkReadContext = context
+            context.Thread.start()
 
         try:
             startSec = time.time()
