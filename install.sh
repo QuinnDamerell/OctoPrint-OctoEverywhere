@@ -1,7 +1,6 @@
 #!/bin/bash
 
 
-
 #
 # OctoEverywhere for Klipper And Bambu Lab Printers!
 #
@@ -61,6 +60,16 @@ then
     IS_SONIC_PAD_OS=1
     # On the K1, we always want the path to be /usr/share, this is where the rest of the klipper stuff is.
     HOME="/usr/share"
+fi
+
+# Next, we try to detect if this OS is the K2 Plus.
+# The K2 runs an openwrt distro called Tina. We detect that by looking at the openwrt_release file.
+IS_K2_OS=0
+if grep -Fiqs "tina" /etc/openwrt_release
+then
+    IS_K2_OS=1
+    # On the K2, we always want the path to be /mnt/UDISK, this is where the rest of the klipper stuff is and where the most storage is.
+    HOME="/mnt/UDISK"
 fi
 
 
@@ -136,12 +145,12 @@ log_blank()
 }
 
 #
-# It's important for consistency that the repo root is in set $HOME for the K1 and Sonic Pad
+# It's important for consistency that the repo root is in set $HOME for the K1, K2, and Sonic Pad
 # To enforce that, we will move the repo where it should be.
 ensure_creality_os_right_repo_path()
 {
     # TODO - re-enable this for the  || [[ $IS_K1_OS -eq 1 ]] after the github script updates.
-    if [[ $IS_SONIC_PAD_OS -eq 1 ]]
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
     then
         # Due to the K1 shell, we have to use grep rather than any bash string contains syntax.
         if echo $OE_REPO_DIR |grep "$HOME" - > /dev/null
@@ -196,7 +205,7 @@ ensure_py_venv()
 
     log_info "No virtual environment found, creating one now."
     mkdir -p "${OE_ENV}"
-    if [[ $IS_K1_OS -eq 1 ]]
+    if [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
     then
         # The K1 requires we setup the virtualenv like this.
         # --system-site-packages is important for the K1, since it doesn't have much disk space.
@@ -239,6 +248,20 @@ install_or_update_system_dependencies()
         # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
         # 5/14/24 - The trusted hosts had to be added to fix a cert issue with pypi we aren't sure why it started happening all of the sudden.
         pip3 install -q --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --no-cache-dir virtualenv
+    elif [[ $IS_K2_OS -eq 1 ]]
+    then
+        # The K2 by default doesn't have any package manager. In some cases
+        # the user might install opkg via the 3rd party k2-improvements entware installer.
+        # But in general, PY will already be installed.
+        # We will try to update python from the package manager if possible, otherwise, we will ignore it.
+        if [[ -f /opt/bin/opkg ]]
+        then
+            # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
+            /opt/bin/opkg update || true
+            /opt/bin/opkg install ${CREALITY_DEP_LIST} || true
+        fi
+        # On the K2, the only we thing we ensure is that virtualenv is installed via pip.
+        pip3 install -q --no-cache-dir virtualenv
     elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
     then
         # The sonic pad always has opkg installed, so we can make sure these packages are installed.
@@ -312,7 +335,7 @@ install_or_update_python_env()
 #
 check_for_octoprint()
 {
-    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
     then
         # Skip, there's no need and we don't have curl.
         return
@@ -391,6 +414,10 @@ if [[ $IS_K1_OS -eq 1 ]]
 then
     echo "Running in K1 and K1 Max OS mode"
 fi
+if [[ $IS_K2_OS -eq 1 ]]
+then
+    echo "Running in K2 OS mode"
+fi
 
 # Before anything, make sure this repo is cloned into the correct path on Creality OS devices.
 # If this is Creality OS and the path is wrong, it will re-clone the repo, run the install again, and exit.
@@ -428,7 +455,7 @@ cd ${OE_REPO_DIR} > /dev/null
 # Disable the PY cache files (-B), since they will be written as sudo, since that's what we launch the PY
 # installer as. The PY installer must be sudo to write the service files, but we don't want the
 # complied files to stay in the repo with sudo permissions.
-if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
+if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
 then
     # Creality OS only has a root user and we can't use sudo.
     ${OE_ENV}/bin/python3 -B -m py_installer ${PY_LAUNCH_JSON}
