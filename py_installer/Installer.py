@@ -7,7 +7,7 @@ from octoeverywhere.httpsessions import HttpSessions
 from .Linker import Linker
 from .Logging import Logger
 from .Service import Service
-from .Context import Context, OsTypes
+from .Context import Context
 from .Discovery import Discovery
 from .DiscoveryCompanionAndBambu import DiscoveryCompanionAndBambu
 from .Configure import Configure

@@ -32,6 +32,8 @@ class OsTypeIdentifier:
                 for l in lines:
                     if "sonic" in l:
                         return OsType.OsType.CrealitySonicPad
+                    if "tina" in l:
+                        return OsType.OsType.CrealityK2
 
         # Default the OS to debian.
         return OsType.OsType.Debian
