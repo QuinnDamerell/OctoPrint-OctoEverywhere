@@ -16,6 +16,11 @@ class TimeSync:
         if context.SkipSudoActions:
             Logger.Warn("Skipping time sync since we are skipping sudo actions.")
             return
+        # Don't bother with Creality OS, since it doesn't have sudo nor systemd.
+        if context.IsCrealityOs():
+            Logger.Debug("Skipping time sync since we are running on a Creality OS.")
+            return
+
         Logger.Info("Ensuring that time sync is enabled...")
 
         # Ensure that NTP is uninstalled, since this conflicts with timesyncd

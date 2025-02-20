@@ -76,8 +76,8 @@ class OptionalDepsInstaller:
     @staticmethod
     def _InstallZStandard(context:Context) -> None:
         try:
-            # We don't even try installing on K1 or SonicPad, we know it fail.
-            if context.OsType == OsTypes.K1 or context.OsType == OsTypes.SonicPad:
+            # We don't even try installing on K1, K2 or SonicPad, we know it fail.
+            if context.IsCrealityOs():
                 return
 
             # We don't try install zstandard on systems with 2 cores or less, since it's too much work and the OS most of the time
@@ -109,8 +109,8 @@ class OptionalDepsInstaller:
     @staticmethod
     def _DoFfmpegInstall(context:Context) -> None:
         try:
-            # We don't even try installing on K1 or SonicPad, we know it fail.
-            if context.OsType == OsTypes.K1 or context.OsType == OsTypes.SonicPad:
+            # We don't even try installing on K1, K2 or SonicPad, we know it fail.
+            if context.OsType == OsTypes.K1 or context.OsType == OsTypes.K2 or context.OsType == OsTypes.SonicPad:
                 return
 
             # Try to install ffmpeg, this is required for RTSP streaming.

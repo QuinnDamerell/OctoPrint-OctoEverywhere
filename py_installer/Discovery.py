@@ -40,9 +40,9 @@ class Discovery:
         if context.OsType == OsTypes.SonicPad:
             # For the Sonic Pad, we know exactly where the files are, so we don't need to do a lot of searching.
             pairList = self._SonicPadFindAllServiceFilesAndPairings(context)
-        elif context.OsType == OsTypes.K1:
-            # For the K1 and K1 max, we know exactly where the files are, so we don't need to do a lot of searching.
-            pairList = self._K1FindAllServiceFilesAndPairings(context)
+        elif context.OsType == OsTypes.K1 or context.OsType == OsTypes.K2:
+            # For the K1, K2, and K1 max, we know exactly where the files are, so we don't need to do a lot of searching.
+            pairList = self._K1AndK2FindAllServiceFilesAndPairings(context)
         else:
             # To start, we will enumerate all moonraker service files we can find and their possible moonraker config parings.
             # For details about why we need these, read the readme.py file in this module.
@@ -173,14 +173,14 @@ class Discovery:
 
     # A special function for K1 and K1 max installs.
     # Note this must return the same result list as _FindAllServiceFilesAndPairings
-    def _K1FindAllServiceFilesAndPairings(self, context:Context):
+    def _K1AndK2FindAllServiceFilesAndPairings(self, context:Context):
 
         # The K1 doesn't have moonraker by default, but most users use a 3rd party script to install it.
         # For now we will just assume the setup that the script produces.
         moonrakerServiceFileName = None
         moonrakerConfigFilePath = None
 
-        # The service file should be something like this "/etc/init.d/S56moonraker_service"
+        # The service file should be something like this "/etc/init.d/S56moonraker_service" or "/etc/init.d/moonraker" on the K2
         for fileOrDirName in os.listdir(Paths.CrealityOsServiceFilePath):
             fullFileOrDirPath = os.path.join(Paths.CrealityOsServiceFilePath, fileOrDirName)
             if os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
@@ -189,11 +189,18 @@ class Discovery:
                     moonrakerServiceFileName = fileOrDirName
                     break
 
-        # The moonraker config file should be here: "/usr/data/printer_data/config/moonraker.conf"
-        moonrakerConfigFilePath = "/usr/data/printer_data/config/moonraker.conf"
+        moonrakerConfigFilePath = None
+        if context.OsType == OsTypes.K1:
+            # The moonraker config file should be here: "/usr/data/printer_data/config/moonraker.conf"
+            moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_K1}/printer_data/config/moonraker.conf"
+        else:
+            # This is where the default instance moonraker config file is on the K2.
+            moonrakerConfigFilePath = "/usr/share/moonraker/moonraker.conf"
+
         if os.path.isfile(moonrakerConfigFilePath):
             Logger.Debug(f"Found moonraker config file: {moonrakerConfigFilePath}")
         else:
+            Logger.Warn(f"Failed to find Moonraker config file, expected location: {moonrakerConfigFilePath}")
             moonrakerConfigFilePath = None
 
         # Check if we are missing either. If so, the user most likely didn't install Moonraker.

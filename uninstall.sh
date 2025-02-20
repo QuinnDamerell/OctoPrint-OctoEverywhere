@@ -19,6 +19,12 @@ then
     IS_K1_OS=1
 fi
 
+IS_K2_OS=0
+if grep -Fiqs "tina" /etc/openwrt_release
+then
+    IS_K2_OS=1
+fi
+
 c_default=$(echo -en "\e[39m")
 c_green=$(echo -en "\e[92m")
 c_yellow=$(echo -en "\e[93m")
@@ -34,7 +40,7 @@ echo ""
 
 # Our installer script has all of the logic to update system deps, py deps, and the py environment.
 # So we use it with a special flag to do updating.
-if [[ $IS_K1_OS -eq 1 ]]
+if [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
 then
     sh ./install.sh -uninstall
 else

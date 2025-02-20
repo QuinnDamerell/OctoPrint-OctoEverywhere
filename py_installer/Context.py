@@ -13,6 +13,7 @@ class OsTypes(IntEnum):
     Debian = 1
     SonicPad = 2
     K1 = 3 # Both the K1 and K1 Max
+    K2 = 4
 
 
 # This class holds the context of the installer, meaning all of the target vars and paths
@@ -135,7 +136,7 @@ class Context:
 
     # Returns true if the OS is Creality OS, aka K1 or Sonic Pad
     def IsCrealityOs(self) -> bool:
-        return self.OsType == OsTypes.SonicPad or self.OsType == OsTypes.K1
+        return self.OsType == OsTypes.SonicPad or self.OsType == OsTypes.K1 or self.OsType == OsTypes.K2
 
 
     # Returns true if the target is a companion or bambu connect setup.
@@ -313,12 +314,18 @@ class Context:
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
                 for l in lines:
+                    l = l.lower()
                     if "sonic" in l:
                         # If we find it, make sure the user data path is where we expect it to be, and we are good.
                         if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
                             self.OsType = OsTypes.SonicPad
                             return
                         raise Exception("We detected a Sonic Pad, but can't determine the data path. Please contact support.")
+                    # The K2 is based on the OS release "tina" and then we look for the user data path.
+                    if "tina" in l:
+                        if os.path.exists(Paths.CrealityOsUserDataPath_K2):
+                            self.OsType = OsTypes.K2
+                            return
 
         # The OS is debian
         self.OsType = OsTypes.Debian

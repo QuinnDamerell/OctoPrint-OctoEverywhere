@@ -30,8 +30,11 @@ class OsTypeIdentifier:
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
                 for l in lines:
+                    l = l.lower()
                     if "sonic" in l:
                         return OsType.OsType.CrealitySonicPad
+                    if "tina" in l:
+                        return OsType.OsType.CrealityK2
 
         # Default the OS to debian.
         return OsType.OsType.Debian
