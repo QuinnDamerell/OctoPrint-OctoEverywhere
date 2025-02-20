@@ -41,7 +41,7 @@ class Uninstall:
         # TODO - We need to cleanup more, but for now, just make sure any services are shutdown.
         Logger.Info("Stopping services...")
         for serviceFileName in foundOeServices:
-            if context.OsType == OsTypes.SonicPad:
+            if context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K2:
                 # We need to build the fill name path
                 serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, serviceFileName)
                 Logger.Debug(f"Full service path: {serviceFilePath}")

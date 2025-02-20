@@ -50,8 +50,8 @@ class Service:
         # Base on the OS type, install the service differently
         if context.OsType == OsTypes.Debian:
             self._InstallDebian(context, argsJsonBase64, moduleNameToRun)
-        elif context.OsType == OsTypes.SonicPad:
-            self._InstallSonicPad(context, argsJsonBase64, moduleNameToRun)
+        elif context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K2:
+            self._InstallSonicPadAndK2(context, argsJsonBase64, moduleNameToRun)
         elif context.OsType == OsTypes.K1:
             self._InstallK1(context, argsJsonBase64, moduleNameToRun)
         else:
@@ -103,19 +103,21 @@ class Service:
 
 
     # Install for sonic pad setups.
-    def _InstallSonicPad(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
+    def _InstallSonicPadAndK2(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
         # First, write the service file
         # Notes:
         #   Set start to be 66, so we start after Moonraker.
         #   OOM_ADJ=-17 prevents us from being killed in an OOM
         startNumberStr = "66"
+        # On the sonic pad it's "moonraker_service" and on the K2 it's "moonraker"
+        depend = "moonraker_service" if context.OsType == OsTypes.SonicPad else "moonraker"
         s = f'''\
 #!/bin/sh /etc/rc.common
 # Copyright (C) 2006-2011 OpenWrt.org
 
 START={startNumberStr}
 STOP=1
-DEPEND=moonraker_service
+DEPEND={depend}
 USE_PROCD=1
 OOM_ADJ=-17
 

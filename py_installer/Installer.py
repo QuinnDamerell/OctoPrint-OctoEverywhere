@@ -193,7 +193,7 @@ class Installer:
 
         # At the end on success, for OSs that don't have very much disk space, clean up the installer log file, since it's probably not needed.
         # If we need the log file for some reason, we should add a flag to the context to keep it.
-        if context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K1:
+        if context.IsCrealityOs():
             Logger.DeleteLogFile()
 
 
