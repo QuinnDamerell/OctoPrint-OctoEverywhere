@@ -18,6 +18,11 @@ if grep -Fqs "ID=buildroot" /etc/os-release
 then
     IS_K1_OS=1
 fi
+IS_K2_OS=0
+if grep -Fiqs "tina" /etc/openwrt_release
+then
+    IS_K2_OS=1
+fi
 IS_SONIC_PAD_OS=0
 if grep -Fqs "sonic" /etc/openwrt_release
 then
@@ -43,7 +48,7 @@ runAsRepoOwner()
 {
     # For the sonic pad and k1, we can't use stat or whoami, but there's only one user anyways, root.
     # So always just run it.
-    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]]
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
     then
         eval $1
         return
@@ -83,7 +88,7 @@ runAsRepoOwner "git pull --quiet"
 # Our installer script has all of the logic to update system deps, py deps, and the py environment.
 # So we use it with a special flag to do updating.
 echo "Running the update..."
-if [[ $IS_K1_OS -eq 1 ]]
+if [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
 then
     sh ./install.sh -update
 else
