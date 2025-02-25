@@ -8,6 +8,7 @@ class Compat:
     _IsMoonrakerHost = False
     _IsCompanionMode = False
     _IsBambu = False
+    _IsElegooOs = False
     @staticmethod
     def IsOctoPrint() -> bool:
         return Compat._IsOctoPrintHost
@@ -29,6 +30,9 @@ class Compat:
     @staticmethod
     def SetIsBambu(b):
         Compat._IsBambu = b
+    @staticmethod
+    def SetIsElegooOs(b):
+        Compat._IsElegooOs = b
 
 
     _LocalAuthObj = None
