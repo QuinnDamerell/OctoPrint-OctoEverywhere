@@ -16,6 +16,8 @@ echo "Testing Moonraker Module..."
 pylint ./moonraker_octoeverywhere/
 echo "Testing Bambu Module..."
 pylint ./bambu_octoeverywhere/
+echo "Testing Elegoo Module..."
+pylint ./elegoo_octoeverywhere/
 
 echo "Testing Linux Host Module..."
 pylint ./linux_host/

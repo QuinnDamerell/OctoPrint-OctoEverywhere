@@ -53,7 +53,6 @@ class ResponseMsg:
         return self.Result
 
 
-
 # Responsible for connecting to and maintaining a connection to the Elegoo Printer.
 class ElegooClient:
 
@@ -90,6 +89,8 @@ class ElegooClient:
         self.WebSocketConnected = False
         # We use this var to keep track of consecutively failed connections
         self.ConsecutivelyFailedConnectionAttempts = 0
+        # We use this var to keep track of how many connection attempts we have made since we did a search.
+        self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
         # Set if we know the last IP attempt was successful, but we failed bc there were too many clients.
         self.LastConnectionFailedDueToTooManyClients = False
         # Hold the IP we are currently connected to, so when it's successful, we can update the config.
@@ -124,7 +125,7 @@ class ElegooClient:
         # Generate a request id, which is a 32 char lowercase letter and number string
         requestId = ''.join(random.choices(string.ascii_lowercase + string.digits, k=32))
 
-        # The messages always have a empty data dict if there's nothing.
+        # The requests always have a empty data dict if there's nothing.
         if data is None:
             data = {}
 
@@ -266,38 +267,58 @@ class ElegooClient:
             except Exception as e:
                 Sentry.Exception("Elegoo client exception in main WS loop.", e)
 
-            # Inform that we lost the connection.
-            self.Logger.info("Elegoo client websocket connection lost. We will try to restart it soon.")
-
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
             # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
             # Right now we allow it to ramp up to 30 seconds between retries.
-            time.sleep(3.0 * self.ConsecutivelyFailedConnectionAttempts)
+            sleepDelay = self.ConsecutivelyFailedConnectionAttempts
+            if sleepDelay > 6:
+                sleepDelay = 6
+            sleepDelaySec = 5.0 * sleepDelay
+            self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Elegoo printer.")
+            time.sleep(5.0 * sleepDelay)
 
 
     # Fired when the websocket is connected.
     def _OnWsConnect(self, ws:Client):
         self.Logger.info("Connection to the Elegoo printer established!")
+
+        # Set the connected flag now, so we can send messages.
         self.WebSocketConnected = True
-                        # We set the defaults here, but the ElegooClient will update them if needed.
+
+        # Reset the failed connection attempts.
+        self.ConsecutivelyFailedConnectionAttempts = 0
+        self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
+
+        # On connect, we need to send a message to start the connection.
+        self.SendRequest(0, waitForResponse=False)
+        # We set the defaults here, but the ElegooClient will update them if needed.
         # TODO move these
         #OctoHttpRequest.SetLocalHostAddress("10.0.0.101")
 
 
     # Fired when the websocket is closed.
     def _OnWsClose(self, ws:Client):
-        self.Logger.warn("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
+        # Don't log this if we already know its due to too many clients.
+        if self.LastConnectionFailedDueToTooManyClients is False:
+            self.Logger.debug("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
 
 
     # Fired when the websocket is closed.
     def _OnWsError(self, ws:Client, e:Exception):
-        Sentry.Exception("Elegoo printer websocket error.", e)
+        # There's a special case here where the Elegoo printers can have a limited number of connections.
+        # When that happens, we want to note it so we don't just keep trying the same IP over and over.
+        msg = str(e)
+        if msg.lower().find("too many client") >= 0:
+            self.LastConnectionFailedDueToTooManyClients = True
+            self.Logger.warning("Elegoo printer connection failed due to too many already connected clients.")
+        else:
+            Sentry.Exception("Elegoo printer websocket error.", e)
 
 
     # Fired when the websocket is closed.
     def _OnWsData(self, ws:Client, buffer:bytearray, msgType):
-        self.Logger.warn("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
+        self.Logger.warning("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
 
 
 #     # Fired when there's an incoming MQTT message.
@@ -391,6 +412,8 @@ class ElegooClient:
 
     # Returns the IP for the next connection attempt
     def _GetIpForConnectionAttempt(self) -> str:
+        # Always increment the failed attempts - no matter the reason.
+        self.ConsecutivelyFailedConnectionAttempts += 1
 
         # Get our vars.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
@@ -413,11 +436,12 @@ class ElegooClient:
         if hasMainboardId is False:
             return configIpOrHostname
 
-        # Increment and reset if it's too high.
+        # If we have a mainboard ID, we can scan for the printer on the local network.
+        # But we only want to do this every now an then due to the CPU load.
         doPrinterSearch = False
-        self.ConsecutivelyFailedConnectionAttempts += 1
-        if self.ConsecutivelyFailedConnectionAttempts > 6:
-            self.ConsecutivelyFailedConnectionAttempts = 0
+        self.ConsecutivelyFailedConnectionAttemptsSinceSearch += 1
+        if self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 6:
+            self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
             doPrinterSearch = True
 
         # On the first few attempts, use the expected IP.

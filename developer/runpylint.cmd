@@ -11,6 +11,8 @@ echo Running pylint on moonraker_octoeverywhere
 pylint .\moonraker_octoeverywhere\
 echo Running pylint on bambu_octoeverywhere
 pylint .\bambu_octoeverywhere\
+echo Running pylint on elegoo_octoeverywhere
+pylint .\elegoo_octoeverywhere\
 
 echo Running pylint on py_installer
 pylint .\py_installer\
