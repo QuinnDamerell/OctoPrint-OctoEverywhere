@@ -81,6 +81,7 @@ class OctoHttpRequest:
     #                   customBodyStreamCallback() -> byteArray : Called to get more bytes. If None is returned, the stream is done.
     #                   customBodyStreamClosedCallback() -> None : MUST BE CALLED when this Result object is closed, to clean up the stream.
     class Result():
+
         def __init__(self, statusCode:int, headers:dict, url:str, didFallback:bool, fullBodyBuffer=None, requestLibResponseObj:requests.Response=None, customBodyStreamCallback=None, customBodyStreamClosedCallback=None):
             # Status code isn't a property because some things need to set it externally to the class. (Result.StatusCode = 302)
             self.StatusCode = statusCode
@@ -290,44 +291,49 @@ class OctoHttpRequest:
             if pathOrUrl.startswith("/webcam?action"):
                 pathOrUrl = pathOrUrl.replace("/webcam?action", "/webcam/?action")
 
-            # The main URL is directly to this OctoPrint instance
-            # This URL will only every be http, it can't be https.
-            url = "http://" + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
+            if pathOrUrl.startswith("/video"):
+                url = "http://" + OctoHttpRequest.LocalHostAddress + ":3031" + pathOrUrl
+            else:
 
-            # The fallback URL is to where we think the http proxy port is.
-            # For this address, we need set the protocol correctly depending if the client detected https
-            # or not.
-            fallbackUrl = httpProxyProtocol + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + pathOrUrl
 
-            # Special case for systems with an API router (only moonraker as of now)
-            # If the API router wants to redirect the URL, it must be tried first, since the default URL
-            # might also work, but might be incorrect.
-            if Compat.HasApiRouterHandler():
-                reroutedUrl = Compat.GetApiRouterHandler().MapRelativePathToAbsolutePathIfNeeded(pathOrUrl, "http://")
-                if reroutedUrl is not None:
-                    # If we got a redirect URL, make sure it's the first URL, and use the default URL as the fallback.
-                    fallbackUrl = url
-                    url = reroutedUrl
+                # The main URL is directly to this OctoPrint instance
+                # This URL will only every be http, it can't be https.
+                url = "http://" + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
 
-            # If the two URLs above don't work, we will try to call the server using the local IP since the server might not be bound to localhost.
-            # Note we only build the suffix part of the string here, because we don't want to do the local IP detection if we don't have to.
-            # Also note this will only work for OctoPrint pages.
-            # This case only seems to apply to OctoPrint instances running on Windows.
-            fallbackLocalIpOctoPrintPortSuffix = ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
-            fallbackLocalIpHttpProxySuffix =  ":" + str(OctoHttpRequest.LocalHttpProxyPort) + pathOrUrl
+                # The fallback URL is to where we think the http proxy port is.
+                # For this address, we need set the protocol correctly depending if the client detected https
+                # or not.
+                fallbackUrl = httpProxyProtocol + OctoHttpRequest.LocalHostAddress + ":" +str(OctoHttpRequest.LocalHttpProxyPort) + pathOrUrl
 
-            # If all else fails, and because this logic isn't perfect, yet, we will also try to fallback to the assumed webcam port.
-            # This isn't a great thing though, because more complex webcam setups use different ports and more than one instance.
-            # Only setup this URL if the path starts with /webcam, which again isn't a great indicator because it can change per user.
-            webcamUrlIndicator = "/webcam"
-            pathLower = pathOrUrl.lower()
-            if pathLower.startswith(webcamUrlIndicator):
-                # We need to remove the /webcam* since we are trying to talk directly to mjpg-streamer
-                # We do want to keep the second / though.
-                secondSlash = pathOrUrl.find("/", 1)
-                if secondSlash != -1:
-                    webcamPath = pathOrUrl[secondSlash:]
-                    fallbackWebcamUrl = "http://" + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
+                # Special case for systems with an API router (only moonraker as of now)
+                # If the API router wants to redirect the URL, it must be tried first, since the default URL
+                # might also work, but might be incorrect.
+                if Compat.HasApiRouterHandler():
+                    reroutedUrl = Compat.GetApiRouterHandler().MapRelativePathToAbsolutePathIfNeeded(pathOrUrl, "http://")
+                    if reroutedUrl is not None:
+                        # If we got a redirect URL, make sure it's the first URL, and use the default URL as the fallback.
+                        fallbackUrl = url
+                        url = reroutedUrl
+
+                # If the two URLs above don't work, we will try to call the server using the local IP since the server might not be bound to localhost.
+                # Note we only build the suffix part of the string here, because we don't want to do the local IP detection if we don't have to.
+                # Also note this will only work for OctoPrint pages.
+                # This case only seems to apply to OctoPrint instances running on Windows.
+                fallbackLocalIpOctoPrintPortSuffix = ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
+                fallbackLocalIpHttpProxySuffix =  ":" + str(OctoHttpRequest.LocalHttpProxyPort) + pathOrUrl
+
+                # If all else fails, and because this logic isn't perfect, yet, we will also try to fallback to the assumed webcam port.
+                # This isn't a great thing though, because more complex webcam setups use different ports and more than one instance.
+                # Only setup this URL if the path starts with /webcam, which again isn't a great indicator because it can change per user.
+                webcamUrlIndicator = "/webcam"
+                pathLower = pathOrUrl.lower()
+                if pathLower.startswith(webcamUrlIndicator):
+                    # We need to remove the /webcam* since we are trying to talk directly to mjpg-streamer
+                    # We do want to keep the second / though.
+                    secondSlash = pathOrUrl.find("/", 1)
+                    if secondSlash != -1:
+                        webcamPath = pathOrUrl[secondSlash:]
+                        fallbackWebcamUrl = "http://" + OctoHttpRequest.LocalHostAddress + ":8080" + webcamPath
 
         elif pathOrUrlType == PathTypes.Absolute:
             # For absolute URLs, only use the main URL and set it be exactly what was requested.

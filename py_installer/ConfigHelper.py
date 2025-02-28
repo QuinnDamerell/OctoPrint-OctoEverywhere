@@ -128,6 +128,39 @@ class ConfigHelper:
 
 
     #
+    # Elegoo Only
+    #
+
+
+    @staticmethod
+    def TryToGetElegooData(context:Context = None, configFolderPath:str = None) -> str:
+        try:
+            # Load the config, if this returns None, there is no existing file.
+            c = ConfigHelper._GetConfig(context, configFolderPath)
+            if c is None:
+                return None
+            # Use a default of None so if they don't exist, they aren't added to the config.
+            return c.GetStr(Config.SectionElegoo, Config.ElegooMainboardId, None)
+        except Exception as e:
+            # There have been a few reports of this file being corrupt, so if it is, we will just fail and rewrite it.
+            Logger.Warn("Failed to parse elegoo details from existing config. "+str(e))
+        return None
+
+
+    # Writes the bambu details to the config file
+    @staticmethod
+    def WriteElegooDetails(context:Context, mainboardId:str):
+        try:
+            # Load the config, force it to be created if it doesn't exist.
+            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            # Write the new values
+            c.SetStr(Config.SectionElegoo, Config.ElegooMainboardId, mainboardId)
+        except Exception as e:
+            Logger.Error("Failed to write elegoo details to config. "+str(e))
+            raise Exception("Failed to write elegoo details to config") from e
+
+
+    #
     # Helpers
     #
 

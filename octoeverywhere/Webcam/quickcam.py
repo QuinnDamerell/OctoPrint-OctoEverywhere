@@ -11,6 +11,7 @@ import signal
 
 from octoeverywhere.sentry import Sentry
 
+from .webcamutil import WebcamUtil
 from ..octohttprequest import OctoHttpRequest
 from .webcamsettingitem import WebcamSettingItem
 from .webcamstreaminstance import WebcamStreamInstance
@@ -21,7 +22,8 @@ from .webcamstreaminstance import WebcamStreamInstance
 class QuickCamStreamTypes:
     NotSupported = 0
     RTSP = 1
-    WebSocket = 2
+    WebSocket = 2,
+    JMPEG = 3
 
 
 # This is a helper class that manages active instances of QuickCam and allows all requests for the same URL to share a common stream.
@@ -116,6 +118,10 @@ class QuickCamManager:
 # Right now it supports RTSP camera feeds and the Bambu Websocket based streaming protocol.
 class QuickCam:
 
+    # The protocol def
+    JMPEGProtocol = "jmpeg://"
+    JMPEGProtocolSecure = "jmpegs://"
+
     # The amount of time the capture thread will stay connected before it will close.
     # Whenever an image is accessed, the time is reset.
     c_CaptureThreadTimeoutSec = 60
@@ -145,9 +151,12 @@ class QuickCam:
         # Check if the URL is RTSP
         if url.startswith("rtsps://") or url.startswith("rtsp://"):
             return QuickCamStreamTypes.RTSP
-        # Or if the URL is a websocket. We will assume it's the Bambu websocket protocol if so.
+        # If the URL is a websocket. We will assume it's the Bambu websocket protocol if so.
         if url.startswith("ws://") or url.startswith("wss://"):
             return QuickCamStreamTypes.WebSocket
+        # This is a protocol handler we use internally to indicate a stream is a JMPEG stream.
+        if url.startswith(QuickCam.JMPEGProtocol) or url.startswith(QuickCam.JMPEGProtocolSecure):
+            return QuickCamStreamTypes.JMPEG
         return QuickCamStreamTypes.NotSupported
 
 
@@ -228,6 +237,7 @@ class QuickCam:
     def _captureThread(self):
         try:
             # We allow a few attempts, so if there are any connection issues or errors we buffer them out.
+            # This is really helpful for ffmpeg and for the Elegoo OS webcam server, which can be flaky.
             attempts = 0
             while attempts < 5:
                 attempts += 1
@@ -240,6 +250,9 @@ class QuickCam:
                 elif self.Type == QuickCamStreamTypes.WebSocket:
                     self.Logger.debug(f"QuickCam capture thread started for Websocket. {self.Url}")
                     camImpl = QuickCam_WebSocket(self.Logger)
+                elif self.Type == QuickCamStreamTypes.JMPEG:
+                    self.Logger.debug(f"QuickCam capture thread started for JMPEG. {self.Url}")
+                    camImpl = QuickCam_Jmpeg(self.Logger)
                 else:
                     self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
                     return
@@ -272,8 +285,8 @@ class QuickCam:
                     except Exception as e:
                         # We have seen times where random errors are returned, like on boot or if the stream is opened too soon after closing.
                         # This exception block is designed to eat any connection or buffer parsing errors, eat them, and try again.
-                        self.Logger.warn("Exception in QuickCam capture thread. "+str(e))
-                        time.sleep(2)
+                        self.Logger.warning("Exception in QuickCam capture thread. "+str(e))
+                        time.sleep(1)
         except Exception as e:
             Sentry.Exception("Exception in QuickCam capture thread. ", e)
         finally:
@@ -440,6 +453,64 @@ class QuickCam_WebSocket:
         try:
             if self.Socket is not None:
                 self.Socket.__exit__(t, v, tb)
+        except Exception:
+            pass
+
+
+# Implements the websocket camera for any jmpeg URL.
+class QuickCam_Jmpeg:
+
+    def __init__(self, logger:logging.Logger):
+        self.Logger = logger
+        self.OctoResult:OctoHttpRequest.Result = None
+        self.IsFirstImagePull = True
+
+
+    # ~~ Interface Function ~~
+    # Connects to the server.
+    # This will throw an exception if it fails.
+    def Connect(self, url:str) -> None:
+        # We don't need to worry about parsing a user name and password, because we will just keep it in the normal URL.
+        # We support both http and https, so we will just replace the jmpeg:// with http:// or https://.
+        url = url.replace("jmpeg://", "http://")
+        url = url.replace("jmpegs://", "https://")
+        self.OctoResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, OctoHttpRequest.GetPathType(url), "GET", {}, allowRedirects=True)
+
+
+    # ~~ Interface Function ~~
+    # Gets an image from the server. This should block until an image is ready.
+    # This can return None to indicate there's no image but the connection is still good, this allows the host to check if we should still be running.
+    # To indicate connection is closed or needs to be closed, this should throw.
+    def GetImage(self) -> bytearray:
+
+        # Ensure we have a valid result
+        if self.OctoResult is None:
+            raise Exception("QuickCam_Jmpeg failed to make the http request.")
+        if self.OctoResult.StatusCode != 200:
+            raise Exception(f"QuickCam_Jmpeg failed to get a valid OctoHttpRequest result. Status code: {self.OctoResult.StatusCode}")
+
+        # Try to get an image from the stream using the common logic.
+        result = WebcamUtil.GetSnapshotFromStream(self.Logger, self.OctoResult, validateMultiStreamHeader=self.IsFirstImagePull)
+        self.IsFirstImagePull = False
+        if result is None:
+            raise Exception("QuickCam_Jmpeg failed to get an image from the stream.")
+
+        # We must use the ensure jpeg header info function to ensure the image is a valid jpeg.
+        # We know, for example, the Elegoo OS webcam server doesn't send the jpeg header info properly.
+        return WebcamUtil.EnsureJpegHeaderInfo(self.Logger, result.ImageBuffer)
+
+
+    # Allows us to using the with: scope.
+    def __enter__(self):
+        return self
+
+
+    # Allows us to using the with: scope.
+    # Must not throw!
+    def __exit__(self, t, v, tb):
+        try:
+            if self.OctoResult is not None:
+                self.OctoResult.__exit__(t, v, tb)
         except Exception:
             pass
 

@@ -7,7 +7,7 @@ from .ConfigHelper import ConfigHelper
 
 # This class does the same function as the Discovery class, but for companion or Bambu Connect plugins.
 # Note that "Bambu Connect" is really just a type of companion plugin, but we use different names so it feels correct.
-class DiscoveryCompanionAndBambu:
+class DiscoveryCompanionBambuAndElegoo:
 
     # This is the base data folder name that will be used, the plugin id suffix will be added to end of it.
     # The folders will always be in the user's home path.
@@ -15,13 +15,26 @@ class DiscoveryCompanionAndBambu:
     # The primary instance (id == "1") will have no "-#" suffix on the folder or service name.
     c_CompanionPluginDataRootFolder_Lower = ".octoeverywhere-companion"
     c_BambuPluginDataRootFolder_Lower = ".octoeverywhere-bambu"
+    c_ElegooPluginDataRootFolder_Lower = ".octoeverywhere-elegoo"
 
 
     def Discovery(self, context:Context):
         Logger.Debug("Starting companion discovery.")
 
+        # Sanity check the context.
+        if context.IsCompanionBambuOrElegoo() is False:
+            raise Exception("DiscoveryCompanionBambuAndElegoo used in non companion, elegoo connect, or bambu connect context.")
+
         # Used for printing the type, like "would you like to install a new {pluginTypeStr} plugin?"
-        pluginTypeStr = "Bambu Connect" if context.IsBambuSetup else "Companion"
+        # Also get the correct plugin root data folder for this target type.
+        pluginTypeStr = "Companion"
+        pluginDataRootFolder = DiscoveryCompanionBambuAndElegoo.c_CompanionPluginDataRootFolder_Lower
+        if context.IsBambuSetup:
+            pluginTypeStr = "Bambu Connect"
+            pluginDataRootFolder = DiscoveryCompanionBambuAndElegoo.c_BambuPluginDataRootFolder_Lower
+        elif context.IsElegooSetup:
+            pluginTypeStr = "Elegoo Connect"
+            pluginDataRootFolder = DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower
 
         # Look for existing companion or bambu data installs.
         existingCompanionFolders = []
@@ -31,16 +44,12 @@ class DiscoveryCompanionAndBambu:
             # Use starts with to see if it matches any of our possible folder names.
             # Since each setup only targets companion or bambu connect, only pick the right folder type.
             fileOrDirNameLower = fileOrDirName.lower()
-            if context.IsCompanionSetup:
-                if fileOrDirNameLower.startswith(DiscoveryCompanionAndBambu.c_CompanionPluginDataRootFolder_Lower):
-                    existingCompanionFolders.append(fileOrDirName)
-                    Logger.Debug(f"Found existing companion data folder: {fileOrDirName}")
-            elif context.IsBambuSetup:
-                if fileOrDirNameLower.startswith(DiscoveryCompanionAndBambu.c_BambuPluginDataRootFolder_Lower):
-                    existingCompanionFolders.append(fileOrDirName)
-                    Logger.Debug(f"Found existing bambu data folder: {fileOrDirName}")
-            else:
-                raise Exception("DiscoveryCompanionAndBambu used in non companion or bambu connect context.")
+
+            # If the folder name starts with the companion or bambu connect folder name, add it to the list.
+            if fileOrDirNameLower.startswith(pluginDataRootFolder):
+                existingCompanionFolders.append(fileOrDirName)
+                Logger.Debug(f"Found existing companion data folder: {fileOrDirName}")
+
 
         # If there's an existing folders, ask the user if they want to use them.
         if len(existingCompanionFolders) > 0:
@@ -54,7 +63,7 @@ class DiscoveryCompanionAndBambu:
             Logger.Blank()
             Logger.Info("Options:")
             for folder in existingCompanionFolders:
-                instanceId = self._GetCompanionOrBambuIdFromFolderName(folder)
+                instanceId = self._GetCompanionBambuOrElegooIdFromFolderName(folder)
                 # Try to parse the config, if there is one and it's valid.
                 ip, port = ConfigHelper.TryToGetCompanionDetails(configFolderPath=os.path.join(context.UserHomePath, folder))
                 if ip is None and port is None:
@@ -99,8 +108,7 @@ class DiscoveryCompanionAndBambu:
         # Create a new instance path. Either there is no existing data path or the user wanted to create a new one.
         # There is a special case for instance ID "1", we use no suffix. All others will have the suffix.
         newId = str(len(existingCompanionFolders) + 1)
-        folderNameRoot = DiscoveryCompanionAndBambu.c_BambuPluginDataRootFolder_Lower if context.IsBambuSetup else DiscoveryCompanionAndBambu.c_CompanionPluginDataRootFolder_Lower
-        fullFolderName = folderNameRoot if newId == Context.CompanionPrimaryInstanceId else f"{folderNameRoot}-{newId}"
+        fullFolderName = pluginDataRootFolder if newId == Context.CompanionPrimaryInstanceId else f"{pluginDataRootFolder}-{newId}"
         self._SetupContextFromVars(context, fullFolderName)
         Logger.Info(f"Creating a new {pluginTypeStr} plugin data path. Path: {context.CompanionDataRoot}, Id: {context.CompanionInstanceId}")
         return
@@ -108,7 +116,7 @@ class DiscoveryCompanionAndBambu:
 
     def _SetupContextFromVars(self, context:Context, folderName:str):
         # First, ensure we can parse the id and set it.
-        context.CompanionInstanceId = self._GetCompanionOrBambuIdFromFolderName(folderName)
+        context.CompanionInstanceId = self._GetCompanionBambuOrElegooIdFromFolderName(folderName)
 
         # Make the full path
         context.CompanionDataRoot = os.path.join(context.UserHomePath, folderName)
@@ -118,19 +126,21 @@ class DiscoveryCompanionAndBambu:
 
 
     # Returns the instance id, for primary instances, this returns "1"
-    def _GetCompanionOrBambuIdFromFolderName(self, folderName:str):
+    def _GetCompanionBambuOrElegooIdFromFolderName(self, folderName:str):
         folderName_lower = folderName.lower()
 
         # If the folder name starts with any of these, then its a folder we can get the instance for.
         # We will get the suffix for the folder path and then figure out the id.
         folderSuffix = None
-        if folderName_lower.startswith(DiscoveryCompanionAndBambu.c_CompanionPluginDataRootFolder_Lower) is True:
-            folderSuffix = folderName_lower[len(DiscoveryCompanionAndBambu.c_CompanionPluginDataRootFolder_Lower):]
-        elif folderName_lower.startswith(DiscoveryCompanionAndBambu.c_BambuPluginDataRootFolder_Lower) is True:
-            folderSuffix = folderName_lower[len(DiscoveryCompanionAndBambu.c_BambuPluginDataRootFolder_Lower):]
+        if folderName_lower.startswith(DiscoveryCompanionBambuAndElegoo.c_CompanionPluginDataRootFolder_Lower) is True:
+            folderSuffix = folderName_lower[len(DiscoveryCompanionBambuAndElegoo.c_CompanionPluginDataRootFolder_Lower):]
+        elif folderName_lower.startswith(DiscoveryCompanionBambuAndElegoo.c_BambuPluginDataRootFolder_Lower) is True:
+            folderSuffix = folderName_lower[len(DiscoveryCompanionBambuAndElegoo.c_BambuPluginDataRootFolder_Lower):]
+        elif folderName_lower.startswith(DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower) is True:
+            folderSuffix = folderName_lower[len(DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower):]
         else:
-            Logger.Error(f"We tried to get an companion or bambu connect ID from a non-companion or bambu connect data folder. {folderName}")
-            raise Exception("We tried to get an companion or bambu connect ID from a non-companion or bambu connect data folder")
+            Logger.Error(f"We tried to get an companion, elegoo connect, or bambu connect ID from a non-companion, elegoo connect, or bambu connect data folder. {folderName}")
+            raise Exception("We tried to get an companion, elegoo connect, or bambu connect ID from a non-companion, elegoo connect, or bambu connect data folder")
 
         # If there is no suffix, this is the primary instance
         if folderSuffix is None or len(folderSuffix) == 0:
@@ -138,6 +148,6 @@ class DiscoveryCompanionAndBambu:
 
         # Otherwise, remove the - and return the id.
         if folderSuffix.startswith("-") is False:
-            Logger.Error(f"We tried to get an companion or bambu connect ID but the suffix didn't start with a -. {folderName}")
-            raise Exception("We tried to get an companion or bambu connect ID but the suffix didn't start with a -")
+            Logger.Error(f"We tried to get an companion, elegoo connect, or bambu connect ID but the suffix didn't start with a -. {folderName}")
+            raise Exception("We tried to get an companion, elegoo connect, or bambu connect ID but the suffix didn't start with a -")
         return folderSuffix[1:]

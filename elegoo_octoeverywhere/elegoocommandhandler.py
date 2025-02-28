@@ -65,7 +65,28 @@ class ElegooCommandHandler:
     #
     # Returning None will result in the "Printer not connected" state.
     def GetCurrentJobStatus(self):
-        return None
+        return {
+            "State": "idle",
+            "SubState": None,
+            "Error": None,
+            "CurrentPrint":
+            {
+                "Progress" : 0,
+                "DurationSec" : 0,
+                # In some system buggy cases, the time left can be super high and won't fit into a int32, so we cap it.
+                "TimeLeftSec" : 0,
+                "FileName" : "",
+                "EstTotalFilUsedMm" : 0,
+                "CurrentLayer": 0,
+                "TotalLayers": 0,
+                "Temps": {
+                    "BedActual": 0,
+                    "BedTarget": 0,
+                    "HotendActual": 0,
+                    "HotendTarget": 0,
+                }
+            }
+        }
         # # Try to get the current state.
         # bambuState = BambuClient.Get().GetState()
 

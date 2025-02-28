@@ -73,6 +73,9 @@ class Context:
         # Parsed from the command line args, if set, this plugin should be installed as an bambu connect (similar to the companion).
         self.IsBambuSetup:bool = False
 
+        # Parsed from the command line args, if set, this plugin should be installed as an elegoo connect (similar to the companion).
+        self.IsElegooSetup:bool = False
+
         # Parsed from the command line args, if set, the plugin install should be in update mode.
         self.IsUpdateMode:bool = False
 
@@ -97,7 +100,7 @@ class Context:
         self.CompanionDataRoot:str = None
 
         # The companion or bambu instance id, so we can support multiple instances on one device.
-        # Note that a id of "1" is special, and you can use IsPrimaryCompanionOrBambu to detect it.
+        # Note that a id of "1" is special, and you can use IsPrimaryCompanionBambuOrElegoo to detect it.
         self.CompanionInstanceId:str = None
 
 
@@ -139,15 +142,15 @@ class Context:
         return self.OsType == OsTypes.SonicPad or self.OsType == OsTypes.K1 or self.OsType == OsTypes.K2
 
 
-    # Returns true if the target is a companion or bambu connect setup.
-    def IsCompanionOrBambu(self) -> bool:
-        return self.IsCompanionSetup or self.IsBambuSetup
+    # Returns true if the target is a companion, bambu connect, or elegoo connect setup.
+    def IsCompanionBambuOrElegoo(self) -> bool:
+        return self.IsCompanionSetup or self.IsBambuSetup or self.IsElegooSetup
 
 
-    # Returns true if this is a bambu or companion plugin and it's the primary, aka it has an instance ID of 1.
-    def IsPrimaryCompanionOrBambu(self) -> bool:
-        if self.IsCompanionOrBambu() is False:
-            raise Exception("IsPrimaryCompanionOrBambu was called for a non companion or bambu context.")
+    # Returns true if this is a bambu, elegoo, companion plugin and it's the primary, aka it has an instance ID of 1.
+    def IsPrimaryCompanionBambuOrElegoo(self) -> bool:
+        if self.IsCompanionBambuOrElegoo() is False:
+            raise Exception("IsPrimaryCompanionBambuOrElegoo was called for a non companion or bambu context.")
         return self.CompanionInstanceId == Context.CompanionPrimaryInstanceId
 
 
@@ -185,7 +188,7 @@ class Context:
         self.CmdLineArgs = self.CmdLineArgs.strip()
 
         if generation >= 2:
-            if self.IsCompanionOrBambu():
+            if self.IsCompanionBambuOrElegoo():
                 self._ValidatePathAndExists(self.CompanionDataRoot, "Required config var Companion Data Path was not found")
                 self._ValidateString(self.CompanionInstanceId, "Required config var Companion Instance Id was not found")
                 self.CompanionDataRoot = self.CompanionDataRoot.strip()
@@ -254,6 +257,9 @@ class Context:
                 elif rawArgLower == "bambu":
                     Logger.Debug("Setup running in Bambu Connect setup mode.")
                     self.IsBambuSetup = True
+                elif rawArgLower == "elegoo":
+                    Logger.Debug("Setup running in Elegoo Connect setup mode.")
+                    self.IsElegooSetup = True
                 elif rawArgLower == "update" or rawArgLower == "upgrade":
                     Logger.Debug("Setup running in update mode.")
                     self.IsUpdateMode = True
@@ -287,12 +293,6 @@ class Context:
 
 
     def DetectOsType(self):
-        self._DetectOsType()
-        # TODO - Remove. Send telemetry about the OS type while we try to debug an issue on an unknown OS.
-        Telemetry.Write("Installer-OsType", int(self.OsType))
-
-
-    def _DetectOsType(self):
         #
         # Note! This should closely resemble the ostype.py class in the plugin and the logic in the ./install.sh script!
         #

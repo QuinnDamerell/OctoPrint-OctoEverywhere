@@ -23,6 +23,13 @@ class OptionalDepsInstaller:
     # The PIP install can take quite a long time (20-30 seconds) so we run in async.
     @staticmethod
     def TryToInstallDepsAsync(context:Context) -> None:
+        # We know Creality OS don't have have apt-get, so we skip it.
+        if context.IsCrealityOs():
+            Logger.Debug("OptionalDepsInstaller - Skipping because we are on a Creality OS.")
+            return
+        if context.SkipSudoActions:
+            Logger.Warn("OptionalDepsInstaller - Skipping because we are skipping sudo actions.")
+            return
         # Since might need to run a sudo command to apt-install, try to run it now so the user can enter their password
         # Otherwise they will randomly be prompted in the middle of the setup.
         # If this fails, it's no problem, we can still try to install the PIP packages.

@@ -200,7 +200,7 @@ class BambuConnector:
                 Logger.Blank()
                 Logger.Blank()
                 Logger.Info("Since we can't automatically find your printer, we can get the IP address manually.")
-                Logger.Info("You Bambu printer's IP address can be found using the screen on your printer, in the Networking settings.")
+                Logger.Info("Your Bambu printer's IP address can be found using the screen on your printer, in the Networking settings.")
                 Logger.Blank()
                 Logger.Warn("Follow this link for a step-by-step guide to find the IP address of your printer:")
                 Logger.Warn("https://octoeverywhere.com/s/bambu-ip")

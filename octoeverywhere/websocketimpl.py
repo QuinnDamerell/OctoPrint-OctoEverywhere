@@ -20,8 +20,11 @@ class Client:
         # Since we also fire onWsError if there is a send error, we need to capture
         # the callback and have some vars to ensure it only gets fired once.
         self.clientWsErrorCallback = onWsError
+        self.clientWsCloseCallback = onWsClose
         self.wsErrorCallbackLock = threading.Lock()
         self.hasFiredWsErrorCallback = False
+        self.hasPendingErrorCallbackFire = False
+        self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
 
         # We use a send queue thread because it allows us to process downloads about 2x faster.
         # This is because the downstream work of the WS can be made faster if it's done in parallel
@@ -52,8 +55,14 @@ class Client:
         # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
         # sometimes it tried to send 3 when we only accepted 1.
         def OnClosed(ws, _, __):
-            if onWsClose:
-                onWsClose(self)
+            # We need to check this special case.
+            # If the error callback is pending, we need to defer the close callback until the error callback is fired.
+            # Otherwise, we handle the error, kick off the thread to fire the error callback, and then fire close before the eroor callback.
+            with self.wsErrorCallbackLock:
+                if self.hasPendingErrorCallbackFire:
+                    self.hasDeferredCloseCallbackDueToPendingErrorCallback = True
+                    return
+            self._FireCloseCallback()
 
         def OnData(ws, buffer, msgType, continueFlag):
             if onWsData:
@@ -155,20 +164,29 @@ class Client:
             Sentry.Exception("Exception while trying to close the send queue.", e)
 
 
+    def _FireCloseCallback(self):
+        if self.clientWsCloseCallback:
+            self.clientWsCloseCallback(self)
+
+
     # This can be called from our logic internally in this class or from the websocket class itself
     def handleWsError(self, exception):
-        # If the client is trying to close this websocket and has made the close call to do so,
-        # we won't fire any more errors out of it. This can happen if a send is trying to send data
-        # at the same time as the socket is closing for example.
-        if self.hasClientRequestedClose:
-            return
 
-        # Since this callback can be fired from many sources, we want to ensure it only
-        # gets fired once.
         with self.wsErrorCallbackLock:
+            # If the client is trying to close this websocket and has made the close call to do so,
+            # we won't fire any more errors out of it. This can happen if a send is trying to send data
+            # at the same time as the socket is closing for example.
+            if self.hasClientRequestedClose:
+                return
+
+            # Since this callback can be fired from many sources, we want to ensure it only
+            # gets fired once.
             if self.hasFiredWsErrorCallback:
                 return
             self.hasFiredWsErrorCallback = True
+
+            # This is important to set, to prevent a race between close being called before the error callback is fired.
+            self.hasPendingErrorCallbackFire = True
 
         # To prevent locking issues or other issues, spin off a thread to fire the callback.
         # This prevents the case where send() fires the callback, we don't want to overlap the
@@ -183,6 +201,17 @@ class Client:
             if self.clientWsErrorCallback:
                 self.clientWsErrorCallback(self, exception)
         except Exception as e :
+            Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
+
+        # Once the error callback is fired, we can now fire the close callback if needed.
+        try:
+            with self.wsErrorCallbackLock:
+                self.hasPendingErrorCallbackFire = False
+                # If the close callback was deferred, we need to fire it now.
+                if self.hasDeferredCloseCallbackDueToPendingErrorCallback:
+                    self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
+                    self._FireCloseCallback()
+        except Exception as e:
             Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
 
         # Be sure we always close the WS

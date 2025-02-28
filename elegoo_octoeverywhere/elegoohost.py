@@ -14,7 +14,6 @@ from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.notificationshandler import NotificationsHandler
-from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.compat import Compat
 
@@ -23,8 +22,8 @@ from linux_host.secrets import Secrets
 from linux_host.version import Version
 from linux_host.logger import LoggerInit
 
-#from .bambucloud import BambuCloud
-#from .bambuclient import BambuClient
+
+from .elegooclient import ElegooClient
 from .elegoowebcamhelper import ElegooWebcamHelper
 from .elegoocommandhandler import ElegooCommandHandler
 #from .bambustatetranslater import BambuStateTranslator
@@ -114,12 +113,6 @@ class ElegooHost:
             # Setup the print info manager.
             PrintInfoManager.Init(self.Logger, localStorageDir)
 
-            # For Elegoo OS printers, the Elegoo interface is running on 3030
-            # and there's an http proxy running on 80.
-            OctoHttpRequest.SetLocalOctoPrintPort(3030)
-            OctoHttpRequest.SetLocalHttpProxyPort(80)
-            OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
-
             # Init the ping pong helper.
             OctoPingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
@@ -142,15 +135,15 @@ class ElegooHost:
             # # Setup the cloud if it's setup in the config.
             # BambuCloud.Init(self.Logger, self.Config)
 
-            # # Setup and start the Bambu Client
-            # BambuClient.Init(self.Logger, self.Config, stateTranslator)
+            # Setup and start the Elegoo Client
+            ElegooClient.Init(self.Logger, self.Config, None) # TOOD - stateTranslator)
 
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
             # TODO - Update the server host!
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Moonraker, False)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo, False)
             oe.RunBlocking()
         except Exception as e:
             Sentry.Exception("!! Exception thrown out of main host run function.", e)

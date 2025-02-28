@@ -3,7 +3,7 @@ import time
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.printinfo import PrintInfoManager
 
-from .bambuclient import BambuClient
+from .elegooclient import BambuClient
 from .bambumodels import BambuState, BambuPrintErrors
 
 # This class is responsible for listening to the mqtt messages to fire off notifications

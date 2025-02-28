@@ -185,39 +185,47 @@ class OctoWebStreamHttpHelper:
         # Before we make the request, make sure we shouldn't defer for a high pri request
         self.checkForDelayIfNotHighPri()
 
-        # Check for some special case requests before we handle the request as normal.
-        #
-        # 1) An oracle snapshot or webcam stream request. In this case the WebCamHelper class will handle the request.
-        # 2) If the request is a OctoStreamCommand, the CommandHandler will handle the request.
-        # 3) Finally, check if the request is cached in Slipstream.
+        # Get the vars we need from the octostream initial context.
         octoHttpResult = None
         isFromCache = False
-        if WebcamHelper.Get().IsSnapshotOrWebcamStreamOracleRequest(sendHeaders):
+        path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+        if path is None:
+            raise Exception("Http request has no path field in open message.")
+        if path.startswith("/video"):
+            sendHeaders["oe-webcamstream"] = 1
             octoHttpResult = WebcamHelper.Get().MakeSnapshotOrWebcamStreamRequest(httpInitialContext, method, sendHeaders, self.UploadBuffer)
-        # If this is a special command for OctoEverywhere, we handle it differently.
-        elif CommandHandler.Get().IsCommandRequest(httpInitialContext):
-            # This HandleCommand wil return a mock  OctoHttpResult, including a full mock response object.
-            octoHttpResult = CommandHandler.Get().HandleCommand(httpInitialContext, self.UploadBuffer)
         else:
-            # This is a normal web request, first ensure they are allowed.
-            # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
-            if OctoHttpRequest.GetDisableHttpRelay() and httpInitialContext.PathType() != PathTypes.Absolute:
-                self.Logger.warn("OctoWebStreamHttpHelper got a request but the http relay is disabled.")
-                self.WebStream.SetClosedDueToFailedRequestConnection()
-                self.WebStream.Close()
-                return
-
-            # For all web requests, check our in memory read-to-go cache.
-            # If available, this will return the object. On a miss it will return None
-            if Compat.HasSlipstream():
-                octoHttpResult = Compat.GetSlipstream().GetCachedOctoHttpResult(httpInitialContext)
-
-            # Check if we got a cache hit.
-            if octoHttpResult is not None:
-                isFromCache = True
+            # Check for some special case requests before we handle the request as normal.
+            #
+            # 1) An oracle snapshot or webcam stream request. In this case the WebCamHelper class will handle the request.
+            # 2) If the request is a OctoStreamCommand, the CommandHandler will handle the request.
+            # 3) Finally, check if the request is cached in Slipstream.
+            if WebcamHelper.Get().IsSnapshotOrWebcamStreamOracleRequest(sendHeaders):
+                octoHttpResult = WebcamHelper.Get().MakeSnapshotOrWebcamStreamRequest(httpInitialContext, method, sendHeaders, self.UploadBuffer)
+            # If this is a special command for OctoEverywhere, we handle it differently.
+            elif CommandHandler.Get().IsCommandRequest(httpInitialContext):
+                # This HandleCommand wil return a mock  OctoHttpResult, including a full mock response object.
+                octoHttpResult = CommandHandler.Get().HandleCommand(httpInitialContext, self.UploadBuffer)
             else:
-                # If we don't have a valid result yet, do the normal http path.
-                octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer)
+                # This is a normal web request, first ensure they are allowed.
+                # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
+                if OctoHttpRequest.GetDisableHttpRelay() and httpInitialContext.PathType() != PathTypes.Absolute:
+                    self.Logger.warn("OctoWebStreamHttpHelper got a request but the http relay is disabled.")
+                    self.WebStream.SetClosedDueToFailedRequestConnection()
+                    self.WebStream.Close()
+                    return
+
+                # For all web requests, check our in memory read-to-go cache.
+                # If available, this will return the object. On a miss it will return None
+                if Compat.HasSlipstream():
+                    octoHttpResult = Compat.GetSlipstream().GetCachedOctoHttpResult(httpInitialContext)
+
+                # Check if we got a cache hit.
+                if octoHttpResult is not None:
+                    isFromCache = True
+                else:
+                    # If we don't have a valid result yet, do the normal http path.
+                    octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer)
 
 
         # If None is returned, it failed.
@@ -499,7 +507,7 @@ class OctoWebStreamHttpHelper:
                 finalFullBufferBytes = len(buffer)
                 if finalFullBufferBytes > lastBodyReadLength + builderContext.c_MsgStreamOverheadSize and self.Logger.isEnabledFor(logging.DEBUG):
                     delta = msgSizeBytes - (lastBodyReadLength + builderContext.c_MsgStreamOverheadSize)
-                    self.Logger.warn(f"The flatbuffer internal buffer had to be resized from the guess we set. Flatbuffer full buffer size: {finalFullBufferBytes}, last body read length: {lastBodyReadLength}; overrage delta: {delta}")
+                    self.Logger.warn(f"The flatbuffer internal buffer had to be resized from the guess we set. Flatbuffer full buffer size: {finalFullBufferBytes}, last body read length: {lastBodyReadLength}; overage delta: {delta}")
 
                 # Clear this flag
                 isFirstResponse = False
