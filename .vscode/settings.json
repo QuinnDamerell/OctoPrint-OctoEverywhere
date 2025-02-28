@@ -203,6 +203,7 @@
         "pushd",
         "pyinstrument",
         "Pylint",
+        "pylintrc",
         "pympler",
         "pypi",
         "pythoncompat",

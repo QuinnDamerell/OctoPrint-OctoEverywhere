@@ -5,6 +5,8 @@ import string
 import logging
 import threading
 
+from enum import Enum
+
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -53,6 +55,12 @@ class ResponseMsg:
         return self.Result
 
 
+# For these messages, we send a request and the request is acked, but the actual message comes as an unsolicited message.
+class SpecialMessages(Enum):
+    StatusUpdate = 0
+    AttributesUpdate = 1
+
+
 # Responsible for connecting to and maintaining a connection to the Elegoo Printer.
 class ElegooClient:
 
@@ -86,7 +94,10 @@ class ElegooClient:
 
         # Setup the websocket vars
         self.WebSocket:Client = None
+        # Set when the websocket is connected and ready to send messages.
         self.WebSocketConnected = False
+        # Set when the first attribute msg is received and we verified the mainboard id.
+        self.WebSocketConnectFinalized = False
         # We use this var to keep track of consecutively failed connections
         self.ConsecutivelyFailedConnectionAttempts = 0
         # We use this var to keep track of how many connection attempts we have made since we did a search.
@@ -96,16 +107,6 @@ class ElegooClient:
         # Hold the IP we are currently connected to, so when it's successful, we can update the config.
         self.WebSocketConnectionIp:str = None
 
-        # Get the port string.
-        self.PortStr  = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
-        if self.PortStr is None:
-            self.PortStr = NetworkSearch.c_ElegooDefaultPortStr
-
-        # Use the direct web server port as the main relay port, and 80 as a fallback.
-        OctoHttpRequest.SetLocalOctoPrintPort(int(self.PortStr))
-        OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
-        OctoHttpRequest.SetLocalHttpProxyPort(80)
-
         # Note that EITHER the IP address or mainboardID are required.
         # The docker container doesn't use the mainboard ID, since we can't network scan anyways.
         ipOrHostname = config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
@@ -113,14 +114,46 @@ class ElegooClient:
         if ipOrHostname is None and self.MainboardId is None:
             raise Exception("An IP address or mainbaord IP must be provided in the config for Elegoo Connect.")
 
+        # Get the port string.
+        self.PortStr  = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
+        if self.PortStr is None:
+            self.PortStr = NetworkSearch.c_ElegooDefaultPortStr
+
+        # Set the IP we have (if any) and it will be updated later when the connection finalizes.
+        if ipOrHostname is not None and len(ipOrHostname) > 0:
+            OctoHttpRequest.SetLocalHostAddress(ipOrHostname)
+        # Set the main server port as first, then the proxy port.
+        OctoHttpRequest.SetLocalOctoPrintPort(int(self.PortStr))
+        OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
+        OctoHttpRequest.SetLocalHttpProxyPort(80)
+
         # Start the client worker thread.
         t = threading.Thread(target=self._ClientWorker)
         t.start()
 
 
+    # Sends a status update request to the printer.
+    def GetStatus(self, waitForResponse:bool=True) -> ResponseMsg:
+        # Status is a special message. We send a request and get an ack response, but the status comes as an unsolicited message.
+        # So we must set the special message flag to ensure we get the result.
+        return self._SendRequest(0, waitForResponse=waitForResponse, specialMessage=SpecialMessages.StatusUpdate)
+
+
+    # Sends a status update request to the printer.
+    def GetAttributes(self, waitForResponse:bool=True) -> ResponseMsg:
+        # Status is a special message. We send a request and get an ack response, but the status comes as an unsolicited message.
+        # So we must set the special message flag to ensure we get the result.
+        return self._SendRequest(1, waitForResponse=waitForResponse, specialMessage=SpecialMessages.AttributesUpdate)
+
+
     # Sends a request to the printer and waits for a response.
     # Always returns a ResponseMsg, with various error codes.
     def SendRequest(self, cmdId:int, data:dict=None, waitForResponse:bool=True) -> ResponseMsg:
+        return self._SendRequest(cmdId, data, waitForResponse)
+
+
+    # An internal method to send a request and wait for a response. This hides the special message logic.
+    def _SendRequest(self, cmdId:int, data:dict=None, waitForResponse:bool=True, specialMessage:SpecialMessages=None) -> ResponseMsg:
 
         # Generate a request id, which is a 32 char lowercase letter and number string
         requestId = ''.join(random.choices(string.ascii_lowercase + string.digits, k=32))
@@ -132,7 +165,7 @@ class ElegooClient:
         # Create our waiting context.
         waitContext = None
         with self.RequestLock:
-            waitContext = MsgWaitingContext(requestId)
+            waitContext = MsgWaitingContext(requestId, specialMessage)
             self.RequestPendingContexts[requestId] = waitContext
 
         # From now on, we need to always make sure to clean up the wait context, even in error.
@@ -171,25 +204,8 @@ class ElegooClient:
                 self.Logger.info(f"Elegoo client timeout while waiting for request. {requestId}")
                 return ResponseMsg(None, ResponseMsg.OE_ERROR_TIMEOUT)
 
-            # Check for an error if found, return the error state.
-            # TODO - finsih!
-            if "error" in result:
-                # Get the error parts
-                errorCode = ResponseMsg.OE_ERROR_EXCEPTION
-                errorStr = "Unknown"
-                if "code" in result["error"]:
-                    errorCode = result["error"]["code"]
-                if "message" in result["error"]:
-                    errorStr = result["error"]["message"]
-                return ResponseMsg(None, errorCode, errorStr)
-
-            # If there's a result, return the entire response
-            if "result" in result:
-                return ResponseMsg(result["result"])
-
-            # Finally, both are missing?
-            self.Logger.error("Elegoo client json rpc got a response that didn't have an error or result object? "+json.dumps(result))
-            return ResponseMsg(None, ResponseMsg.OE_ERROR_EXCEPTION, "No result or error object")
+            # Success!
+            return ResponseMsg(result)
 
         except Exception as e:
             Sentry.Exception("Moonraker client json rpc request failed to send.", e)
@@ -229,28 +245,13 @@ class ElegooClient:
         return True
 
 
-
-#     # Sends the pause command, returns is the send was successful or not.
-#     def SendPause(self) -> bool:
-#         return self._Publish({"print": {"sequence_id": "0", "command": "pause"}})
-
-
-#     # Sends the resume command, returns is the send was successful or not.
-#     def SendResume(self) -> bool:
-#         return self._Publish({"print": {"sequence_id": "0", "command": "resume"}})
-
-
-#     # Sends the cancel (stop) command, returns is the send was successful or not.
-#     def SendCancel(self) -> bool:
-#         return self._Publish({"print": {"sequence_id": "0", "command": "stop"}})
-
-
     # Sets up, runs, and maintains the websocket connection.
     def _ClientWorker(self):
         while True:
             try:
-                # Clear the connection flag
+                # Clear the connection flags
                 self.WebSocketConnected = False
+                self.WebSocketConnectFinalized = False
 
                 # Get the current IP we want to try to connect with.
                 self.WebSocketConnectionIp = self._GetIpForConnectionAttempt()
@@ -290,11 +291,10 @@ class ElegooClient:
         self.ConsecutivelyFailedConnectionAttempts = 0
         self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
 
-        # On connect, we need to send a message to start the connection.
-        self.SendRequest(0, waitForResponse=False)
-        # We set the defaults here, but the ElegooClient will update them if needed.
-        # TODO move these
-        #OctoHttpRequest.SetLocalHostAddress("10.0.0.101")
+        # On connect, we need to request the status and attributes.
+        # Important, we can't wait for for the response or will deadlock.
+        self.GetStatus(waitForResponse=False)
+        self.GetAttributes(waitForResponse=False)
 
 
     # Fired when the websocket is closed.
@@ -302,6 +302,11 @@ class ElegooClient:
         # Don't log this if we already know its due to too many clients.
         if self.LastConnectionFailedDueToTooManyClients is False:
             self.Logger.debug("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
+
+        # Clear any pending requests.
+        with self.RequestLock:
+            for _, v in self.RequestPendingContexts.items():
+                v.SetSocketClosed()
 
 
     # Fired when the websocket is closed.
@@ -318,96 +323,88 @@ class ElegooClient:
 
     # Fired when the websocket is closed.
     def _OnWsData(self, ws:Client, buffer:bytearray, msgType):
-        self.Logger.warning("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
-
-
-#     # Fired when there's an incoming MQTT message.
-#     def _OnMessage(self, client, userdata, mqttMsg:mqtt.MQTTMessage):
-#         try:
-#             # Try to deserialize the message.
-#             msg = json.loads(mqttMsg.payload)
-#             if msg is None:
-#                 raise Exception("Parsed json MQTT message returned None")
-
-#             # Print for debugging if desired.
-#             if BambuClient._PrintMQTTMessages and self.Logger.isEnabledFor(logging.DEBUG):
-#                 self.Logger.debug("Incoming Bambu Message:\r\n"+json.dumps(msg, indent=3))
-
-#             # Since we keep a track of the state locally from the partial updates, we need to feed all updates to our state object.
-#             isFirstFullSyncResponse = False
-#             if "print" in msg:
-#                 printMsg = msg["print"]
-#                 try:
-#                     if self.State is None:
-#                         # Build the object before we set it.
-#                         s = BambuState()
-#                         s.OnUpdate(printMsg)
-#                         self.State = s
-#                     else:
-#                         self.State.OnUpdate(printMsg)
-#                 except Exception as e:
-#                     Sentry.Exception("Exception calling BambuState.OnUpdate", e)
-
-#                 # Try to detect if this is the response to the first full sync request.
-#                 if self.HasDoneFirstFullStateSync is False:
-#                     # First make sure the command is the push status.
-#                     cmd = printMsg.get("command", None)
-#                     if cmd is not None and cmd == "push_status":
-#                         # We dont have a 100% great way to know if this is a fully sync message.
-#                         # For now, we use this stat. The message we get from a P1P has 59 members in the root, so we use 40 as mark.
-#                         # Note we use this same value in NetworkSearch.ValidateConnection_Bambu
-#                         if len(printMsg) > 40:
-#                             isFirstFullSyncResponse = True
-#                             self.HasDoneFirstFullStateSync = True
-
-#             # Update the version info if sent.
-#             if "info" in msg:
-#                 try:
-#                     if self.Version is None:
-#                         # Build the object before we set it.
-#                         s = BambuVersion(self.Logger)
-#                         s.OnUpdate(msg["info"])
-#                         self.Version = s
-#                     else:
-#                         self.Version.OnUpdate(msg["info"])
-#                 except Exception as e:
-#                     Sentry.Exception("Exception calling BambuVersion.OnUpdate", e)
-
-#             # Send all messages to the state translator
-#             # This must happen AFTER we update the State object, so it's current.
-#             try:
-#                 # Only send the message along if there's a state. This can happen if a push_status isn't the first message we receive.
-#                 if self.State is not None:
-#                     self.StateTranslator.OnMqttMessage(msg, self.State, isFirstFullSyncResponse)
-#             except Exception as e:
-#                 Sentry.Exception("Exception calling StateTranslator.OnMqttMessage", e)
-
-#         except Exception as e:
-#             Sentry.Exception(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
-
-
-    # Publishes a message and blocks until it knows if the message send was successful or not.
-    def _Publish(self, msg:dict) -> bool:
         try:
+            # Try to deserialize the message.
+            msg = json.loads(buffer.decode("utf-8"))
+            if msg is None:
+                raise Exception("Parsed json message returned None")
+
             # Print for debugging if desired.
-            if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Incoming Bambu Message:\r\n"+json.dumps(msg, indent=3))
+            if ElegooClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug("Incoming Elegoo Message:\r\n"+json.dumps(msg, indent=3))
 
-            # Ensure we are connected.
-            if self.Client is None or not self.Client.is_connected():
-                self.Logger.info("Failed to publish command because we aren't connected.")
-                return False
+            # Check for a waiting request context.
+            # If there is a pending context, give the message to it and we are done.
+            data = msg.get("Data", None)
+            if data is not None:
+                requestId = data.get("RequestID", None)
+                if requestId is not None:
+                    with self.RequestLock:
+                        if requestId in self.RequestPendingContexts:
+                            # Special case! - There are a few special messages that we send requests for and get an ack, but the actual result comes as an unsolicited message.
+                            # So if the special message is set, we need to give the result to the special message context.
+                            context = self.RequestPendingContexts[requestId]
+                            if context.SpecialMessage is None:
+                                context.SetResultAndEvent(msg)
+                            # Either way we return - if this is a special message we are throwing away the ack.
+                            return
 
-            # Try to publish.
-            state = self.Client.publish(f"device/{self.PrinterSn}/request", json.dumps(msg))
+            #
+            # If we are here, this either a response that the context is gone or it's a unsolicited message.
+            #
 
-            # Wait for the message publish to be acked.
-            # This will throw if the publish fails.
-            state.wait_for_publish(20)
-            return True
+            # Handle unsolicited messages.
+            attributes = msg.get("Attributes", None)
+            if attributes is not None:
+                self._HandleAttributesUpdate(attributes)
+                return
+
+            # Handle unsolicited messages.
+            status = msg.get("Status", None)
+            if status is not None:
+                self._HandleStatusUpdate(status)
+                return
+
         except Exception as e:
-            Sentry.Exception("Failed to publish message to bambu printer.", e)
-        return False
+            Sentry.Exception("Failed to handle incoming Elegoo message.", e)
+
+
+    def _HandleAttributesUpdate(self, attributes:dict):
+        # First, check if there's any special requests waiting on the attributes.
+        # If there is, we need to give the result to the waiting context.
+        with self.RequestLock:
+            for _, v in self.RequestPendingContexts.items():
+                if v.SpecialMessage == SpecialMessages.AttributesUpdate:
+                    v.SetResultAndEvent(attributes)
+
+        # We only need to handle the finalize once.
+        if self.WebSocketConnectFinalized is True:
+            return
+
+        # Try to get the mainbaord id
+        mainboardID = attributes.get("MainboardID", None)
+        if mainboardID is None:
+            return
+
+        # If we have a mainboard ID, we can now finalize the connection.
+        if self.MainboardId != mainboardID:
+            self.Logger.error(f"Elegoo Mainboard ID mismatch. Expected: {self.MainboardId} Got: {mainboardID}")
+            return
+
+        # Now that we are fully connected, set the successful IP in the config and the relay
+        OctoHttpRequest.SetLocalHostAddress(self.WebSocketConnectionIp)
+        self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, self.WebSocketConnectionIp)
+        self.Logger.info("Elegoo client connection finalized.")
+        self.WebSocketConnectFinalized = True
+
+
+    def _HandleStatusUpdate(self, status:dict):
+        # First, check if there's any special requests waiting on the status.
+        # If there is, we need to give the result to the waiting context.
+        with self.RequestLock:
+            for _, v in self.RequestPendingContexts.items():
+                if v.SpecialMessage == SpecialMessages.StatusUpdate:
+                    v.SetResultAndEvent(status)
 
 
     # Returns the IP for the next connection attempt
@@ -483,10 +480,12 @@ class ElegooClient:
 # A helper class used for waiting msg requests
 class MsgWaitingContext:
 
-    def __init__(self, msgId:str) -> None:
+    def __init__(self, msgId:str, specialMessage:SpecialMessages=None) -> None:
         self.Id = msgId
         self.WaitEvent = threading.Event()
         self.Result:dict = None
+        # If this is not None, this request invoked a special message and needs to be given the result of a special message.
+        self.SpecialMessage = specialMessage
 
 
     def GetEvent(self) -> threading.Event:
@@ -497,7 +496,7 @@ class MsgWaitingContext:
         return self.Result
 
 
-    def SetResultAndEvent(self, result) -> None:
+    def SetResultAndEvent(self, result:dict) -> None:
         self.Result = result
         self.WaitEvent.set()
 
@@ -505,31 +504,3 @@ class MsgWaitingContext:
     def SetSocketClosed(self) -> None:
         self.Result = None
         self.WaitEvent.set()
-
-# # A class returned as the result of all commands.
-# class BambuCommandResult:
-
-#     def __init__(self, result:dict = None, connected:bool = True, timeout:bool = False, otherError:str = None, exception:Exception = None) -> None:
-#         self.Connected = connected
-#         self.Timeout = timeout
-#         self.OtherError = otherError
-#         self.Ex = exception
-#         self.Result = result
-
-
-#     def HasError(self) -> bool:
-#         return self.Ex is not None or self.OtherError is not None or self.Result is None or self.Connected is False or self.Timeout is True
-
-
-#     def GetLoggingErrorStr(self) -> str:
-#         if self.Ex is not None:
-#             return str(self.Ex)
-#         if self.OtherError is not None:
-#             return self.OtherError
-#         if self.Connected is False:
-#             return "MQTT not connected."
-#         if self.Timeout:
-#             return "Command timeout."
-#         if self.Result is None:
-#             return "No response."
-#         return "No Error"
