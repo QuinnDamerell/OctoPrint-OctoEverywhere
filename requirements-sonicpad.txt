@@ -1,0 +1,22 @@
+
+#
+# This file should be IDENTICAL to the requirements.txt file, except for the comments:
+#  - urllib3 must be under 2.0, because it needs openssl 1.1.1, which the sonic pad doesn't have.
+#
+octowebsocket_client==1.8.3
+requests>=2.31.0
+octoflatbuffers==24.3.27
+pillow
+certifi>=2025.1.31
+rsa>=4.9
+dnspython>=2.3.0
+httpx>=0.24.1
+urllib3>=1.26.15,<2.0.0
+#sentry-sdk>=1.19.1,<2
+#zstandard>=0.22.0,<0.23.0
+
+# The following are required only for Moonraker
+configparser
+
+# Only used for Bambu Connect
+paho-mqtt>=2.0.0

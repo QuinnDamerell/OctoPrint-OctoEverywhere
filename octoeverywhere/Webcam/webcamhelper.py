@@ -3,17 +3,22 @@ import os
 import json
 from typing import List
 
-import urllib3
-
 from ..sentry import Sentry
+from .webcamutil import WebcamUtil
+from .quickcam import QuickCamManager
 from ..octohttprequest import OctoHttpRequest
 from .webcamsettingitem import WebcamSettingItem
-from .quickcam import QuickCamManager
 
 # The point of this class is to abstract the logic that needs to be done to reliably get a webcam snapshot and stream from many types of
 # printer setups. The main entry point is GetSnapshot() which will try a number of ways to get a snapshot from whatever camera system is
 # setup. This includes USB based cameras, external IP based cameras, and OctoPrint instances that don't have a snapshot URL defined.
 class WebcamHelper:
+
+    # These are the headers Oracle will add to indicate a snapshot or webcam stream request.
+    # These can't really change since old plugins use them.
+    c_OracleSnapshotHeaderKey = "oe-snapshot"         # The existence of this header with any value will be handled as a snapshot request.
+    c_OracleStreamHeaderKey = "oe-webcamstream"       # The existence of this header with any value will be handled as a stream request.
+    c_OracleWebcamIndexHeaderKey = "oe-webcam-index"  # The existence and value of this header will determine the webcam index.
 
     # If no other index is specified, 0 is the default webcam index.
     # This assumption is also made in the service and website, so it can't change.
@@ -79,17 +84,17 @@ class WebcamHelper:
 
     # Check if the special header is set, indicating this is a snapshot request.
     def IsSnapshotOracleRequest(self, requestHeadersDict):
-        return "oe-snapshot" in requestHeadersDict
+        return WebcamHelper.c_OracleSnapshotHeaderKey in requestHeadersDict
 
 
     # Check if the special header is set, indicating this is a webcam stream request.
     def IsWebcamStreamOracleRequest(self, requestHeadersDict):
-        return "oe-webcamstream" in requestHeadersDict
+        return WebcamHelper.c_OracleStreamHeaderKey in requestHeadersDict
 
     # If the header is set to specify a camera name, this returns it. Otherwise None
     def GetOracleRequestCameraIndex(self, requestHeadersDict) -> int:
-        if "oe-webcam-index" in requestHeadersDict:
-            return int(requestHeadersDict["oe-webcam-index"])
+        if WebcamHelper.c_OracleWebcamIndexHeaderKey in requestHeadersDict:
+            return int(requestHeadersDict[WebcamHelper.c_OracleWebcamIndexHeaderKey])
         return None
 
     # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
@@ -205,130 +210,22 @@ class WebcamHelper:
 
             # Hold the entire response in a with block, so that we we leave it will be cleaned up, since it's most likely a streaming stream.
             with octoHttpResult:
-                # We expect this to be a multipart stream if it's going to be a mjpeg stream.
-                isMultipartStream = False
-                contentTypeLower = ""
-                headers = octoHttpResult.Headers
-                for name in headers:
-                    nameLower = name.lower()
-                    if nameLower == "content-type":
-                        contentTypeLower = headers[name].lower()
-                        if contentTypeLower.startswith("multipart/"):
-                            isMultipartStream = True
-                        break
-
-                # If this isn't a multipart stream, get out of here.
-                if isMultipartStream is False:
-                    self.Logger.info("Snapshot fallback failed not correct content type: "+str(contentTypeLower))
+                # Use the common logic to get the snapshot from the stream.
+                result = WebcamUtil.GetSnapshotFromStream(self.Logger, octoHttpResult)
+                if result is None:
                     return None
-
-                # Ensure we have a response object to read from.
-                responseForBodyRead = octoHttpResult.ResponseForBodyRead
-                if responseForBodyRead is None:
-                    self.Logger.warn("Snapshot fallback got a response that didn't have a requests lib Response object to read from.")
-                    return None
-
-                # Try to read some of the stream, so we can find the content type and the size of this first frame.
-                # We use the raw response, so we can control directly how much we read.
-                dataBuffer = responseForBodyRead.raw.read(300)
-                if dataBuffer is None:
-                    self.Logger.info("Snapshot fallback failed no data returned.")
-                    return None
-
-                # Decode the headers
-                # Example --boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
-                #      or \r\n--boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
-                #      or boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
-                headerStr = dataBuffer.decode(errors="ignore")
-
-                # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
-                endOfAllHeadersMatch = "\r\n\r\n"
-                endOfHeaderMatch = "\r\n"
-                headerStrSize = headerStr.find(endOfAllHeadersMatch)
-                if headerStrSize == -1:
-                    self.Logger.info("Snapshot fallback failed no end of headers found.")
-                    return None
-
-                # Add 4 bytes for the \r\n\r\n end of header sequence.
-                headerStrSize += 4
-
-                # Try to find the size of this chunk.
-                frameSizeInt = 0
-                contentType = None
-                headers = headerStr.split(endOfHeaderMatch)
-                for header in headers:
-                    headerLower = header.lower()
-                    if headerLower.startswith("content-type"):
-                        # We found the content-length header!
-                        p = header.split(':')
-                        if len(p) == 2:
-                            contentType = p[1].strip()
-
-                    if headerLower.startswith("content-length"):
-                        # We found the content-length header!
-                        p = header.split(':')
-                        if len(p) == 2:
-                            frameSizeInt = int(p[1].strip())
-
-                if frameSizeInt == 0 or contentType is None:
-                    if frameSizeInt == 0:
-                        self.Logger.info("Snapshot fallback failed to find frame size.")
-                    if contentType is None:
-                        self.Logger.info("Snapshot fallback failed to find the content type.")
-                    return None
-                self.Logger.debug("Image found in webcam stream. Size: %s, Type: %s", str(frameSizeInt), str(contentType))
-
-                # Read the entire first image into the buffer.
-                totalDesiredBufferSize = frameSizeInt + headerStrSize
-                toRead = totalDesiredBufferSize - len(dataBuffer)
-                if toRead > 0:
-                    data = responseForBodyRead.raw.read(toRead)
-                    if data is None:
-                        self.Logger.error("_GetSnapshotFromStream failed to read the rest of the image buffer.")
-                        return None
-                    dataBuffer += data
-
-                # Since this is a stream, ideally we close it as soon as possible to not waste resources.
-                # Otherwise this will be auto closed when the function leaves, since we are using the with: scope
-                try:
-                    responseForBodyRead.close()
-                except Exception:
-                    pass
-
-                # If we got extra data trim it.
-                # This shouldn't happen, but just incase the api changes.
-                if len(dataBuffer) > totalDesiredBufferSize:
-                    dataBuffer = dataBuffer[:totalDesiredBufferSize]
-
-                # Check we got what we wanted.
-                if len(dataBuffer) != totalDesiredBufferSize:
-                    self.Logger.warn("Snapshot callback failed, the data read loop didn't produce the expected data size. desired: "+str(totalDesiredBufferSize)+", got: "+str(len(dataBuffer)))
-                    return None
-
-                # Get only the jpeg buffer
-                imageBuffer = dataBuffer[headerStrSize:]
-                if len(imageBuffer) != frameSizeInt:
-                    self.Logger.warn("Snapshot callback final image size was not the frame size. expected: "+str(frameSizeInt)+", got: "+str(len(imageBuffer)))
 
                 # If successful, set values to match the fixed size body and content type.
                 headers = {
                     # Set the content type to the header we got from the stream chunk.
-                    "content-type": contentType,
+                    "content-type": result.ContentType,
                     # It's very important this size matches the body buffer we give OctoHttpRequest, or the logic in the http loop will fail because it will keep trying to read more.
-                    "content-length": str(len(imageBuffer))
+                    "content-length": str(len(result.ImageBuffer))
                 }
                 # Return a result. Return the full image buffer which will be used as the response body.
-                self.Logger.debug("Successfully got image from stream URL. Size: %s, Format: %s", str(len(imageBuffer)), contentType)
-                return OctoHttpRequest.Result(200, headers, url, True, fullBodyBuffer=imageBuffer)
+                return OctoHttpRequest.Result(200, headers, url, True, fullBodyBuffer=result.ImageBuffer)
         except Exception as e:
-            if e is ConnectionError and "Read timed out" in str(e):
-                self.Logger.debug("_GetSnapshotFromStream got a timeout while reading the stream.")
-            elif e is urllib3.exceptions.ProtocolError and "IncompleteRead" in str(e):
-                self.Logger.debug("_GetSnapshotFromStream got a incomplete read while reading the stream.")
-            elif e is urllib3.exceptions.ReadTimeoutError and "Read timed out" in str(e):
-                self.Logger.debug("_GetSnapshotFromStream got a read timeout while reading stream.")
-            else:
-                Sentry.Exception("Failed to get fallback snapshot.", e)
+            Sentry.Exception("Failed to get fallback snapshot.", e)
         return None
 
 
@@ -429,91 +326,8 @@ class WebcamHelper:
                 self.Logger.error("_EnsureJpegHeaderInfo got a null body read from ReadAllContentFromStreamResponse")
                 return None
 
-        # Handle the buffer.
-        # In a nutshell, all jpeg images have a lot of header segments, but they must have the app0 header.
-        # This header defines what sub type of image the jpeg is. It seems the app0 header is always there, but some
-        # webcam servers don't set the identifier bits, which should be JFIF\0 or something like that.
-        # We need to find the app0 header, and if we do, ensure the identifier is set.
-        # This has to be efficient so it can run on low power hardware!
-        try:
-
-            # Check if this is a jpeg, it must start with FF D8
-            bufLen = len(buf)
-            if bufLen < 2 or buf[0] != 0xFF or buf[1] != 0xD8:
-                return octoHttpResult
-
-            # Search the headers for the APP0
-            pos = 2
-            while pos < bufLen:
-                # Ensure we have room and sanity check the buffer headers.
-                if pos + 1 >= bufLen:
-                    self.Logger.warn("Ran out of buffer before we found a jpeg APP0 header")
-                    return octoHttpResult
-                if buf[pos] != 0xFF:
-                    self.Logger.error("jpeg segment header didn't start with 0xff")
-                    return octoHttpResult
-
-                # The first byte is always FF, so we only care about the second.
-                segmentType = buf[pos+1]
-                if segmentType == 0xDA:
-                    # This is the start of the image, the headers are over.
-                    self.Logger.debug("We found the start of the jpeg image before we found the APP0 header.")
-                    return octoHttpResult
-                elif segmentType == 0xE0:
-                    # This is the APP0 header.
-                    # Skip past the segment header and size bytes
-                    pos += 4
-
-                    # If these next bytes aren't set, we will set them to the default of "JFIF\0"
-                    # Note that the last byte should be 0!
-                    needsChanges = buf[pos] == 0 or buf[pos+1] == 0 or buf[pos+2] == 0 or buf[pos+3] == 0 or buf[pos+4] == 0 or buf[pos+5] != 0
-
-                    # If we don't need changes, we are done.
-                    # No need to process more headers.
-                    if needsChanges is False:
-                        return octoHttpResult
-
-                    # To edit the byte array, we need a bytearray.
-                    # This adds overhead, but it's required because bytes objects aren't editable.
-                    bufArray = bytearray(buf)
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x4a # J
-                    pos += 1
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x46 # F
-                    pos += 1
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x49 # I
-                    pos += 1
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x46 # F
-                    pos += 1
-                    # This should be 0.
-                    if bufArray[pos] != 0:
-                        bufArray[pos] = 0 # /0
-                    pos += 1
-
-                    # We need to set the buffer again, since it's a new bytearray object now.
-                    octoHttpResult.SetFullBodyBuffer(bufArray)
-
-                    # Done, No need to process more headers.
-                    return octoHttpResult
-                else:
-                    # This is some other header, skip it's length.
-                    # First skip past the type two bytes.
-                    pos += 2
-                    # Now read the length, two bytes
-                    segLen = (buf[pos] << 8) + buf[pos+1]
-                    # Now skip past the segment length (the two length bytes are included in the length size)
-                    pos += segLen
-
-        except Exception as e:
-            Sentry.Exception("WebcamHelper _EnsureJpegHeaderInfo failed to handle jpeg buffer", e)
-            # On a failure, return the original result, since it's still good.
-            return octoHttpResult
-
-        # If we fall out of the while loop,
-        self.Logger.debug("_EnsureJpegHeaderInfo excited the while loop without finding the app0 header.")
+        imgBuffer = WebcamUtil.EnsureJpegHeaderInfo(self.Logger, buf)
+        octoHttpResult.SetFullBodyBuffer(imgBuffer)
         return octoHttpResult
 
 

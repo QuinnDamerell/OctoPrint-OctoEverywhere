@@ -68,7 +68,7 @@ class WebcamStreamInstance:
                 if self.IsFirstSend:
                     imageChunkBuffer = imageChunkBuffer + imageChunkBuffer
                     self.IsFirstSend = False
-                    self.Logger.info(f"QuickCam took {time.time()-self.StreamOpenTimeSec} seconds from stream open to first image sent.")
+                    self.Logger.debug(f"QuickCam took {round(time.time()-self.StreamOpenTimeSec, 3)} seconds from stream open to first image sent.")
                 return imageChunkBuffer
             # If we didn't get an image, wait on the event for a new one.
             self.ImageReadyEvent.wait()

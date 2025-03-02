@@ -20,8 +20,11 @@ class Client:
         # Since we also fire onWsError if there is a send error, we need to capture
         # the callback and have some vars to ensure it only gets fired once.
         self.clientWsErrorCallback = onWsError
+        self.clientWsCloseCallback = onWsClose
         self.wsErrorCallbackLock = threading.Lock()
         self.hasFiredWsErrorCallback = False
+        self.hasPendingErrorCallbackFire = False
+        self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
 
         # We use a send queue thread because it allows us to process downloads about 2x faster.
         # This is because the downstream work of the WS can be made faster if it's done in parallel
@@ -52,8 +55,14 @@ class Client:
         # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
         # sometimes it tried to send 3 when we only accepted 1.
         def OnClosed(ws, _, __):
-            if onWsClose:
-                onWsClose(self)
+            # We need to check this special case.
+            # If the error callback is pending, we need to defer the close callback until the error callback is fired.
+            # Otherwise, we handle the error, kick off the thread to fire the error callback, and then fire close before the error callback.
+            with self.wsErrorCallbackLock:
+                if self.hasPendingErrorCallbackFire:
+                    self.hasDeferredCloseCallbackDueToPendingErrorCallback = True
+                    return
+            self._FireCloseCallback()
 
         def OnData(ws, buffer, msgType, continueFlag):
             if onWsData:
@@ -76,7 +85,7 @@ class Client:
 
 
     # Runs the websocket blocking until it closes.
-    def RunUntilClosed(self):
+    def RunUntilClosed(self, pingIntervalSec:int=None, pingTimeoutSec:int=None):
         # Start the send queue thread if it hasn't been started.
         if self.SendThread is None:
             self.SendThread = threading.Thread(target=self._SendQueueThread, daemon=True)
@@ -91,18 +100,31 @@ class Client:
         # Important note! This websocket lib won't use certify which a Root CA store that mirrors what firefox uses.
         # Since let's encrypt updated their CA root, we need to use certify's root or the connection will likely fail.
         # The requests lib already does this, so we only need to worry about it for websockets.
-        #
         # Another important note!
+        #
         # The ping_timeout is used to timeout the select() call when the websocket is waiting for data. There's a bug in the WebSocketApp
         # where it will call select() after the socket is closed, which makes select() hang until the time expires.
         # Thus we need to keep the ping_timeout low, so when this happens, it doesn't hang forever.
+        if pingTimeoutSec is None or pingTimeoutSec <= 0 or pingTimeoutSec > 60:
+            pingTimeoutSec = 20
+        # Ensure that the ping timeout is set, otherwise the websocket will hang forever if the connection is lost.
+        if pingIntervalSec is None or pingIntervalSec <= 0:
+            pingIntervalSec = 600
+
         try:
+            # Do validation on the ping interval and timeout.
+            # The API requires the timeout be less than the interval.
+            if pingTimeoutSec >= pingIntervalSec:
+                pingTimeoutSec = pingIntervalSec - 1
+            if pingIntervalSec > 0 and pingTimeoutSec <= 0:
+                raise Exception("The ping timeout must be greater than 0.")
+
             # Since some clients use RunAsync, check that we didn't close before the async action started.
             with self.isClosedLock:
                 if self.isClosed:
                     return
 
-            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=600, ping_timeout=20, sslopt={"ca_certs":certifi.where()})
+            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt={"ca_certs":certifi.where()})
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,
@@ -155,20 +177,29 @@ class Client:
             Sentry.Exception("Exception while trying to close the send queue.", e)
 
 
+    def _FireCloseCallback(self):
+        if self.clientWsCloseCallback:
+            self.clientWsCloseCallback(self)
+
+
     # This can be called from our logic internally in this class or from the websocket class itself
     def handleWsError(self, exception):
-        # If the client is trying to close this websocket and has made the close call to do so,
-        # we won't fire any more errors out of it. This can happen if a send is trying to send data
-        # at the same time as the socket is closing for example.
-        if self.hasClientRequestedClose:
-            return
 
-        # Since this callback can be fired from many sources, we want to ensure it only
-        # gets fired once.
         with self.wsErrorCallbackLock:
+            # If the client is trying to close this websocket and has made the close call to do so,
+            # we won't fire any more errors out of it. This can happen if a send is trying to send data
+            # at the same time as the socket is closing for example.
+            if self.hasClientRequestedClose:
+                return
+
+            # Since this callback can be fired from many sources, we want to ensure it only
+            # gets fired once.
             if self.hasFiredWsErrorCallback:
                 return
             self.hasFiredWsErrorCallback = True
+
+            # This is important to set, to prevent a race between close being called before the error callback is fired.
+            self.hasPendingErrorCallbackFire = True
 
         # To prevent locking issues or other issues, spin off a thread to fire the callback.
         # This prevents the case where send() fires the callback, we don't want to overlap the
@@ -183,6 +214,17 @@ class Client:
             if self.clientWsErrorCallback:
                 self.clientWsErrorCallback(self, exception)
         except Exception as e :
+            Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
+
+        # Once the error callback is fired, we can now fire the close callback if needed.
+        try:
+            with self.wsErrorCallbackLock:
+                self.hasPendingErrorCallbackFire = False
+                # If the close callback was deferred, we need to fire it now.
+                if self.hasDeferredCloseCallbackDueToPendingErrorCallback:
+                    self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
+                    self._FireCloseCallback()
+        except Exception as e:
             Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
 
         # Be sure we always close the WS

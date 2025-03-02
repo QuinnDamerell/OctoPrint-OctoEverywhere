@@ -43,11 +43,12 @@ class HostCommon:
 
     @staticmethod
     def GetAddPrinterUrl(printerId, isOctoPrint):
-        sourceGetArg = "isFromOctoPrint=true"
-        if isOctoPrint is False:
-            sourceGetArg = "isFromKlipper=true"
+        # These aren't needed right now.
+        # sourceGetArg = "isFromOctoPrint=true"
+        # if isOctoPrint is False:
+        #     sourceGetArg = "isFromKlipper=true"
         # Note this must have at least one ? and arg because users of it might append &source=blah
-        return HostCommon.c_OctoEverywhereAddPrinterUrl + "?" + sourceGetArg + "&" + "printerid=" + printerId
+        return HostCommon.c_OctoEverywhereAddPrinterUrl + "?printerid=" + printerId
 
 
     # This will restart the plugin or if running in OctoPrint restart OctoPrint!

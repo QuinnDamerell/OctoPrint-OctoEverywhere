@@ -7,9 +7,9 @@ from octoeverywhere.httpsessions import HttpSessions
 from .Linker import Linker
 from .Logging import Logger
 from .Service import Service
-from .Context import Context
+from .Context import Context, OsTypes
 from .Discovery import Discovery
-from .DiscoveryCompanionAndBambu import DiscoveryCompanionAndBambu
+from .DiscoveryCompanionBambuAndElegoo import DiscoveryCompanionBambuAndElegoo
 from .Configure import Configure
 from .Updater import Updater
 from .Permissions import Permissions
@@ -84,6 +84,9 @@ class Installer:
         Logger.Debug("Validating args")
         context.Validate(1)
 
+        # Report our progress
+        self.ReportInstallerPhase(context, "Startup")
+
         #
         # Run Phase
         #
@@ -126,8 +129,8 @@ class Installer:
         # Next step is to discover and fill out the moonraker config file path and service file name.
         # If we are doing an companion or bambu setup, we need the user to help us input the details to the external moonraker IP or bambu printer.
         # This is the hardest part of the setup, because it's highly dependent on the system and different moonraker setups.
-        if context.IsCompanionOrBambu():
-            discovery = DiscoveryCompanionAndBambu()
+        if context.IsCompanionBambuOrElegoo():
+            discovery = DiscoveryCompanionBambuAndElegoo()
             discovery.Discovery(context)
         else:
             discovery = Discovery()
@@ -171,7 +174,7 @@ class Installer:
         # Add our auto update logic.
         updater = Updater()
         # If this is an companion or a Creality OS install, put the update script in the users root, so it's easy to find.
-        if context.IsCompanionOrBambu() or context.IsCrealityOs():
+        if context.IsCompanionBambuOrElegoo() or context.IsCrealityOs():
             updater.PlaceUpdateScriptInRoot(context)
         # Also setup our cron updater if we can, so that the plugin will auto update.
         updater.EnsureCronUpdateJob(context.RepoRootFolder)
@@ -213,6 +216,24 @@ class Installer:
         return jsonStr
 
 
+    def ReportInstallerPhase(self, context:Context, phaseStr:str) -> None:
+        installTarget = "LocalMoonraker"
+        if context.IsCompanionSetup:
+            installTarget = "Companion"
+        elif context.IsBambuSetup:
+            installTarget = "Bambu"
+        elif context.IsElegooSetup:
+            installTarget = "Elegoo"
+        elif context.OsType == OsTypes.SonicPad:
+            installTarget = "SonicPad"
+        elif context.OsType == OsTypes.K1:
+            installTarget = "K1"
+        elif context.OsType == OsTypes.K2:
+            installTarget = "K2"
+        Telemetry.Write("Installer-Phase", 1, {"Phase":phaseStr, "OsType":context.OsType, "Target":installTarget })
+        Logger.Debug(f"Installer Phase: {phaseStr}, OsType: {context.OsType}, Target: {installTarget}")
+
+
     def PrintHelp(self):
         Logger.Blank()
         Logger.Blank()
@@ -244,6 +265,7 @@ class Installer:
         Logger.Info("  -update          - The installer will update all OctoEverywhere plugins on this device of any type.")
         Logger.Info("  -companion       - Makes the setup target a OctoEverywhere Companion plugin setup.")
         Logger.Info("  -bambu           - Makes the setup target a OctoEverywhere Bambu Connect plugin setup.")
+        Logger.Info("  -elegoo          - Makes the setup target a OctoEverywhere Elegoo Connect plugin setup.")
         Logger.Info("  -noatuoselect    - Disables auto selecting a moonraker instance, allowing the user to always choose.")
         Logger.Info("  -debug           - Enable debug logging to the console.")
         Logger.Info("  -skipsudoactions - Skips sudo required actions. This is useful for debugging, but will make the install not fully work.")

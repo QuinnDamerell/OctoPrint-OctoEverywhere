@@ -5,8 +5,9 @@ from .Paths import Paths
 from .Logging import Logger
 from .Context import Context
 from .Context import OsTypes
-from .NetworkConnectors.MoonrakerConnector import MoonrakerConnector
 from .NetworkConnectors.BambuConnector import BambuConnector
+from .NetworkConnectors.ElegooConnector import ElegooConnector
+from .NetworkConnectors.MoonrakerConnector import MoonrakerConnector
 
 # The goal of this class is the take the context object from the Discovery Gen2 phase to the Phase 3.
 class Configure:
@@ -24,11 +25,15 @@ class Configure:
         # All services start with octoeverywhere (c_ServiceCommonName) but they have different suffixes so they don't collide if there
         # are multiple instances or types install one a signal device.
         serviceSuffixStr = ""
-        if context.IsCompanionOrBambu():
-            # For companions or bambu, we use the companion id, with a unique prefix to separate it from any possible local installs
+        if context.IsCompanionBambuOrElegoo():
+            # For companions, elegoo, or bambu, we use the companion id, with a unique prefix to separate it from any possible local installs
             # Special case, for the primary instance id, we don't add the number suffix, so it easier to use.
-            instanceIdSuffix = "" if context.IsPrimaryCompanionOrBambu() else f"-{context.CompanionInstanceId}"
-            pluginTypeStr = "bambu" if context.IsBambuSetup else "companion"
+            instanceIdSuffix = "" if context.IsPrimaryCompanionBambuOrElegoo() else f"-{context.CompanionInstanceId}"
+            pluginTypeStr = "companion"
+            if context.IsBambuSetup:
+                pluginTypeStr = "bambu"
+            elif context.IsElegooSetup:
+                pluginTypeStr = "elegoo"
             serviceSuffixStr = f"-{pluginTypeStr}{instanceIdSuffix}"
         elif context.OsType == OsTypes.SonicPad:
             # For Sonic Pad, we know the format of the service file is a bit different.
@@ -49,8 +54,8 @@ class Configure:
                 serviceSuffixStr = "-" + moonrakerServiceSuffix[1]
         Logger.Debug(f"Moonraker Service File Name: {context.MoonrakerServiceFileName}, Suffix: '{serviceSuffixStr}'")
 
-        if context.IsCompanionOrBambu():
-            # For companion or bambu setups, there is no local moonraker config files, so things are setup differently.
+        if context.IsCompanionBambuOrElegoo():
+            # For companion, elegoo, or bambu setups, there is no local moonraker config files, so things are setup differently.
             # The plugin data folder, which is normally the root printer data folder for that instance, becomes our per instance companion folder.
             context.RootFolder = context.CompanionDataRoot
             # The config folder is where our config lives, which we put in the main data root.
@@ -135,6 +140,11 @@ class Configure:
         if context.IsBambuSetup:
             bc = BambuConnector()
             bc.EnsureBambuConnection(context)
+
+        # If this is a Elegoo Connect setup, we need to make sure we have a connection to a Elegoo printer.
+        if context.IsElegooSetup:
+            ec = ElegooConnector()
+            ec.EnsureElegooPrinterConnection(context)
 
         # Report
         Logger.Debug(f'Configured. Service: {context.ServiceName}, Path: {context.ServiceFilePath}, LocalStorage: {context.LocalFileStorageFolder}, Config Dir: {context.ConfigFolder}, Logs: {context.LogsFolder}')

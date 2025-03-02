@@ -248,7 +248,7 @@ class BambuClient:
 
 
     # Fired when the MQTT connection has something to log.
-    def _OnLog(self, client, userdata, level:mqtt.LOGGING_LEVEL, msg:str):
+    def _OnLog(self, client, userdata, level:int, msg:str):
         if level == mqtt.MQTT_LOG_ERR:
             # If the string is something like "Caught exception in on_connect: ..."
             # It's a leaked exception from us.

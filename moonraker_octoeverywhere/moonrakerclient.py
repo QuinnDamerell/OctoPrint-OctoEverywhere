@@ -285,7 +285,6 @@ class MoonrakerClient:
 
             # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
             jsonStr = json.dumps(obj, default=str)
-            self.Logger.debug("Moonraker RPC Request - "+str(msgId)+" : "+method+" "+jsonStr)
             if self._WebSocketSend(jsonStr) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
                 return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)

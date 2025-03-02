@@ -129,8 +129,13 @@ class BambuState:
 
     # Returns a unique string for this print.
     # This string should be as unique as possible, but always the same for the same print.
+    # If there is no active print, this should return None!
     # See details in NotificationHandler._RecoverOrRestForNewPrint
     def GetPrintCookie(self) -> str:
+        # If there's no project id or subtask name, we shouldn't make a cookie..
+        if self.project_id is None or len(self.project_id) == 0 or self.subtask_name is None or len(self.subtask_name) == 0:
+            return None
+
         # From testing, the project_id is always unique for cloud based prints, but is 0 for local prints.
         # The file name changes most of the time, so the combination of both makes a good pair.
         return f"{self.project_id}-{self.GetFileNameWithNoExtension()}"

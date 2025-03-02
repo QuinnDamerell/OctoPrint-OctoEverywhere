@@ -69,6 +69,12 @@ class Config:
     BambuConnectionModeValueCloud = "cloud"
     BambuConnectionModeDefault = BambuConnectionModeValueLocal
 
+    #
+    # Used only for Elegoo Connect
+    #
+    SectionElegoo = "elegoo"
+    ElegooMainboardId = "mainboard_id"
+
 
     # This allows us to add comments into our config.
     # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
@@ -90,6 +96,7 @@ class Config:
         { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
         { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification."},
+        { "Target": ElegooMainboardId,  "Comment": "This is the mainboard id of the linked printer."},
     ]
 
 

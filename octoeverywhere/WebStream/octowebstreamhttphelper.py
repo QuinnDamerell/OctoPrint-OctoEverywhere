@@ -185,6 +185,12 @@ class OctoWebStreamHttpHelper:
         # Before we make the request, make sure we shouldn't defer for a high pri request
         self.checkForDelayIfNotHighPri()
 
+        # Before we handle the request, see if this is a webcam stream request we need to handle specially.
+        if Compat.HasRelayWebcamStreamDetector():
+            relativeOrAbsolutePath = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+            # If needed, this will update the send headers to make it look like an oracle stream or snapshot request.
+            Compat.GetRelayWebcamStreamDetector().OnIncomingRelayRequest(relativeOrAbsolutePath, sendHeaders)
+
         # Check for some special case requests before we handle the request as normal.
         #
         # 1) An oracle snapshot or webcam stream request. In this case the WebCamHelper class will handle the request.
@@ -499,7 +505,7 @@ class OctoWebStreamHttpHelper:
                 finalFullBufferBytes = len(buffer)
                 if finalFullBufferBytes > lastBodyReadLength + builderContext.c_MsgStreamOverheadSize and self.Logger.isEnabledFor(logging.DEBUG):
                     delta = msgSizeBytes - (lastBodyReadLength + builderContext.c_MsgStreamOverheadSize)
-                    self.Logger.warn(f"The flatbuffer internal buffer had to be resized from the guess we set. Flatbuffer full buffer size: {finalFullBufferBytes}, last body read length: {lastBodyReadLength}; overrage delta: {delta}")
+                    self.Logger.warn(f"The flatbuffer internal buffer had to be resized from the guess we set. Flatbuffer full buffer size: {finalFullBufferBytes}, last body read length: {lastBodyReadLength}; overage delta: {delta}")
 
                 # Clear this flag
                 isFirstResponse = False

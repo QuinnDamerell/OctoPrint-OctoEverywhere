@@ -123,6 +123,20 @@ class MoonrakerWebcamHelper():
         return False
 
 
+    # !! Interface Function !!
+    # Called when quick cam is about to attempt to start a stream.
+    def OnQuickCamStreamStart(self, url:str) -> None:
+        # Nothing to do.
+        pass
+
+
+    # !! Interface Function !!
+    # Called when quick cam detects that the stream might have stalled.
+    def OnQuickCamStreamStall(self, url:str) -> None:
+        # Nothing to do.
+        pass
+
+
     # Wakes up the auto settings worker.
     # Called by moonrakerclient when the websocket is connected, to ensure we pull settings on moonraker connections.
     def KickOffWebcamSettingsUpdate(self, forceUpdate = False):

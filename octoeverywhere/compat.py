@@ -8,6 +8,7 @@ class Compat:
     _IsMoonrakerHost = False
     _IsCompanionMode = False
     _IsBambu = False
+    _IsElegooOs = False
     @staticmethod
     def IsOctoPrint() -> bool:
         return Compat._IsOctoPrintHost
@@ -29,6 +30,9 @@ class Compat:
     @staticmethod
     def SetIsBambu(b):
         Compat._IsBambu = b
+    @staticmethod
+    def SetIsElegooOs(b):
+        Compat._IsElegooOs = b
 
 
     _LocalAuthObj = None
@@ -92,3 +96,27 @@ class Compat:
     @staticmethod
     def HasApiRouterHandler():
         return Compat._ApiRouterHandler is not None
+
+
+    _RelayWebcamStreamDetector = None
+    @staticmethod
+    def GetRelayWebcamStreamDetector():
+        return Compat._RelayWebcamStreamDetector
+    @staticmethod
+    def SetRelayWebcamStreamDetector(obj):
+        Compat._RelayWebcamStreamDetector = obj
+    @staticmethod
+    def HasRelayWebcamStreamDetector():
+        return Compat._RelayWebcamStreamDetector is not None
+
+
+    _RelayWebsocketProvider = None
+    @staticmethod
+    def GetRelayWebsocketProvider():
+        return Compat._RelayWebsocketProvider
+    @staticmethod
+    def SetRelayWebsocketProvider(obj):
+        Compat._RelayWebsocketProvider = obj
+    @staticmethod
+    def HasRelayWebsocketProvider():
+        return Compat._RelayWebsocketProvider is not None

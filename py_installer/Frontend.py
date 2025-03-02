@@ -1,6 +1,8 @@
 from enum import Enum
 import requests
 
+from linux_host.networksearch import NetworkSearch
+
 from .Util import Util
 from .Logging import Logger
 from .Context import Context
@@ -12,6 +14,7 @@ class KnownFrontends(Enum):
     Mainsail = 2
     Fluidd   = 3
     Creality = 4 # This is Creality's K1 default web interface (not nearly as good as the others)
+    Elegoo   = 5 # This is Elegoo's default web interface.
 
     # Makes to str() cast not to include the class name.
     def __str__(self):
@@ -34,6 +37,12 @@ class Frontend:
         # There's no frontend for bambu connect.
         if context.IsBambuSetup:
             Logger.Debug("Skipping frontend setup, there's no frontend for bambu connect.")
+            return
+
+        # The elegoo os only allows for one frontend and doesn't have printer access, so we don't need to ask the user.
+        if context.IsElegooSetup:
+            Logger.Debug("Skipping frontend setup, elegoo os only allows for one frontend.")
+            ConfigHelper.WriteFrontendDetails(context, str(NetworkSearch.c_ElegooDefaultPortStr), KnownFrontends.Elegoo)
             return
 
         Logger.Debug("Starting Web Interface Setup")
@@ -70,7 +79,7 @@ class Frontend:
         # Find the target. If this is a local install, the target is local.
         # Otherwise, it's whatever the companion target is.
         targetIpOrHostname = "127.0.0.1"
-        if context.IsCompanionOrBambu():
+        if context.IsCompanionBambuOrElegoo():
             (ip, _) = ConfigHelper.TryToGetCompanionDetails(context)
             if ip is None or len(ip) == 0:
                 raise Exception("Frontend setup failed to find companion ip from companion config file.")
@@ -215,7 +224,8 @@ class Frontend:
             80,   # On most devices, this is the port the frontend is on. But note on the K1, this is Creality's own special frontend, most users don't want.
             81,   # A common port for an secondary frontend to run on, like Fluidd or Mainsail.
             443,  # Not ideal, but https might be here.
-            8819  # Sonic Pad Mainsail port.
+            8819, # Sonic Pad Mainsail port.
+            3030, # This is the web interface port for the Elegoo OS printers.
         ]
 
         # Try to find what we can.
@@ -258,6 +268,8 @@ class Frontend:
                     frontend = KnownFrontends.Fluidd
                 elif "creality" in htmlLower:
                     frontend = KnownFrontends.Creality
+                elif "elegoo" in htmlLower:
+                    frontend = KnownFrontends.Elegoo
                 else:
                     Logger.Debug(f"Unknown frontend type. html: {result.text}")
             except Exception as e:

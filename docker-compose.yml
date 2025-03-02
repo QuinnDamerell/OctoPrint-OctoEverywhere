@@ -1,53 +1,89 @@
 version: '2'
 services:
-  octoeverywhere-bambu-connect:
+  octoeverywhere-connect:
     image: octoeverywhere/octoeverywhere:latest
     environment:
+        # Required: The version of OctoEverywhere Companion you want use.
+        #   - bambu:   Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
+        #   - elegoo:  Elegoo Connect - for Elegoo OS 3D printers such as the Elegoo Centauri & Elegoo Centauri Carbon.
+        #   - klipper: Use this for Klipper / Moonraker based printers.
+      - COMPANION_MODE=bambu
+
+        #
+        # Required for Bambu Connect
+        #
         # https://octoeverywhere.com/s/access-code
       - ACCESS_CODE=XXXXXXXX
         # https://octoeverywhere.com/s/bambu-sn
       - SERIAL_NUMBER=XXXXXXXXXXXXXXX
         # Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
       - PRINTER_IP=XXX.XXX.XXX.XXX
+
+        #
+        # Required for Elegoo Connect
+        #
+        # Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
+      - ELEGOO_PRINTER_IP=XXX.XXX.XXX.XXX
+
+        #
+        # Required For Klipper / Moonraker
+        #
+        # TODO - The OctoEverywhere Klipper Docker container doesn't work yet, but it will soon!
+      #- KLIPPER_PRINTER_IP=XXX.XXX.XXX.XXX
+      #- KLIPPER_PRINTER_PORT=7125
+      #- KLIPPER_WEBSERVER_PORT=80
+
+        #
+        # Optional Settings
+        #
         # Set timezone to proper timezone for logs using standard timezones:
         # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
       - TZ=America/New_York
-
-      # Optionally: If you want to connect via the Bambu Cloud, you can specify the following environment variables.
-      # By default the plugin will use the local connection mode, which is preferred.
-      # Bambu Cloud might not work for all printers and account types due to limitations by Bambu Labs. :(
-      #
-      # If you use Bambu Cloud, you MUST disable 2 factor authentication, because Bambu does not allow us to support it.
-      # Your Bambu email address and password are KEPT LOCALLY, securely on disk, and are NEVER SENT to the OctoEverywhere service
-      # - BAMBU_CLOUD_ACCOUNT_EMAIL=quinn@test.com
-      # - BAMBU_CLOUD_ACCOUNT_PASSWORD=supersecretpassword
-      # - CONNECTION_MODE=cloud
 
     volumes:
       # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
       - ./data:/data
 
   # Add as many printers as you want!
-  # octoeverywhere-bambu-connect-2:
+  # octoeverywhere-connect-2:
   #   image: octoeverywhere/octoeverywhere:latest
   #   environment:
+  #       # Required: The version of OctoEverywhere Companion you want use.
+  #       #   - bambu:   Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
+  #       #   - elegoo:  Elegoo Connect - for Elegoo OS 3D printers such as the Elegoo Centauri & Elegoo Centauri Carbon.
+  #       #   - klipper: Use this for Klipper / Moonraker based printers.
+  #     - COMPANION_MODE=bambu
+
+  #       #
+  #       # Required for Bambu Connect
+  #       #
   #       # https://octoeverywhere.com/s/access-code
   #     - ACCESS_CODE=XXXXXXXX
   #       # https://octoeverywhere.com/s/bambu-sn
   #     - SERIAL_NUMBER=XXXXXXXXXXXXXXX
   #       # Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
   #     - PRINTER_IP=XXX.XXX.XXX.XXX
-  #
-  #    # Optionally: If you want to connect via the Bambu Cloud, you can specify the following environment variables.
-  #    # By default the plugin will use the local connection mode, which is preferred.
-  #    # Bambu Cloud might not work for all printers and account types due to limitations by Bambu Labs. :(
-  #    #
-  #    # If you use Bambu Cloud, you MUST disable 2 factor authentication, because Bambu does not allow us to support it.
-  #    # Your Bambu email address and password are KEPT LOCALLY, securely on disk, and are NEVER SENT to the OctoEverywhere service
-  #    # - BAMBU_CLOUD_ACCOUNT_EMAIL=quinn@test.com
-  #    # - BAMBU_CLOUD_ACCOUNT_PASSWORD=supersecretpassword
-  #    # - CONNECTION_MODE=cloud
-  #
+
+  #       #
+  #       # Required for Elegoo Connect
+  #       #
+  #       # Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
+  #     - ELEGOO_PRINTER_IP=XXX.XXX.XXX.XXX
+
+  #       #
+  #       # Required For Klipper / Moonraker
+  #       #
+  #     - KLIPPER_PRINTER_IP=XXX.XXX.XXX.XXX
+  #     - KLIPPER_PRINTER_PORT=7125
+  #     - KLIPPER_WEBSERVER_PORT=80
+
+  #       #
+  #       # Optional Settings
+  #       #
+  #       # Set timezone to proper timezone for logs using standard timezones:
+  #       # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
+  #     - TZ=America/New_York
+
   #   volumes:
-  #     # Specify a path mapping for the required persistent storage
+  #     # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
   #     - ./data:/data

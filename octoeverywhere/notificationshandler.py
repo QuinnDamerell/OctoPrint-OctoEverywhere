@@ -1051,9 +1051,8 @@ class NotificationsHandler:
     # Returns True on success, otherwise False
     def _sendEvent(self, event:str, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
-        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ))
+        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ), name="NotificationsHandler._sendEvent")
         thread.start()
-
         return True
 
 

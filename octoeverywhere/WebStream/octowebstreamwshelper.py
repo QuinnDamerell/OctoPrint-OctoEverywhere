@@ -193,7 +193,16 @@ class OctoWebStreamWsHelper:
 
         # Make the websocket object and start it running.
         self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
-        ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
+
+        # On some platforms, we might have a websocket object that was provided by the platform.
+        # If a websocket is provided, it must be a websocketimpl.Client or mock it's APIs exactly!
+        ws = None
+        if Compat.HasRelayWebsocketProvider():
+            ws = Compat.GetRelayWebsocketProvider().GetWebsocketObject(path, pathType, self.HttpInitialContext,
+                    self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
+
+        if ws is None:
+            ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
 
         # To ensure we never leak a websocket, we need to use this lock.
         # We need to check the is closed flag and then only set the ws if it's not closed.

@@ -36,6 +36,21 @@
             ]
         },
         {
+            "name": "Elegoo Connect",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "elegoo_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Bambu Connect version of the plugin. These args target the first instance.
+                //
+                // { "ServiceName": "octoeverywhere-elegoo", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-elegoo/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-elegoo/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-elegoo/", "CompanionInstanceIdStr":"1" }
+                "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtZWxlZ29vIiwgIlZpcnR1YWxFbnZQYXRoIjoiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUtZW52IiwgIlJlcG9Sb290Rm9sZGVyIjoiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUvIiwgIkxvZ0ZvbGRlciI6Ii9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1lbGVnb28vbG9ncyIsICJMb2NhbEZpbGVTdG9yYWdlUGF0aCI6Ii9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1lbGVnb28vb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWVsZWdvby8iLCAiQ29tcGFuaW9uSW5zdGFuY2VJZFN0ciI6IjEiIH0=",
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
+        {
             "name": "Bambu Connect - X1C",
             "type": "debugpy",
             "request": "launch",
@@ -123,6 +138,19 @@
             ]
         },
         {
+            "name": "Installer - Elegoo Connect",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "py_installer",
+            "justMyCode": false,
+            "args": [
+                // The module requires this json object to be passed.
+                // Normally the install.sh script runs, ensure everything is installed, creates a virtural env, and then runs this modlue giving it these args.
+                // But for debugging, we can skip that assuming it's already been ran.
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -elegoo -debug\"}"
+            ]
+        },
+        {
             "name": "OctoPrint Dev Module",
             "type": "debugpy",
             "request": "launch",
@@ -139,6 +167,8 @@
                 "VENV_DIR": "/home/pi/octoeverywhere-env",
                 "REPO_DIR": "/home/pi/octoeverywhere",
                 "DATA_DIR": "/home/pi/.octoeverywhere-docker-bootstrap", // This path needs to be created.
+                "COMPANION_MODE": "elegoo",
+                "ELEGOO_PRINTER_IP": "10.0.0.101"
                 //"SERIAL_NUMBER": "serial",
                 //"ACCESS_CODE": "test123"
                 //"PRINTER_IP": "127.0.0.1",

@@ -34,10 +34,10 @@ class Service:
         }
         # Set plugin specific vars.
         # These vars are used on all companion and bambu setups.
-        if context.IsCompanionOrBambu():
+        if context.IsCompanionBambuOrElegoo():
             args['CompanionInstanceIdStr'] = context.CompanionInstanceId
         # These vars are used on anything that's NOT a companion or bambu
-        if not context.IsCompanionOrBambu():
+        if not context.IsCompanionBambuOrElegoo():
             args['MoonrakerConfigFile'] = context.MoonrakerConfigFilePath
 
         # We have to convert to bytes -> encode -> back to string.
@@ -45,7 +45,11 @@ class Service:
         argsJsonBase64 = base64.urlsafe_b64encode(bytes(argsJson, "utf-8")).decode("utf-8")
 
         # Get the correct module host for the service to run, based on the install type.
-        moduleNameToRun = "bambu_octoeverywhere" if context.IsBambuSetup else "moonraker_octoeverywhere"
+        moduleNameToRun = "moonraker_octoeverywhere"
+        if context.IsBambuSetup:
+            moduleNameToRun = "bambu_octoeverywhere"
+        elif context.IsElegooSetup:
+            moduleNameToRun = "elegoo_octoeverywhere"
 
         # Base on the OS type, install the service differently
         if context.OsType == OsTypes.Debian:
@@ -60,8 +64,14 @@ class Service:
 
     # Install for debian setups
     def _InstallDebian(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
-        serviceName = "Bambu Lab Printers" if context.IsBambuSetup else "Moonraker"
-        optionalAfter = "" if context.IsBambuSetup else "moonraker.service"
+        serviceName = "Moonraker"
+        optionalAfter = "moonraker.service"
+        if context.IsBambuSetup:
+            serviceName = "Bambu Lab Printers"
+            optionalAfter = ""
+        if context.IsElegooSetup:
+            serviceName = "Elegoo Printers"
+            optionalAfter = ""
         s = f'''\
     # OctoEverywhere For {serviceName}
     [Unit]

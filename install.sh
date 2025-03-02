@@ -325,8 +325,14 @@ install_or_update_python_env()
     log_info "Installing or updating required python libs..."
     if [[ $IS_K1_OS -eq 1 ]]
     then
+        # The K1 needs some special flags.
         "${OE_ENV}"/bin/pip3 install --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
+    elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
+    then
+        # The sonic pad as different requirements, so it doesn't hold back the rest of the installs.
+        "${OE_ENV}"/bin/pip3 install --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements-sonicpad.txt
     else
+        # This is the default for all other systems.
         "${OE_ENV}"/bin/pip3 install --require-virtualenv --no-cache-dir -q -r "${OE_REPO_DIR}"/requirements.txt
     fi
     #log_info "Python libs installed."

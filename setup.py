@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "3.6.8"
+plugin_version = "4.0.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -62,7 +62,7 @@ plugin_license = "AGPLv3"
 #   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
 # urllib3
 #   There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
-#   This must be less than 2.0.0, because 2.0.0 requires open ssl 1.1.1+, which the sonic pad doesn't have.
+#   The sonic pad can't support anything newer than 2.0.0, so we need to stay below that. But we moved the sonic pad to it's own requirements file, so we can go higher.
 # zstandard
 #   zstandard gives us great compression that's super fast, but it requires a native lib to installed. The PY package will come with a lib and or try to build it, but we can also install it via apt-get.
 #   For the complexity, we can't list it as a required install, since it won't work on some platforms. So instead we will try to install it during runtime, and then it will be used after the following restart.
@@ -72,7 +72,7 @@ plugin_license = "AGPLv3"
 #   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
 #   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
 #   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
-#   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it. We had a user having an issue that updated to 0.24.0, and it resolved the issue.
+#   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it.
 #   sentry-sdk - We don't use Sentry right now, so we disabled it. It was conflicting with the new OctoPrint RC, so if we add it back, we need to address that.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
@@ -81,11 +81,11 @@ plugin_requires = [
     "requests>=2.31.0",
     "octoflatbuffers==24.3.27",
     "pillow",
-    "certifi>=2023.11.17",
+    "certifi>=2025.1.31",
     "rsa>=4.9",
     "dnspython>=2.3.0",
-    "httpx>=0.24.1,<0.26.0",
-    "urllib3>=1.26.18,<2.0.0",
+    "httpx>=0.24.1",
+    "urllib3>=2.0.0",
     #"sentry-sdk>=TODO",
     #"zstandard" - optional lib see notes
     ]

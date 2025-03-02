@@ -47,6 +47,20 @@ class BambuWebcamHelper():
         return state.IsPrinting(True)
 
 
+    # !! Interface Function !!
+    # Called when quick cam is about to attempt to start a stream.
+    def OnQuickCamStreamStart(self, url:str) -> None:
+        # Nothing to do.
+        pass
+
+
+    # !! Interface Function !!
+    # Called when quick cam detects that the stream might have stalled.
+    def OnQuickCamStreamStall(self, url:str) -> None:
+        # Nothing to do.
+        pass
+
+
     # Returns the current URL that should be used for snapshots and streaming.
     def _GetStreamingUrl(self) -> str:
         # We cache the urls for a little bit once they are generated, so we don't have to re-created them every time

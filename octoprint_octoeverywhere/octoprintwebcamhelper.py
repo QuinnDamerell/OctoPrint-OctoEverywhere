@@ -216,3 +216,17 @@ class OctoPrintWebcamHelper():
     def ShouldQuickCamStreamKeepRunning(self) -> bool:
         # TODO - this should return true if we are still printing.
         return False
+
+
+    # !! Interface Function !!
+    # Called when quick cam is about to attempt to start a stream.
+    def OnQuickCamStreamStart(self, url:str) -> None:
+        # Nothing to do.
+        pass
+
+
+    # !! Interface Function !!
+    # Called when quick cam detects that the stream might have stalled.
+    def OnQuickCamStreamStall(self, url:str) -> None:
+        # Nothing to do.
+        pass
