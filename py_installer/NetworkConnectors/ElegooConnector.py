@@ -110,7 +110,6 @@ class ElegooConnector:
             Logger.Blank()
             Logger.Warn("Searching for your Elegoo printer on your network, this will take about 5 seconds...")
             results = NetworkSearch.ScanForInstances_Elegoo(Logger.GetPyLogger())
-            results = []
 
             # If there's only one result, handle things differently to make it easier.
             if len(results) == 1:
@@ -143,7 +142,7 @@ class ElegooConnector:
             while True:
                 Logger.Blank()
                 Logger.Blank()
-                Logger.Info("Since we can't automatically find your printer, we can get the IP address manually.")
+                Logger.Info("We can't automatically find your printer, we can get the IP address manually.")
                 Logger.Info("Your Elegoo printer's IP address can be found using the screen on your printer:")
                 Logger.Info("   - Press the gear icon second in the vertical left icon menu.")
                 Logger.Info("   - Press the 'Network' tab at the top of the screen.")
