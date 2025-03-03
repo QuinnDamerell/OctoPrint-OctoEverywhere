@@ -1,4 +1,4 @@
-from octoeverywhere.commandhandler import CommandResponse
+from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
@@ -20,12 +20,17 @@ class ElegooCommandHandler:
     # See the JobStatusV2 class in the service for the object definition.
     #
     # Returning None will result in the "Printer not connected" state.
+    # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
+    #
     def GetCurrentJobStatus(self):
         # Try to get the current state.
         printerState = ElegooClient.Get().GetState()
 
         # If the state is None, the printer isn't connected or the state isn't known yet.
         if printerState is None:
+            # Check if we aren't connected because there are too many existing clients.
+            if ElegooClient.Get().IsDisconnectDueToTooManyClients():
+                return CommandHandler.c_CommandError_CantConnectTooManyClients
             # Returning None will be a "connection lost" state.
             return None
 

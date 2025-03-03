@@ -23,6 +23,9 @@ class MoonrakerCommandHandler:
     #
     # See the JobStatusV2 class in the service for the object definition.
     #
+    # Returning None will result in the "Printer not connected" state.
+    # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
+    #
     def GetCurrentJobStatus(self):
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {

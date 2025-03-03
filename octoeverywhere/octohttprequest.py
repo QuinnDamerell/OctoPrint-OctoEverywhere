@@ -72,7 +72,7 @@ class OctoHttpRequest:
     # so the body stream can be read, assuming there's no full body buffer.
     #
     # There are three ways this class can contain a body to be used.
-    #       1) ResponseForBodyRead - If this is not None, then there's a requests.Response attached to this Result and it can be used to be read from.
+    #       1) ResponseForBodyRead - If this is not None, then there's a requests. Response attached to this Result and it can be used to be read from.
     #              Note, in this case, ideally the Result is used with a `with` keyword to cleanup when it's done.
     #       2) FullBodyBuffer - If this is not None, then there's a fully read body buffer that should be used.
     #              In this case, the size of the body is known, it's the size of the full body buffer. The size can't change.
@@ -96,6 +96,21 @@ class OctoHttpRequest:
             self._customBodyStreamClosedCallback = customBodyStreamClosedCallback
             if (self._customBodyStreamCallback is not None and self._customBodyStreamClosedCallback is None) or (self._customBodyStreamCallback is None and self._customBodyStreamClosedCallback is not None):
                 raise Exception("Both the customBodyStreamCallback and customBodyStreamClosedCallback must be set!")
+
+
+        # Allows for a quick way to create a Result object with no body.
+        @staticmethod
+        def Error(statusCode:int, url:str, didFallback:bool=False) -> "OctoHttpRequest.Result":
+            # We must use a content length of 0 and set an empty body for the request to be handled correctly.
+            headers = { "Content-Length": "0" }
+            return OctoHttpRequest.Result(statusCode, headers, url, didFallback, fullBodyBuffer=bytearray())
+
+        # Builds a Result object from a requests.Response object.
+        @staticmethod
+        def BuildFromRequestLibResponse(response:requests.Response, url:str, isFallback:bool=False) -> "OctoHttpRequest.Result":
+            if response is None:
+                return None
+            return OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)
 
         @property
         def Headers(self) -> dict:
@@ -446,7 +461,7 @@ class OctoHttpRequest:
             # our logic relies on the exception when the stream is consumed to end the http response stream.
             response = HttpSessions.GetSession(url).request(method, url, headers=headers, data=data, timeout=1800, allow_redirects=allowRedirects, stream=True, verify=False)
         except Exception as e:
-            logger.info(attemptName + " http URL threw an exception: "+str(e))
+            logger.debug(attemptName + " http URL threw an exception: "+str(e))
 
         # We have seen when making absolute calls to some lower end devices, like external IP cameras, they can't handle the number of headers we send.
         # So if any call fails due to 431 (headers too long) we will retry the call with no headers at all. Note this will break most auth, but
@@ -467,14 +482,14 @@ class OctoHttpRequest:
         if response is not None and response.status_code != 404:
             # We got a valid response, we are done.
             # Return true and the result object, so it can be returned.
-            return OctoHttpRequest.AttemptResult(True, OctoHttpRequest._buildHttRequestResultFromResponse(response, url, isFallback))
+            return OctoHttpRequest.AttemptResult(True, OctoHttpRequest.Result.BuildFromRequestLibResponse(response, url, isFallback))
 
         # Check if we have another fallback URL to try.
         if nextFallbackUrl is not None:
             # We have more fallbacks to try.
             # Return false so we keep going, but also return this response if we had one. This lets
             # use capture the main result object, so we can use it eventually if all fallbacks fail.
-            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest._buildHttRequestResultFromResponse(response, url, isFallback))
+            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest.Result.BuildFromRequestLibResponse(response, url, isFallback))
 
         # We don't have another fallback, so we need to end this.
         if mainResult is not None:
@@ -483,16 +498,9 @@ class OctoHttpRequest:
             return OctoHttpRequest.AttemptResult(True, mainResult)
         else:
             if response is not None:
-                logger.error(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
-                return OctoHttpRequest.AttemptResult(True, OctoHttpRequest._buildHttRequestResultFromResponse(response, url, isFallback))
+                logger.debug(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
+                return OctoHttpRequest.AttemptResult(True, OctoHttpRequest.Result.BuildFromRequestLibResponse(response, url, isFallback))
 
             # Otherwise return the failure.
-            logger.error(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
+            logger.debug(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
             return OctoHttpRequest.AttemptResult(True, None)
-
-
-    @staticmethod
-    def _buildHttRequestResultFromResponse(response:requests.Response, url:str, isFallback:bool) -> Result:
-        if response is None:
-            return None
-        return OctoHttpRequest.Result(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)

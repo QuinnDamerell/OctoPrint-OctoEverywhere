@@ -282,7 +282,7 @@ class WebcamHelper:
     # Checks if the result was success and if so adds the common header.
     # Returns the octoHttpResult, so the function is chainable
     def _AddOeWebcamTransformHeader(self, octoHttpResult, cameraIndex:int):
-        if octoHttpResult is None:
+        if octoHttpResult is None or octoHttpResult.StatusCode > 300:
             return octoHttpResult
 
         # Default to none
@@ -312,7 +312,7 @@ class WebcamHelper:
     # Returns the octoHttpResult, so the function is chainable
     def _EnsureJpegHeaderInfo(self, octoHttpResult:OctoHttpRequest.Result):
         # Ensure we got a result.
-        if octoHttpResult is None:
+        if octoHttpResult is None or octoHttpResult.StatusCode > 300:
             return octoHttpResult
 
         # The GetSnapshot API will always return the fully buffered snapshot.

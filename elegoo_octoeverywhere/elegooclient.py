@@ -159,6 +159,11 @@ class ElegooClient:
         return self.WebSocketConnected
 
 
+    # Indicates if the last connection attempt failed due to too many clients.
+    def IsDisconnectDueToTooManyClients(self) -> bool:
+        return self.LastConnectionFailedDueToTooManyClients
+
+
     # Sends a command to the printer to enable the webcam.
     def SendEnableWebcamCommand(self, waitForResponse:bool=True) -> ResponseMsg:
         return ElegooClient.Get().SendRequest(386, {"Enable":1}, waitForResponse=waitForResponse)
@@ -326,6 +331,7 @@ class ElegooClient:
         # Reset the failed connection attempts.
         self.ConsecutivelyFailedConnectionAttempts = 0
         self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
+        self.LastConnectionFailedDueToTooManyClients = False
 
         # On connect, we need to request the status and attributes.
         # Important, we can't wait for for the response or will deadlock.
@@ -507,7 +513,6 @@ class ElegooClient:
         # If the last attempt was successful but it failed due to too many clients, we will try the same IP again.
         # We should always have an ip in the config, because we save it even though the connection failed.
         if self.LastConnectionFailedDueToTooManyClients:
-            self.LastConnectionFailedDueToTooManyClients = False
             if hasConfigIp:
                 return configIpOrHostname
 

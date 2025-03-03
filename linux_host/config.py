@@ -311,7 +311,7 @@ class Config:
             self.Config.read(self.OeConfigFilePath)
         else:
             # If no config exists, create a new file by writing the empty config now.
-            print("Config file doesn't exist. Creating a new file now!")
+            #print("Config file doesn't exist. Creating a new file now!")
             self._SaveConfig_UnderLock()
 
 

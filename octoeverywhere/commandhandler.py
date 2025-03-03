@@ -46,6 +46,10 @@ class CommandHandler:
     c_CommandError_HostNotConnected = 785
     # Used for things like the print, resume, or cancel command, to indicate there's nothing to take action on.
     c_CommandError_InvalidPrinterState = 786
+    # Used for any printer that can only support a limited number of connections.
+    # This indicates the plugin can't connect because too many other clients are connected.
+    c_CommandError_CantConnectTooManyClients = 787
+
 
 
     _Instance = None
@@ -83,10 +87,11 @@ class CommandHandler:
                 self.Logger.warn("GetStatus command has no PlatformCommandHandler")
             else:
                 # If the plugin is connected and in a good state, this should return the standard job status.
-                # On error, meaning the plugin isn't connected to the host, this should return None, which then sends back the HostNotConnected error.
+                # On error, this should return None and then we send back the CommandHandler.c_CommandError_HostNotConnected error
+                # OR it will return an int, which must be a CommandHandler.c_CommandError_... error, and we will send that back.
                 jobStatus = self.PlatformCommandHandler.GetCurrentJobStatus()
-                # This interface should always return None on failure, but make sure.
-                if jobStatus is not None and len(jobStatus) == 0:
+                # This interface should always return None, an int, or a dict with details.
+                if jobStatus is not None and (isinstance(jobStatus, dict) and len(jobStatus) == 0):
                     jobStatus = None
         except Exception as e:
             Sentry.ExceptionNoSend("API command GetStatus failed to get job status", e)
@@ -94,6 +99,9 @@ class CommandHandler:
         # Ensure we got a job status, otherwise the host isn't connected.
         if jobStatus is None:
             return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Host not connected")
+        # If we got an int back, it's an error code.
+        if isinstance(jobStatus, int):
+            return CommandResponse.Error(jobStatus, "Failed to get current status.")
 
         # Gather info that's specific to us.
         octoeverywhereStatus = None

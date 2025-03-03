@@ -74,7 +74,10 @@ class QuickCamManager:
         # Try to get a snapshot.
         img = qc.GetCurrentImage()
         if img is None:
-            return None
+            # If we can't get an image from a quick cam URL, no future system will be able to.
+            # All of these URLs have prefixes like rtsp, ws, or jmpeg, so we can't get a snapshot from them.
+            # So, don't return none, just return a failed http response.
+            return OctoHttpRequest.Result.Error(404, url)
 
         # If we get an image, return it!
         headers = {

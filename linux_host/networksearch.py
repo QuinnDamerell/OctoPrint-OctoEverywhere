@@ -341,7 +341,7 @@ class NetworkSearch:
                 failedToConnect = False
             except Exception as e:
                 logger.debug(f"Elegoo {url} - connection failure {e}")
-            logger.debug(f"Connection exit for Bambu on {url}")
+            logger.debug(f"Connection exit for Elegoo on {url}")
 
             # Wait for the timeout.
             if not failedToConnect:

@@ -230,7 +230,7 @@ class Installer:
             installTarget = "K1"
         elif context.OsType == OsTypes.K2:
             installTarget = "K2"
-        Telemetry.Write("Installer-Phase", 1, {"Phase":phaseStr, "OsType":context.OsType, "Target":installTarget })
+        Telemetry.Write("Installer-Phase", 1, {"Phase":phaseStr, "OsType":context.OsType }, {"Target":installTarget})
         Logger.Debug(f"Installer Phase: {phaseStr}, OsType: {context.OsType}, Target: {installTarget}")
 
 

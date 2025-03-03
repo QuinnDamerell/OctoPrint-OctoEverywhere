@@ -32,6 +32,9 @@ class OctoPrintCommandHandler:
     #
     # See the JobStatusV2 class in the service for the object definition.
     #
+    # Returning None will result in the "Printer not connected" state.
+    # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
+    #
     def GetCurrentJobStatus(self):
         try:
             # Get the date from the octoprint printer object.
