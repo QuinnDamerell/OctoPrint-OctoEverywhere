@@ -60,12 +60,13 @@ class BambuBootstrap:
 
         # For now, we also need the user to supply the printer's IP address in both modes, since we can't auto scan the network in docker.
         # We also need this for the Bambu Cloud mode, since we can't get it from the Bambu Cloud API and we can't scan for the printer.
-        printerId = os.environ.get("PRINTER_IP", None)
-        if printerId is not None:
-            logger.info(f"Setting Printer IP: {printerId}")
-            config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, printerId)
+        printerIp = os.environ.get("PRINTER_IP", None)
+        if printerIp is not None:
+            logger.info(f"Setting Printer IP: {printerIp}")
+            config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, printerIp)
         # Ensure something is set now.
-        if config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None) is None:
+        printerIp = config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
+        if printerIp is None:
             logger.error("")
             logger.error("")
             logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -79,10 +80,12 @@ class BambuBootstrap:
             # Sleep some, so we don't restart super fast and then exit.
             time.sleep(5.0)
             sys.exit(1)
+        else:
+            logger.info(f"Target Printer IP: {printerIp}")
 
         # The port is always the same, so we just set the known Bambu Lab printer port.
-        if config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None) is None:
-            config.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, "8883")
+        # Note we should always set this, to ensure we override any other values from other companion modes.
+        config.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, "8883")
 
         #
         #

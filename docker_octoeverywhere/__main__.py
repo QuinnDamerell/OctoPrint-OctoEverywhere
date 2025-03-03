@@ -137,6 +137,7 @@ if __name__ == '__main__':
             "LocalFileStoragePath" : localStoragePath,
             "LogFolder" : logDirPath,
             "ConfigFolder" : configPath,
+            'IsCompanion' : True,
         }
 
         # Convert the launch string into what's expected.

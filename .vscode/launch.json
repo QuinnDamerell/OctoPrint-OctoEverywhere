@@ -167,14 +167,27 @@
                 "VENV_DIR": "/home/pi/octoeverywhere-env",
                 "REPO_DIR": "/home/pi/octoeverywhere",
                 "DATA_DIR": "/home/pi/.octoeverywhere-docker-bootstrap", // This path needs to be created.
-                "COMPANION_MODE": "elegoo",
-                "ELEGOO_PRINTER_IP": "10.0.0.101"
-                //"SERIAL_NUMBER": "serial",
-                //"ACCESS_CODE": "test123"
-                //"PRINTER_IP": "127.0.0.1",
-                //"CONNECTION_MODE": "cloud",
-                //"BAMBU_CLOUD_ACCOUNT_EMAIL":"quinn@test.com",
-                //"BAMBU_CLOUD_ACCOUNT_PASSWORD": "test123",
+                //
+                // Bambu
+                //
+                //"COMPANION_MODE": "bambu",
+                //"SERIAL_NUMBER": "xx",
+                //"ACCESS_CODE": "xx",
+                //"PRINTER_IP": "10.0.0.23",
+
+                //
+                // Elgeoo
+                //
+                //"COMPANION_MODE": "elegoo",
+                //"PRINTER_IP": "10.0.0.101"
+
+                //
+                // Klipper
+                //
+                // "COMPANION_MODE": "klipper",
+                // "PRINTER_IP":"10.0.0.21",
+                // "MOONRAKER_PORT": "7125",
+                // "WEBSERVER_PORT": "80",
             },
         },
     ]
