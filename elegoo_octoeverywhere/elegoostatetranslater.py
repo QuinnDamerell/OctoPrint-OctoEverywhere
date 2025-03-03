@@ -18,10 +18,16 @@ class ElegooStateTranslator:
         self.NotificationsHandler = notificationHandler
 
 
-    # Called by the client just before it tires to make a new connection.
+    # Fired when the websocket connection is lost to the printer.
     # This is used to let us know that we are in an unknown state again, until we can re-sync.
-    def ResetForNewConnection(self):
-        # Reset the last state to indicate that we don't know what it is.
+    # If wasFullyConnected was set, we know we were fully connected before the loss.
+    def OnConnectionLost(self, wasFullyConnected:bool) -> None:
+        # If we were fully connected and were printing or warming up, then report  the connection loss.
+        # Otherwise, don't bother, since it might just be the user turning off the printer.
+        if wasFullyConnected and (PrinterState.IsPrepareOrSlicingState(self.LastStatus) or PrinterState.IsPrintingState(self.LastStatus, False)):
+            self.NotificationsHandler.OnError("Connection to printer lost during a print.")
+
+        # Always reset our state.
         self.LastStatus = None
         self.IsWaitingOnPrintInfoToFirePrintStart = False
 

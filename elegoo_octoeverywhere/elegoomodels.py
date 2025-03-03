@@ -347,7 +347,7 @@ class PrinterAttributes:
 
     # Called when there's a new print message from the printer.
     def OnUpdate(self, msg:dict) -> None:
-        self.MainboardId = msg.get("MainboardId", None)
+        self.MainboardId = msg.get("MainboardID", None)
         # if self.HasLoggedPrinterVersion is False:
         #     self.HasLoggedPrinterVersion = True
         #     self.Logger.info(f"Printer Version: {self.PrinterName}, CPU: {self.Cpu}, Project: {self.ProjectName} Hardware: {self.HardwareVersion}, Software: {self.SoftwareVersion}, Serial: {self.SerialNumber}")

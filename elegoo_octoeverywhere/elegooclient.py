@@ -318,7 +318,6 @@ class ElegooClient:
         self.WebSocketConnected = False
         self.WebSocketConnectFinalized = None
         self.WebSocketConnectionIp = None
-        self.StateTranslator.ResetForNewConnection()
 
 
     # Fired when the websocket is connected.
@@ -353,8 +352,14 @@ class ElegooClient:
             for _, v in self.RequestPendingContexts.items():
                 v.SetSocketClosed()
 
+        # Grab if we were fully connected before the state cleanup.
+        wasFullyConnected = self.WebSocketConnectFinalized
+
         # Clean up the state.
         self._CleanupStateOnDisconnect()
+
+        # Report the connection was lost.
+        self.StateTranslator.OnConnectionLost(wasFullyConnected)
 
 
     # Fired when the websocket is closed.
