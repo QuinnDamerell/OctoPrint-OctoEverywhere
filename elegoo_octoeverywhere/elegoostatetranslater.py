@@ -2,7 +2,7 @@ from octoeverywhere.notificationshandler import NotificationsHandler
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
-from .elegoofilemanager import ElegooFileManager
+from .elegoofilemanager import ElegooFileManager, FileInfo
 
 # This class is responsible for listening to the mqtt messages to fire off notifications
 # and to act as the printer state interface for Bambu printers.
@@ -111,11 +111,11 @@ class ElegooStateTranslator:
         fileSizeKb = 0
         totalFilamentWeightMg = 0
         # Try to get the file info if we can - this will come from a in-memory cache if we have it.
-        fileInfo = ElegooFileManager.Get().GetFileInfoFromState(printerState)
+        fileInfo:FileInfo = ElegooFileManager.Get().GetFileInfoFromState(printerState)
         if fileInfo is not None:
             if fileInfo.FileSizeKb is not None:
                 fileSizeKb = fileInfo.FileSizeKb
-            if fileInfo.EstimatedFilamentWeightMg is not None:
+            if fileInfo.EstFilamentWeightMg is not None:
                 totalFilamentWeightMg = fileInfo.EstFilamentWeightMg
 
         # We must pass the unique cookie name for this print and any other details we can.
