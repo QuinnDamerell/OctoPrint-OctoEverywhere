@@ -262,6 +262,11 @@ class QuickCam:
             while attempts < 5:
                 attempts += 1
 
+                # Some systems don't lke a single stream to be too long.
+                # If this time is set, we will abort the connection after this amount of time.
+                # But we will auto reconnect, so any clients streaming won't even know, beyond a small delay in the image stream.
+                maxSingleStreamTimeSec = None
+
                 # Create the camera implementation we need for this device.
                 camImpl = None
                 if self.Type == QuickCamStreamTypes.RTSP:
@@ -273,6 +278,9 @@ class QuickCam:
                 elif self.Type == QuickCamStreamTypes.JMPEG:
                     self.Logger.debug(f"QuickCam capture thread started for JMPEG. {self.Url}")
                     camImpl = QuickCam_Jmpeg(self.Logger)
+                    # The elegoo webcam server doesn't like us to stream too long, so set a short-ish max time
+                    # remember the client streams will not be effected, there will only be a small gap in the stream images.
+                    maxSingleStreamTimeSec = 60
                 else:
                     self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
                     return
@@ -284,6 +292,7 @@ class QuickCam:
                         self.WebcamPlatformHelperInterface.OnQuickCamStreamStart(self.Url)
 
                         # Connect to the server.
+                        connectionStartSec = time.time()
                         camImpl.Connect(self.Url)
 
                         # Begin the capture loop.
@@ -304,6 +313,13 @@ class QuickCam:
                             # Set the image if we got one.
                             if img is not None:
                                 self._SetNewImage(img)
+                                # If we got an image, we are connected, so reset the connection attempts.
+                                attempts = 0
+
+                            # Check if we have hit the max single connection limit, and if we need to reconnect.
+                            if maxSingleStreamTimeSec is not None and time.time() - connectionStartSec > maxSingleStreamTimeSec:
+                                self.Logger.debug("QuickCam capture thread hit the max single stream time. Ending this connect to start a new one...")
+                                break
 
                     except Exception as e:
                         # We have seen times where random errors are returned, like on boot or if the stream is opened too soon after closing.

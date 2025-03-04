@@ -24,6 +24,7 @@ from linux_host.logger import LoggerInit
 
 
 from .elegooclient import ElegooClient
+from .elegoofilemanager import ElegooFileManager
 from .elegoowebsocketmux import ElegooWebsocketMux
 from .elegoowebcamhelper import ElegooWebcamHelper
 from .elegoocommandhandler import ElegooCommandHandler
@@ -140,8 +141,11 @@ class ElegooHost:
             websocketMux = ElegooWebsocketMux(self.Logger)
             Compat.SetRelayWebsocketProvider(websocketMux)
 
+            # Init the file manager
+            ElegooFileManager.Init(self.Logger)
+
             # Setup and start the Elegoo Client
-            ElegooClient.Init(self.Logger, self.Config, stateTranslator, websocketMux)
+            ElegooClient.Init(self.Logger, self.Config, stateTranslator, websocketMux, ElegooFileManager.Get())
 
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri

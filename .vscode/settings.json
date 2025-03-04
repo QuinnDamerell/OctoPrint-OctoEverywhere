@@ -61,6 +61,7 @@
         "elegoo",
         "elegooclient",
         "elegoocommandhandler",
+        "elegoofilemanager",
         "elegoohost",
         "elegoomodels",
         "elegoorelaywebcamstreamdetector",

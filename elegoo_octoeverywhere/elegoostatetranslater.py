@@ -2,6 +2,7 @@ from octoeverywhere.notificationshandler import NotificationsHandler
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
+from .elegoofilemanager import ElegooFileManager
 
 # This class is responsible for listening to the mqtt messages to fire off notifications
 # and to act as the printer state interface for Bambu printers.
@@ -35,7 +36,7 @@ class ElegooStateTranslator:
     # Fired when any mqtt message comes in.
     # State will always be NOT NONE, since it's going to be created before this call.
     # The isFirstFullSyncResponse flag indicates if this is the first full state sync of a new connection.
-    def OnStatusUpdate(self, status:dict, pState:PrinterState, isFirstFullSyncResponse:bool):
+    def OnStatusUpdate(self, pState:PrinterState, isFirstFullSyncResponse:bool):
 
         # First, if we have a new connection and we just synced, make sure the notification handler is in sync.
         if isFirstFullSyncResponse:
@@ -52,7 +53,7 @@ class ElegooStateTranslator:
                 # If the last state is None, this is mostly likely the first time we've seen a state.
                 # All we want to do here is update last state to the new state.
                 pass
-            # Check if we are now in a printing state we use the common function so the definition of "printing" stays common.
+            # Check if we are now in a printing (or warming up) state we use the common function so the definition of "printing" stays common.
             elif pState.IsPrinting(False):
                 # If we are now printing, but the last state was paused, we want to fire the resume event.
                 if self.LastStatus == PrinterState.PRINT_STATUS_PAUSED:
@@ -65,6 +66,9 @@ class ElegooStateTranslator:
                         # and thus can generate the print cookie. Since this flag is checked right after this,
                         # we can always set it here, and then have one check.
                         self.IsWaitingOnPrintInfoToFirePrintStart = True
+                        # But this is a good time to fire a file sync, since we should have the file on the system now, and the start
+                        # event will try to pull info from it.
+                        ElegooFileManager.Get().Sync()
             # Check for the paused state
             elif pState.IsPaused():
                 # If the error is temporary, like a filament run out, the printer goes into a paused state with the printer_error set.
@@ -104,8 +108,18 @@ class ElegooStateTranslator:
 
 
     def OnStart(self, printerState:PrinterState):
+        fileSizeKb = 0
+        totalFilamentWeightMg = 0
+        # Try to get the file info if we can - this will come from a in-memory cache if we have it.
+        fileInfo = ElegooFileManager.Get().GetFileInfoFromState(printerState)
+        if fileInfo is not None:
+            if fileInfo.FileSizeKb is not None:
+                fileSizeKb = fileInfo.FileSizeKb
+            if fileInfo.EstimatedFilamentWeightMg is not None:
+                totalFilamentWeightMg = fileInfo.EstFilamentWeightMg
+
         # We must pass the unique cookie name for this print and any other details we can.
-        self.NotificationsHandler.OnStarted(printerState.GetPrintCookie(), printerState.GetFileNameWithNoExtension())
+        self.NotificationsHandler.OnStarted(printerState.GetPrintCookie(), printerState.GetFileNameWithNoExtension(), fileSizeKBytes=fileSizeKb, totalFilamentWeightMg=totalFilamentWeightMg)
 
 
     def OnComplete(self, printerState:PrinterState):

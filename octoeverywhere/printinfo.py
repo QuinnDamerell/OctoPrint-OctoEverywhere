@@ -18,6 +18,7 @@ class PrintInfo:
     c_FileNameKey = "FileName"
     c_FileSizeInKBytes = "FileSizeKBytes"
     c_EstFilamentUsageMm = "EstFilamentUsageMm"
+    c_EstFilamentWeightMg = "EstFilamentWeightMg"
     c_FinalPrintDurationSec = "FinalPrintDurationSec"
 
     # Given a file path, this loads a print info if possible.
@@ -101,6 +102,15 @@ class PrintInfo:
     def SetEstFilamentUsageMm(self, estMm:int) -> None:
         if self.GetEstFilamentUsageMm() != estMm:
             self.Data[PrintInfo.c_EstFilamentUsageMm] = estMm
+            self.Save()
+
+
+    # Estimated filament weight used is optional.
+    def GetEstFilamentWeightUsageMg(self) -> int:
+        return self.Data.get(PrintInfo.c_EstFilamentWeightMg, 0)
+    def SetEstFilamentWeightUsageMg(self, estG:int) -> None:
+        if self.GetEstFilamentUsageMm() != estG:
+            self.Data[PrintInfo.c_EstFilamentWeightMg] = estG
             self.Save()
 
 

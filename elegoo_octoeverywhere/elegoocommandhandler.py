@@ -2,6 +2,7 @@ from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
+from .elegoofilemanager import ElegooFileManager
 
 # This class implements the Platform Command Handler Interface
 class ElegooCommandHandler:
@@ -58,8 +59,12 @@ class ElegooCommandHandler:
         durationSec = printerState.DurationSec if printerState.DurationSec is not None else 0
         timeLeftSec = printerState.GetTimeRemainingSec()
 
-        # There's a estimated filament usage, if we use the files command, but it's always 0 right now.
-        filamentUsageMm = 0
+        # Either of these can be set, or both or none.
+        filamentUsedMm = 0
+        filamentWeightMg = 0
+        fileInfo = ElegooFileManager.Get().GetFileInfoFromState(printerState)
+        if fileInfo is not None:
+            filamentWeightMg = fileInfo.EstFilamentWeightMg
 
         # Get the progress, as a float 100.0-0.0
         # On Elegoo, the progress is always a whole number.
@@ -85,7 +90,8 @@ class ElegooCommandHandler:
                 # In some system buggy cases, the time left can be super high and won't fit into a int32, so we cap it.
                 "TimeLeftSec" : min(timeLeftSec, 2147483600),
                 "FileName" : fileName,
-                "EstTotalFilUsedMm" : filamentUsageMm,
+                "EstTotalFilUsedMm" : filamentUsedMm,
+                "EstTotalFilWeightMg" : filamentWeightMg,
                 "CurrentLayer": currentLayerInt,
                 "TotalLayers": totalLayersInt,
                 "Temps": {

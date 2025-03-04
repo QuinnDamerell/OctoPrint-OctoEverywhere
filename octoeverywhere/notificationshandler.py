@@ -321,7 +321,7 @@ class NotificationsHandler:
     # The string can be anything, but it must be a valid file name.
     # The string should also be unique between prints, but common for the same print. This allows us to pull up the print info for the same print if we crash or
     # or lose the printer connection.
-    def OnStarted(self, printCookie:str, fileName:str = None, fileSizeKBytes:int = 0, totalFilamentUsageMm:int = 0):
+    def OnStarted(self, printCookie:str, fileName:str = None, fileSizeKBytes:int = 0, totalFilamentUsageMm:int = 0, totalFilamentWeightMg:int = 0):
         # Validate
         if self._shouldIgnoreEvent(fileName):
             return
@@ -346,6 +346,7 @@ class NotificationsHandler:
             return
         pi.SetFileSizeKBytes(fileSizeKBytes)
         pi.SetEstFilamentUsageMm(totalFilamentUsageMm)
+        pi.SetEstFilamentWeightUsageMg(totalFilamentWeightMg)
 
         self.StartPrintTimers(True, None)
         self._sendEvent("started")
@@ -1151,6 +1152,7 @@ class NotificationsHandler:
             args["FileName"] = str(pi.GetFileName())
             args["FileSizeKb"] = str(pi.GetFileSizeKBytes())
             args["FilamentUsageMm"] = str(pi.GetEstFilamentUsageMm())
+            args["FilamentWeightMg"] = str(pi.GetEstFilamentWeightUsageMg())
         else:
             Sentry.LogError("NotificationsHandler failed to get the print info for the current print.", {"Cookie": self.PrintCookie, "Event": event})
 

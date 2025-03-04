@@ -15,7 +15,6 @@ from linux_host.networksearch import NetworkSearch
 
 from .elegoomodels import PrinterState, PrinterAttributes
 
-
 # The response object for a request message.
 # Contains information on the state, and if successful, the result.
 class ResponseMsg:
@@ -74,8 +73,8 @@ class ElegooClient:
     WebSocketMessageDebugging = False
 
     @staticmethod
-    def Init(logger:logging.Logger, config:Config, stateTranslator, websocketMux):
-        ElegooClient._Instance = ElegooClient(logger, config, stateTranslator, websocketMux)
+    def Init(logger:logging.Logger, config:Config, stateTranslator, websocketMux, fileManger):
+        ElegooClient._Instance = ElegooClient(logger, config, stateTranslator, websocketMux, fileManger)
 
 
     @staticmethod
@@ -83,11 +82,12 @@ class ElegooClient:
         return ElegooClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, stateTranslator, websocketMux) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, stateTranslator, websocketMux, fileManger) -> None:
         self.Logger = logger
         self.Config = config
         self.StateTranslator = stateTranslator # ElegooStateTranslator
         self.WebsocketMux = websocketMux # ElegooWebsocketMux
+        self.FileManger = fileManger # ElegooFileManager
 
         # Setup the request response system.
         self.RequestLock = threading.Lock()
@@ -171,7 +171,7 @@ class ElegooClient:
 
     # Sends a request to the printer and waits for a response.
     # Always returns a ResponseMsg, with various error codes.
-    def SendRequest(self, cmdId:int, data:dict=None, waitForResponse:bool=True) -> ResponseMsg:
+    def SendRequest(self, cmdId:int, data:dict=None, waitForResponse:bool=True, timeoutSec:float=None) -> ResponseMsg:
         # Generate a request id, which is a 32 char lowercase letter and number string
         requestId = ''.join(random.choices(string.ascii_lowercase + string.digits, k=32))
 
@@ -214,7 +214,9 @@ class ElegooClient:
                 return ResponseMsg(None)
 
             # Wait for a response
-            waitContext.GetEvent().wait(ElegooClient.RequestTimeoutSec)
+            if timeoutSec is None:
+                timeoutSec = ElegooClient.RequestTimeoutSec
+            waitContext.GetEvent().wait(timeoutSec)
 
             # Check if we got a result.
             result = waitContext.GetResult()
@@ -224,8 +226,8 @@ class ElegooClient:
 
             # Handle the one common way commands can fail.
             data = result.get("Data", None)
-            if data is None:
-                innerData = result.get("Data", None)
+            if data is not None:
+                innerData = data.get("Data", None)
                 if innerData is not None:
                     ack = innerData.get("Ack", None)
                     if ack is not None and ack == 1:
@@ -371,6 +373,7 @@ class ElegooClient:
             self.LastConnectionFailedDueToTooManyClients = True
             self.Logger.warning("Elegoo printer connection failed due to too many already connected clients.")
         else:
+            self.LastConnectionFailedDueToTooManyClients = False
             Sentry.Exception("Elegoo printer websocket error.", e)
 
 
@@ -481,6 +484,9 @@ class ElegooClient:
         self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, wsConIp)
         self.Logger.info("Elegoo client connection finalized.")
 
+        # Kick off the file manager to sync.
+        self.FileManger.Sync()
+
 
     def _HandleStatusUpdate(self, status:dict):
         # First update the state object.
@@ -498,7 +504,7 @@ class ElegooClient:
             Sentry.Exception("Failed to update printer states object", e)
 
         # After the state is updated, invoke the state translator.
-        self.StateTranslator.OnStatusUpdate(status, self.State, isFirstStateUpdate)
+        self.StateTranslator.OnStatusUpdate(self.State, isFirstStateUpdate)
 
 
     # Returns the IP for the next connection attempt

@@ -63,8 +63,11 @@ class ElegooWebsocketMux:
     # Called when a ElegooWebsocketClientProxy closes.
     def ProxyClose(self, ws:"ElegooWebsocketClientProxy"):
         # Remove the websocket from the connected list, so it stops getting messages.
+        wsId = ws.GetId()
         with self.Lock:
-            del self.ConnectedWebsockets[ws.GetId()]
+            # Note this will not be in the list if it never opened.
+            if wsId in self.ConnectedWebsockets:
+                del self.ConnectedWebsockets[ws.GetId()]
 
         # Tell the ElegooClient the ws is closed, so it can clear any pending contexts.
         ElegooClient.Get().MuxWebsocketClosed(ws.GetId())
