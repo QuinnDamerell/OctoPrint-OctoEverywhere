@@ -23,6 +23,7 @@ from linux_host.version import Version
 from linux_host.logger import LoggerInit
 
 
+from .slipstream import Slipstream
 from .elegooclient import ElegooClient
 from .elegoofilemanager import ElegooFileManager
 from .elegoowebsocketmux import ElegooWebsocketMux
@@ -144,8 +145,11 @@ class ElegooHost:
             # Init the file manager
             ElegooFileManager.Init(self.Logger)
 
+            # Init the slipstream cache
+            Slipstream.Init(self.Logger)
+
             # Setup and start the Elegoo Client
-            ElegooClient.Init(self.Logger, self.Config, stateTranslator, websocketMux, ElegooFileManager.Get())
+            ElegooClient.Init(self.Logger, self.Config, printerId, pluginVersionStr, stateTranslator, websocketMux, ElegooFileManager.Get())
 
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
@@ -240,8 +244,7 @@ class ElegooHost:
     # actionLink - string, if not None or empty, this is the URL to show on the action button or text link.
     # onlyShowIfLoadedViaOeBool - bool, if set, the message should only be shown on browsers loading the portal from OE.
     def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool):
-        # This isn't supported on Bambu
-        pass
+        ElegooClient.Get().SendFrontendPopupMsg(title, text, msgType, actionText, actionLink, showForSec, onlyShowIfLoadedViaOeBool)
 
 
     #

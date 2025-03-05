@@ -37,7 +37,7 @@ class FinalSnap:
         self.SnapLock = threading.Lock()
         self.SnapHistory = []
         self.Profiler = None
-        self.Timer = RepeatTimer(self.Logger, FinalSnap.c_defaultSnapIntervalSec, self._snapCallback)
+        self.Timer = RepeatTimer(self.Logger, "FinalSnap", FinalSnap.c_defaultSnapIntervalSec, self._snapCallback)
         self.Timer.start()
         self.Logger.info("Starting FinalSnap")
 

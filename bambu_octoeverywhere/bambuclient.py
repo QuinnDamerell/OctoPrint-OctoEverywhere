@@ -57,6 +57,9 @@ class BambuClient:
         self.IsPendingSubscribe = False
         self._CleanupStateOnDisconnect()
 
+        # This is used to wake up the connection thread if it's sleeping.
+        self.SleepEvent = threading.Event()
+
         # Get the required args.
         self.Config = config
         self.PortStr  = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
@@ -78,6 +81,10 @@ class BambuClient:
     # Returns the current local State object which is kept in sync with the printer.
     # Returns None if the printer is not connected and the state is unknown.
     def GetState(self) -> BambuState:
+        if self.State is None:
+            # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
+            self.SleepEvent.set()
+            return None
         return self.State
 
 
@@ -107,6 +114,7 @@ class BambuClient:
         localBackoffCounter = 0
         while True:
             ipOrHostname = None
+            isConnectAttemptFromEventBump = False
             try:
                 # Before we try to connect, ensure we tell the state translator that we are starting a new connection.
                 self.StateTranslator.ResetForNewConnection()
@@ -127,7 +135,7 @@ class BambuClient:
                 self.Client.on_log = self._OnLog
 
                 # Get the IP to try on this connect
-                connectionContext = self._GetConnectionContextToTry()
+                connectionContext = self._GetConnectionContextToTry(isConnectAttemptFromEventBump)
                 if connectionContext.IsCloud:
                     self.Logger.info("Trying to connect to printer via Bambu Cloud...")
                     # We are connecting to Bambu Cloud, setup MQTT for it.
@@ -173,9 +181,17 @@ class BambuClient:
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
             # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
-            # Right now we allow it to ramp up to 30 seconds between retries.
-            localBackoffCounter = min(localBackoffCounter, 6)
-            time.sleep(5 * localBackoffCounter)
+            #
+            # Since we now have the sleep event, we can sleep longer, because when something attempts to use the socket, the event will wake us up
+            # to try a connection again. So, for example, when the user goes to the OE dashboard, the status check will wake us up.
+            #
+            # So right now, the max sleep time is 5 minutes.
+            localBackoffCounter = min(localBackoffCounter, 60)
+            sleepDelaySec = 5.0 * localBackoffCounter
+            self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Bambu printer.")
+            # Sleep for the time or until the event is set.
+            isConnectAttemptFromEventBump = self.SleepEvent.wait(sleepDelaySec)
+            self.SleepEvent.clear()
 
 
     # Since MQTT sends a full state and then partial updates, we sometimes need to force a full state sync, like on connect.
@@ -359,6 +375,8 @@ class BambuClient:
             # Ensure we are connected.
             if self.Client is None or not self.Client.is_connected():
                 self.Logger.info("Failed to publish command because we aren't connected.")
+                # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
+                self.SleepEvent.set()
                 return False
 
             # Try to publish.
@@ -376,11 +394,13 @@ class BambuClient:
     # Returns a connection context object we should try to for this connection attempt.
     # The connection context can indicate we are trying to connect to the Bambu Cloud or the local printer,
     # depending on the plugin config and what's available.
-    def _GetConnectionContextToTry(self) -> ConnectionContext:
+    def _GetConnectionContextToTry(self, isConnectAttemptFromEventBump:bool) -> ConnectionContext:
         # Increment and reset if it's too high.
         # This will restart the process of trying cloud connect and falling back.
+        # But we don't want to increment if this is from a connection bump, since they can be spammy.
+        if isConnectAttemptFromEventBump is False:
+            self.ConsecutivelyFailedConnectionAttempts += 1
         doPrinterSearch = False
-        self.ConsecutivelyFailedConnectionAttempts += 1
         if self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
             doPrinterSearch = True

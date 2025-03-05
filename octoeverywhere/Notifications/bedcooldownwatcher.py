@@ -43,7 +43,7 @@ class BedCooldownWatcher:
             self.IsFirstTimerRead = True
 
             # Start a new timer.
-            self.Timer = RepeatTimer(self.Logger, BedCooldownWatcher.c_checkIntervalSec, self._timerCallback)
+            self.Timer = RepeatTimer(self.Logger, "BedCooldownWatcher", BedCooldownWatcher.c_checkIntervalSec, self._timerCallback)
             self.Timer.start()
 
 

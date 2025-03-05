@@ -248,7 +248,8 @@ class OctoWebStreamHttpHelper:
             # which indicates the body hasn't been modified and we can save the bandwidth by not sending it.
             # We need to do this before we process the response headers.
             # This function will check if we want to do a 304 return and update the request correctly.
-            self.checkForNotModifiedCacheAndUpdateResponseIfSo(sendHeaders, octoHttpResult)
+            if isFromCache is False:
+                self.checkForNotModifiedCacheAndUpdateResponseIfSo(sendHeaders, octoHttpResult)
 
             # Before we check the headers, check if we are using a full body buffer.
             # If we are using a full body buffer, we need to ensure the content header is set. This will do a few things:

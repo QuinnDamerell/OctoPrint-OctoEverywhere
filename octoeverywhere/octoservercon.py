@@ -312,7 +312,7 @@ class OctoServerCon:
         try:
             # Start the RunFor time checker.
             # This will always be stopped in the finally before we exit this function.
-            runForTimeChecker = RepeatTimer(self.Logger, self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
+            runForTimeChecker = RepeatTimer(self.Logger, "OctoServer-RunForTimer", self.RunForTimeCheckerIntervalSec, self.OnRunForTimerCallback)
             runForTimeChecker.start()
 
             while 1:

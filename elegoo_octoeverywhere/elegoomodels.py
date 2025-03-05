@@ -132,6 +132,8 @@ class PrinterState:
         # t.STATUS_PRINTING = [13],
         # t.STATUS_FILE_DETECTION = [10],
         # t.STATUS_RECOVERY = [12],
+        #
+        # There are some hints in this /assets/i18n/network-en.json file as well, it's a translation file with strings of the states.
         s = self.PrintInfoStatus
         if s == 0:
             return PrinterState.PRINT_STATUS_IDLE, None

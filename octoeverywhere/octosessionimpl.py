@@ -194,7 +194,7 @@ class OctoSession:
                     return
 
                 # Create the new stream object now.
-                localStream = octowebstream.OctoWebStream(args=(self.Logger, streamId, self,))
+                localStream = octowebstream.OctoWebStream(name="OctoWebStreamPumper", args=(self.Logger, streamId, self, ))
                 # Set it in the map
                 self.ActiveWebStreams[streamId] = localStream
                 # Start it's main worker thread

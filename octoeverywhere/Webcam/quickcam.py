@@ -111,6 +111,25 @@ class QuickCamManager:
     # Returns a QuickCam instances for this url. If auth is required, the auth should be added to the URL in the http:// style. Ex rtsp://username:password@hostname...
     # The QuickCam class will be shared across multiple instances, it's thread safe.
     def _GetOrCreate(self, url:str):
+
+        # We need to be careful with the URL to make sure it doesn't have any cache busting query params.
+        # But we do need to support query params for things like /webcam/?action=stream
+        queryParamsStart = url.find("?")
+        if queryParamsStart != -1:
+            # Remove all of the query params to start.
+            ogUrl = url
+            url = url[:queryParamsStart]
+
+            # We decided to do an opt-in for query params, so we will only remove them if they are not in the opt-in list.
+            # This is because some printers use query params for things like /webcam/?action=stream
+            # We don't want to remove those, since they are part of the URL.
+            actionIndex = ogUrl.find("action=")
+            if actionIndex != -1:
+                actionEnd = ogUrl.find("&", queryParamsStart)
+                if actionEnd == -1:
+                    actionEnd = len(ogUrl)
+                url += "?" + ogUrl[queryParamsStart:actionEnd]
+
         with self.QuickCamMapLock:
             # If it already exists, get it and return it.
             qc = self.QuickCamMap.get(url, None)
@@ -349,7 +368,7 @@ class QuickCam:
                 # Set the last counter here so if something throws we still get current values.
                 lastImageCounter = self.ImageCounter
                 while self.IsCaptureThreadRunning:
-                    # Sleep for a bit until we want to check for a stall.
+                    # Sleep for a bit until we want to check for a stall.quic
                     time.sleep(QuickCam.c_StallMonitorThreadCheckIntervalSec)
 
                     # Ensure we are still running.
@@ -358,6 +377,7 @@ class QuickCam:
 
                     # Check if the image counter hasn't changed.
                     if self.ImageCounter == lastImageCounter:
+                        self.Logger.debug("QuickCam capture thread stalled.")
                         # Report the stall.
                         self.WebcamPlatformHelperInterface.OnQuickCamStreamStall(self.Url)
 

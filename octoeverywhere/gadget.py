@@ -78,7 +78,7 @@ class Gadget:
             self.Logger.info("Gadget is now watching!")
 
             # Start a new timer.
-            self.Timer = RepeatTimer(self.Logger, Gadget.c_defaultIntervalSec, self._timerCallback)
+            self.Timer = RepeatTimer(self.Logger, "Gadget", Gadget.c_defaultIntervalSec, self._timerCallback)
             self.Timer.start()
 
 

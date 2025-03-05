@@ -45,12 +45,19 @@ class ElegooWebsocketMux:
     # Return true to allow the websocket to open, false to prevent it, fire an error and close.
     def ProxyOpen(self, ws:"ElegooWebsocketClientProxy") -> bool:
         # If we have a connection to the printer, return it's ok to open.
+        wsId = ws.GetId()
         result = ElegooClient.Get().IsWebsocketConnected()
         if result is True:
             # If successful, add the websocket to the connected list.
             with self.Lock:
-                self.ConnectedWebsockets[ws.GetId()] = ws
+                self.ConnectedWebsockets[wsId] = ws
         return result
+
+
+    # Called after the ElegooWebsocketClientProxy is fully open and is ready to send messages.
+    def ProxyOpened(self, ws:"ElegooWebsocketClientProxy"):
+        # When the websocket is fully opened, we can tell the ElegooClient.
+        ElegooClient.Get().MuxWebsocketOpened(ws.GetId())
 
 
     # Called when a ElegooWebsocketClientProxy sends a message.
@@ -151,6 +158,9 @@ class ElegooWebsocketClientProxy():
                 self._DebugLog("Opening websocket.")
                 if self.OnWsOpen is not None:
                     self.OnWsOpen(self)
+
+                # Tell the mux we are fully opened now.
+                self.Mux.ProxyOpened(self)
             except Exception as e:
                 self._fireErrorAndCloseAsync("Exception in OnWsOpen callback.", e)
         threading.Thread(target=openThread, name="ElegooWebsocketClientProxy-OpenThread").start()

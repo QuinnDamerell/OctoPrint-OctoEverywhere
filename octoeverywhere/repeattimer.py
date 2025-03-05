@@ -4,8 +4,8 @@ import logging
 from .sentry import Sentry
 
 class RepeatTimer(threading.Thread):
-    def __init__(self, logger:logging.Logger, intervalSec:int, func):
-        threading.Thread.__init__(self)
+    def __init__(self, logger:logging.Logger, name:str, intervalSec:int, func):
+        threading.Thread.__init__(self, name=name)
         self.stopEvent = threading.Event()
         self.logger = logger
         self.intervalSec = intervalSec

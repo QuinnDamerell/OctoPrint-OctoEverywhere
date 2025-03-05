@@ -6,6 +6,7 @@ import logging
 import threading
 import octowebsocket
 
+from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -73,8 +74,8 @@ class ElegooClient:
     WebSocketMessageDebugging = False
 
     @staticmethod
-    def Init(logger:logging.Logger, config:Config, stateTranslator, websocketMux, fileManger):
-        ElegooClient._Instance = ElegooClient(logger, config, stateTranslator, websocketMux, fileManger)
+    def Init(logger:logging.Logger, config:Config, pluginId, pluginVersion, stateTranslator, websocketMux, fileManger):
+        ElegooClient._Instance = ElegooClient(logger, config, pluginId, pluginVersion, stateTranslator, websocketMux, fileManger)
 
 
     @staticmethod
@@ -82,9 +83,11 @@ class ElegooClient:
         return ElegooClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, stateTranslator, websocketMux, fileManger) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, pluginId:str, pluginVersion:str, stateTranslator, websocketMux, fileManger) -> None:
         self.Logger = logger
         self.Config = config
+        self.PluginId = pluginId
+        self.PluginVersion = pluginVersion
         self.StateTranslator = stateTranslator # ElegooStateTranslator
         self.WebsocketMux = websocketMux # ElegooWebsocketMux
         self.FileManger = fileManger # ElegooFileManager
@@ -109,6 +112,8 @@ class ElegooClient:
         self.LastConnectionFailedDueToTooManyClients = False
         # Hold the IP we are currently connected to, so when it's successful, we can update the config.
         self.WebSocketConnectionIp:str = None
+        # This is the event we will sleep on between connection attempts, which allows us to be poked to connect now.
+        self.SleepEvent:threading.Event = threading.Event()
 
         # We keep track of the states locally so we know the delta between states and
         # So we don't have to ping the printer for every state change.
@@ -145,6 +150,10 @@ class ElegooClient:
     # Returns the local printer state object with the most up-to-date information.
     # Returns None if the printer is not connected or the state is unknown.
     def GetState(self) -> PrinterState:
+        if self.State is None:
+            # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
+            self.SleepEvent.set()
+            return None
         return self.State
 
 
@@ -156,6 +165,9 @@ class ElegooClient:
 
     # Indicates if the websocket is connected and ready to send messages.
     def IsWebsocketConnected(self) -> bool:
+        if self.WebSocketConnected is False:
+            # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
+            self.SleepEvent.set()
         return self.WebSocketConnected
 
 
@@ -167,6 +179,22 @@ class ElegooClient:
     # Sends a command to the printer to enable the webcam.
     def SendEnableWebcamCommand(self, waitForResponse:bool=True) -> ResponseMsg:
         return ElegooClient.Get().SendRequest(386, {"Enable":1}, waitForResponse=waitForResponse)
+
+
+    # Sends a command to all connected frontends to show a popup message.
+    def SendFrontendPopupMsg(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
+        data = {
+            "Notification": {
+                "title": title,
+                "text": text,
+                "msg_type": msgType,
+                "action_text": actionText,
+                "action_link": actionLink,
+                "show_for_sec": showForSec,
+                "only_show_if_loaded_via_oe": onlyShowIfLoadedViaOeBool
+            }
+        }
+        self._SendMuxFrontendMessage(data)
 
 
     # Sends a request to the printer and waits for a response.
@@ -252,10 +280,11 @@ class ElegooClient:
     # Sends a string to the connected websocket.
     # forceSend is used to send the initial messages before the system is ready.
     def _WebSocketSend(self, jsonStr:str) -> bool:
-
         # Ensure the websocket is connected and ready.
         if self.WebSocketConnected is False:
             self.Logger.info("Elegoo client - tired to send a websocket message when the socket wasn't open.")
+            # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
+            self.SleepEvent.set()
             return False
         localWs = self.WebSocket
         if localWs is None:
@@ -278,6 +307,7 @@ class ElegooClient:
 
     # Sets up, runs, and maintains the websocket connection.
     def _ClientWorker(self):
+        isConnectAttemptFromEventBump = False
         while True:
             try:
                 # Clear the connection flags
@@ -285,7 +315,7 @@ class ElegooClient:
                 self.WebSocketConnectFinalized = False
 
                 # Get the current IP we want to try to connect with.
-                self.WebSocketConnectionIp = self._GetIpForConnectionAttempt()
+                self.WebSocketConnectionIp = self._GetIpForConnectionAttempt(isConnectAttemptFromEventBump)
 
                 # Build the connection URL
                 url = f"ws://{self.WebSocketConnectionIp}:{self.PortStr}/websocket"
@@ -304,13 +334,18 @@ class ElegooClient:
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
             # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
-            # Right now we allow it to ramp up to 30 seconds between retries.
+            #
+            # Since we now have the sleep event, we can sleep longer, because when something attempts to use the socket, the event will wake us up
+            # to try a connection again. So, for example, when the user goes to the OE dashboard, the status check will wake us up.
+            #
+            # So right now, the max sleep time is 5 minutes.
             sleepDelay = self.ConsecutivelyFailedConnectionAttempts
-            if sleepDelay > 6:
-                sleepDelay = 6
+            sleepDelay = min(sleepDelay, 60)
             sleepDelaySec = 5.0 * sleepDelay
             self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Elegoo printer.")
-            time.sleep(5.0 * sleepDelay)
+            # Sleep for the time or until the event is set.
+            isConnectAttemptFromEventBump = self.SleepEvent.wait(sleepDelaySec)
+            self.SleepEvent.clear()
 
 
     # Fired whenever the client is disconnected, we need to clean up the state since it's now unknown.
@@ -487,6 +522,10 @@ class ElegooClient:
         # Kick off the file manager to sync.
         self.FileManger.Sync()
 
+        # Kick off the slipstream cache
+        if Compat.HasSlipstream():
+            Compat.GetSlipstream().UpdateCache()
+
 
     def _HandleStatusUpdate(self, status:dict):
         # First update the state object.
@@ -508,7 +547,7 @@ class ElegooClient:
 
 
     # Returns the IP for the next connection attempt
-    def _GetIpForConnectionAttempt(self) -> str:
+    def _GetIpForConnectionAttempt(self, isConnectAttemptFromEventBump:bool) -> str:
         # Always increment the failed attempts - no matter the reason.
         self.ConsecutivelyFailedConnectionAttempts += 1
 
@@ -532,11 +571,14 @@ class ElegooClient:
         if hasMainboardId is False:
             return configIpOrHostname
 
+        # Don't bump this for event based reconnect attempts, since they can happen often.
+        if isConnectAttemptFromEventBump is False:
+            self.ConsecutivelyFailedConnectionAttemptsSinceSearch += 1
+
         # If we have a mainboard ID, we can scan for the printer on the local network.
         # But we only want to do this every now an then due to the CPU load.
         doPrinterSearch = False
-        self.ConsecutivelyFailedConnectionAttemptsSinceSearch += 1
-        if self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 6:
+        if self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 15:
             self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
             doPrinterSearch = True
 
@@ -578,6 +620,35 @@ class ElegooClient:
     #
     # APIs for ElegooWebsocketMux
     #
+
+
+    # This sends our special OE message out through all of the mux websockets to the frontend.
+    def _SendMuxFrontendMessage(self, data:dict=None) -> None:
+        # No data is fine, it just means we are sending a message with the plugin id and version.
+        if data is None:
+            data = {}
+
+        # Always include the plugin id and version.
+        data["PluginId"] = self.PluginId
+        data["PluginVersion"] = self.PluginVersion
+
+        # The outside object needs to be a valid response object, so the Elegoo frontend can parse it and ignore it.
+        # Create the request object
+        obj = {
+            # This ID is just a random 32 char string.
+            "Id": ''.join(random.choices(string.ascii_lowercase + string.digits, k=32)),
+            # This topic field must exist, but it's what's used to match the message type.
+            # So far it looks like defining our own type here is ideal, because then it's ignored.
+            # This can't change, because the frontend is looking for this exact string.
+            "Topic": "sdcp/octoeverywhere-frontend-msg",
+            "Data": data
+        }
+
+        # Serialize and send to all of the active mux sockets.
+        # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
+        jsonStr = json.dumps(obj, default=str).encode("utf-8")
+        self.WebsocketMux.OnIncomingMessage(None, jsonStr, octowebsocket.ABNF.OPCODE_TEXT)
+
 
     # Called by ElegooWebsocketMux when a mux client sends a message.
     # This returns true if the message was sent, false on failure.
@@ -624,6 +695,12 @@ class ElegooClient:
         except Exception as e:
             Sentry.Exception("Elegoo client exception in MuxSendMessage.", e)
             return False
+
+
+    # Called by ElegooWebsocketMux when a mux client is fully opened and can send messages.
+    def MuxWebsocketOpened(self, wsId:int) -> None:
+        # When a new mux connects, we want to send a frontend message so share the plugin id and version string.
+        self._SendMuxFrontendMessage()
 
 
     # Called by ElegooWebsocketMux when a mux client closes.

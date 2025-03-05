@@ -1242,13 +1242,13 @@ class NotificationsHandler:
 
         # Setup the progress timer
         intervalSec = 60 * 60 # Fire every hour.
-        timer = RepeatTimer(self.Logger, intervalSec, self.ProgressTimerCallback)
+        timer = RepeatTimer(self.Logger, "Notifications-TimedProgress", intervalSec, self.ProgressTimerCallback)
         timer.start()
         self.ProgressTimer = timer
 
         # Setup the first layer watcher - we use a different timer since this timer is really short lived and it fires much more often.
         intervalSec = NotificationsHandler.FirstLayerTimerIntervalSec
-        firstLayerTimer = RepeatTimer(self.Logger, intervalSec, self.FirstLayerTimerCallback)
+        firstLayerTimer = RepeatTimer(self.Logger, "Notifications-FirstLayerWatcher", intervalSec, self.FirstLayerTimerCallback)
         firstLayerTimer.start()
         self.FirstLayerTimer = firstLayerTimer
 
