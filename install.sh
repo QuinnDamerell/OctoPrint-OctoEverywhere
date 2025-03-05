@@ -1,19 +1,19 @@
 #!/bin/bash
 
-
-
 #
-# OctoEverywhere for Klipper And Bambu Lab Printers!
+# OctoEverywhere for Klipper, Creality, Bambu Lab, Elegoo, and other 3D Printers!
 #
 # Use this script to install the OctoEverywhere plugin for:
-#    OctoEverywhere for Klipper - Where this device is running Moonraker.
-#    OctoEverywhere for Creality - Where this device is a Creality device (Sonic Pad, K1, etc)
-#    OctoEverywhere Companion Plugin - Where this plugin will connect to Moonraker running on a different device on the same LAN
-#    OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu printer running on the save LAN.
+#    OctoEverywhere for Klipper    - The plugin is connected to Moonraker running on this device.
+#    OctoEverywhere for Creality   - The plugin is being installed on a Creality device (Sonic Pad, K1, etc)
+#    OctoEverywhere Companion      - The plugin will connect to Moonraker running on a different device on the same LAN
+#    OctoEverywhere Bambu Connect  - The plugin will connect to A Bambu Lab printer running on the save LAN.
+#    OctoEverywhere Elegoo Connect - The plugin will connect to A Elegoo printer running on the save LAN.
 #
-# For a device running Klipper locally, use no arguments.
+# For local Klipper or Creality devices, no arguments are required.
 # For a companion install, use the -companion argument.
 # For a Bambu Connect install, use the -bambu argument.
+# For a Elegoo Connect install, use the -elegoo argument.
 #
 # Simply run ./install.sh from the git repo root directory to get started!
 #
@@ -29,10 +29,8 @@
 # virtual environment, and py requirements. The core of the setup logic is done by the PY install script.
 #
 
-# Set this to terminate on error.
 # We don't do this anymore, because some commands return non-zero exit codes, but still are successful.
 # set -e
-
 
 #
 # First things first, we need to detect what kind of OS we are running on. The script works by default with all
@@ -377,34 +375,36 @@ log_blank
 log_blank
 log_blank
 cat << EOF
-      @@@@@@@@@@@@@@@@@@@@@@@@***@@@@@@@@@@@@@@@@@@@@@@@
-      @@@@@@@@@@@@@@***********************@@@@@@@@@@@@@
-      @@@@@@@@@@*******************************@@@@@@@@@
-      @@@@@@@@***********************************@@@@@@@
-      @@@@@,,,************************/////////*****@@@@
-      @@@@,,,,,,*****************//////////////******@@@
-      @@,,,,,,,,,,***********//////////////////*******@@
-      @@,,,,,,,,,,,,*******////////****///////*********@
-      @,,,,,,,,,,,/////////////////****//////***********
-      @,,,,,,,//////////////////////////////************
-      ,,,,,,,,////////////////////////////**************
-      @,,,,,,,,,,,,/////////////////////****************
-      @,,,,,,,,,,,,,,/////////////////******************
-      @@,,,,,,,,,,,,,,,,//////////////*****************@
-      @@@,,,,,/#######,,,,///////////*****************@@
-      @@@@,,,##########,,,,,,,//////,****************@@@
-      @@@@@,##########,,,,,,,,,////,,,,*************@@@@
-      @@@@@########,,,,,,,,,,,,//,,,,,,,,********@@@@@@@
-      @@@@@#@@@@,,,,,,,,,,,,,,,,,,,,,,,,,,,***,@@@@@@@@@
-      @@@@@@@@@@@@@@@,,,,,,,,,,,,,,,,,,,,,@@@@@@@@@@@@@@
+                         ==============
+                     ======================
+                   ==========================
+                 ==============================
+               ==================================
+              ======================+#%@@@@*======
+             ====================+%@@@@@@@@========
+            ===================*@@@%%@@@@@%=========
+            =================*@@@@====%@@@==========
+            ===========*@@@@@@@@@@====@@@===========
+            =========@@@@@@@@@@@@@@@@@@%============
+            ============@@@@@@@@@@@@@@+=============
+            ============+@@@@@@@@@@@*===============
+            ===========%%=#@@@@@@@@@================
+            =========+@@@@#=%@@@@@@@================
+             ========%@@@@@%===%@@@===============-
+              =======@@@@%+=====@@+=============-=
+               =================+============-==-
+                 =======================-=-=-=-
+                   =================-=-=-=---
+                     =========-=-=-=-------
+                         -==-==-=------
 EOF
 log_blank
-log_header    "  OctoEverywhere For Klipper, Creality OS, And Bambu Lab Printers"
-log_blue      " The 3D Printing Communities #1 Remote Access And AI Cloud Service"
+log_header    "  OctoEverywhere For Klipper, Creality, Elegoo, And Bambu Lab Printers"
+log_blue      "   The 3D Printing Communities #1 Remote Access And AI Cloud Service"
 log_blank
 log_blank
 log_important "OctoEverywhere empowers the worldwide maker community with..."
-log_info      "  - Free & Unlimited Mainsail, Fluidd, And Bambu Lab Printers Remote Access"
+log_info      "  - Free & Unlimited Mainsail, Fluidd, Elegoo, Creality, And Bambu Lab Printers Remote Access"
 log_info      "  - Free & Unlimited Next-Gen AI Print Failure Detection"
 log_info      "  - Free Full Frame Rate & Full Resolution Webcam Streaming"
 log_info      "  - 5 Star Rated iOS & Android Apps"
