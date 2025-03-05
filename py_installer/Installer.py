@@ -156,6 +156,8 @@ class Installer:
         # Before we start the service, check if the secrets config file already exists and if a printer id already exists.
         # This will indicate if this is a fresh install or not.
         context.ExistingPrinterId = Linker.GetPrinterIdFromServiceSecretsConfigFile(context)
+        if context.ExistingPrinterId is None:
+            self.ReportInstallerPhase(context, "NewPrinterId")
 
         # Final validation
         context.Validate(4)
@@ -182,6 +184,9 @@ class Installer:
         # The service is ready! Now do the account linking process.
         linker = Linker()
         linker.Run(context)
+
+        # Report our progress.
+        self.ReportInstallerPhase(context, "Success")
 
         # Success!
         Logger.Blank()
