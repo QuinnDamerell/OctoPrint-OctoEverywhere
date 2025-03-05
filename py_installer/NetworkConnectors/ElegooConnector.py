@@ -164,7 +164,7 @@ class ElegooConnector:
 
                 # If we got a mainboard id, we are good to go.
                 if result.MainboardId is not None:
-                    Logger.Info(f"Found your Elegoo printer on your network at {result.Ip}.")
+                    Logger.Info(f"Found your Elegoo printer on your network at {ip}.")
                     return (ip, result.MainboardId)
 
                 # Handle too many clients
