@@ -1,6 +1,6 @@
 # Start with the latest alpine, for a solid base,
 # since we need some advance binaries for things like pillow and ffmpeg.
-FROM alpine:3.20.0
+FROM alpine:3.21.3
 
 # Create a non-root user to run, so we don't run as root.
 # There's no need to run as root and it helps some platforms like openshift.

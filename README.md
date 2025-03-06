@@ -42,7 +42,7 @@ The OctoEverywhere Docker Container plugin can be use for:
 
 - [OctoEverywhere Bambu Connect](https://octoeverywhere.com/bambu?source=github_readme_docker) - OctoEverywhere for Bambu Lab 3D printers.
 - [OctoEverywhere Elegoo Connect](https://octoeverywhere.com/elegoo-centauri?source=github_readme_docker) - OctoEverywhere for Elegoo Centauri & Centauri Carbon 3D printers.
-- [OctoEverywhere Klipper Companion](https://octoeverywhere.com/getstarted?source=github_readme_docker) - OctoEverywhere for Klipper 3D printers.
+- [OctoEverywhere Klipper Companion](https://octoeverywhere.com/?source=github_readme_docker) - OctoEverywhere for Klipper 3D printers.
 
 Our Docker container can be ran on Windows, Linux, Mac, or just about anywhere.
 
