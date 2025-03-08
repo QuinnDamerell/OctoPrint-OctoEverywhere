@@ -431,44 +431,60 @@ class ElegooClient:
             sendToMuxSocketId = None
             try:
                 #
-                # Handle unsolicited messages first, to ensure the states always get updated.
+                # Handle the message by it's topic type.
                 #
+                topic:str = msg.get("Topic", None)
+                if topic is None:
+                    raise Exception("Elegoo message missing topic.")
 
                 # Handle state updates.
-                status = msg.get("Status", None)
-                if status is not None:
+                if topic.startswith("sdcp/status/"):
+                    status = msg.get("Status", None)
+                    if status is None:
+                        raise Exception("Elegoo sdcp/status/ message missing Status object.")
                     self._HandleStatusUpdate(status)
                     return
 
                 # Handle attributes updates.
-                attributes = msg.get("Attributes", None)
-                if attributes is not None:
+                if topic.startswith("sdcp/attributes/"):
+                    attributes = msg.get("Attributes", None)
+                    if attributes is None:
+                        raise Exception("Elegoo sdcp/attributes/ message missing Attributes object.")
                     self._HandleAttributesUpdate(attributes)
                     return
 
-                # Check for a waiting request context.
-                # If there is a pending context, give the message to it and we are done.
-                data = msg.get("Data", None)
-                if data is not None:
-                    requestId = data.get("RequestID", None)
-                    if requestId is not None:
-                        with self.RequestLock:
-                            context = self.RequestPendingContexts.get(requestId, None)
-                            if context is not None:
-                                # If the WsId is none, this is a local pending request.
-                                if context.WsId is None:
-                                    # We shouldn't send this to mux sockets, since we got a local response.
-                                    sendToAllMuxSockets = False
-                                    context.SetResultAndEvent(msg)
-                                else:
-                                    # We shouldn't send this to all mux sockets, since we got a mux response.
-                                    # But we do need to send it to the one that requested it.
-                                    sendToAllMuxSockets = False
-                                    sendToMuxSocketId = context.WsId
+                # Handle responses to our requests.
+                if topic.startswith("sdcp/response/"):
+                    # Responses should only ever be handled per websocket, they are never sent to all mux sockets.
+                    # If so, the frontend will show random "action was successful" toasts to the user.
+                    sendToAllMuxSockets = False
 
-                                    # Clean up the context for this message.
-                                    del self.RequestPendingContexts[requestId]
-                                return
+                    # Check for a waiting request context.
+                    # If there is a pending context, give the message to it and we are done.
+                    # Note that some responses might not have a pending request context, if the caller decided to not wait for the response.
+                    data = msg.get("Data", None)
+                    if data is None:
+                        raise Exception("Elegoo sdcp/response/ message missing Data object.")
+                    requestId = data.get("RequestID", None)
+                    if requestId is None:
+                        raise Exception("Elegoo sdcp/response/ message missing RequestID object.")
+                    with self.RequestLock:
+                        # Remember sometimes there won't be a match, if the send function didn't wait or timed out.
+                        context = self.RequestPendingContexts.get(requestId, None)
+                        if context is not None:
+                            # If the WsId is none, this is a local pending request.
+                            if context.WsId is None:
+                                # We shouldn't send this to mux sockets, since we got a local response.
+                                context.SetResultAndEvent(msg)
+                            else:
+                                # We shouldn't send this to all mux sockets, since we got a mux response.
+                                # But we do need to send it to the one that requested it.
+                                sendToMuxSocketId = context.WsId
+
+                                # Clean up the context for this message.
+                                del self.RequestPendingContexts[requestId]
+                    return
+
             finally:
                 # Once the message has been handled locally, we can send it to the mux sockets if needed.
                 # Check if there's one mux socket to send to first, if so send it there and be done.
