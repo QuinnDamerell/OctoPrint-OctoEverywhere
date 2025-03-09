@@ -263,7 +263,13 @@ install_or_update_system_dependencies()
             /opt/bin/opkg update || true
             /opt/bin/opkg install ${CREALITY_DEP_LIST} || true
         else
-            log_important "This K2 is missing the required setup files for OctoEverywhere. Please visit https://octoeverywhere.com/s/k2 for a step-by-step setup guide."
+            log_blank
+            log_blank
+            log_error "This K2 is missing the required setup files for OctoEverywhere."
+            log_important "Please visit https://octoeverywhere.com/s/k2 for a step-by-step setup guide."
+            log_blank
+            log_blank
+            exit 1
         fi
         # On the K2, the only we thing we ensure is that virtualenv is installed via pip.
         pip3 install -q --no-cache-dir virtualenv
