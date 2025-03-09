@@ -63,14 +63,18 @@ fi
 
 # Next, we try to detect if this OS is the K2 Plus.
 # The K2 runs an openwrt distro called Tina. We detect that by looking at the openwrt_release file.
+# But this also seems to overlap with the sonic pad, so we also check for the webrtc binary.
 IS_K2_OS=0
-# if grep -Fiqs "tina" /etc/openwrt_release
-# then
-#     IS_K2_OS=1
-#     # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
-#     # The default moonraker instance is installed in /usr/share/moonraker/
-#     HOME="/mnt/UDISK"
-# fi
+if grep -Fiqs "tina" /etc/openwrt_release
+then
+    if [[ -f /usr/bin/webrtc ]]
+    then
+
+        IS_K2_OS=1
+        # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
+        HOME="/mnt/UDISK"
+    fi
+fi
 
 
 # Get the root path of the repo, aka, where this script is executing
@@ -149,8 +153,7 @@ log_blank()
 # To enforce that, we will move the repo where it should be.
 ensure_creality_os_right_repo_path()
 {
-    # TODO - re-enable this for the  || [[ $IS_K1_OS -eq 1 ]] after the github script updates.
-    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
     then
         # Due to the K1 shell, we have to use grep rather than any bash string contains syntax.
         if echo $OE_REPO_DIR |grep "$HOME" - > /dev/null
