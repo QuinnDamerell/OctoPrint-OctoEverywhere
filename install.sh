@@ -64,13 +64,13 @@ fi
 # Next, we try to detect if this OS is the K2 Plus.
 # The K2 runs an openwrt distro called Tina. We detect that by looking at the openwrt_release file.
 IS_K2_OS=0
-if grep -Fiqs "tina" /etc/openwrt_release
-then
-    IS_K2_OS=1
-    # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
-    # The default moonraker instance is installed in /usr/share/moonraker/
-    HOME="/mnt/UDISK"
-fi
+# if grep -Fiqs "tina" /etc/openwrt_release
+# then
+#     IS_K2_OS=1
+#     # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
+#     # The default moonraker instance is installed in /usr/share/moonraker/
+#     HOME="/mnt/UDISK"
+# fi
 
 
 # Get the root path of the repo, aka, where this script is executing
