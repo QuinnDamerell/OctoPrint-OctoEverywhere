@@ -241,13 +241,11 @@ install_or_update_system_dependencies()
         # the user might install opkg via the 3rd party moonraker installer script.
         # But in general, PY will already be installed.
         # We will try to update python from the package manager if possible, otherwise, we will ignore it.
-        if [[ -f /opt/bin/opkgd ]]
+        if [[ -f /opt/bin/opkg ]]
         then
             # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
             /opt/bin/opkg update || true
             /opt/bin/opkg install ${CREALITY_DEP_LIST} || true
-        else
-            log_important "This K2 is missing the required setup files for OctoEverywhere. Please visit https://octoeverywhere.com/s/k2 for a step-by-step setup guide."
         fi
         # On the K1, the only we thing we ensure is that virtualenv is installed via pip.
         # We have had users report issues where this install gets stuck, using the no cache dir flag seems to fix it.
@@ -264,6 +262,8 @@ install_or_update_system_dependencies()
             # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
             /opt/bin/opkg update || true
             /opt/bin/opkg install ${CREALITY_DEP_LIST} || true
+        else
+            log_important "This K2 is missing the required setup files for OctoEverywhere. Please visit https://octoeverywhere.com/s/k2 for a step-by-step setup guide."
         fi
         # On the K2, the only we thing we ensure is that virtualenv is installed via pip.
         pip3 install -q --no-cache-dir virtualenv
