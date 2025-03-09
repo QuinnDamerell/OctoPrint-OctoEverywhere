@@ -99,7 +99,7 @@ class Updater:
 
             # For the k1, we need to use the prefix sh for the script run
             updateCmdPrefix = ""
-            if context.OsType == OsTypes.K1:
+            if context.OsType == OsTypes.K1 or context.OsType == OsTypes.K2:
                 updateCmdPrefix = "sh "
 
             s = f'''\
@@ -123,7 +123,9 @@ cd $startingDir
             # Target the user home unless this is a Creality install.
             # For Sonic Pad and K1 the user home will be set differently, but we want to put this script where the user logs in, aka root.
             targetPath = context.UserHomePath
-            if context.IsCrealityOs():
+            if context.OsType == OsTypes.K2:
+                targetPath = "/mnt/UDISK/root"
+            elif context.IsCrealityOs():
                 targetPath="/root"
 
             # Create the file.
