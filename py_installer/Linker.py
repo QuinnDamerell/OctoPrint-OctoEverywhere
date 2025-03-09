@@ -15,6 +15,11 @@ class Linker:
 
     def Run(self, context:Context):
 
+        # Get the amount of time we will wait for the plugin to install. For creality devices, give them more time since they are low powered.
+        pluginStartWaitTimeBeforeWarningSec = 10.0
+        if context.IsCrealityOs():
+            pluginStartWaitTimeBeforeWarningSec = 20.0
+
         # First, wait for the config file to be created and the printer ID to show up.
         printerId = None
         startTimeSec = time.time()
@@ -29,7 +34,7 @@ class Linker:
             # If we failed, try to handle the case where the service might be having an error.
             if printerId is None:
                 timeDelta = time.time() - startTimeSec
-                if timeDelta > 10.0:
+                if timeDelta > pluginStartWaitTimeBeforeWarningSec:
                     Logger.Warn("The local plugin service is taking a while to start, there might be something wrong.")
                     if Util.AskYesOrNoQuestion("Do you want to keep waiting?"):
                         startTimeSec = time.time()

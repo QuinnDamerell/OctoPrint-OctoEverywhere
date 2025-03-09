@@ -99,7 +99,7 @@ class Updater:
 
             # For the k1, we need to use the prefix sh for the script run
             updateCmdPrefix = ""
-            if context.OsType == OsTypes.K1:
+            if context.OsType == OsTypes.K1 or context.OsType == OsTypes.K2:
                 updateCmdPrefix = "sh "
 
             s = f'''\
@@ -121,12 +121,16 @@ cd {context.RepoRootFolder}
 cd $startingDir
             '''
             # Target the user home unless this is a Creality install.
-            # For Sonic Pad and K1 the user home will be set differently, but we want to put this script where the user logs in, aka root.
             targetPath = context.UserHomePath
-            if context.IsCrealityOs():
+            # For the K2, we use this dir, it's the default user login has the most data.
+            if context.OsType == OsTypes.K2:
+                targetPath = "/mnt/UDISK"
+            # For Sonic Pad and K1 the user home will be set differently, but we want to put this script where the user logs in, aka root.
+            elif context.IsCrealityOs():
                 targetPath="/root"
 
             # Create the file.
+            updateFileName = "update-octoeverywhere.sh"
             updateFilePath = os.path.join(targetPath, "update-octoeverywhere.sh")
             with open(updateFilePath, 'w', encoding="utf-8") as f:
                 f.write(s)
@@ -137,6 +141,23 @@ cd $startingDir
 
             # Ensure the user who launched the installer script has permissions to run it.
             Util.SetFileOwnerRecursive(updateFilePath, context.UserName)
+
+            # For the K2, if this common script is used (https://github.com/jamincollins/k2-improvements), the users default ssh path becomes /mnt/UDISK/root
+            try:
+                if context.OsType == OsTypes.K2:
+                    if os.path.exists("/mnt/UDISK/root"):
+                        # Create a symlink to the update script in the user's home directory.
+                        symLinkPath = os.path.join("/mnt/UDISK/root", updateFileName)
+                        os.symlink(updateFilePath, symLinkPath)
+
+                        # Make sure to make it executable
+                        st = os.stat(symLinkPath)
+                        os.chmod(symLinkPath, st.st_mode | stat.S_IEXEC)
+
+                        # Ensure the user who launched the installer script has permissions to run it.
+                        Util.SetFileOwnerRecursive(symLinkPath, context.UserName)
+            except Exception as e:
+                Logger.Warn("Failed to create symlink to update script. "+str(e))
 
             return True
         except Exception as e:

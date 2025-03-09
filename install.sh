@@ -3,6 +3,16 @@
 #
 # OctoEverywhere for Klipper, Creality, Bambu Lab, Elegoo, and other 3D Printers!
 #
+#
+# If you don't know what you're doing, start the link think below, which will help you determine which plugin to install.
+# https://octoeverywhere.com/getstarted
+#
+#
+# This script is a can be used to install the OctoEverywhere plugin directly on any Debian based Linux system.
+# OctoEverywhere can also set up using a Docker image, see this link for details:
+# https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/blob/master/docker-readme.md
+#
+#
 # Use this script to install the OctoEverywhere plugin for:
 #    OctoEverywhere for Klipper    - The plugin is connected to Moonraker running on this device.
 #    OctoEverywhere for Creality   - The plugin is being installed on a Creality device (Sonic Pad, K1, etc)
@@ -19,8 +29,6 @@
 #
 # If you need help, feel free to contact us at support@octoeverywhere.com
 #
-
-
 
 
 
@@ -63,14 +71,18 @@ fi
 
 # Next, we try to detect if this OS is the K2 Plus.
 # The K2 runs an openwrt distro called Tina. We detect that by looking at the openwrt_release file.
+# But this also seems to overlap with the sonic pad, so we also check for the webrtc binary.
 IS_K2_OS=0
-# if grep -Fiqs "tina" /etc/openwrt_release
-# then
-#     IS_K2_OS=1
-#     # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
-#     # The default moonraker instance is installed in /usr/share/moonraker/
-#     HOME="/mnt/UDISK"
-# fi
+if grep -Fiqs "tina" /etc/openwrt_release
+then
+    if [[ -f /usr/bin/webrtc ]]
+    then
+
+        IS_K2_OS=1
+        # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
+        HOME="/mnt/UDISK"
+    fi
+fi
 
 
 # Get the root path of the repo, aka, where this script is executing
@@ -149,8 +161,7 @@ log_blank()
 # To enforce that, we will move the repo where it should be.
 ensure_creality_os_right_repo_path()
 {
-    # TODO - re-enable this for the  || [[ $IS_K1_OS -eq 1 ]] after the github script updates.
-    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
+    if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
     then
         # Due to the K1 shell, we have to use grep rather than any bash string contains syntax.
         if echo $OE_REPO_DIR |grep "$HOME" - > /dev/null
@@ -250,15 +261,24 @@ install_or_update_system_dependencies()
         pip3 install -q --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --no-cache-dir virtualenv
     elif [[ $IS_K2_OS -eq 1 ]]
     then
-        # The K2 by default doesn't have any package manager. In some cases
-        # the user might install opkg via the 3rd party k2-improvements entware installer.
-        # But in general, PY will already be installed.
-        # We will try to update python from the package manager if possible, otherwise, we will ignore it.
+        # The K2 by default doesn't have any package manager.
+        # But without the package manager, we can't install the required packages, or even git.
+        # We we need the user to have opkg setup some how, usually from https://github.com/jamincollins/k2-improvements.
         if [[ -f /opt/bin/opkg ]]
         then
             # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
             /opt/bin/opkg update || true
             /opt/bin/opkg install ${CREALITY_DEP_LIST} || true
+            # The K2 also needs ffmpeg.
+            /opt/bin/opkg install ffmpeg
+        else
+            log_blank
+            log_blank
+            log_error "This K2 is missing the required setup files for OctoEverywhere."
+            log_important "Please visit https://octoeverywhere.com/s/k2 for a step-by-step Creality K2 setup guide."
+            log_blank
+            log_blank
+            exit 1
         fi
         # On the K2, the only we thing we ensure is that virtualenv is installed via pip.
         pip3 install -q --no-cache-dir virtualenv

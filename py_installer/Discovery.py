@@ -195,6 +195,7 @@ class Discovery:
             moonrakerConfigFilePath = f"{Paths.CrealityOsUserDataPath_K1}/printer_data/config/moonraker.conf"
         else:
             # This is where the default instance moonraker config file is on the K2.
+            # For some reason it's out here, but most of the other printer data is in /mnt/UDISK/printer_data
             moonrakerConfigFilePath = "/usr/share/moonraker/moonraker.conf"
 
         if os.path.isfile(moonrakerConfigFilePath):
