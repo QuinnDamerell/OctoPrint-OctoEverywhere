@@ -257,7 +257,7 @@ install_or_update_system_dependencies()
         # the user might install opkg via the 3rd party k2-improvements entware installer.
         # But in general, PY will already be installed.
         # We will try to update python from the package manager if possible, otherwise, we will ignore it.
-        if [[ -f /opt/bin/opkgdd ]]
+        if [[ -f /opt/bin/opkg ]]
         then
             # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
             /opt/bin/opkg update || true
@@ -266,7 +266,7 @@ install_or_update_system_dependencies()
             log_blank
             log_blank
             log_error "This K2 is missing the required setup files for OctoEverywhere."
-            log_important "Please visit https://octoeverywhere.com/s/k2 for a step-by-step setup guide."
+            log_important "Please visit https://octoeverywhere.com/s/k2 for a step-by-step Creality K2 setup guide."
             log_blank
             log_blank
             exit 1
