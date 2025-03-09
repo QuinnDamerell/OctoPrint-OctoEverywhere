@@ -253,10 +253,9 @@ install_or_update_system_dependencies()
         pip3 install -q --trusted-host pypi.python.org --trusted-host pypi.org --trusted-host=files.pythonhosted.org --no-cache-dir virtualenv
     elif [[ $IS_K2_OS -eq 1 ]]
     then
-        # The K2 by default doesn't have any package manager. In some cases
-        # the user might install opkg via the 3rd party k2-improvements entware installer.
-        # But in general, PY will already be installed.
-        # We will try to update python from the package manager if possible, otherwise, we will ignore it.
+        # The K2 by default doesn't have any package manager.
+        # But without the package manager, we can't install the required packages, or even git.
+        # We we need the user to have opkg setup some how, usually from https://github.com/jamincollins/k2-improvements.
         if [[ -f /opt/bin/opkg ]]
         then
             # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
