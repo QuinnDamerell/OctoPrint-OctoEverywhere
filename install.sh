@@ -257,7 +257,7 @@ install_or_update_system_dependencies()
         # the user might install opkg via the 3rd party k2-improvements entware installer.
         # But in general, PY will already be installed.
         # We will try to update python from the package manager if possible, otherwise, we will ignore it.
-        if [[ -f /opt/bin/opkg ]]
+        if [[ -f /opt/bin/opkgdd ]]
         then
             # Use the full path to ensure it's found, since it might not be in the path if you user didn't restart the printer.
             /opt/bin/opkg update || true
