@@ -142,12 +142,13 @@ cd $startingDir
             # Ensure the user who launched the installer script has permissions to run it.
             Util.SetFileOwnerRecursive(updateFilePath, context.UserName)
 
-            # For the K2, if this common script is used (https://github.com/jamincollins/k2-improvements), the users default ssh path becomes /mnt/UDISK/root
+            # For the K2, if this common script is used (https://github.com/jamincollins/k2-improvements), the users default ssh path becomes /mnt/UDISK/root.
+            # So if that directory exists, we should create a symlink to the update script there as well.
             try:
                 if context.OsType == OsTypes.K2:
-                    if os.path.exists("/mnt/UDISK/root"):
+                    symLinkPath = os.path.join("/mnt/UDISK/root", updateFileName)
+                    if os.path.exists("/mnt/UDISK/root") and os.path.exists(symLinkPath) is False:
                         # Create a symlink to the update script in the user's home directory.
-                        symLinkPath = os.path.join("/mnt/UDISK/root", updateFileName)
                         os.symlink(updateFilePath, symLinkPath)
 
                         # Make sure to make it executable
