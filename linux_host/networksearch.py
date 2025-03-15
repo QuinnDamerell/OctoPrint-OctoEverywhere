@@ -398,8 +398,8 @@ class NetworkSearch:
 
             # For the same reasons above, we always limit the number of threads on low resources devices.
             if NetworkSearch.IsLowResourceDevice():
-                logger.debug("Low resource device detected, limiting threads to 10.")
-                totalThreads = 10
+                logger.debug("Low resource device detected, limiting threads to 30.")
+                totalThreads = 30
 
             outstandingIpsToCheck = []
             counter = 0
