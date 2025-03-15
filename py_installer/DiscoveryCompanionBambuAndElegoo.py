@@ -57,7 +57,7 @@ class DiscoveryCompanionBambuAndElegoo:
             Logger.Blank()
             Logger.Header(f"Existing {pluginTypeStr} Plugins Found")
             Logger.Blank()
-            Logger.Info( "If you want to update or recover an existing plugin enter the Plugin ID from the list below.")
+            Logger.Info( "If you want to update or recover an existing plugin, enter the Plugin ID from the list below.")
             Logger.Info( "                          - or - ")
             Logger.Info(f"If you want to install a new {pluginTypeStr} plugin, enter 'n'.")
             Logger.Blank()

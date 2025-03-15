@@ -1,3 +1,4 @@
+import os
 import ssl
 import time
 import json
@@ -389,10 +390,17 @@ class NetworkSearch:
             # In the past, we did this wide with 255 threads.
             # We got some feedback that the system was hanging on lower powered systems, but then I also found a bug where
             # if an exception was thrown in the thread, it would hang the system.
-            # I fixed that but also lowered the concurrent thread count to 100, which seems more comfortable.
-            totalThreads = 100
+            # We also saw on lower powered systems we hit max thread limits, since each of these thread might spawn threads in their tests.
+            # I fixed that but also lowered the concurrent thread count to 50, which seems more comfortable.
+            totalThreads = 50
             if threadCount is not None:
                 totalThreads = threadCount
+
+            # For the same reasons above, we always limit the number of threads on low resources devices.
+            if NetworkSearch.IsLowResourceDevice():
+                logger.debug("Low resource device detected, limiting threads to 10.")
+                totalThreads = 10
+
             outstandingIpsToCheck = []
             counter = 0
             while counter < 255:
@@ -489,3 +497,18 @@ class NetworkSearch:
         finally:
             s.close()
         return ip
+
+
+    @staticmethod
+    def IsLowResourceDevice() -> bool:
+        try:
+            # This only works on Linux
+            result = os.popen('free -t -m').readlines()
+            line = result[1]
+            parts = line.split()
+            totalRamMb = int(parts[1])
+            # If the total memory is less than 1Gb, we consider this a low resource device.
+            return totalRamMb < 1024
+        except Exception:
+            pass
+        return False

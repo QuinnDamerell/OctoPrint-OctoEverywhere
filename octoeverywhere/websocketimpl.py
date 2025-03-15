@@ -86,11 +86,6 @@ class Client:
 
     # Runs the websocket blocking until it closes.
     def RunUntilClosed(self, pingIntervalSec:int=None, pingTimeoutSec:int=None):
-        # Start the send queue thread if it hasn't been started.
-        if self.SendThread is None:
-            self.SendThread = threading.Thread(target=self._SendQueueThread, daemon=True)
-            self.SendThread.start()
-
         #
         # The client is responsible for sending keep alive pings the server will then pong respond to.
         # If that's not done, the connection will timeout. We will send a ping every 10 minutes.
@@ -112,6 +107,12 @@ class Client:
             pingIntervalSec = 600
 
         try:
+            # Start the send queue thread if it hasn't been started.
+            # Do this in the try block, so if we fail to start the thread the error is handled.
+            if self.SendThread is None:
+                self.SendThread = threading.Thread(target=self._SendQueueThread, daemon=True)
+                self.SendThread.start()
+
             # Do validation on the ping interval and timeout.
             # The API requires the timeout be less than the interval.
             if pingTimeoutSec >= pingIntervalSec:

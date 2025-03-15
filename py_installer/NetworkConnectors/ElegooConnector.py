@@ -142,9 +142,9 @@ class ElegooConnector:
             while True:
                 Logger.Blank()
                 Logger.Blank()
-                Logger.Info("We cannot automatically detect your printer; so we need to enter the IP address manually. (don't worry, it's easy!)")
+                Logger.Info("We cannot automatically detect your printer, so we need to enter the IP address manually. (don't worry, it's easy!)")
                 Logger.Blank()
-                Logger.Info("Use the display on your Elegoo 3D printer to find you IP address by following these steps:")
+                Logger.Info("Use the display on your Elegoo 3D printer to find your IP address by following these steps:")
                 Logger.Info("   - Press the gear icon in the vertical main menu icon.")
                 Logger.Info("   - Press the 'Network' tab at the top of the screen.")
                 Logger.Info("   - Ensure Wi-Fi is on and the printer is connected to your network.")
