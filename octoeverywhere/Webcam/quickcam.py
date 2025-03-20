@@ -14,6 +14,7 @@ from enum import Enum
 from octoeverywhere.sentry import Sentry
 
 from .webcamutil import WebcamUtil
+from .quickcamwebrtc import QuickCam_WebRTC
 from ..octohttprequest import OctoHttpRequest
 from .webcamsettingitem import WebcamSettingItem
 from .webcamstreaminstance import WebcamStreamInstance
@@ -26,6 +27,7 @@ class QuickCamStreamTypes(Enum):
     RTSP = 1
     WebSocket = 2
     JMPEG = 3
+    WebRtc = 4
 
     # Makes to str() cast not to include the class name.
     def __str__(self):
@@ -151,6 +153,10 @@ class QuickCam:
     JMPEGProtocol = "jmpeg://"
     JMPEGProtocolSecure = "jmpegs://"
 
+    # Protocol definition for the WebRTC streams.
+    # These streams can have suffixes for the type of webrtc server, like webrtc-k2:// etc
+    WebRTCProtocol_Prefix = "webrtc"
+
     # The amount of time the capture thread will stay connected before it will close.
     # Whenever an image is accessed, the time is reset.
     c_CaptureThreadTimeoutSec = 60
@@ -190,6 +196,8 @@ class QuickCam:
         # This is a protocol handler we use internally to indicate a stream is a JMPEG stream.
         if url.startswith(QuickCam.JMPEGProtocol) or url.startswith(QuickCam.JMPEGProtocolSecure):
             return QuickCamStreamTypes.JMPEG
+        if url.startswith(QuickCam.WebRTCProtocol_Prefix):
+            return QuickCamStreamTypes.WebRtc
         return QuickCamStreamTypes.NotSupported
 
 
@@ -300,6 +308,9 @@ class QuickCam:
                     # The elegoo webcam server doesn't like us to stream too long, so set a short-ish max time
                     # remember the client streams will not be effected, there will only be a small gap in the stream images.
                     maxSingleStreamTimeSec = 60
+                elif self.Type == QuickCamStreamTypes.WebRtc:
+                    self.Logger.debug(f"QuickCam capture thread started for WebRTC. {self.Url}")
+                    camImpl = QuickCam_WebRTC(self.Logger)
                 else:
                     self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
                     return

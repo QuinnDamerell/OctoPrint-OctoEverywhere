@@ -92,6 +92,10 @@ class MoonrakerWebcamHelper():
         # Kick the settings worker since the webcam was accessed.
         self.KickOffWebcamSettingsUpdate()
 
+        return [
+            WebcamSettingItem("Default", None, "webrtc-k2://10.0.0.26", self.FlipH, self.FlipV, self.Rotation)
+        ]
+
         # Grab the lock to see what we should be returning.
         with self.ResultsLock:
             # If auto settings are enabled, return any cached auto settings that we found.
