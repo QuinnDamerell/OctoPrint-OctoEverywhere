@@ -21,6 +21,7 @@ from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
+from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.printinfo import PrintInfoManager
@@ -609,7 +610,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self._logger.info("New printer id is: "+currentId)
 
             # Update the printer URL whenever the id changes to ensure they always stay in sync.
-            self.SetAddPrinterUrl(HostCommon.GetAddPrinterUrl(currentId, True))
+            self.SetAddPrinterUrl(LinkHelper.GetAddPrinterUrl(currentId))
 
             # "PrinterKey" is used by name in the static plugin JS and needs to be updated if this ever changes.
             self.SaveToSettingsIfUpdated("PrinterKey", currentId)

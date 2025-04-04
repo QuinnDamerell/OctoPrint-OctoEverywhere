@@ -6,6 +6,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
+from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
 from octoeverywhere.octopingpong import OctoPingPong
 from octoeverywhere.httpsessions import HttpSessions
@@ -301,17 +302,7 @@ class MoonrakerHost:
         # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
         # This would be if the skipped the printer link or missed it in the setup script.
         if connectedAccounts is None or len(connectedAccounts) == 0:
-            self.Logger.warning("")
-            self.Logger.warning("")
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("          This Plugin Isn't Connected To OctoEverywhere!          ")
-            self.Logger.warning(" Use the following link to finish the setup and get remote access:")
-            self.Logger.warning(" %s", HostCommon.GetAddPrinterUrl(self.GetPrinterId(), False))
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("")
-            self.Logger.warning("")
+            LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, self.GetPrinterId(), "moonraker_host")
 
         # Now that we are connected, start the moonraker client.
         # We do this after the connection incase it needs to send any notifications or messages when starting.

@@ -5,13 +5,14 @@ from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.compression import Compression
-from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
+from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.Proto.ServerHost import ServerHost
@@ -259,17 +260,7 @@ class ElegooHost:
         # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
         # This would be if the skipped the printer link or missed it in the setup script.
         if connectedAccounts is None or len(connectedAccounts) == 0:
-            self.Logger.warning("")
-            self.Logger.warning("")
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("          This Plugin Isn't Connected To OctoEverywhere!          ")
-            self.Logger.warning(" Use the following link to finish the setup and get remote access:")
-            self.Logger.warning(" %s", HostCommon.GetAddPrinterUrl(self.GetPrinterId(), False))
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-            self.Logger.warning("")
-            self.Logger.warning("")
+            LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, self.GetPrinterId(), "elegoo_host")
 
 
     #

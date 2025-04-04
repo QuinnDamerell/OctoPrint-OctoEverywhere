@@ -16,9 +16,6 @@ class HostCommon:
     c_OctoEverywherePrivateKeyMinLength = 80
     c_OctoEverywherePrivateKeyMaxLength = 128
 
-    # The url for the add printer process.
-    c_OctoEverywhereAddPrinterUrl = "https://octoeverywhere.com/getstarted"
-
     # The main URL octoclients use to connect.
     # MUST be wss!
     c_OctoEverywhereOctoClientWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
@@ -40,15 +37,6 @@ class HostCommon:
     @staticmethod
     def IsPrivateKeyValid(privateKey):
         return privateKey is not None and len(privateKey) >= HostCommon.c_OctoEverywherePrivateKeyMinLength and len(privateKey) <= HostCommon.c_OctoEverywherePrivateKeyMaxLength
-
-    @staticmethod
-    def GetAddPrinterUrl(printerId, isOctoPrint):
-        # These aren't needed right now.
-        # sourceGetArg = "isFromOctoPrint=true"
-        # if isOctoPrint is False:
-        #     sourceGetArg = "isFromKlipper=true"
-        # Note this must have at least one ? and arg because users of it might append &source=blah
-        return HostCommon.c_OctoEverywhereAddPrinterUrl + "?printerid=" + printerId
 
 
     # This will restart the plugin or if running in OctoPrint restart OctoPrint!
