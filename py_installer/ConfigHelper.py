@@ -1,4 +1,5 @@
 import os
+from typing import Tuple
 
 from linux_host.config import Config
 
@@ -57,7 +58,7 @@ class ConfigHelper:
     # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
     # Returns (ipOrHostname:str, portStr:str)
     @staticmethod
-    def TryToGetCompanionDetails(context:Context = None, configFolderPath:str = None):
+    def TryToGetCompanionDetails(context:Context = None, configFolderPath:str = None) -> Tuple[str, str]:
         try:
             # Load the config, if this returns None, there is no existing file.
             c = ConfigHelper._GetConfig(context, configFolderPath)
@@ -158,6 +159,41 @@ class ConfigHelper:
         except Exception as e:
             Logger.Error("Failed to write elegoo details to config. "+str(e))
             raise Exception("Failed to write elegoo details to config") from e
+
+    #
+    # Moonraker Only
+    #
+
+    # Given a context, this will try to find the config file and see if the moonraker data is in it.
+    # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
+    # Returns (apiKey:str)
+    @staticmethod
+    def TryToGetMoonrakerDetails(context:Context = None, configFolderPath:str = None) -> str:
+        try:
+            # Load the config, if this returns None, there is no existing file.
+            c = ConfigHelper._GetConfig(context, configFolderPath)
+            if c is None:
+                return None
+            # Use a default of None so if they don't exist, they aren't added to the config.
+            apiKey = c.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, True)
+            return apiKey
+        except Exception as e:
+            # There have been a few reports of this file being corrupt, so if it is, we will just fail and rewrite it.
+            Logger.Warn("Failed to parse moonraker details from existing config. "+str(e))
+        return None
+
+
+    # Writes the moonraker details to the config file
+    @staticmethod
+    def WriteMoonrakerDetails(context:Context, apiKey:str):
+        try:
+            # Load the config, force it to be created if it doesn't exist.
+            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            # Write the new values
+            c.SetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, apiKey, True)
+        except Exception as e:
+            Logger.Error("Failed to write moonraker details to config. "+str(e))
+            raise Exception("Failed to write moonraker details to config") from e
 
 
     #

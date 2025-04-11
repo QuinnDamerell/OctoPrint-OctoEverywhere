@@ -54,16 +54,18 @@ The IP address must be set as an environment var when you first run the containe
 
 ### Klipper Companion
 
-To use Elegoo Connect, you need to get the following information.
+To use the Klipper Companion, you need to get the following information.
 
 - Your printer's IP address.
 - (optional) Moonraker's server port. Defaults to 7125.
+- (optional) Moonraker API key. Defaults to None. If your Moonraker server requires auth, you can generate an API key in Mainsail or Fluidd.
 - (optional) Your web frontend's server port. Defaults to 80.
 
 These three values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
 - PRINTER_IP=(ip address)
 - MOONRAKER_PORT=(port)
+- MOONRAKER_API_KEY=(apiKey)
 - WEBSERVER_PORT=(port)
 
 ## Required Persistent Storage

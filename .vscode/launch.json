@@ -81,7 +81,7 @@
             ]
         },
         {
-            "name": "Companion - PI - Instnace 1",
+            "name": "Companion 1 - Klipper",
             "type": "debugpy",
             "request": "launch",
             "module": "moonraker_octoeverywhere",
@@ -90,10 +90,8 @@
                 // These args reflect the correct setup for a pi installed with the Companion version of the plugin. These args target the first instance.
                 //
                 // This is the single instance setup
-                "eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1vYnNlcnZlci0xL2NvbmZpZyIsICJNb29ucmFrZXJDb25maWdGaWxlIjogbnVsbCwgIktsaXBwZXJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLW9ic2VydmVyLTEvbG9ncyIsICJMb2NhbEZpbGVTdG9yYWdlUGF0aCI6ICIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtb2JzZXJ2ZXItMS9vY3RvZXZlcnl3aGVyZS1zdG9yZSIsICJTZXJ2aWNlTmFtZSI6ICJvY3RvZXZlcnl3aGVyZS1vYnNlcnZlcjEiLCAiVmlydHVhbEVudlBhdGgiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUtZW52IiwgIlJlcG9Sb290Rm9sZGVyIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlIiwgIklzT2JzZXJ2ZXIiOiB0cnVlLCAiT2JzZXJ2ZXJDb25maWdGaWxlUGF0aCI6ICIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtb2JzZXJ2ZXItMS9jb25maWcvb2N0b2V2ZXJ5d2hlcmUtb2JzZXJ2ZXIuY2ZnIiwgIk9ic2VydmVySW5zdGFuY2VJZFN0ciI6ICIxIn0=",
+                "eyJDb25maWdGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbiIsICJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbi9sb2dzIiwgIkxvY2FsRmlsZVN0b3JhZ2VQYXRoIjogIi9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1jb21wYW5pb24vb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtY29tcGFuaW9uIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSIsICJJc0NvbXBhbmlvbiI6IHRydWUsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjogIjEifQ==",
                 //
-                // This is the multi instance seutp
-                //"eyJLbGlwcGVyQ29uZmlnRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZyIsICJNb29ucmFrZXJDb25maWdGaWxlIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2NvbmZpZy9tb29ucmFrZXIuY29uZiIsICJLbGlwcGVyTG9nRm9sZGVyIjogIi9ob21lL3BpL3ByaW50ZXJfMV9kYXRhL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiAiL2hvbWUvcGkvcHJpbnRlcl8xX2RhdGEvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtMSIsICJWaXJ0dWFsRW52UGF0aCI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUifQ==",
                 // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
@@ -184,10 +182,11 @@
                 //
                 // Klipper
                 //
-                // "COMPANION_MODE": "klipper",
-                // "PRINTER_IP":"10.0.0.21",
-                // "MOONRAKER_PORT": "7125",
-                // "WEBSERVER_PORT": "80",
+                //"COMPANION_MODE": "klipper",
+                //"PRINTER_IP":"10.0.0.21",
+                //"MOONRAKER_PORT": "7125",
+                //"MOONRAKER_API_KEY": "someApiKey",
+                //"WEBSERVER_PORT": "80",
             },
         },
     ]

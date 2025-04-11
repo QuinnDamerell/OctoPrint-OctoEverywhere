@@ -49,7 +49,9 @@ class MoonrakerCredentialManager:
     def TryToGetApiKey(self) -> str or None:
         # If this is an companion plugin, we dont' have the moonraker config file nor can we access the UNIX socket.
         if self.IsCompanionMode:
-            self.Logger.info("OctoEverywhere Companion Plugins don't support Moonraker setups with auth.")
+            self.Logger.error("!!!! Moonraker auth is required, so you must generate an API key in Mainsail or Fluidd and set it the octoeverywhere.conf file in the companion root folder. The config file can be found in /data for docker or ~/.octoeverywhere-companion for CLI installs")
+            # Since we know we will keep failing, sleep for a while to avoid spamming the logs and so the user sees this error.
+            time.sleep(10)
             return None
 
         # First, we need to find the unix socket to connect to

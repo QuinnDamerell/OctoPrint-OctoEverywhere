@@ -40,6 +40,9 @@ services:
         #  Optional - The port of Moonraker. This defaults to 7125 if not set.
         #- MOONRAKER_PORT=7125
         #
+        #  Optional - If your Moonraker needs API key auth, you can generate it in Mainsail or Fluidd and set it here.
+        #- MOONRAKER_API_KEY=someApiKey
+        #
         #  Optional - The port of frontend webserver. This defaults to 80 if not set.
         #- WEBSERVER_PORT=80
 
@@ -99,6 +102,9 @@ services:
   #       #
   #       #  Optional - The port of Moonraker. This defaults to 7125 if not set.
   #       #- MOONRAKER_PORT=7125
+  #       #
+  #       #  Optional - If your Moonraker needs API key auth, you can generate it in Mainsail or Fluidd and set it here.
+  #       #- MOONRAKER_API_KEY=someApiKey
   #       #
   #       #  Optional - The port of frontend webserver. This defaults to 80 if not set.
   #       #- WEBSERVER_PORT=80

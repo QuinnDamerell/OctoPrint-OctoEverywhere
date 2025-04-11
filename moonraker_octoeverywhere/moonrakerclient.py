@@ -111,7 +111,8 @@ class MoonrakerClient:
 
         # Some instances use auth and we need an API key to access them. If this is not set to None, it's the API key.
         # This is found and set when we try to connect and we fail due to an unauthed socket.
-        self.MoonrakerApiKey = None
+        # It can also be set by the user in the config.
+        self.MoonrakerApiKey = self.Config.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, keepInConfigIfNone=True)
 
         # Setup the WS vars and a websocket worker thread.
         # Don't run it until StartRunningIfNotAlready is called!

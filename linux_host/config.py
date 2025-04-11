@@ -12,6 +12,10 @@ class Config:
     # This can't change or all past plugins will fail.
     ConfigFileName = "octoeverywhere.conf"
 
+    # We allow strings to be set as None, because then it keeps then in the config with the comment about the key.
+    # We use an empty value for None, to indicate that the key is not set.
+    c_NoneStringValue = ""
+
     #
     # Common To All Plugins
     #
@@ -44,6 +48,12 @@ class Config:
     WebcamFlipH = "flip_horizontally"
     WebcamFlipV = "flip_vertically"
     WebcamRotation = "rotate"
+
+    #
+    # Used for the Moonraker specific settings.
+    #
+    MoonrakerSection = "moonraker"
+    MoonrakerApiKey = "moonraker_api_key"
 
 
     #
@@ -97,6 +107,7 @@ class Config:
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
         { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification."},
         { "Target": ElegooMainboardMac,  "Comment": "This is the MAC address of the mainboard for the linked printer."},
+        { "Target": MoonrakerApiKey,  "Comment": "Leave blank unless your Moonraker requires an API key to connect. Moonraker API keys can be generated from the Mainsail or Fluidd."},
     ]
 
 
@@ -139,22 +150,23 @@ class Config:
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
     # If the default value is None, the default will not be written into the config.
-    def GetStr(self, section, key, defaultValue) -> str:
+    def GetStr(self, section:str, key:str, defaultValue:str, keepInConfigIfNone=False) -> str:
         with self.ConfigLock:
             # Ensure we have the config.
             self._LoadConfigIfNeeded_UnderLock()
             # Check if the section and key exists
             if self.Config.has_section(section):
                 if key in self.Config[section].keys():
-                    # If the value of None was written, it was an accidental serialized None value to string.
-                    # Consider it not a valid value, and use the default value.
                     value = self.Config[section][key]
-                    if value != "None":
+                    # If None or empty string written consider it not a valid value so use the default value.
+                    # The default value logic will handle the keepInConfigIfNone case.
+                    # Use lower, to accept user generated errors.
+                    if value.lower() != "none" and len(value) > 0:
                         # Reverse any possible string replaces we had to add.
                         value = value.replace(Config.PercentageStringReplaceString, "%")
                         return value
         # The value wasn't set, create it using the default.
-        self.SetStr(section, key, defaultValue)
+        self.SetStr(section, key, defaultValue, keepInConfigIfNone)
         return defaultValue
 
 
@@ -272,7 +284,7 @@ class Config:
 
     # Sets the value into the config and saves it.
     # Setting a value of None will delete the key from the config.
-    def SetStr(self, section, key, value) -> None:
+    def SetStr(self, section:str, key:str, value:str, keepInConfigIfNone=False) -> None:
         # Ensure the value is a string, unless it's None
         if value is not None:
             value = str(value)
@@ -283,6 +295,10 @@ class Config:
             # Ensure the section exists
             if self.Config.has_section(section) is False:
                 self.Config.add_section(section)
+            # If the value is None but we want to keep it in the config, set it to the None string.
+            if value is None and keepInConfigIfNone is True:
+                value = Config.c_NoneStringValue
+            # If the value is still None, we will make sure the key is deleted.
             if value is None:
                 # None is a special case, if we are setting it, delete the key if it exists.
                 if key in self.Config[section].keys():
