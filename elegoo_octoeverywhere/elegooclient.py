@@ -122,12 +122,12 @@ class ElegooClient:
         self.Attributes:PrinterAttributes = None
         self._CleanupStateOnDisconnect()
 
-        # Note that EITHER the IP address or mainboardID are required.
-        # The docker container doesn't use the mainboard ID, since we can't network scan anyways.
+        # Note that EITHER the IP address or mainboard mac are required.
+        # The docker container doesn't use the mainboard mac, since we can't network scan anyways.
         ipOrHostname = config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        self.MainboardId = config.GetStr(Config.SectionElegoo, Config.ElegooMainboardId, None)
-        if ipOrHostname is None and self.MainboardId is None:
-            raise Exception("An IP address or mainbaord IP must be provided in the config for Elegoo Connect.")
+        self.MainboardMac = config.GetStr(Config.SectionElegoo, Config.ElegooMainboardMac, None)
+        if ipOrHostname is None and self.MainboardMac is None:
+            raise Exception("An IP address or mainbaord MAC must be provided in the config for Elegoo Connect.")
 
         # Get the port string.
         self.PortStr = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
@@ -516,24 +516,15 @@ class ElegooClient:
         if self.WebSocketConnectFinalized is True:
             return
 
-        # Try to get the mainbaord id
-        if self.Attributes.MainboardId is None:
-            return
-
-        # If we have a mainboard ID, we can now finalize the connection.
-        if self.MainboardId != self.Attributes.MainboardId:
-            self.Logger.error(f"Elegoo Mainboard ID mismatch. Expected: {self.MainboardId} Got: {self.Attributes.MainboardId}")
-            return
+        # Do the finalize.
+        self.WebSocketConnectFinalized = True
 
         # Now that we are fully connected, set the successful IP in the config and the relay
-        self.WebSocketConnectFinalized = True
         wsConIp = self.WebSocketConnectionIp
         if wsConIp is None:
             self.Logger.error("Elegoo client finalized but we don't have a websocket IP?")
-            return
-        OctoHttpRequest.SetLocalHostAddress(wsConIp)
-        self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, wsConIp)
-        self.Logger.info("Elegoo client connection finalized.")
+        else:
+            OctoHttpRequest.SetLocalHostAddress(wsConIp)
 
         # Kick off the file manager to sync.
         self.FileManger.Sync()
@@ -541,6 +532,29 @@ class ElegooClient:
         # Kick off the slipstream cache
         if Compat.HasSlipstream():
             Compat.GetSlipstream().UpdateCache()
+
+        # Try to get the mainbaord mac
+        # Note, in the past we tried to use the mainboard id, but it changed for some users on update.
+        if self.Attributes.MainboardMac is None or len(self.Attributes.MainboardMac) == 0:
+            self.Logger.warning("Elegoo client finalized but we don't have a mainboard mac address.")
+            return
+
+        # We moved from the mainboard ID to the mainboard mac address in update 4.0.5
+        # We added this so old user's mainboard macs would get captured, but we should delete it later so we don't auto capture invalid MACs on first run.
+        if self.MainboardMac is None:
+            self.Logger.info(f"Elegoo Mainboard Mac not set in config. Setting it to {self.Attributes.MainboardMac}")
+            self.MainboardMac = self.Attributes.MainboardMac
+            self.Config.SetStr(Config.SectionElegoo, Config.ElegooMainboardMac, self.MainboardMac)
+
+        # We have seen issues were this mismatches in the past, so for now we will log it and not stop the connection finalization.
+        # But we will not set the new IP in the config if this isn't matching.
+        if self.MainboardMac != self.Attributes.MainboardMac:
+            self.Logger.error(f"Elegoo Mainboard MAC mismatch. Expected: {self.MainboardMac} Got: {self.Attributes.MainboardMac}")
+            return
+
+        # We have a match, so we are good.
+        self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, wsConIp)
+        self.Logger.info("Elegoo client connection finalized.")
 
 
     def _HandleStatusUpdate(self, status:dict):
@@ -569,11 +583,11 @@ class ElegooClient:
 
         # Get our vars.
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
-        hasMainboardId = self.MainboardId is not None and len(self.MainboardId) > 0
+        hasMainboardMac = self.MainboardMac is not None and len(self.MainboardMac) > 0
         hasConfigIp = configIpOrHostname is not None and len(configIpOrHostname) > 0
 
         # Sanity check we have what we need.
-        if hasMainboardId is False and hasConfigIp is False:
+        if hasMainboardMac is False and hasConfigIp is False:
             raise Exception("An IP address or mainbaord IP must be provided in the config for Elegoo Connect.")
 
         # If the last attempt was successful but it failed due to too many clients, we will try the same IP again.
@@ -584,7 +598,7 @@ class ElegooClient:
 
         # If the mainboard id is None, we can only ever user the config IP.
         # TODO - We could scan in the docker container if we have an old IP, but we don't do that now.
-        if hasMainboardId is False:
+        if hasMainboardMac is False:
             return configIpOrHostname
 
         # Don't bump this for event based reconnect attempts, since they can happen often.
@@ -609,8 +623,8 @@ class ElegooClient:
         # Note we don't want to do this too often since it's CPU intensive and the printer might just be off.
         # We use a lower thread count and delay before each action to reduce the required load.
         # Using this config, it takes about 30 seconds to scan for the printer.
-        self.Logger.info(f"Searching for your Elegoo printer {self.MainboardId}")
-        results = NetworkSearch.ScanForInstances_Elegoo(self.Logger, mainboardId=self.MainboardId, threadCount=25, delaySec=0.2)
+        self.Logger.info(f"Searching for your Elegoo printer {self.MainboardMac}")
+        results = NetworkSearch.ScanForInstances_Elegoo(self.Logger, mainboardMac=self.MainboardMac, threadCount=25, delaySec=0.2)
 
         # Handle the results.
         if results is None or len(results) == 0:

@@ -17,10 +17,10 @@ class ElegooConnector:
 
         # For Elegoo printers, we need the IP or Hostname, the port is static, and the mainboard ID.
         ip, port = ConfigHelper.TryToGetCompanionDetails(context)
-        mainboardId = ConfigHelper.TryToGetElegooData(context)
-        if ip is not None and port is not None and mainboardId is not None:
+        mainboardMac = ConfigHelper.TryToGetElegooData(context)
+        if ip is not None and port is not None and mainboardMac is not None:
             # Check if we can still connect. This can happen if the IP address changes, the user might need to setup the printer again.
-            Logger.Debug(f"Existing Elegoo config found. IP: {ip} - {mainboardId}")
+            Logger.Debug(f"Existing Elegoo config found. IP: {ip} - {mainboardMac}")
             Logger.Info(f"Checking if we can connect to your Elegoo printer at {ip}...")
             result:NetworkValidationResult = NetworkSearch.ValidateConnection_Elegoo(Logger.GetPyLogger(), ipOrHostname=ip, timeoutSec=10.0)
             # Validate - This should never be set.
@@ -37,7 +37,7 @@ class ElegooConnector:
                 Logger.Warn("You can keep the current Elegoo Connect printer setup or re-run the connection process.")
                 Logger.Blank()
                 if Util.AskYesOrNoQuestion("Do you want to set up the Elegoo printer connection again?") is False:
-                    Logger.Info(f"Keeping the existing Elegoo printer connection setup. {ip} - {mainboardId}")
+                    Logger.Info(f"Keeping the existing Elegoo printer connection setup. {ip} - {mainboardMac}")
                     return
             # If there was an exception or we never connected to the WS, we should ask the user if they want to try again.
             elif result.Exception is not None or result.WsConnected is False:
@@ -47,28 +47,28 @@ class ElegooConnector:
                 Logger.Warn("You can keep the current Elegoo Connect printer setup or re-run the connection process.")
                 Logger.Blank()
                 if Util.AskYesOrNoQuestion("Do you want to set up the Elegoo printer connection again?") is False:
-                    Logger.Info(f"Keeping the existing Elegoo printer connection setup. {ip} - {mainboardId}")
+                    Logger.Info(f"Keeping the existing Elegoo printer connection setup. {ip} - {mainboardMac}")
                     return
-            elif (result.MainboardId is not None and result.MainboardId == mainboardId):
+            elif (result.MainboardMac is not None and result.MainboardMac == mainboardMac):
                 Logger.Info("Successfully connected to you Elegoo printer!")
                 return
             else:
                 # This means we found a printer on this ip, but the mainboard id was different?
-                Logger.Warn(f"Found a printer on {ip}, but the mainboard ID was different. Expected: {mainboardId}, Found: {result.MainboardId}")
+                Logger.Warn(f"Found a printer on {ip}, but the mainboard ID was different. Expected: {mainboardMac}, Found: {result.MainboardMac}")
                 Logger.Warn("Let's setup your Elegoo printer again.")
 
-        ipOrHostname, mainboardId = self._SetupNewElegooConnection(context)
+        ipOrHostname, mainboardMac = self._SetupNewElegooConnection(context)
         Logger.Info(f"You Elegoo printer was found and authentication was successful! IP: {ipOrHostname}")
 
         ConfigHelper.WriteCompanionDetails(context, ipOrHostname, NetworkSearch.c_ElegooDefaultPortStr)
-        ConfigHelper.WriteElegooDetails(context, mainboardId)
+        ConfigHelper.WriteElegooDetails(context, mainboardMac)
         Logger.Blank()
         Logger.Header("Elegoo printer connection successful!")
         Logger.Blank()
 
 
     # Shows the user a message that there are too many clients connected to the printer and how to fix it.
-    def _ShowTooManyClientsError(self, ip:str):
+    def _ShowTooManyClientsError(self, ip:str) -> None:
         Logger.Blank()
         Logger.Blank()
         Logger.Warn(f"We found an Elegoo printer on your network at {ip}, but we couldn't connect to it because there are too many existing connections.")
@@ -119,26 +119,60 @@ class ElegooConnector:
                     continue
 
                 Logger.Info(f"Found your Elegoo printer on your network at {result.Ip}.")
-                return (result.Ip, result.MainboardId)
+                return (result.Ip, result.MainboardMac)
 
             elif len(results) > 1:
                 # Handle multiple results.
                 Logger.Blank()
                 Logger.Blank()
                 Logger.Info("We found the following Elegoo printers on your network:")
+                count = 0
                 for result in results:
+                    count+= 1
                     if result.TooManyClients:
-                        Logger.Info(f"   {result.Ip} - Couldn't connect, too many connections.")
-                    Logger.Info(f"   {result.Ip} - {result.MainboardId}")
-                if not Util.AskYesOrNoQuestion("Are the Access Code and Serial Number correct?"):
-                    # Loop back to the very top, to restart the entire setup, allowing the user to enter their values again.
-                    Logger.Blank()
-                    Logger.Blank()
-                    Logger.Blank()
-                    Logger.Blank()
-                    continue
+                        Logger.Info(f"   {count}) {result.Ip} - Couldn't connect, too many connections.")
+                    Logger.Info(    f"   {count}) {result.Ip} - {result.MainboardMac}")
+                Logger.Info("   m) Press `m` to enter the IP address manually")
 
-            # We didnt't find any printer, enter manual IP setup mode.
+                # Ask the user to select the printer they want to connect to.
+                Logger.Blank()
+                reTryAuto = False
+                while True:
+                    try:
+                        i = input("Please select the printer number above you want to connect to this plugin: ")
+                        if i == "m" or i == "M":
+                            # Enter manual IP setup mode, break out of this loop to run the logic under it.
+                            break
+
+                        # Validate the selection number
+                        selection = int(i)
+                        if selection < 1 or selection > len(results):
+                            raise ValueError()
+                        result = results[selection - 1]
+
+                        # Check if the user selected a printer that has too many clients.
+                        if result.TooManyClients:
+                            # If so, tell the user how to fix it and do the auto scan again when they say they are ready.
+                            self._ShowTooManyClientsError(results[selection - 1].Ip)
+                            reTryAuto = True
+                            break
+
+                        # If we got a mainboard id, we are good to go.
+                        if result.MainboardMac is not None:
+                            return (result.Ip, result.MainboardMac)
+
+                        # Break to the manual logic.
+                        Logger.Info("The selected printer had no mainboard ID, going to manual setup.")
+                        break
+                    except ValueError:
+                        Logger.Error("Invalid selection, please enter a number from the list.")
+                        continue
+
+            # If we should retry the auto scan, we will do so.
+            if reTryAuto:
+                continue
+
+            # If we are here, we either found no printers, or the user selected to enter the IP address manually.
             while True:
                 Logger.Blank()
                 Logger.Blank()
@@ -164,9 +198,9 @@ class ElegooConnector:
                 Logger.Blank()
 
                 # If we got a mainboard id, we are good to go.
-                if result.MainboardId is not None:
+                if result.MainboardMac is not None:
                     Logger.Info(f"Found your Elegoo printer on your network at {ip}.")
-                    return (ip, result.MainboardId)
+                    return (ip, result.MainboardMac)
 
                 # Handle too many clients
                 if result.TooManyClients:

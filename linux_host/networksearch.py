@@ -15,10 +15,10 @@ from octoeverywhere.websocketimpl import Client
 
 # A helper class that's the result of a network search.
 class ElegooNetworkSearchResult:
-    def __init__(self, ip:str, tooManyClients:bool, mainboardId:str) -> None:
+    def __init__(self, ip:str, tooManyClients:bool, mainboardMac:str) -> None:
         self.Ip = ip
         self.TooManyClients = tooManyClients
-        self.MainboardId = mainboardId
+        self.MainboardMac = mainboardMac
 
 
 # A helper class that's the result of a network validation.
@@ -28,7 +28,7 @@ class NetworkValidationResult:
                  # Bambu specific results
                  failedToConnect:bool = False, failedAuth:bool = False, failSn:bool = False, exception:Exception = None, bambuRtspUrl = None,
                  # Elegoo specific results
-                 wsConnected:bool=False, tooManyClients:bool=False, mainboardId:str=None
+                 wsConnected:bool=False, tooManyClients:bool=False, mainboardMac:str=None
                  ) -> None:
         self.IsBambu = isBambu
         # Bambu specific results
@@ -43,7 +43,7 @@ class NetworkValidationResult:
         # Elegoo specific results
         self.WsConnected:bool = wsConnected
         self.TooManyClients:bool = tooManyClients
-        self.MainboardId:str = mainboardId
+        self.MainboardMac:str = mainboardMac
 
 
     def Success(self) -> bool:
@@ -53,7 +53,7 @@ class NetworkValidationResult:
             # Defines success for bambu
             return not self.FailedToConnect and not self.FailedAuth and not self.FailedSerialNumber
         # Defines success for elegoo
-        return self.WsConnected and not self.TooManyClients and self.MainboardId is not None
+        return self.WsConnected and not self.TooManyClients and self.MainboardMac is not None
 
 
 # A helper class that allows for validating and or searching for Moonraker or Bambu printers on the local LAN.
@@ -77,21 +77,21 @@ class NetworkSearch:
 
     # Scans the local IP LAN subset for Elegoo 3D printers.
     # Thread count and delay can be used to control how aggressive the scan is.
-    # If a mainBoardId is specified, only printers with that mainBoardId will be considered.
+    # If a mainboardMac is specified, only printers with that mainboardMac will be considered.
     @staticmethod
-    def ScanForInstances_Elegoo(logger:logging.Logger, mainboardId:str=None, portStr:str = None, threadCount:int=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
-        foundPrinters:dict = {}
+    def ScanForInstances_Elegoo(logger:logging.Logger, mainboardMac:str=None, portStr:str = None, threadCount:int=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
+        foundPrinters:dict[str,NetworkValidationResult] = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
             # We want to keep track of successful printers and ones we know are Elegoo printers, but we can't connect to.
-            if result.MainboardId is not None or result.TooManyClients:
+            if result.MainboardMac is not None or result.TooManyClients:
                 foundPrinters[ip] = result
             return result
 
         # If we have a target mac, no need to return after the first one is found.
         # Otherwise we find everything we can.
         returnAfterNumberFound = 0
-        if mainboardId is not None:
+        if mainboardMac is not None:
             returnAfterNumberFound = 1
         NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=returnAfterNumberFound, threadCount=threadCount, perThreadDelaySec=delaySec)
 
@@ -100,16 +100,16 @@ class NetworkSearch:
             return []
 
         # If we are looking for a specific mainboard id, we need to check the results.
-        if mainboardId is not None:
+        if mainboardMac is not None:
             for ip, result in foundPrinters.items():
-                if result.MainboardId is not None and result.MainboardId.lower() == mainboardId.lower():
-                    return [ElegooNetworkSearchResult(ip, result.TooManyClients, result.MainboardId)]
+                if result.MainboardMac is not None and result.MainboardMac.lower() == mainboardMac.lower():
+                    return [ElegooNetworkSearchResult(ip, result.TooManyClients, result.MainboardMac)]
             return []
 
         # If we are looking for all printers, we can return all the results.
         ret = []
         for ip, result in foundPrinters.items():
-            ret.append(ElegooNetworkSearchResult(ip, result.TooManyClients, result.MainboardId))
+            ret.append(ElegooNetworkSearchResult(ip, result.TooManyClients, result.MainboardMac))
         return ret
 
 
@@ -307,10 +307,10 @@ class NetworkSearch:
                     attr = msg.get("Attributes", None)
                     if attr is None:
                         return
-                    mainBoardId = attr.get("MainboardID", None)
-                    if mainBoardId is not None:
-                        logger.debug(f"Elegoo {ipOrHostname} found mainboard id: {mainBoardId}")
-                        result["MainboardId"] = mainBoardId
+                    mainboardMac = attr.get("MainboardMAC", None)
+                    if mainboardMac is not None:
+                        logger.debug(f"Elegoo {ipOrHostname} found mainboard id: {mainboardMac}")
+                        result["MainboardMac"] = mainboardMac
 
                     # Once we have seen the mainboard id, we are done.
                     result["Event"].set()
@@ -351,7 +351,7 @@ class NetworkSearch:
             # Walk though the connection and see how far we got.
             wsConnected = False
             tooManyClients = False
-            mainBoardId = None
+            mainboardMac = None
 
             if "WsConnected" in result:
                 wsConnected = True
@@ -359,9 +359,9 @@ class NetworkSearch:
             if "TooManyClients" in result:
                 tooManyClients = True
             # Get the mainboard id if we have it.
-            if "MainboardId" in result:
-                mainBoardId = result["MainboardId"]
-            return NetworkValidationResult(isBambu=False, wsConnected=wsConnected, tooManyClients=tooManyClients, mainboardId=mainBoardId)
+            if "MainboardMac" in result:
+                mainboardMac = result["MainboardMac"]
+            return NetworkValidationResult(isBambu=False, wsConnected=wsConnected, tooManyClients=tooManyClients, mainboardMac=mainboardMac)
         except Exception as e:
             return NetworkValidationResult(isBambu=False, exception=e)
 
@@ -431,7 +431,7 @@ class NetworkSearch:
                                 if hasFoundRequestedNumberOfIps[0] is True:
                                     return
                                 # Get the next IP.
-                                ip = outstandingIpsToCheck.pop()
+                                ip = outstandingIpsToCheck.pop(0)
 
                             # This is a quick fix to slow down the scan so it doesn't eat a lot of CPU load on the device while the printer is off
                             # and the plugin is trying to find it. But it's important this scan also be fast, for the installer.

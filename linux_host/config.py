@@ -73,7 +73,7 @@ class Config:
     # Used only for Elegoo Connect
     #
     SectionElegoo = "elegoo"
-    ElegooMainboardId = "mainboard_id"
+    ElegooMainboardMac = "mainboard_mac"
 
 
     # This allows us to add comments into our config.
@@ -96,7 +96,7 @@ class Config:
         { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
         { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification."},
-        { "Target": ElegooMainboardId,  "Comment": "This is the mainboard id of the linked printer."},
+        { "Target": ElegooMainboardMac,  "Comment": "This is the MAC address of the mainboard for the linked printer."},
     ]
 
 
