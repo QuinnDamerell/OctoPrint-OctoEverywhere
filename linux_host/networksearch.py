@@ -80,7 +80,7 @@ class NetworkSearch:
     # If a mainboardMac is specified, only printers with that mainboardMac will be considered.
     @staticmethod
     def ScanForInstances_Elegoo(logger:logging.Logger, mainboardMac:str=None, portStr:str = None, threadCount:int=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
-        foundPrinters:dict[str,NetworkValidationResult] = {}
+        foundPrinters:dict = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
             # We want to keep track of successful printers and ones we know are Elegoo printers, but we can't connect to.
