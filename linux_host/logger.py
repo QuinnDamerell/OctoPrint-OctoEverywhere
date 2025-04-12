@@ -22,6 +22,11 @@ class LoggerInit:
         ]
         logLevel = config.GetStrIfInAcceptableList(Config.LoggingSection, Config.LogLevelKey, "INFO", possibleValueList)
 
+        # Check the environment variable for the log level.
+        if os.getenv("DEBUG") is not None or os.getenv("-DEBUG") or os.getenv("debug") or os.getenv("-debug"):
+            print("Environment variable DEBUG set, setting log level to DEBUG")
+            logLevel = "DEBUG"
+
         # Allow the dev config to override the log level.
         if logLevelOverride_CanBeNone is not None:
             logLevelOverride_CanBeNone = logLevelOverride_CanBeNone.upper()
