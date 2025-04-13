@@ -208,7 +208,7 @@ class Config:
         # Convert the default value to a string, if it's not None.
         defaultValueAsStr:Optional[str] = None
         if defaultValue is not None:
-                defaultValueAsStr = str(defaultValue)
+            defaultValueAsStr = str(defaultValue)
 
         try:
             result = self.GetStr(section, key, defaultValueAsStr)
