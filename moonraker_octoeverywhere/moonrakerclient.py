@@ -113,6 +113,9 @@ class MoonrakerClient:
         # This is found and set when we try to connect and we fail due to an unauthed socket.
         # It can also be set by the user in the config.
         self.MoonrakerApiKey = self.Config.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, keepInConfigIfNone=True)
+        # Same idea, but sometimes we need to get the oneshot_token to access the system.
+        # This code is only valid for 5 seconds, so it will be retrieved when we need it.
+        self.OneshotToken = None
 
         # Setup the WS vars and a websocket worker thread.
         # Don't run it until StartRunningIfNotAlready is called!
@@ -507,8 +510,14 @@ class MoonrakerClient:
                 # We know if the WS is connected, the host and port must be correct.
                 self._UpdateMoonrakerHostAndPort()
 
-                # Create a websocket client and start it connecting.
+                # Build the URL, include the oneshot token if we have one.
                 url = "ws://"+self.MoonrakerHostAndPort+"/websocket"
+                if self.OneshotToken is not None:
+                    url += "?token="+self.OneshotToken
+                    # Since the one shot token expires after 5 seconds, we need to clear it out.
+                    self.OneshotToken = None
+
+                # Create a websocket client and start it connecting.
                 self.Logger.info("Connecting to moonraker: "+url)
                 with self.WebSocketLock:
                     self.WebSocket = Client(url,
@@ -542,13 +551,13 @@ class MoonrakerClient:
 
             # This will only happen if the websocket closes or there was an error.
             # Sleep for a bit so we don't spam the system with attempts.
+            # Note that if we failed auth but got a oneshot token it will expire in 5 seconds, so we need to retry quickly.
             time.sleep(2.0)
 
 
     # Based on the docs: https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     # After the websocket is open, we need to do this sequence to make sure the system is healthy and ready.
     def _AfterOpenReadyWaiter(self, targetWsObjRef):
-
         logCounter = 0
         self.Logger.info("Moonraker client waiting for klippy ready...")
         try:
@@ -589,16 +598,15 @@ class MoonrakerClient:
                 if result.HasError():
                     # Check if the error is Unauthorized, in which case we need to try to get credentials.
                     if result.ErrorCode == -32602 or result.ErrorStr == "Unauthorized":
-                        self.Logger.info("Our websocket connection to moonraker needs auth, trying to get the API key...")
-                        self.MoonrakerApiKey = MoonrakerCredentialManager.Get().TryToGetApiKey()
-                        if self.MoonrakerApiKey is None:
-                            self.Logger.error("Our websocket connection to moonraker needs auth and we failed to get the API key.")
-                            raise Exception("Websocket unauthorized.")
-                        else:
+                        if self._TryToGetWebsocketAuth():
+                            # On success, shut down the websocket so we do the reconnect logic.
                             self.Logger.info("Successfully got the API key, restarting the websocket to try again using it.")
-                            # Shut down the websocket so we do the reconnect logic.
                             self._RestartWebsocket()
                             return
+                        # Since we know we will keep failing, sleep for a while to avoid spamming the logs and so the user sees this error.
+                        self.Logger.error("!!!! Moonraker auth is required, so you must re-run the OctoEverywhere installer or generate an API key in Mainsail or Fluidd and set it the octoeverywhere.conf. The octoeverywhere.conf config file can be found in /data for docker or ~/.octoeverywhere*/ for CLI installs")
+                        time.sleep(10)
+                        raise Exception("Websocket unauthorized.")
 
                     # Handle the timeout without throwing, since this happens sometimes when the system is down.
                     if result.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
@@ -643,6 +651,34 @@ class MoonrakerClient:
             Sentry.Exception("Moonraker client exception in klippy waiting logic.", e)
             # Shut down the websocket so we do the reconnect logic.
             self._RestartWebsocket()
+
+
+    # Attempts to update the moonraker api key or one shot token.
+    # Returns true if it's able to get one of them.
+    def _TryToGetWebsocketAuth(self) -> bool:
+        # First, try to get an API key
+        # If we are running locally, we should be able to connect to the unix socket and always get it.
+        self.Logger.info("Our websocket connection to moonraker needs auth, trying to get the API key...")
+        newApiKey = MoonrakerCredentialManager.Get().TryToGetApiKey()
+        if newApiKey is not None:
+            # If we got a new API key, use it now.
+            self.Logger.info("Successfully got a new API key from Moonraker.")
+            self.MoonrakerApiKey = newApiKey
+            return True
+
+        # If we didn't get an new API key, try to get a oneshot token.
+        # Note that we might already have an existing Moonraker API key, so we will include it incase.
+        #
+        # For some systems we need auth for the websocket, but no auth for the oneshot token API, which makes no sense.
+        # But if that's the case, we try to get a one_shot token.
+        self.OneshotToken = MoonrakerCredentialManager.Get().TryToGetOneshotToken(self.MoonrakerApiKey)
+        if self.OneshotToken is None:
+            # If we got a one shot token, use it.
+            self.Logger.info("Successfully got a new oneshot token from Moonraker.")
+            return True
+
+        # If we got here, we failed to get either.
+        return False
 
 
     # Kills the current websocket connection. Our logic will auto try to reconnect.

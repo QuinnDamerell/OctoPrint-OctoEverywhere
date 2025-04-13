@@ -5,9 +5,13 @@ import json
 import logging
 import time
 
+from typing import Optional
+
 import configparser
 
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.Proto.PathTypes import PathTypes
+from octoeverywhere.octohttprequest import OctoHttpRequest
 
 # A class that handles trying to get user credentials from Moonraker if needed.
 #
@@ -46,12 +50,41 @@ class MoonrakerCredentialManager:
         self.IsCompanionMode = isCompanionMode
 
 
-    def TryToGetApiKey(self) -> str or None:
+    # Attempts to get the API key from moonraker. If it fails, it will return None.
+    def TryToGetOneshotToken(self, apiKey:str=None) -> Optional[str]:
+        try:
+            # If we got an API key, try to set it.
+            headers = {}
+            if apiKey is not None:
+                headers["X-Api-Key"] = apiKey
+
+            # Make the call
+            result = OctoHttpRequest.MakeHttpCall(self.Logger, "/access/oneshot_token", PathTypes.Relative, "GET", headers)
+            if result is None:
+                raise Exception("Failed to get the oneshot token from moonraker.")
+            if result.StatusCode != 200:
+                raise Exception("Failed to get the oneshot token from moonraker. "+str(result.StatusCode))
+
+            # Read the response.
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            buf = result.FullBodyBuffer
+            if buf is None:
+                raise Exception("Failed to get the oneshot token from moonraker. No content.")
+
+            # Decode & parse the response.
+            jsonMsg = json.loads(buf.decode(encoding="utf-8"))
+            token = jsonMsg.get("result", None)
+            if token is None:
+                raise Exception("Failed to get the oneshot token from moonraker. No result.")
+            return str(token)
+        except Exception as e:
+            Sentry.Exception("TryToGetOneshotToken failed to get the token.", e)
+        return None
+
+
+    def TryToGetApiKey(self) -> Optional[str]:
         # If this is an companion plugin, we dont' have the moonraker config file nor can we access the UNIX socket.
         if self.IsCompanionMode:
-            self.Logger.error("!!!! Moonraker auth is required, so you must generate an API key in Mainsail or Fluidd and set it the octoeverywhere.conf file in the companion root folder. The config file can be found in /data for docker or ~/.octoeverywhere-companion for CLI installs")
-            # Since we know we will keep failing, sleep for a while to avoid spamming the logs and so the user sees this error.
-            time.sleep(10)
             return None
 
         # First, we need to find the unix socket to connect to
@@ -124,7 +157,7 @@ class MoonrakerCredentialManager:
             return None
 
 
-    def _TryToFindUnixSocket(self) -> str or None:
+    def _TryToFindUnixSocket(self) -> Optional[str]:
 
         # First, try to parse the moonraker config to find the klipper socket path, since the moonraker socket should be similar.
         try:
@@ -185,7 +218,7 @@ class MoonrakerCredentialManager:
         return os.path.abspath(os.path.join(path, os.pardir))
 
 
-    def _ReadSingleJsonObject(self, sock) -> str or None:
+    def _ReadSingleJsonObject(self, sock) -> Optional[str]:
         # Since sock.recv blocks, we must read each char one by one so we know when the message ends.
         # This is messy, but since it only happens very occasionally, it's fine.
         message = bytearray()
