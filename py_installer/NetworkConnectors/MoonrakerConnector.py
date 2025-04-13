@@ -2,7 +2,7 @@ import json
 import socket
 import threading
 import ipaddress
-from typing import Tuple
+from typing import Tuple, List
 
 from octoeverywhere.websocketimpl import Client
 
@@ -295,7 +295,7 @@ class MoonrakerConnector:
 
     # Scans the subnet for Moonraker instances.
     # Returns a list of IPs where moonraker was found.
-    def _ScanForMoonrakerInstances(self) -> list[MoonrakerScanResult]:
+    def _ScanForMoonrakerInstances(self) -> List[MoonrakerScanResult]:
         results = []
         try:
             localIp = self._TryToGetLocalIp()
