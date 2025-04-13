@@ -216,6 +216,7 @@
         "pylintrc",
         "pympler",
         "pypi",
+        "pyright",
         "pythoncompat",
         "pythonhosted",
         "PYTHONPATH",
