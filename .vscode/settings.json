@@ -255,6 +255,7 @@
         "starport",
         "struct",
         "subcode",
+        "subed",
         "substate",
         "systemconfigmanager",
         "telemetryaccumulator",

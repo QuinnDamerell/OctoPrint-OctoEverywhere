@@ -7,7 +7,7 @@ import string
 import socket
 import logging
 import threading
-from typing import List
+from typing import List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -24,11 +24,11 @@ class ElegooNetworkSearchResult:
 # A helper class that's the result of a network validation.
 class NetworkValidationResult:
     def __init__(self,
-                 isBambu:bool = True, # True if this is a Bambu printer, False if it's an Elegoo printer.
+                 isBambu:bool=True, # True if this is a Bambu printer, False if it's an Elegoo printer.
                  # Bambu specific results
-                 failedToConnect:bool = False, failedAuth:bool = False, failSn:bool = False, exception:Exception = None, bambuRtspUrl = None,
+                 failedToConnect:bool=False, failedAuth:bool=False, failSn:bool=False, exception:Optional[Exception]=None, bambuRtspUrl:Optional[str]=None,
                  # Elegoo specific results
-                 wsConnected:bool=False, tooManyClients:bool=False, mainboardMac:str=None
+                 wsConnected:bool=False, tooManyClients:bool=False, mainboardMac:Optional[str]=None
                  ) -> None:
         self.IsBambu = isBambu
         # Bambu specific results
@@ -43,7 +43,7 @@ class NetworkValidationResult:
         # Elegoo specific results
         self.WsConnected:bool = wsConnected
         self.TooManyClients:bool = tooManyClients
-        self.MainboardMac:str = mainboardMac
+        self.MainboardMac:Optional[str] = mainboardMac
 
 
     def Success(self) -> bool:
@@ -68,7 +68,7 @@ class NetworkSearch:
     # Scans the local IP LAN subset for Bambu servers that successfully authorize given the access code and printer sn.
     # Thread count and delay can be used to control how aggressive the scan is.
     @staticmethod
-    def ScanForInstances_Bambu(logger:logging.Logger, accessCode:str, printerSn:str, portStr:str = None, threadCount:int=None, delaySec:float=0.0) -> List[str]:
+    def ScanForInstances_Bambu(logger:logging.Logger, accessCode:str, printerSn:str, portStr:Optional[str]=None, threadCount:Optional[int]=None, delaySec:float=0.0) -> List[str]:
         def callback(ip:str):
             return NetworkSearch.ValidateConnection_Bambu(logger, ip, accessCode, printerSn, portStr, timeoutSec=5)
         # We want to return if any one IP is found, since there can only be one printer that will match the printer 100% correct.
@@ -79,7 +79,7 @@ class NetworkSearch:
     # Thread count and delay can be used to control how aggressive the scan is.
     # If a mainboardMac is specified, only printers with that mainboardMac will be considered.
     @staticmethod
-    def ScanForInstances_Elegoo(logger:logging.Logger, mainboardMac:str=None, portStr:str = None, threadCount:int=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
+    def ScanForInstances_Elegoo(logger:logging.Logger, mainboardMac:Optional[str]=None, portStr:Optional[str]=None, threadCount:Optional[int]=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
         foundPrinters:dict = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
@@ -126,8 +126,8 @@ class NetworkSearch:
     # Given the ip, accessCode, printerSn, and optionally port, this will check if the printer is connectable.
     # Returns a NetworkValidationResult with the results.
     @staticmethod
-    def ValidateConnection_Bambu(logger:logging.Logger, ipOrHostname:str, accessCode:str, printerSn:str, portStr:str = None, timeoutSec:float = 5.0) -> NetworkValidationResult:
-        client:mqtt.Client = None
+    def ValidateConnection_Bambu(logger:logging.Logger, ipOrHostname:str, accessCode:str, printerSn:str, portStr:Optional[str]=None, timeoutSec:float=5.0) -> NetworkValidationResult:
+        client:mqtt.Client = None # pyright: ignore[reportAssignmentType]
         try:
             if portStr is None:
                 portStr = NetworkSearch.c_BambuDefaultPortStr
@@ -135,12 +135,12 @@ class NetworkSearch:
             logger.debug(f"Testing for Bambu on {ipOrHostname}:{port}")
             result = {}
             result["Event"] = threading.Event()
-            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=result)
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=result) # pyright: ignore[reportPrivateImportUsage]
             client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
             client.tls_insecure_set(True)
             client.username_pw_set("bblp", accessCode)
 
-            def connect(client:mqtt.Client, userdata:dict, flags, reason_code:mqtt.ReasonCode, properties):
+            def connect(client:mqtt.Client, userdata:dict, flags, reason_code:mqtt.ReasonCode, properties): # pyright: ignore[reportPrivateImportUsage]
                 # If auth is wrong, we will get a connect callback with a failure "Not authorized"
                 if reason_code.is_failure:
                     logger.debug(f"Bambu {ipOrHostname} connection failure: {reason_code}")
@@ -165,7 +165,7 @@ class NetworkSearch:
                 logger.debug(f"Bambu {ipOrHostname} disconnected.")
                 userdata["Event"].set()
 
-            def subscribe(client, userdata:dict, mid, reason_code_list:List[mqtt.ReasonCode], properties):
+            def subscribe(client, userdata:dict, mid, reason_code_list:List[mqtt.ReasonCode], properties): # pyright: ignore[reportPrivateImportUsage]
                 if "ReportMid" in userdata and mid == userdata["ReportMid"]:
                     # If this is the sub report, check the status and disconnect.
                     failedSn = False
@@ -265,8 +265,7 @@ class NetworkSearch:
     # Given the ip and optionally a mac address, this will check if the printer is connectable.
     # Returns a NetworkValidationResult with the results.
     @staticmethod
-    def ValidateConnection_Elegoo(logger:logging.Logger, ipOrHostname:str, portStr:str = None, timeoutSec:float = 2.0) -> NetworkValidationResult:
-        client:Client = None
+    def ValidateConnection_Elegoo(logger:logging.Logger, ipOrHostname:str, portStr:Optional[str]=None, timeoutSec:float=2.0) -> NetworkValidationResult:
         try:
             # Setup the connection functions.
             if portStr is None:
@@ -293,7 +292,7 @@ class NetworkSearch:
                         "TimeStamp": int(time.time() / 1000), # Current time in seconds.
                         "From": 1
                     }
-                }))
+                }).encode("utf-8"))
 
             def onWsMessage(ws:Client, message:bytearray):
                 # We got a message back! We expect this to be the response to what we asked for.
@@ -336,10 +335,10 @@ class NetworkSearch:
             url = f"ws://{ipOrHostname}:{port}/websocket"
             try:
                 logger.debug(f"Connecting to Elegoo on {url}...")
-                client = Client(url, onWsOpen=onWsOpen, onWsMsg=onWsMessage, onWsClose=onWsClose, onWsError=onWsError)
-                # We must run async, so we don't block this testing thread.
-                client.RunAsync()
-                failedToConnect = False
+                with Client(url, onWsOpen=onWsOpen, onWsMsg=onWsMessage, onWsClose=onWsClose, onWsError=onWsError) as client:
+                    # We must run async, so we don't block this testing thread.
+                    client.RunAsync()
+                    failedToConnect = False
             except Exception as e:
                 logger.debug(f"Elegoo {url} - connection failure {e}")
             logger.debug(f"Connection exit for Elegoo on {url}")
@@ -370,7 +369,7 @@ class NetworkSearch:
     # testConFunction must be a function func(ip:str) -> NetworkValidationResult
     # Returns a list of IPs that reported Success() == True
     @staticmethod
-    def _ScanForInstances(logger:logging.Logger, testConFunction, returnAfterNumberFound:int=0, threadCount:int=None, perThreadDelaySec:float=0.0) -> List[str]:
+    def _ScanForInstances(logger:logging.Logger, testConFunction, returnAfterNumberFound:int=0, threadCount:Optional[int]=None, perThreadDelaySec:float=0.0) -> List[str]:
         foundIps = []
         try:
             localIp = NetworkSearch._TryToGetLocalIp()
@@ -417,11 +416,11 @@ class NetworkSearch:
             counter = 0
             while counter < totalThreads:
                 def threadFunc(threadId):
+                    ip = "none"
                     try:
                         # Loop until we run out of IPs or the test is done by the bool flag.
                         while True:
                             # Get the next IP
-                            ip = "none"
                             with threadLock:
                                 # If there are no IPs left, this thread is done.
                                 if len(outstandingIpsToCheck) == 0:
@@ -496,7 +495,7 @@ class NetworkSearch:
             pass
         finally:
             s.close()
-        return ip
+        return str(ip)
 
 
     @staticmethod

@@ -6,7 +6,7 @@ class Version:
     # Throws if the file can't be found or the version string can't be found.
     # This logic is shared with the moonraker installer!
     @staticmethod
-    def GetPluginVersion(repoRoot):
+    def GetPluginVersion(repoRoot:str) -> str:
         # Since OctoPrint says the version must be in the setup.py file, we share the same file to reduce any duplication.
         setupFilePath = os.path.join(repoRoot, "setup.py")
         if os.path.exists(setupFilePath) is False:

@@ -1,5 +1,7 @@
 import queue
 import threading
+from typing import Union
+
 import certifi
 import octowebsocket
 from octowebsocket import WebSocketApp
@@ -232,7 +234,7 @@ class Client:
         self._Close()
 
 
-    def Send(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, isData:bool = True):
+    def Send(self, buffer:Union[bytes, bytearray], msgStartOffsetBytes:int = None, msgSize:int = None, isData:bool = True):
         if isData:
             self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, octowebsocket.ABNF.OPCODE_BINARY)
         else:
