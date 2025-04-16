@@ -1,6 +1,6 @@
 import queue
 import threading
-from typing import Any, Dict, List, Self, Callable, Optional
+from typing import Any, Dict, List, Callable, Optional
 
 import certifi
 import octowebsocket
@@ -17,11 +17,11 @@ class Client(IWebSocketClient):
     def __init__(
                 self,
                 url:str,
-                onWsOpen:Optional[Callable[[Self], None]]=None,
-                onWsMsg:Optional[Callable[[Self, Buffer], None]]=None,
-                onWsData:Optional[Callable[[Self, Buffer, WebSocketOpCode], None]]=None,
-                onWsClose:Optional[Callable[[Self], None]]=None,
-                onWsError:Optional[Callable[[Self, Exception], None]]=None,
+                onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
+                onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
+                onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
+                onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
+                onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
                 headers:Optional[Dict[str, str]]=None,
                 subProtocolList:Optional[List[str]]=None
                 ) -> None:

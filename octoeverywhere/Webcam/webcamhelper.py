@@ -3,8 +3,6 @@ import os
 import json
 from typing import Dict, List, Optional
 
-import httpcore
-
 from ..sentry import Sentry
 from .webcamutil import WebcamUtil
 from .quickcam import QuickCamManager
