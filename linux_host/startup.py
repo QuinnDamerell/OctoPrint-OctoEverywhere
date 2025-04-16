@@ -24,7 +24,7 @@ class Startup:
 
 
     # Given the process args, this returns the json config.
-    def GetJsonFromArgs(self, argv:List[str]) -> Optional[dict]:
+    def GetJsonFromArgs(self, argv:List[str]) -> dict:
         # The config and settings path is passed as the first arg when the service runs.
         # This allows us to run multiple services instances, each pointing at it's own config.
         if len(argv) < 1:
@@ -44,7 +44,7 @@ class Startup:
             return json.loads(jsonConfigStr)
         except Exception as e:
             self.PrintErrorAndExit("Failed to get json from cmd args. "+str(e))
-        return None
+            return {}
 
 
     # If there was a dev config passed, this parses it and returns the json object.

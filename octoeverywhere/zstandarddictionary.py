@@ -8,7 +8,7 @@ import logging
 # This is only used for training the dictionary, so it's not used in the main code.
 class ZStandardDictionary:
 
-    _Instance = None
+    _Instance:"ZStandardDictionary" = None #pyright: ignore[reportAssignmentType]
 
     # These are only used for dev building.
     _TrainingPath = "/home/pi/zstandard-training-samples"
@@ -27,14 +27,14 @@ class ZStandardDictionary:
 
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
-        self.TrainingDataNamePrefix:str = None
+        self.TrainingDataNamePrefix:str = None #pyright: ignore[reportAttributeAccessIssue]
 
         # This will be None if we aren't using zstandard in this runtime.
         self.PreTrainedDict = None
 
 
     # The check for zstandard lib must be made before we can call this, but if we are using zstandard, we must load this dict.
-    def InitPreComputedDict(self):
+    def InitPreComputedDict(self) -> None:
         # To make things easier, we include the dict in the source code as a based64 encoded string.
         # This prevents us from doing any kind of file IO or network calls to load the dict.
         dictData = base64.b64decode(ZStandardDictionary.c_Dict1)
@@ -58,7 +58,7 @@ class ZStandardDictionary:
     # DEV ONLY
     # Used only in dev builds to init training data samples.
     # You must also add SubmitData into the Compression class to get the samples submitted.
-    def InitTrainingOutputDataFile(self, namePrefix:str):
+    def InitTrainingOutputDataFile(self, namePrefix:str) -> None:
         if input(f"Are you sure you want to add to the training data with prefix [{namePrefix}]? (y/n) ") != "y":
             return
         self.TrainingDataNamePrefix = namePrefix
@@ -92,7 +92,7 @@ class ZStandardDictionary:
 
 
     # Used by dev builds to build a new training dict.
-    def BuildTrainingDict(self):
+    def BuildTrainingDict(self) -> None:
         try:
             #pylint: disable=import-outside-toplevel
             import zstandard as zstd

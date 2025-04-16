@@ -78,7 +78,7 @@ class MoonrakerCredentialManager:
                 raise Exception("Failed to get the oneshot token from moonraker. No result.")
             return str(token)
         except Exception as e:
-            Sentry.Exception("TryToGetOneshotToken failed to get the token.", e)
+            Sentry.OnException("TryToGetOneshotToken failed to get the token.", e)
         return None
 
 
@@ -153,7 +153,7 @@ class MoonrakerCredentialManager:
                 return result
 
         except Exception as e:
-            Sentry.Exception("TryToGetCredentials failed to open the unix socket.", e)
+            Sentry.OnException("TryToGetCredentials failed to open the unix socket.", e)
             return None
 
 
@@ -184,7 +184,7 @@ class MoonrakerCredentialManager:
             if "Source contains parsing errors" in str(e):
                 self.Logger.error("_TryToFindUnixSocket failed to handle moonraker config. "+str(e))
         except Exception as e:
-            Sentry.Exception("_TryToFindUnixSocket failed to handle moonraker config.", e)
+            Sentry.OnException("_TryToFindUnixSocket failed to handle moonraker config.", e)
 
         # If that failed, try to find the path by stepping back from the moonraker config a few times.
         moonrakerConfigFolderPath = self._GetParentDirectory(self.MoonrakerConfigFilePath)

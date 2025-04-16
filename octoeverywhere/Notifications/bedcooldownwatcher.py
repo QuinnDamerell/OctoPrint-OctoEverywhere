@@ -1,6 +1,7 @@
 import time
 import logging
 import threading
+from typing import Optional
 
 from ..sentry import Sentry
 from ..repeattimer import RepeatTimer
@@ -26,8 +27,8 @@ class BedCooldownWatcher:
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PrinterStateInterface = printerStateInterface
-        self.Timer = None
-        self.TimerStartSec = None
+        self.Timer:Optional[RepeatTimer] = None
+        self.TimerStartSec:Optional[float] = None
         self.IsFirstTimerRead = True
         self.Lock = threading.Lock()
 
@@ -68,6 +69,10 @@ class BedCooldownWatcher:
 
     def _timerCallback(self):
         try:
+            # Ensure we have a starting time.
+            if self.TimerStartSec is None:
+                self.TimerStartSec = time.time()
+
             # Check if we should stop watching.
             if time.time() - self.TimerStartSec > BedCooldownWatcher.c_maxWatcherRuntimeSec:
                 self.Logger.info("Bed cooldown watcher, max runtime reached. Stopping.")
@@ -104,4 +109,4 @@ class BedCooldownWatcher:
             self.NotificationHandler.OnBedCooldownComplete(bedTempCelsiusFloat)
 
         except Exception as e:
-            Sentry.Exception("BedCooldownWatcher exception in timer callback", e)
+            Sentry.OnException("BedCooldownWatcher exception in timer callback", e)

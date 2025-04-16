@@ -26,7 +26,7 @@ class Secrets:
     ]
 
 
-    def __init__(self, logger:logging.Logger, octoeverywhereStoragePath:str, moonrakerConfig = None) -> None:
+    def __init__(self, logger:logging.Logger, octoeverywhereStoragePath:str, moonrakerConfig:Optional[Config]=None) -> None:
         self.Logger = logger
 
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
@@ -52,7 +52,7 @@ class Secrets:
 
 
     # Sets the printer id and saves the file.
-    def SetPrinterId(self, printerId:str) -> None:
+    def SetPrinterId(self, printerId:Optional[str]) -> None:
         self._SetStr(Secrets._SecretsSection, Secrets._PrinterIdKey, printerId)
 
 
@@ -62,7 +62,7 @@ class Secrets:
 
 
     # Sets the printer id and saves the file.
-    def SetPrivateKey(self, privateKey:str) -> None:
+    def SetPrivateKey(self, privateKey:Optional[str]) -> None:
         self._SetStr(Secrets._SecretsSection, Secrets._PrivateKeyKey, privateKey)
 
 

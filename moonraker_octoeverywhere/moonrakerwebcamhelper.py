@@ -199,7 +199,7 @@ class MoonrakerWebcamHelper():
                     profiler.ReportIfNeeded()
 
                 except Exception as e:
-                    Sentry.Exception("Webcam helper - _WebcamSettingsUpdateWorker exception. ", e)
+                    Sentry.OnException("Webcam helper - _WebcamSettingsUpdateWorker exception. ", e)
 
 
     # Reads the values currently set in the config and sets them into our local settings.
@@ -250,7 +250,7 @@ class MoonrakerWebcamHelper():
             self._ResetValuesToDefaults()
 
         except Exception as e:
-            Sentry.Exception("Webcam helper - _DoAutoSettingsUpdate exception. ", e)
+            Sentry.OnException("Webcam helper - _DoAutoSettingsUpdate exception. ", e)
 
 
     # Tries to find the webcam config using the new Moonraker webcam APIs.
@@ -336,7 +336,7 @@ class MoonrakerWebcamHelper():
             # If the settings are validated, return success!
             return webcamSettings
         except Exception as e:
-            Sentry.Exception("Webcam helper _TryToParseWebcamApiItem exception. ", e)
+            Sentry.OnException("Webcam helper _TryToParseWebcamApiItem exception. ", e)
         return None
 
 
@@ -441,7 +441,7 @@ class MoonrakerWebcamHelper():
             # If the settings are validated, return success!
             return webcamSettings
         except Exception as e:
-            Sentry.Exception("Webcam helper _TryToParseWebcamDbEntry exception. ", e)
+            Sentry.OnException("Webcam helper _TryToParseWebcamDbEntry exception. ", e)
         return None
 
 
@@ -551,7 +551,7 @@ class MoonrakerWebcamHelper():
             # If the settings are validated, return success!
             return webcamSettings
         except Exception as e:
-            Sentry.Exception("Webcam helper _TryToParseFluiddCustomWebcamDbEntry exception. ", e)
+            Sentry.OnException("Webcam helper _TryToParseFluiddCustomWebcamDbEntry exception. ", e)
         return None
 
 
@@ -608,7 +608,7 @@ class MoonrakerWebcamHelper():
             # Finally, do the standard webcam settings validation.
             return webcamSettings.Validate(self.Logger)
         except Exception as e:
-            Sentry.Exception("Webcam helper _ValidatePossibleWebCamSettings exception. ", e)
+            Sentry.OnException("Webcam helper _ValidatePossibleWebCamSettings exception. ", e)
         return False
 
 

@@ -156,7 +156,7 @@ class BambuHost:
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Bambu, False)
             oe.RunBlocking()
         except Exception as e:
-            Sentry.Exception("!! Exception thrown out of main host run function.", e)
+            Sentry.OnException("!! Exception thrown out of main host run function.", e)
 
         # Allow the loggers to flush before we exit
         try:

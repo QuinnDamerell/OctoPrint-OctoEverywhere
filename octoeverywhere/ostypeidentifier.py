@@ -1,7 +1,7 @@
 import os
 import platform
 
-from .Proto import OsType
+from .Proto.OsType import OsType
 
 
 class OsTypeIdentifier:
@@ -11,11 +11,11 @@ class OsTypeIdentifier:
     #
 
     @staticmethod
-    def DetectOsType() -> OsType:
+    def DetectOsType() -> int:
         # Do a quick check for windows first.
         # This is only possible on OctoPrint right now.
         if platform.system().lower == "windows":
-            return OsType.OsType.Windows
+            return OsType.Windows
 
         # For the k1 and k1 max, we look for the "buildroot" OS.
         if os.path.exists("/etc/os-release"):
@@ -23,7 +23,7 @@ class OsTypeIdentifier:
                 lines = osInfo.readlines()
                 for l in lines:
                     if "ID=buildroot" in l:
-                        return OsType.OsType.CrealityK1
+                        return OsType.CrealityK1
 
         # For the Sonic Pad, we look for the openwrt os
         if os.path.exists("/etc/openwrt_release"):
@@ -32,9 +32,9 @@ class OsTypeIdentifier:
                 for l in lines:
                     l = l.lower()
                     if "sonic" in l:
-                        return OsType.OsType.CrealitySonicPad
+                        return OsType.CrealitySonicPad
                     if "tina" in l:
-                        return OsType.OsType.CrealityK2
+                        return OsType.CrealityK2
 
         # Default the OS to debian.
-        return OsType.OsType.Debian
+        return OsType.Debian

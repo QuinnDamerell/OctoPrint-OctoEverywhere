@@ -1,11 +1,18 @@
 import json
+from typing import Any, Optional
 
-from .octostreammsgbuilder import OctoStreamMsgBuilder
-from .octohttprequest import OctoHttpRequest
+from .buffer import Buffer
+from .gadget import Gadget
+from .sentry import Sentry
+from .httpresult import HttpResult
 from .octohttprequest import PathTypes
 from .Webcam.webcamhelper import WebcamHelper
+from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .Webcam.webcamsettingitem import WebcamSettingItem
-from .sentry import Sentry
+from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse
+
+from .Proto.HttpInitialContext import HttpInitialContext
+
 
 #
 # Platform Command Handler Interface
@@ -51,21 +58,20 @@ class CommandHandler:
     c_CommandError_CantConnectTooManyClients = 787
 
 
-
-    _Instance = None
+    _Instance:"CommandHandler" = None #pyright: ignore[reportAssignmentType]
 
 
     @staticmethod
-    def Init(logger, notificationHandler, platCommandHandler, hostCommandHandler):
+    def Init(logger, notificationHandler:INotificationHandler, platCommandHandler:IPlatformCommandHandler, hostCommandHandler:IHostCommandHandler):
         CommandHandler._Instance = CommandHandler(logger, notificationHandler, platCommandHandler, hostCommandHandler)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "CommandHandler":
         return CommandHandler._Instance
 
 
-    def __init__(self, logger, notificationHandler, platCommandHandler, hostCommandHandler):
+    def __init__(self, logger, notificationHandler:INotificationHandler, platCommandHandler:IPlatformCommandHandler, hostCommandHandler:IHostCommandHandler):
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PlatformCommandHandler = platCommandHandler
@@ -77,7 +83,7 @@ class CommandHandler:
     #
 
     # Must return a CommandResponse
-    def GetStatus(self):
+    def GetStatus(self) -> CommandResponse:
         # We want to mock the OctoPrint /api/job API since it has good stuff in it.
         # So we will return a similar result. We use similar code to what the actual API returns.
         # If we fail to get this object, we will still return a result without it.
@@ -94,7 +100,7 @@ class CommandHandler:
                 if jobStatus is not None and (isinstance(jobStatus, dict) and len(jobStatus) == 0):
                     jobStatus = None
         except Exception as e:
-            Sentry.ExceptionNoSend("API command GetStatus failed to get job status", e)
+            Sentry.OnExceptionNoSend("API command GetStatus failed to get job status", e)
 
         # Ensure we got a job status, otherwise the host isn't connected.
         if jobStatus is None:
@@ -110,7 +116,7 @@ class CommandHandler:
                 # This shouldn't happen, even debug should have this.
                 self.Logger.warn("API command GetStatus has no notification handler")
             else:
-                gadget = self.NotificationHandler.GetGadget()
+                gadget:Gadget = self.NotificationHandler.GetGadget()
                 octoeverywhereStatus = {
                     # <str> The most recent print id. This is only updated when a new print starts, so it will remain until replaced.
                     # Defaults to "none", but it should always be set when the notification manager is inited.
@@ -146,17 +152,17 @@ class CommandHandler:
                     },
                 }
         except Exception as e:
-            Sentry.ExceptionNoSend("API command GetStatus failed to get OctoEverywhere info", e)
+            Sentry.OnExceptionNoSend("API command GetStatus failed to get OctoEverywhere info", e)
 
         # Get the platform version.
-        versionStr = None
+        versionStr:Optional[str] = None
         try:
             if self.PlatformCommandHandler is None:
                 self.Logger.warn("GetStatus command has no PlatformCommandHandler")
             else:
                 versionStr = self.PlatformCommandHandler.GetPlatformVersionStr()
         except Exception as e:
-            Sentry.ExceptionNoSend("API command GetStatus failed to get OctoPrint version", e)
+            Sentry.OnExceptionNoSend("API command GetStatus failed to get OctoPrint version", e)
 
         # Get the list webcams response as well
         # Don't include the URL to reduce the payload size.
@@ -173,12 +179,11 @@ class CommandHandler:
             "PlatformVersion" : versionStr,
             "ListWebcams" : webcamInfoCommandResponse.ResultDict
         }
-
         return CommandResponse.Success(responseObj)
 
 
     # Must return a CommandResponse
-    def ListWebcams(self, includeUrls = True):
+    def ListWebcams(self, includeUrls=True) -> CommandResponse:
         # Get all of the known webcams
         webcamSettingsItems = WebcamHelper.Get().ListWebcams()
         if webcamSettingsItems is None:
@@ -200,14 +205,13 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def SetDefaultCameraName(self, jsonObjData_CanBeNone):
-        name = None
-        if jsonObjData_CanBeNone is not None:
+    def SetDefaultCameraName(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
+        name:Optional[str] = None
+        if jsonObjData is not None:
             try:
-                if "Name" in jsonObjData_CanBeNone:
-                    name = jsonObjData_CanBeNone["Name"]
+                name = jsonObjData.get("Name", None)
             except Exception as e:
-                Sentry.Exception("Failed to SetDefaultCameraName, bad args.", e)
+                Sentry.OnException("Failed to SetDefaultCameraName, bad args.", e)
                 return CommandResponse.Error(400, "Failed to parse args")
         if name is None:
             return CommandResponse.Error(400, "No name passed")
@@ -218,7 +222,7 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def GetPluginLocalWebcamSettingsItems(self, _):
+    def GetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
         # Get the list, make sure we also include any disabled items
         localWebcams = WebcamHelper.Get().GetPluginLocalWebcamList(returnDisabledItems=True)
 
@@ -235,11 +239,14 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def SetPluginLocalWebcamSettingsItems(self, jsonObjData_CanBeNone):
+    def SetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
         localWebcamSettingItems = []
         try:
+            if jsonObjData is None:
+                raise Exception("No args passed")
+
             # Get the list.
-            items = jsonObjData_CanBeNone.get("LocalPluginWebcams", None)
+            items = jsonObjData.get("LocalPluginWebcams", None)
             if items is None:
                 raise Exception("No LocalPluginWebcams found")
 
@@ -252,7 +259,7 @@ class CommandHandler:
                     raise Exception("Failed to deserialize item")
                 localWebcamSettingItems.append(o)
         except Exception as e:
-            Sentry.Exception("Failed to SetPluginLocalWebcamSettingsItems, bad args.", e)
+            Sentry.OnException("Failed to SetPluginLocalWebcamSettingsItems, bad args.", e)
             return CommandResponse.Error(400, "Failed to parse args")
 
         # Set the new list
@@ -261,7 +268,7 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def Pause(self, jsonObjData_CanBeNone):
+    def Pause(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
 
         # Defaults.
         smartPause = False
@@ -270,52 +277,52 @@ class CommandHandler:
         # Smart pause options
         disableHotendBool = True
         disableBedBool = False
-        zLiftMm = 0.0
-        retractFilamentMm = 0.0
+        zLiftMm:int = 0
+        retractFilamentMm:int = 0
         showSmartPausePopup = True
 
         # Parse if we have args
-        if jsonObjData_CanBeNone is not None:
+        if jsonObjData is not None:
             try:
                 # Get values
                 # ParseSmart Pause first, since it changes the default of suppressNotificationBool
-                if "SmartPause" in jsonObjData_CanBeNone:
-                    smartPause = jsonObjData_CanBeNone["SmartPause"]
+                if "SmartPause" in jsonObjData:
+                    smartPause = jsonObjData["SmartPause"]
 
                 # Update the default of the notification suppression based on the type. We only suppress for smart pause
                 # because it will only happen from Gadget, which will send it's own notification.
                 suppressNotificationBool = smartPause
 
                 # Parse the rest.
-                if "DisableHotend" in jsonObjData_CanBeNone:
-                    disableHotendBool = jsonObjData_CanBeNone["DisableHotend"]
-                if "DisableBed" in jsonObjData_CanBeNone:
-                    disableBedBool = jsonObjData_CanBeNone["DisableBed"]
-                if "ZLiftMm" in jsonObjData_CanBeNone:
-                    zLiftMm = jsonObjData_CanBeNone["ZLiftMm"]
-                if "RetractFilamentMm" in jsonObjData_CanBeNone:
-                    retractFilamentMm = jsonObjData_CanBeNone["RetractFilamentMm"]
-                if "SuppressNotification" in jsonObjData_CanBeNone:
-                    suppressNotificationBool = jsonObjData_CanBeNone["SuppressNotification"]
-                if "ShowSmartPausePopup" in jsonObjData_CanBeNone:
-                    showSmartPausePopup = jsonObjData_CanBeNone["ShowSmartPausePopup"]
+                if "DisableHotend" in jsonObjData:
+                    disableHotendBool = jsonObjData["DisableHotend"]
+                if "DisableBed" in jsonObjData:
+                    disableBedBool = jsonObjData["DisableBed"]
+                if "ZLiftMm" in jsonObjData:
+                    zLiftMm:int = jsonObjData["ZLiftMm"]
+                if "RetractFilamentMm" in jsonObjData:
+                    retractFilamentMm:int = jsonObjData["RetractFilamentMm"]
+                if "SuppressNotification" in jsonObjData:
+                    suppressNotificationBool = jsonObjData["SuppressNotification"]
+                if "ShowSmartPausePopup" in jsonObjData:
+                    showSmartPausePopup = jsonObjData["ShowSmartPausePopup"]
             except Exception as e:
-                Sentry.Exception("Failed to ExecuteSmartPause, bad args.", e)
+                Sentry.OnException("Failed to ExecuteSmartPause, bad args.", e)
                 return CommandResponse.Error(400, "Failed to parse args")
 
         # If this throws that's fine.
         return self.PlatformCommandHandler.ExecutePause(smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup)
 
 
-    def Resume(self):
+    def Resume(self) -> CommandResponse:
         return self.PlatformCommandHandler.ExecuteResume()
 
 
-    def Cancel(self):
+    def Cancel(self) -> CommandResponse:
         return self.PlatformCommandHandler.ExecuteCancel()
 
 
-    def Rekey(self):
+    def Rekey(self) -> CommandResponse:
         self.Logger.warn("Rekey command received!")
         resultBool = self.HostCommandHandler.OnRekeyCommand()
         if resultBool:
@@ -330,10 +337,10 @@ class CommandHandler:
 
     # Returns True or False depending if this request is a OE command or not.
     # If it is, HandleCommand should be used to get the response.
-    def IsCommandRequest(self, httpInitialContext):
+    def IsCommandRequest(self, httpInitialContext:HttpInitialContext) -> bool:
         # Get the path to check if it's a command or not.
         if httpInitialContext.PathType() != PathTypes.Relative:
-            return None
+            return False
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
         if path is None:
             raise Exception("IsCommandHttpRequest Http request has no path field in IsCommandRequest.")
@@ -347,7 +354,7 @@ class CommandHandler:
     # Note! It's very important that the OctoHttpResult has all of the properties the generic system expects! For example,
     # it must have the FullBodyBuffer (similar to the snapshot helper) and a valid response object JUST LIKE the requests lib would return.
     #
-    def HandleCommand(self, httpInitialContext, postBody_CanBeNone):
+    def HandleCommand(self, httpInitialContext:HttpInitialContext, postBody:Optional[Buffer]) -> HttpResult:
         # Get the command path.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
         if path is None:
@@ -357,28 +364,27 @@ class CommandHandler:
         commandPath = path[len(CommandHandler.c_CommandHandlerPathPrefix):]
 
         # Parse the args. Args are optional, it depends on the command.
-        jsonObj_CanBeNone = None
+        jsonObj:Optional[dict[str, Any]] = None
         try:
-            if postBody_CanBeNone is not None:
-                jsonObj_CanBeNone = json.loads(postBody_CanBeNone)
+            if postBody is not None:
+                jsonObj = json.loads(postBody.GetBytesLike())
         except Exception as e:
-            Sentry.Exception("CommandHandler error while parsing command args.", e)
+            Sentry.OnException("CommandHandler error while parsing command args.", e)
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ArgParseFailure, str(e))
 
         # Handle the command
         responseObj = None
         try:
-            responseObj = self.ProcessCommand(commandPath, jsonObj_CanBeNone)
+            responseObj = self.ProcessCommand(commandPath, jsonObj)
         except Exception as e:
-            Sentry.Exception("CommandHandler error while handling command.", e)
+            Sentry.OnException("CommandHandler error while handling command.", e)
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str(e))
-
 
         # Build the result
         resultBytes = None
         try:
             # Build the common response.
-            jsonResponse = {
+            jsonResponse:dict[str,Any] = {
                 "Status" : responseObj.StatusCode
             }
             if responseObj.ErrorStr is not None:
@@ -390,7 +396,7 @@ class CommandHandler:
             resultBytes = json.dumps(jsonResponse).encode(encoding="utf-8")
 
         except Exception as e:
-            Sentry.Exception("CommandHandler failed to serialize response.", e)
+            Sentry.OnException("CommandHandler failed to serialize response.", e)
             # Use a known good json object for this error.
             resultBytes = json.dumps(
                 {
@@ -403,11 +409,14 @@ class CommandHandler:
         headers = {
             "Content-Type": "text/json"
         }
-        return OctoHttpRequest.Result(200, headers, OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path()), False, fullBodyBuffer=resultBytes)
+        url = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+        if url is None:
+            url = "Unknown"
+        return HttpResult(200, headers, url, False, fullBodyBuffer=Buffer(resultBytes))
 
 
     # The goal here is to keep as much of the common logic as common as possible.
-    def ProcessCommand(self, commandPath, jsonObj_CanBeNone):
+    def ProcessCommand(self, commandPath:str, jsonObj_CanBeNone:Optional[dict[str, Any]]) -> CommandResponse:
         # To lower, to match any case.
         commandPathLower = commandPath.lower()
         if commandPathLower.startswith("ping"):
@@ -431,24 +440,3 @@ class CommandHandler:
         elif commandPathLower.startswith("rekey"):
             return self.Rekey()
         return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
-
-
-# A helper class that's the result of all ran commands.
-class CommandResponse():
-
-    @staticmethod
-    def Success(resultDict:dict = None):
-        if resultDict is None:
-            resultDict = {}
-        return CommandResponse(200, resultDict, None)
-
-
-    @staticmethod
-    def Error(statusCode:int, errorStr_CanBeNull:str):
-        return CommandResponse(statusCode, None, errorStr_CanBeNull)
-
-
-    def __init__(self, statusCode:int, resultDict:dict, errorStr_CanBeNull:str):
-        self.StatusCode = statusCode
-        self.ResultDict = resultDict
-        self.ErrorStr = errorStr_CanBeNull

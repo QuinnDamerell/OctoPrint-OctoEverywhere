@@ -58,4 +58,4 @@ class MoonrakerDatabase:
                     return
                 self.Logger.debug("Database namespace "+n+" : "+json.dumps(result.GetResult(), indent=4, separators=(", ", ": ")))
         except Exception as e:
-            Sentry.Exception("_Debug_EnumerateDataBase exception.", e)
+            Sentry.OnException("_Debug_EnumerateDataBase exception.", e)

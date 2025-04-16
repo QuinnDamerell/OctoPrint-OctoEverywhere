@@ -2,7 +2,7 @@
 #  A class argument that allows requesters to resize down and crop the image if desired.
 class SnapshotResizeParams:
 
-    def __init__(self, size, resizeToHeight = False, resizeToWidth = False, cropSquareCenterNoPadding = False):
+    def __init__(self, size:int, resizeToHeight=False, resizeToWidth=False, cropSquareCenterNoPadding=False):
         # The size that will be used for the resize.
         self.Size = size
         if self.Size < 2:

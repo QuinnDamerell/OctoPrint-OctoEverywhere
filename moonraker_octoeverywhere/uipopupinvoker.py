@@ -54,4 +54,4 @@ class UiPopupInvoker():
                 time.sleep(20)
                 self.ShowUiPopup("🥰 Test Message!", "Message body <strong>with html</strong>. This can also include a lot of things, like <i>italics</i>.", "notice", "And a lot of the time this will have a link!", "https://octoeverywhere.com/supporter?some=arg", 5, False)
             except Exception as e:
-                Sentry.Exception("_NotificationTestWorker error", e)
+                Sentry.OnException("_NotificationTestWorker error", e)

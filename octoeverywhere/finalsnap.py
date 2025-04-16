@@ -2,10 +2,13 @@ import math
 import time
 import logging
 import threading
+from typing import List, Optional
 
 from .sentry import Sentry
 from .repeattimer import RepeatTimer
 from .debugprofiler import DebugProfiler, DebugProfilerFeatures
+from .interfaces import INotificationHandler
+from .buffer import Buffer, BufferOrNone
 
 # A helper class to try to capture a better "print completed" image by taking images before the complete notification
 # so we have images from shortly before the notification fires. This is needed because most printers will move the
@@ -30,13 +33,13 @@ class FinalSnap:
 
 
     # Creates the object and starts the timer.
-    def __init__(self, logger:logging.Logger, notificationHandler) -> None:
+    def __init__(self, logger:logging.Logger, notificationHandler:INotificationHandler) -> None:
         self.Logger = logger
         self.LastExtrudeCommandSent:float = 0.0
         self.NotificationHandler = notificationHandler
         self.SnapLock = threading.Lock()
-        self.SnapHistory = []
-        self.Profiler = None
+        self.SnapHistory:List[Buffer] = []
+        self.Profiler:Optional[DebugProfiler] = None
         self.Timer = RepeatTimer(self.Logger, "FinalSnap", FinalSnap.c_defaultSnapIntervalSec, self._snapCallback)
         self.Timer.start()
         self.Logger.info("Starting FinalSnap")
@@ -46,13 +49,13 @@ class FinalSnap:
     # This allows us to track the last time the printer actually extruded, which might would be a good time
     # to target for a snapshot.
     # Note some prints wont fire this, like if printing from an SD card.
-    def ReportPositiveExtrudeCommandSent(self):
+    def ReportPositiveExtrudeCommandSent(self) -> None:
         self.LastExtrudeCommandSent = time.time()
 
 
     # Gets a final snapshot image is possible and shuts down the class.
     # If no final image exists, this will return null.
-    def GetFinalSnapAndStop(self):
+    def GetFinalSnapAndStop(self) -> BufferOrNone:
         # Stop the timer
         self.Timer.Stop()
 
@@ -141,4 +144,4 @@ class FinalSnap:
             self.Profiler.ReportIfNeeded()
 
         except Exception as e:
-            Sentry.Exception("FinalSnap::_snapCallback failed to get snapshot.", e)
+            Sentry.OnException("FinalSnap::_snapCallback failed to get snapshot.", e)

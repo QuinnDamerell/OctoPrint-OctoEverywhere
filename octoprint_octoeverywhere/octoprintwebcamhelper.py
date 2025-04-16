@@ -133,7 +133,7 @@ class OctoPrintWebcamHelper():
                         self.Logger.debug(f"Webcam settings item validation failed for {webcamName}")
 
         except Exception as e:
-            Sentry.Exception("GetWebcamConfig failed to handle new 1.9.0 logic. Falling back to the old logic.", e)
+            Sentry.OnException("GetWebcamConfig failed to handle new 1.9.0 logic. Falling back to the old logic.", e)
 
         # If we didn't get anything, try a fallback.
         if len(results) == 0:

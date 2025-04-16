@@ -31,7 +31,7 @@ class PrinterStateObject:
                         printTimeLeft = int(float(currentData["progress"]["printTimeLeft"]))
                         return printTimeLeft
         except Exception as e:
-            Sentry.Exception("Failed to find progress object in printer current data.", e)
+            Sentry.OnException("Failed to find progress object in printer current data.", e)
 
         # If that fails, try to use the default OctoPrint estimate.
         try:
@@ -51,7 +51,7 @@ class PrinterStateObject:
                     return 0
                 return printTimeEstSec - currentDurationSec
         except Exception as e:
-            Sentry.Exception("Failed to find time estimate from OctoPrint. ", e)
+            Sentry.OnException("Failed to find time estimate from OctoPrint. ", e)
 
         # We failed.
         return -1
@@ -60,7 +60,7 @@ class PrinterStateObject:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self):
+    def GetCurrentZOffsetMm(self):
         # Try to get the current value from the data.
         try:
             # Don't get the current zoffset until the print is running, since the tool could be at any
@@ -75,7 +75,7 @@ class PrinterStateObject:
                 currentZ = float(currentData["currentZ"])
                 return currentZ
         except Exception as e:
-            Sentry.Exception("Failed to find current z offset.", e)
+            Sentry.OnException("Failed to find current z offset.", e)
 
         # Failed to find it.
         return -1

@@ -114,7 +114,7 @@ class BambuCloud:
             return LoginStatus.Success
 
         except Exception as e:
-            Sentry.Exception("Bambu Cloud login exception", e)
+            Sentry.OnException("Bambu Cloud login exception", e)
         return  LoginStatus.UnknownError
 
 
@@ -148,7 +148,7 @@ class BambuCloud:
             jsonAuthToken = json.loads(base64.b64decode(accountInfoBase64))
             return jsonAuthToken["username"]
         except Exception as e:
-            Sentry.Exception("Bambu Cloud GetUserNameFromAccessToken exception", e)
+            Sentry.OnException("Bambu Cloud GetUserNameFromAccessToken exception", e)
         return None
 
 
@@ -217,7 +217,7 @@ class BambuCloud:
                 self.Logger.info("Bambu Cloud SyncBambuCloudInfo updated the access code.")
             return True
         except Exception as e:
-            Sentry.Exception("SyncBambuCloudInfo exception", e)
+            Sentry.OnException("SyncBambuCloudInfo exception", e)
         return False
 
 
@@ -257,7 +257,7 @@ class BambuCloud:
             self.Config.SetStr(Config.SectionBambu, Config.BambuCloudContext, token)
             return True
         except Exception as e:
-            Sentry.Exception("Bambu Cloud set email exception", e)
+            Sentry.OnException("Bambu Cloud set email exception", e)
         return False
 
 
@@ -285,7 +285,7 @@ class BambuCloud:
                 return (None, None)
             return (e, p)
         except Exception as e:
-            Sentry.Exception("Bambu Cloud login exception", e)
+            Sentry.OnException("Bambu Cloud login exception", e)
         return (None, None)
 
 

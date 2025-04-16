@@ -1,9 +1,10 @@
 import logging
 
-from  octoeverywhere.Webcam.webcamhelper import WebcamHelper
+from octoeverywhere.Webcam.webcamhelper import WebcamHelper
+from octoeverywhere.interfaces import IRelayWebcamStreamDetector
 
 # Detects if an incoming relay request is a webcam stream request and modifies the request if needed.
-class ElegooRelayWebcamUrlDetector:
+class ElegooRelayWebcamUrlDetector(IRelayWebcamStreamDetector):
 
 
     def __init__(self, logger:logging.Logger):

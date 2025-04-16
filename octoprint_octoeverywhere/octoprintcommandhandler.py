@@ -144,7 +144,7 @@ class OctoPrintCommandHandler:
             }
 
         except Exception as e:
-            Sentry.ExceptionNoSend("GetCurrentJobStatus failed to get job status", e)
+            Sentry.OnExceptionNoSend("GetCurrentJobStatus failed to get job status", e)
         return None
 
 
@@ -157,7 +157,7 @@ class OctoPrintCommandHandler:
                 return "Unknown"
             return versionStr
         except Exception as e:
-            Sentry.ExceptionNoSend("GetPlatformVersionStr failed to get OctoPrint version", e)
+            Sentry.OnExceptionNoSend("GetPlatformVersionStr failed to get OctoPrint version", e)
         return "Unknown"
 
 
@@ -185,7 +185,7 @@ class OctoPrintCommandHandler:
                 return CommandResponse.Success(None)
 
             except Exception as e:
-                Sentry.Exception("Pause command failed to execute.", e)
+                Sentry.OnException("Pause command failed to execute.", e)
                 return CommandResponse.Error(500, "Failed to pause")
 
         # Otherwise, do the smart pause.
@@ -193,7 +193,7 @@ class OctoPrintCommandHandler:
             # If this doesn't throw it's successful
             SmartPause.Get().DoSmartPause(disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, suppressNotificationBool)
         except Exception as e:
-            Sentry.Exception("Failed to ExecutePause, SmartPause error.", e)
+            Sentry.OnException("Failed to ExecutePause, SmartPause error.", e)
             return CommandResponse.Error(500, "Failed to pause")
 
         # On success, if we did a smart pause, send a notification to tell the user.

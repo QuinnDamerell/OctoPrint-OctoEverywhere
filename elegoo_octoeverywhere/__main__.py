@@ -36,8 +36,8 @@ if __name__ == '__main__':
     # Run!
     try:
         # Create and run the main host!
-        host = ElegooHost(ConfigFolder, LogFolder, devConfig_CanBeNone)
-        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, devConfig_CanBeNone)
+        host = ElegooHost(ConfigFolder, LogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main elegoo host class. Error:{str(e)}")
 

@@ -1,16 +1,31 @@
+from typing import Optional, Tuple
 import octoflatbuffers
 
+from .buffer import Buffer
 from .Proto import MessageContext
 from .Proto import HandshakeSyn
 from .Proto import OctoStreamMessage
-from .Proto import OsType
-from .Proto.DataCompression import DataCompression
 
 # A helper class that builds our OctoStream messages as flatbuffers.
 class OctoStreamMsgBuilder:
 
     @staticmethod
-    def BuildHandshakeSyn(printerId, privateKey, isPrimarySession, pluginVersion, localHttpProxyPort, localIp, rsaChallenge, rasKeyVersionInt, summonMethod, serverHostType, isCompanion, osType:OsType.OsType, receiveCompressionType:DataCompression, deviceId:str):
+    def BuildHandshakeSyn(
+                            printerId:str,
+                            privateKey:str,
+                            isPrimarySession:bool,
+                            pluginVersion:str,
+                            localHttpProxyPort:int,
+                            localIp:str,
+                            rsaChallenge:bytes,
+                            rasKeyVersionInt:int,
+                            summonMethod:int,
+                            serverHostType:int,
+                            isCompanion:bool,
+                            osType:int,
+                            receiveCompressionType:int,
+                            deviceId:Optional[str]
+                        ) -> Tuple[Buffer, int, int]:
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
@@ -48,14 +63,17 @@ class OctoStreamMsgBuilder:
             HandshakeSyn.AddDeviceId(builder, deviceIdOffset)
         synOffset = HandshakeSyn.End(builder)
 
+        # Create and return.
         return OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.HandshakeSyn, synOffset)
+
 
     @staticmethod
     def CreateBuffer(size) -> octoflatbuffers.Builder:
         return octoflatbuffers.Builder(size)
 
+
     @staticmethod
-    def CreateOctoStreamMsgAndFinalize(builder, contextType, contextOffset):
+    def CreateOctoStreamMsgAndFinalize(builder:octoflatbuffers.Builder, contextType:int, contextOffset:int) -> Tuple[Buffer, int, int]:
         # Create the message
         OctoStreamMessage.Start(builder)
         OctoStreamMessage.AddContextType(builder, contextType)
@@ -69,13 +87,13 @@ class OctoStreamMsgBuilder:
         # with the header offset set and size. Flatbuffers are built backwards, so there's usually space in the front were we can add data
         # without creating a new buffer!
         # Note that the buffer is a bytearray
-        buffer = builder.Bytes
+        buffer = Buffer(builder.Bytes)
         msgStartOffsetBytes = builder.Head()
         return (buffer, msgStartOffsetBytes, len(buffer) - msgStartOffsetBytes)
-        #return builder.Output()
+
 
     @staticmethod
-    def BytesToString(buf) -> str:
+    def BytesToString(buf) -> Optional[str]:
         # The default value for optional strings is None
         # So, we handle it.
         if buf is None:

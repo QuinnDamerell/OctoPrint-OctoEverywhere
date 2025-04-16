@@ -36,7 +36,7 @@ class DnsTest:
             self.Logger.error(f"RunTestSync test failed. {e}")
 
 
-    def _TestUrl(self, url: str, recordType:str = "A") -> None:
+    def _TestUrl(self, url:str, recordType:str="A") -> None:
         try:
             self.Logger.debug(f"Starting DNS resolve test for {url} with record type {recordType}")
             startSec = time.time()

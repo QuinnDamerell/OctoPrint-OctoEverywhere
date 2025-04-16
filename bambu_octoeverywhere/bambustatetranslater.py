@@ -175,7 +175,7 @@ class BambuStateTranslator:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this or GetCurrentLayerInfo!
     # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self):
+    def GetCurrentZOffsetMm(self):
         # This is only used for the first layer logic, but only if GetCurrentLayerInfo fails.
         # Since our GetCurrentLayerInfo shouldn't always work, this shouldn't really matter.
         # We can't get this value, but since it doesn't really matter, we can estimate it.

@@ -176,7 +176,7 @@ class BambuClient:
                     self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
-                    Sentry.Exception(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
+                    Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
@@ -211,7 +211,7 @@ class BambuClient:
                     raise Exception("Failed to publish full sync")
             except Exception as e:
                 # Report and disconnect since we are in an unknown state.
-                Sentry.Exception("BambuClient _ForceStateSyncAsync exception.", e)
+                Sentry.OnException("BambuClient _ForceStateSyncAsync exception.", e)
                 self.Client.disconnect()
         t = threading.Thread(target=_FullSyncWorker)
         t.start()
@@ -269,7 +269,7 @@ class BambuClient:
             # If the string is something like "Caught exception in on_connect: ..."
             # It's a leaked exception from us.
             if "exception" in msg:
-                Sentry.Exception("MQTT leaked exception.", Exception(msg))
+                Sentry.OnException("MQTT leaked exception.", Exception(msg))
             else:
                 self.Logger.error(f"MQTT log error: {msg}")
         elif level == mqtt.MQTT_LOG_WARNING:
@@ -325,7 +325,7 @@ class BambuClient:
                     else:
                         self.State.OnUpdate(printMsg)
                 except Exception as e:
-                    Sentry.Exception("Exception calling BambuState.OnUpdate", e)
+                    Sentry.OnException("Exception calling BambuState.OnUpdate", e)
 
                 # Try to detect if this is the response to the first full sync request.
                 if self.HasDoneFirstFullStateSync is False:
@@ -350,7 +350,7 @@ class BambuClient:
                     else:
                         self.Version.OnUpdate(msg["info"])
                 except Exception as e:
-                    Sentry.Exception("Exception calling BambuVersion.OnUpdate", e)
+                    Sentry.OnException("Exception calling BambuVersion.OnUpdate", e)
 
             # Send all messages to the state translator
             # This must happen AFTER we update the State object, so it's current.
@@ -359,10 +359,10 @@ class BambuClient:
                 if self.State is not None:
                     self.StateTranslator.OnMqttMessage(msg, self.State, isFirstFullSyncResponse)
             except Exception as e:
-                Sentry.Exception("Exception calling StateTranslator.OnMqttMessage", e)
+                Sentry.OnException("Exception calling StateTranslator.OnMqttMessage", e)
 
         except Exception as e:
-            Sentry.Exception(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
+            Sentry.OnException(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
 
 
     # Publishes a message and blocks until it knows if the message send was successful or not.
@@ -387,7 +387,7 @@ class BambuClient:
             state.wait_for_publish(20)
             return True
         except Exception as e:
-            Sentry.Exception("Failed to publish message to bambu printer.", e)
+            Sentry.OnException("Failed to publish message to bambu printer.", e)
         return False
 
 

@@ -380,7 +380,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Use LocalAuth to handle the request.
             return LocalAuth.Get().ValidateApiKey(api_key)
         except Exception as e:
-            Sentry.Exception("key_validator failed", e)
+            Sentry.OnException("key_validator failed", e)
         return None
 
 
@@ -589,7 +589,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                 # Ignore this temp issue.
                 pass
             else:
-                Sentry.Exception("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
+                Sentry.OnException("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
 
 
     # Ensures we have generated a printer id and returns it.
@@ -752,7 +752,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self._logger, self, self, self._plugin_version, ServerHost.OctoPrint, False)
             oe.RunBlocking()
         except Exception as e:
-            Sentry.Exception("Exception thrown out of main runner.", e)
+            Sentry.OnException("Exception thrown out of main runner.", e)
 
     # For logging and debugging purposes, print the IPs the hostname is resolving to.
     def TryToPrintHostNameIps(self):

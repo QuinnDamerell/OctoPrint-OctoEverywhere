@@ -11,6 +11,7 @@ from typing import List, Optional
 
 import paho.mqtt.client as mqtt
 
+from octoeverywhere.buffer import Buffer
 from octoeverywhere.websocketimpl import Client
 
 # A helper class that's the result of a network search.
@@ -281,7 +282,7 @@ class NetworkSearch:
                 result["WsConnected"] = True
                 # We want the Attributes message which will contain the main board id.
                 # We need to send any command to get that message back, so we just send this.
-                ws.Send(json.dumps(
+                ws.Send(Buffer(json.dumps(
                 {
                     "Id": "",
                     "Data": {
@@ -292,12 +293,12 @@ class NetworkSearch:
                         "TimeStamp": int(time.time() / 1000), # Current time in seconds.
                         "From": 1
                     }
-                }).encode("utf-8"))
+                }).encode("utf-8")))
 
-            def onWsMessage(ws:Client, message:bytearray):
+            def onWsMessage(ws:Client, message:Buffer):
                 # We got a message back! We expect this to be the response to what we asked for.
                 try:
-                    msgStr = message.decode("utf-8")
+                    msgStr = message.GetBytesLike().decode("utf-8")
                     logger.debug(f"Elegoo {ipOrHostname} ws msg: %s", msgStr)
                     msg = json.loads(msgStr)
 

@@ -246,9 +246,9 @@ class MoonrakerClient:
             if "Source contains parsing errors" in str(e):
                 self.Logger.error("Failed to parse moonraker config file. "+str(e))
             else:
-                Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
+                Sentry.OnException("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
         except Exception as e:
-            Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
+            Sentry.OnException("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
         return (currentHostStr, currentPortInt)
 
 
@@ -322,7 +322,7 @@ class MoonrakerClient:
             return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object")
 
         except Exception as e:
-            Sentry.Exception("Moonraker client json rpc request failed to send.", e)
+            Sentry.OnException("Moonraker client json rpc request failed to send.", e)
             return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_EXCEPTION, str(e))
 
         finally:
@@ -356,7 +356,7 @@ class MoonrakerClient:
                 # without adding the extra space for the header. We can add the header here or in the WS lib, it's the same amount of work.
                 localWs.Send(jsonStr.encode("utf-8"), isData=False)
             except Exception as e:
-                Sentry.Exception("Moonraker client exception in websocket send.", e)
+                Sentry.OnException("Moonraker client exception in websocket send.", e)
                 return False
         return True
 
@@ -534,7 +534,7 @@ class MoonrakerClient:
                     self.WebSocket.RunUntilClosed()
 
             except Exception as e:
-                Sentry.Exception("Moonraker client exception in main WS loop.", e)
+                Sentry.OnException("Moonraker client exception in main WS loop.", e)
 
             # Inform that we lost the connection.
             self.Logger.info("Moonraker client websocket connection lost. We will try to restart it soon.")
@@ -648,7 +648,7 @@ class MoonrakerClient:
                 raise Exception(f"Unknown klippy waiting state. {state}")
 
         except Exception as e:
-            Sentry.Exception("Moonraker client exception in klippy waiting logic.", e)
+            Sentry.OnException("Moonraker client exception in klippy waiting logic.", e)
             # Shut down the websocket so we do the reconnect logic.
             self._RestartWebsocket()
 
@@ -753,7 +753,7 @@ class MoonrakerClient:
             self.NonResponseMsgQueue.put_nowait(msgObj)
 
         except Exception as e:
-            Sentry.Exception("Exception while handing moonraker client websocket message.", e)
+            Sentry.OnException("Exception while handing moonraker client websocket message.", e)
             # Raise again which will cause the websocket to close and reset.
             raise e
 
@@ -772,7 +772,7 @@ class MoonrakerClient:
                     # Let the profiler report if needed
                     profiler.ReportIfNeeded()
         except Exception as e:
-            Sentry.Exception("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
+            Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
         self._RestartWebsocket()
 
 
@@ -790,7 +790,7 @@ class MoonrakerClient:
             # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
             self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
         else:
-            Sentry.Exception("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
+            Sentry.OnException("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
 
 
 # A helper class used for waiting rpc requests
@@ -1032,7 +1032,7 @@ class MoonrakerCompat:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self):
+    def GetCurrentZOffsetMm(self):
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
             "objects": {
@@ -1041,7 +1041,7 @@ class MoonrakerCompat:
             }
         })
         if result.HasError():
-            self.Logger.error("GetCurrentZOffset failed to query toolhead objects: "+result.GetLoggingErrorStr())
+            self.Logger.error("GetCurrentZOffsetMm failed to query toolhead objects: "+result.GetLoggingErrorStr())
             return False
 
         # If we are warming up, don't return a value, since the z-axis could be at any level before the print starts.
@@ -1054,7 +1054,7 @@ class MoonrakerCompat:
             zAxisPositionFloat = res["toolhead"]["position"][2]
             return zAxisPositionFloat
         except Exception as e:
-            Sentry.Exception("GetCurrentZOffset exception. ", e)
+            Sentry.OnException("GetCurrentZOffsetMm exception. ", e)
         return -1
 
 
@@ -1139,7 +1139,7 @@ class MoonrakerCompat:
 
             return (currentLayer, totalLayers)
         except Exception as e:
-            Sentry.Exception("GetCurrentLayerInfo exception. ", e)
+            Sentry.OnException("GetCurrentLayerInfo exception. ", e)
         return (0,0)
 
 
@@ -1283,7 +1283,7 @@ class MoonrakerCompat:
                 return True
             return False
         except Exception as e:
-            Sentry.Exception("IsPrintWarmingUp exception. ", e)
+            Sentry.OnException("IsPrintWarmingUp exception. ", e)
         return False
 
 
@@ -1357,5 +1357,5 @@ class MoonrakerCompat:
             return int(basicEtaFloatSec * inverseSpeedFactorFloat)
 
         except Exception as e:
-            Sentry.Exception("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
+            Sentry.OnException("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
         return -1

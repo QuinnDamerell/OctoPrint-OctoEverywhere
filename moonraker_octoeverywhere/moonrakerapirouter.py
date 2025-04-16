@@ -61,5 +61,5 @@ class MoonrakerApiRouter:
             if relativeUrlLower.startswith("/websocket") or relativeUrlLower.startswith("/printer/") or relativeUrlLower.startswith("/api/") or relativeUrlLower.startswith("/access/") or relativeUrlLower.startswith("/machine/") or relativeUrlLower.startswith("/server/") or relativeUrlLower.startswith("/debug/"):
                 return protocol + self.MoonrakerHostAndPortStr + relativeUrl
         except Exception as e:
-            Sentry.Exception("MoonrakerApiRouter exception while handling MapRelativePathToAbsolutePathIfNeeded.", e)
+            Sentry.OnException("MoonrakerApiRouter exception while handling MapRelativePathToAbsolutePathIfNeeded.", e)
         return None

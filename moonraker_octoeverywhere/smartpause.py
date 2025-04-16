@@ -25,7 +25,7 @@ class SmartPause:
 
     def __init__(self, logger):
         self.Logger = logger
-        self.LastPauseNotificationSuppressionTimeSec = 0
+        self.LastPauseNotificationSuppressionTimeSec = 0.0
 
 
     # Does the actual smart pause.

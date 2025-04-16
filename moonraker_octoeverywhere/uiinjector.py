@@ -58,7 +58,7 @@ class UiInjector():
                 self.WorkerEvent.wait(UiInjector.c_UpdateCheckIntervalSec)
 
             except Exception as e:
-                Sentry.Exception("UiInjector worker exception.", e)
+                Sentry.OnException("UiInjector worker exception.", e)
 
 
     # Does the work.
@@ -98,7 +98,7 @@ class UiInjector():
                             # If successful, make sure our latest js and css files are also there.
                             self._UpdateStaticFilesIntoRootIfNeeded(htmlStaticRoot)
         except Exception as e:
-            Sentry.Exception("UiInjector _ExecuteInjectAndUpdate.", e)
+            Sentry.OnException("UiInjector _ExecuteInjectAndUpdate.", e)
 
 
     # Ensures we can get paths to the static files in our repo and hashes them.
@@ -230,7 +230,7 @@ class UiInjector():
             if e is UnicodeDecodeError and "invalid continuation byte" in str(e):
                 self.Logger.warn("_InjectIntoHtml failed, the html file has invalid utf-8")
             else:
-                Sentry.Exception("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
+                Sentry.OnException("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
         return False, False
 
 
@@ -282,7 +282,7 @@ class UiInjector():
             if e is UnicodeDecodeError and "invalid continuation byte" in str(e):
                 self.Logger.warn("Failed to inject UI helpers into html, the html file has invalid utf-8")
             else:
-                Sentry.Exception("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
+                Sentry.OnException("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
             return False
 
 
@@ -372,7 +372,7 @@ class UiInjector():
 
             self.Logger.info(f"Sw.js [{swJsFilePath}] updated.")
         except Exception as e:
-            Sentry.Exception("_UpdateSwHash failed for "+staticHtmlRootPath, e)
+            Sentry.OnException("_UpdateSwHash failed for "+staticHtmlRootPath, e)
 
 
     # Copies our static files into the html root, where they are expected to be.
@@ -406,7 +406,7 @@ class UiInjector():
                 if f != jsStaticFileName and f != cssStaticFileName:
                     os.remove(os.path.join(oeStaticFileRoot, f))
         except Exception as e:
-            Sentry.Exception("_UpdateStaticFilesIntoRootIfNeeded failed for "+staticHtmlRootPath, e)
+            Sentry.OnException("_UpdateStaticFilesIntoRootIfNeeded failed for "+staticHtmlRootPath, e)
 
 
     # Returns the parent directory of the passed directory or file path.

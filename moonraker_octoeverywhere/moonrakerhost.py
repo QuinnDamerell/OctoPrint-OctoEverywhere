@@ -132,6 +132,7 @@ class MoonrakerHost:
 
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
+            MDns.Get().Test()
 
             # Init device id
             DeviceId.Init(self.Logger)
@@ -209,7 +210,7 @@ class MoonrakerHost:
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker, isCompanionMode)
             oe.RunBlocking()
         except Exception as e:
-            Sentry.Exception("!! Exception thrown out of main host run function.", e)
+            Sentry.OnException("!! Exception thrown out of main host run function.", e)
 
         # Allow the loggers to flush before we exit
         try:

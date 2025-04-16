@@ -1,17 +1,30 @@
 import queue
 import threading
-from typing import Union
+from typing import Any, List, Self, Callable, Optional
 
 import certifi
 import octowebsocket
-from octowebsocket import WebSocketApp
 
+from octowebsocket import WebSocketApp, WebSocket
+
+from .interfaces import WebSocketOpCode, IWebSocketClient
+from .buffer import Buffer, BufferOrNone
 from .sentry import Sentry
 
 # This class gives a bit of an abstraction over the normal ws
-class Client:
+class Client(IWebSocketClient):
 
-    def __init__(self, url, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers:dict = None, subProtocolList:list = None):
+    def __init__(
+                self,
+                url:str,
+                onWsOpen:Optional[Callable[[Self], None]]=None,
+                onWsMsg:Optional[Callable[[Self, Buffer], None]]=None,
+                onWsData:Optional[Callable[[Self, Buffer, WebSocketOpCode], None]]=None,
+                onWsClose:Optional[Callable[[Self], None]]=None,
+                onWsError:Optional[Callable[[Self, Exception], None]]=None,
+                headers:Optional[dict[str, str]]=None,
+                subProtocolList:Optional[List[str]]=None
+                ) -> None:
 
         # Set the default timeout for the socket. There's no other way to do this than this global var, and it will be shared by all websockets.
         # This is used when the system is writing or receiving, but not when it's waiting to receive, as that's a select()
@@ -31,7 +44,7 @@ class Client:
         # We use a send queue thread because it allows us to process downloads about 2x faster.
         # This is because the downstream work of the WS can be made faster if it's done in parallel
         self.SendQueue = queue.Queue()
-        self.SendThread:threading.Thread = None
+        self.SendThread:threading.Thread = None #pyright: ignore[reportAttributeAccessIssue]
 
         # Used to log more details about what's going on with the websocket.
         # websocket.enableTrace(True)
@@ -45,18 +58,18 @@ class Client:
         self.isClosed = False
         self.isClosedLock = threading.Lock()
 
-        def OnOpen(ws):
+        def OnOpen(ws:WebSocket):
             if onWsOpen:
                 onWsOpen(self)
 
-        def OnMsg(ws, msg):
+        def OnMsg(ws:WebSocket, msg:bytearray):
             if onWsMsg:
-                onWsMsg(self, msg)
+                onWsMsg(self, Buffer(msg))
 
         # Note that the API says this only takes one arg, but after looking into the code
         # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
         # sometimes it tried to send 3 when we only accepted 1.
-        def OnClosed(ws, _, __):
+        def OnClosed(ws:WebSocket, _, __):
             # We need to check this special case.
             # If the error callback is pending, we need to defer the close callback until the error callback is fired.
             # Otherwise, we handle the error, kick off the thread to fire the error callback, and then fire close before the error callback.
@@ -66,11 +79,11 @@ class Client:
                     return
             self._FireCloseCallback()
 
-        def OnData(ws, buffer, msgType, continueFlag):
+        def OnData(ws:WebSocket, buffer:bytearray, msgType:int, continueFlag:bool):
             if onWsData:
-                onWsData(self, buffer, msgType)
+                onWsData(self, Buffer(buffer), WebSocketOpCode.FromWsLibInt(msgType))
 
-        def OnError(ws, exception):
+        def OnError(ws:WebSocket, exception:Exception):
             # For this special case, call our function.
             self.handleWsError(exception)
 
@@ -87,7 +100,7 @@ class Client:
 
 
     # Runs the websocket blocking until it closes.
-    def RunUntilClosed(self, pingIntervalSec:int=None, pingTimeoutSec:int=None):
+    def RunUntilClosed(self, pingIntervalSec:Optional[int]=None, pingTimeoutSec:Optional[int]=None):
         #
         # The client is responsible for sending keep alive pings the server will then pong respond to.
         # If that's not done, the connection will timeout. We will send a ping every 10 minutes.
@@ -170,14 +183,14 @@ class Client:
                 # We don't have a logger, sooooooo
                 print("Websocket closed due to: 'NoneType' object has no attribute 'close'")
             else:
-                Sentry.Exception("Websocket fireWsErrorCallbackThread close exception", e)
+                Sentry.OnException("Websocket fireWsErrorCallbackThread close exception", e)
 
         # Always ensure we close the send queue.
         try:
             # Push an empty buffer to the send queue, which will close it.
             self.SendQueue.put(SendQueueContext(None))
         except Exception as e:
-            Sentry.Exception("Exception while trying to close the send queue.", e)
+            Sentry.OnException("Exception while trying to close the send queue.", e)
 
 
     def _FireCloseCallback(self):
@@ -186,7 +199,7 @@ class Client:
 
 
     # This can be called from our logic internally in this class or from the websocket class itself
-    def handleWsError(self, exception):
+    def handleWsError(self, exception:Exception):
 
         with self.wsErrorCallbackLock:
             # If the client is trying to close this websocket and has made the close call to do so,
@@ -211,13 +224,13 @@ class Client:
         callbackThread.start()
 
 
-    def fireWsErrorCallbackThread(self, exception):
+    def fireWsErrorCallbackThread(self, exception:Exception):
         try:
             # Fire the error callback.
             if self.clientWsErrorCallback:
                 self.clientWsErrorCallback(self, exception)
         except Exception as e :
-            Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
+            Sentry.OnException("Websocket client exception in fireWsErrorCallbackThread", e)
 
         # Once the error callback is fired, we can now fire the close callback if needed.
         try:
@@ -228,23 +241,23 @@ class Client:
                     self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
                     self._FireCloseCallback()
         except Exception as e:
-            Sentry.Exception("Websocket client exception in fireWsErrorCallbackThread", e)
+            Sentry.OnException("Websocket client exception in fireWsErrorCallbackThread", e)
 
         # Be sure we always close the WS
         self._Close()
 
 
-    def Send(self, buffer:Union[bytes, bytearray], msgStartOffsetBytes:int = None, msgSize:int = None, isData:bool = True):
+    def Send(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, isData:bool=True) -> None:
         if isData:
-            self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, octowebsocket.ABNF.OPCODE_BINARY)
+            self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, WebSocketOpCode.BINARY)
         else:
-            self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, octowebsocket.ABNF.OPCODE_TEXT)
+            self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, WebSocketOpCode.TEXT)
 
 
     # Sends a buffer, with an optional message start offset and size.
     # If the message start offset and size are not provided, it's assumed the buffer starts at 0 and the size is the full buffer.
     # Providing a bytearray with room in the front allows the system to avoid copying the buffer.
-    def SendWithOptCode(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, optCode = octowebsocket.ABNF.OPCODE_BINARY):
+    def SendWithOptCode(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, optCode=WebSocketOpCode.BINARY) -> None:
         try:
             # Make sure we have a buffer, this is invalid and it will also shutdown our send thread.
             if buffer is None:
@@ -260,7 +273,7 @@ class Client:
         try:
             while self.isClosed is False:
                 # Wait on something to send.
-                context = self.SendQueue.get()
+                context:SendQueueContext = self.SendQueue.get()
                 # If it's None, that means we are shutting down.
                 if context is None or context.Buffer is None:
                     return
@@ -268,7 +281,8 @@ class Client:
                 # Important! We don't want to use the frame mask because it adds about 30% CPU usage on low end devices.
                 # The frame masking was only need back when websockets were used over the internet without SSL.
                 # Our server, OctoPrint, and Moonraker all accept unmasked frames, so its safe to do this for all WS.
-                self.Ws.send(context.Buffer, context.OptCode, False, context.MsgStartOffsetBytes, context.MsgSize)
+                dataToSend:Any = context.Buffer.Get()
+                self.Ws.send(dataToSend, context.OptCode.ToWsLibInt(), False, context.MsgStartOffsetBytes, context.MsgSize)
         except Exception as e:
             # If any exception happens during sending, we want to report the error
             # and shutdown the entire websocket.
@@ -335,7 +349,7 @@ class Client:
 
 
 class SendQueueContext():
-    def __init__(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, optCode = octowebsocket.ABNF.OPCODE_BINARY) -> None:
+    def __init__(self, buffer:BufferOrNone, msgStartOffsetBytes:Optional[int] = None, msgSize:Optional[int] = None, optCode=WebSocketOpCode.BINARY) -> None:
         self.Buffer = buffer
         self.MsgStartOffsetBytes = msgStartOffsetBytes
         self.MsgSize = msgSize
