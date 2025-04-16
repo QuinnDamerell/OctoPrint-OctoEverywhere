@@ -89,7 +89,7 @@ class Slipstream(ISlipstreamHandler):
 
         self.Lock = threading.Lock()
         self.IsRefreshing = False
-        self.Cache:dict[str, HttpResult] = {}
+        self.Cache:Dict[str, HttpResult] = {}
 
         # Kick off a thread to grab the initial index, no delay we build the cache ASAP.
         # Note on server boot this index cache call can take a long time (25-30s)

@@ -1,7 +1,7 @@
 import logging
 import os
 import json
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import httpcore
 
@@ -83,22 +83,22 @@ class WebcamHelper:
 
 
     # Given a set of request headers, this determine if this is a special Oracle call indicating it's a snapshot or webcam stream.
-    def IsSnapshotOrWebcamStreamOracleRequest(self, requestHeadersDict:dict[str, str]) -> bool:
+    def IsSnapshotOrWebcamStreamOracleRequest(self, requestHeadersDict:Dict[str, str]) -> bool:
         return self.IsSnapshotOracleRequest(requestHeadersDict) or self.IsWebcamStreamOracleRequest(requestHeadersDict)
 
 
     # Check if the special header is set, indicating this is a snapshot request.
-    def IsSnapshotOracleRequest(self, requestHeadersDict:dict[str, str]) -> bool:
+    def IsSnapshotOracleRequest(self, requestHeadersDict:Dict[str, str]) -> bool:
         return WebcamHelper.c_OracleSnapshotHeaderKey in requestHeadersDict
 
 
     # Check if the special header is set, indicating this is a webcam stream request.
-    def IsWebcamStreamOracleRequest(self, requestHeadersDict:dict[str, str]) -> bool:
+    def IsWebcamStreamOracleRequest(self, requestHeadersDict:Dict[str, str]) -> bool:
         return WebcamHelper.c_OracleStreamHeaderKey in requestHeadersDict
 
 
     # If the header is set to specify a camera name, this returns it. Otherwise None
-    def GetOracleRequestCameraIndex(self, requestHeadersDict:dict[str, str]) -> Optional[int]:
+    def GetOracleRequestCameraIndex(self, requestHeadersDict:Dict[str, str]) -> Optional[int]:
         if WebcamHelper.c_OracleWebcamIndexHeaderKey in requestHeadersDict:
             return int(requestHeadersDict[WebcamHelper.c_OracleWebcamIndexHeaderKey])
         return None
@@ -107,7 +107,7 @@ class WebcamHelper:
     # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
     # It's important that this function returns a OctoHttpRequest that's very similar to what the default MakeHttpCall function
     # returns, to ensure the rest of the octostream http logic can handle the response.
-    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders:dict[str, str], uploadBuffer) -> HttpResultOrNone:
+    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders:Dict[str, str], uploadBuffer) -> HttpResultOrNone:
         cameraIndexOpt = self.GetOracleRequestCameraIndex(sendHeaders)
         if self.IsSnapshotOracleRequest(sendHeaders):
             return self.GetSnapshot(cameraIndexOpt)

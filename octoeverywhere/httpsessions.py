@@ -1,5 +1,7 @@
 import logging
 import threading
+from typing import Dict
+
 import requests
 from requests import Session
 
@@ -21,7 +23,7 @@ class HttpSessions:
 
     def __init__(self, logger:logging.Logger):
         self.Logger = logger
-        self.Sessions:dict[str, Session] = {}
+        self.Sessions:Dict[str, Session] = {}
         self.SessionsLock = threading.Lock()
 
 

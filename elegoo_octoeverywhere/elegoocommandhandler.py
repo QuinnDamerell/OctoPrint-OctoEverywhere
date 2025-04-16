@@ -1,4 +1,4 @@
-from typing import Any, Union
+from typing import Any, Dict, Union
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 from octoeverywhere.interfaces import IPlatformCommandHandler
 
@@ -25,7 +25,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
-    def GetCurrentJobStatus(self) -> Union[int, None, dict[str, Any]]:
+    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         # Try to get the current state.
         printerState = ElegooClient.Get().GetState()
 

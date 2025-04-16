@@ -3,7 +3,7 @@ import time
 import json
 import logging
 import threading
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import dns.resolver
 
@@ -46,7 +46,7 @@ class MDns:
         self.CacheFilePath = os.path.join(pluginDataFolderPath, "mDnsCache.json")
 
         # Try to load past stats from the file. If we fail, just restart.
-        self.Cache:dict[str,dict[str,str]] = None #pyright: ignore[reportAttributeAccessIssue]
+        self.Cache:Dict[str,Dict[str,str]] = None #pyright: ignore[reportAttributeAccessIssue]
         self._LoadCacheFile()
         if self.Cache is None:
             self._ResetCacheFile()
@@ -329,7 +329,7 @@ class MDns:
 
     # Note, we have to use a dict instead of a class here so that it serializes correctly with
     # the normal json serializer.
-    def CreateCacheEntryDict(self, address:str) -> dict[str, str]:
+    def CreateCacheEntryDict(self, address:str) -> Dict[str, str]:
         d = {}
         d["UpdateTimeSec"] = time.time()
         d["IpAddress"] = address

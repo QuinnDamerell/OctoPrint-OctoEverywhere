@@ -53,7 +53,7 @@ class LocalAuth:
 
 
     # Adds the auth header with the auth key.
-    def AddAuthHeader(self, headers:dict[str,str]) -> None:
+    def AddAuthHeader(self, headers:Dict[str,str]) -> None:
         # This will overwrite any existing keys.
         headers["X-Api-Key"] = self.ApiKey
 

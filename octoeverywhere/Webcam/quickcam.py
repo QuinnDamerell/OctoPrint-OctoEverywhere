@@ -10,7 +10,7 @@ import os
 import signal
 
 from enum import Enum
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.interfaces import IQuickCam
@@ -56,7 +56,7 @@ class QuickCamManager:
     def __init__(self, logger:logging.Logger, webcamPlatformHelperInterface:IWebcamPlatformHelper) -> None:
         self.Logger = logger
         self.WebcamPlatformHelperInterface = webcamPlatformHelperInterface
-        self.QuickCamMap:dict[str, QuickCam] = {}
+        self.QuickCamMap:Dict[str, QuickCam] = {}
         self.QuickCamMapLock = threading.Lock()
 
 

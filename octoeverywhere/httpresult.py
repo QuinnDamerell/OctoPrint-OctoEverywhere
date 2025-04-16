@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Optional, Union
+from typing import Callable, Dict, Optional, Union
 
 import requests
 from requests.structures import CaseInsensitiveDict
@@ -27,7 +27,7 @@ HttpResultOrNone = Union["HttpResult", None]
 class HttpResult():
     def __init__(self,
                     statusCode:int,
-                    headers:Union[CaseInsensitiveDict[str], dict[str, str]],
+                    headers:Union[CaseInsensitiveDict[str], Dict[str, str]],
                     url:str,
                     didFallback:bool,
                     fullBodyBuffer:Optional[Buffer]=None,

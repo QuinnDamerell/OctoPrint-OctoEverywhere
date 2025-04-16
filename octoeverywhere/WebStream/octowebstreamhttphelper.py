@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import requests
 import urllib3
@@ -667,7 +667,7 @@ class OctoWebStreamHttpHelper:
         return Compression.Get().Decompress(self.CompressionContext, dataBuffer, webStreamMsg.OriginalDataSize(), webStreamMsg.IsDataTransmissionDone(), compressionType)
 
 
-    def checkForNotModifiedCacheAndUpdateResponseIfSo(self, sentHeaders:dict[str, str], octoHttpResult:HttpResult) -> None:
+    def checkForNotModifiedCacheAndUpdateResponseIfSo(self, sentHeaders:Dict[str, str], octoHttpResult:HttpResult) -> None:
         # Check if the sent headers have any conditional http headers.
         requestEtag = None
         requestModifiedDate = None

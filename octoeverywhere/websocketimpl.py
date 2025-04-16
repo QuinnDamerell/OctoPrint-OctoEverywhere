@@ -1,6 +1,6 @@
 import queue
 import threading
-from typing import Any, List, Self, Callable, Optional
+from typing import Any, Dict, List, Self, Callable, Optional
 
 import certifi
 import octowebsocket
@@ -22,7 +22,7 @@ class Client(IWebSocketClient):
                 onWsData:Optional[Callable[[Self, Buffer, WebSocketOpCode], None]]=None,
                 onWsClose:Optional[Callable[[Self], None]]=None,
                 onWsError:Optional[Callable[[Self, Exception], None]]=None,
-                headers:Optional[dict[str, str]]=None,
+                headers:Optional[Dict[str, str]]=None,
                 subProtocolList:Optional[List[str]]=None
                 ) -> None:
 

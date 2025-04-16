@@ -3,7 +3,7 @@ import json
 import time
 import threading
 import logging
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
@@ -50,7 +50,7 @@ class OctoPingPong:
         self.IsDisablePrimaryOverride = False
 
         # Try to load past stats from the file.
-        self.Stats:dict[str, Any] = None #pyright: ignore[reportAttributeAccessIssue]
+        self.Stats:Dict[str, Any] = None #pyright: ignore[reportAttributeAccessIssue]
         self._LoadStatsFromFile()
 
         # If failed, just make a new stats obj.
@@ -159,7 +159,7 @@ class OctoPingPong:
             return
 
         # Now ping each server we got back
-        serverResults:dict[str, Optional[PingResult]] = {}
+        serverResults:Dict[str, Optional[PingResult]] = {}
         for sub in defaultServerResult.ServersSubdomains:
             # Note this will be None if it failed.
             result = self._DoPing(sub)

@@ -1,7 +1,7 @@
 import sys
 import threading
 import logging
-from typing import List
+from typing import Dict, List
 
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
@@ -43,7 +43,7 @@ class OctoSession(IOctoSession):
                     serverHostType:int,
                     isCompanion:bool
                 ):
-        self.ActiveWebStreams:dict[int,OctoWebStream] = {}
+        self.ActiveWebStreams:Dict[int,OctoWebStream] = {}
         self.ActiveWebStreamsLock = threading.Lock()
         self.IsAcceptingStreams = True
 

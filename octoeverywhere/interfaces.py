@@ -1,6 +1,6 @@
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, Optional, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
 from .buffer import Buffer, BufferOrNone
 from .httpresult import HttpResult, HttpResultOrNone
@@ -192,7 +192,7 @@ class IPlatformCommandHandler(ABC):
     # On error, this should return None and then we send back the CommandHandler.c_CommandError_HostNotConnected error
     # OR it will return an int, which must be a CommandHandler.c_CommandError_... error, and we will send that back.
     @abstractmethod
-    def GetCurrentJobStatus(self) -> Union[int, None, dict[str, Any]]:
+    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         pass
 
     # This must return the platform version as a string.
@@ -222,7 +222,7 @@ class IPlatformCommandHandler(ABC):
 class ILocalAuth(ABC):
 
     # Adds the auth header with the auth key.
-    def AddAuthHeader(self, headers:dict[str,str]) -> None:
+    def AddAuthHeader(self, headers:Dict[str,str]) -> None:
         pass
 
 
@@ -230,7 +230,7 @@ class IRelayWebcamStreamDetector(ABC):
 
     # This function takes in the incoming relay http request and rewrites the URL or adds to the request if needed.
     @abstractmethod
-    def OnIncomingRelayRequest(self, relativeOrAbsolutePath:str, headers:dict[str,str]) -> None:
+    def OnIncomingRelayRequest(self, relativeOrAbsolutePath:str, headers:Dict[str,str]) -> None:
         pass
 
 
@@ -298,7 +298,7 @@ class IRelayWebSocketProvider(ABC):
                            onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                            onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                            onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
-                           headers:Optional[dict[str, str]]=None,
+                           headers:Optional[Dict[str, str]]=None,
                            subProtocolList:Optional[List[str]]=None) -> Optional[IWebSocketClient]:
         pass
 
@@ -380,7 +380,7 @@ class INotificationHandler(ABC):
     # Note that the args must be a string, string dict, because the HTTP post form requires string values.
     # We also use any for the file type because otherwise the type is too complex.
     @abstractmethod
-    def BuildCommonEventArgs(self, event:str, args:Optional[dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[dict[str,str]], Optional[dict[str,Any]]]:
+    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str,Any]]]:
         pass
 
     @abstractmethod

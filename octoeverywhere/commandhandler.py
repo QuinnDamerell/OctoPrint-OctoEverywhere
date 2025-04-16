@@ -1,5 +1,5 @@
 import json
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from .buffer import Buffer
 from .gadget import Gadget
@@ -205,7 +205,7 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def SetDefaultCameraName(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
+    def SetDefaultCameraName(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
         name:Optional[str] = None
         if jsonObjData is not None:
             try:
@@ -222,7 +222,7 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def GetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
+    def GetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
         # Get the list, make sure we also include any disabled items
         localWebcams = WebcamHelper.Get().GetPluginLocalWebcamList(returnDisabledItems=True)
 
@@ -239,7 +239,7 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def SetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
+    def SetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
         localWebcamSettingItems = []
         try:
             if jsonObjData is None:
@@ -268,7 +268,7 @@ class CommandHandler:
 
 
     # Must return a CommandResponse
-    def Pause(self, jsonObjData:Optional[dict[str,Any]]) -> CommandResponse:
+    def Pause(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
 
         # Defaults.
         smartPause = False
@@ -364,7 +364,7 @@ class CommandHandler:
         commandPath = path[len(CommandHandler.c_CommandHandlerPathPrefix):]
 
         # Parse the args. Args are optional, it depends on the command.
-        jsonObj:Optional[dict[str, Any]] = None
+        jsonObj:Optional[Dict[str, Any]] = None
         try:
             if postBody is not None:
                 jsonObj = json.loads(postBody.GetBytesLike())
@@ -384,7 +384,7 @@ class CommandHandler:
         resultBytes = None
         try:
             # Build the common response.
-            jsonResponse:dict[str,Any] = {
+            jsonResponse:Dict[str,Any] = {
                 "Status" : responseObj.StatusCode
             }
             if responseObj.ErrorStr is not None:
@@ -416,7 +416,7 @@ class CommandHandler:
 
 
     # The goal here is to keep as much of the common logic as common as possible.
-    def ProcessCommand(self, commandPath:str, jsonObj_CanBeNone:Optional[dict[str, Any]]) -> CommandResponse:
+    def ProcessCommand(self, commandPath:str, jsonObj_CanBeNone:Optional[Dict[str, Any]]) -> CommandResponse:
         # To lower, to match any case.
         commandPathLower = commandPath.lower()
         if commandPathLower.startswith("ping"):

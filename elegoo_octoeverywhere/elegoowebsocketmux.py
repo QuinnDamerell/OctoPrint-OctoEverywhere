@@ -2,7 +2,7 @@ from enum import Enum
 import queue
 import logging
 import threading
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Dict
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.Proto.PathTypes import PathTypes
@@ -19,7 +19,7 @@ class ElegooWebsocketMux(IRelayWebSocketProvider, IWebsocketMux):
         self.Logger = logger
         self.Lock = threading.Lock()
         self.NextId = 0
-        self.ConnectedWebsockets:dict[int, ElegooWebsocketClientProxy] = {}
+        self.ConnectedWebsockets:Dict[int, ElegooWebsocketClientProxy] = {}
 
 
     # !! Interface Function !!
@@ -32,7 +32,7 @@ class ElegooWebsocketMux(IRelayWebSocketProvider, IWebsocketMux):
                            onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                            onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                            onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
-                           headers:Optional[dict[str, str]]=None,
+                           headers:Optional[Dict[str, str]]=None,
                            subProtocolList:Optional[List[str]]=None) -> Optional[IWebSocketClient]:
         # All of the frontend WS connections are relative, so we only need to handle those.
         if pathType != PathTypes.Relative:
@@ -126,7 +126,7 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
                 onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                 onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                 onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
-                headers:Optional[dict[str, str]]=None,
+                headers:Optional[Dict[str, str]]=None,
                 subProtocolList:Optional[List[str]]=None):
         self.Mux = mux
         self.Id = wsId

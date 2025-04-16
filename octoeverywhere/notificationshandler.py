@@ -5,7 +5,7 @@ import threading
 import secrets
 import string
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .gadget import Gadget
 from .sentry import Sentry
@@ -1058,7 +1058,7 @@ class NotificationsHandler(INotificationHandler):
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEvent(self, event:str, args:Optional[dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
+    def _sendEvent(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
         thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ), name="NotificationsHandler._sendEvent")
         thread.start()
@@ -1067,7 +1067,7 @@ class NotificationsHandler(INotificationHandler):
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEventThreadWorker(self, event:str, args:Optional[dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
+    def _sendEventThreadWorker(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
         # The profiler will do nothing if it's not enabled.
         with DebugProfiler(self.Logger, DebugProfilerFeatures.NotificationHandlerEvent):
             try:
@@ -1135,7 +1135,7 @@ class NotificationsHandler(INotificationHandler):
     # Returns an array of [args, files] which are ready to be used in the request.
     # The args and files will always contain any information that can be gathered at the time of the call.
     # Returns None if we don't have the printer id or octokey yet.
-    def BuildCommonEventArgs(self, event:str, args:Optional[dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[dict[str,str]], Optional[dict[str,Any]]]:
+    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str,Any]]]:
 
         # Ensure we have the required var set already. If not, get out of here.
         if self.PrinterId is None or self.OctoKey is None:

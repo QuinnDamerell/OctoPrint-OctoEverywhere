@@ -1,7 +1,7 @@
 import logging
 import threading
 import time
-from typing import Optional
+from typing import Optional, Dict
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.sentry import Sentry
@@ -67,7 +67,7 @@ class Slipstream(ISlipstreamHandler):
 
         self.Lock = threading.Lock()
         self.IsRefreshing = False
-        self.Cache:dict[str, HttpResult] = {}
+        self.Cache:Dict[str, HttpResult] = {}
 
 
     # If available for the given URL, this will returned the cached and ready to go OctoHttpResult.
