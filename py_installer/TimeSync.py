@@ -12,7 +12,7 @@ from .Context import Context
 class TimeSync:
 
     @staticmethod
-    def EnsureNtpSyncEnabled(context:Context):
+    def EnsureNtpSyncEnabled(context:Context) -> None:
         if context.SkipSudoActions:
             Logger.Warn("Skipping time sync since we are skipping sudo actions.")
             return
@@ -44,7 +44,7 @@ class TimeSync:
 
 
     @staticmethod
-    def _UpdateTimeSyncdConfig():
+    def _UpdateTimeSyncdConfig() -> None:
         targetFilePath = "/etc/systemd/timesyncd.conf"
         try:
             # After writing, read the file and insert any comments we have.
@@ -66,7 +66,7 @@ class TimeSync:
 
 
     @staticmethod
-    def _RunSystemCommand(cmd:str):
+    def _RunSystemCommand(cmd:str) -> None:
         (code, stdOut, errOut) = Util.RunShellCommand(cmd, False)
         if code == 0:
             Logger.Debug(f"TimeSync System Command Success. Cmd: {cmd}")
@@ -75,6 +75,6 @@ class TimeSync:
 
 
     @staticmethod
-    def _PrintTimeSyncDStatus():
+    def _PrintTimeSyncDStatus() -> None:
         (_, stdOut, errOut) = Util.RunShellCommand("sudo timedatectl status", False)
         Logger.Debug(f"TimeSync Status:\r\n{stdOut} {errOut}")

@@ -1,5 +1,6 @@
 import os
 import shutil
+from typing import List
 
 from .Context import Context
 from .Context import OsTypes
@@ -10,10 +11,10 @@ from .Util import Util
 
 class Uninstall:
 
-    def DoUninstall(self, context:Context):
+    def DoUninstall(self, context:Context) -> None:
         # Ensure there's something to remove first.
         # Since all service names must use the same identifier in them, we can find any services using the same search.
-        foundOeServices = []
+        foundOeServices:List[str] = []
         fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f"Searching for OE services to remove, found: {fileOrDirName}")

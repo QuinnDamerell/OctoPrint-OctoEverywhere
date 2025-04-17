@@ -1,4 +1,5 @@
 import os
+from typing import List, Optional
 
 from .Util import Util
 from .Logging import Logger
@@ -8,7 +9,7 @@ from .Paths import Paths
 
 
 class ServiceFileConfigPathPair:
-    def __init__(self, serviceFileName, moonrakerConfigPath) -> None:
+    def __init__(self, serviceFileName:str, moonrakerConfigPath:str) -> None:
         self.ServiceFileName = serviceFileName
         self.MoonrakerConfigFilePath = moonrakerConfigPath
 
@@ -21,7 +22,7 @@ class ServiceFileConfigPathPair:
 # and we should be able to parse out the -d flag for the older klipper_config flags.
 class Discovery:
 
-    def FindTargetMoonrakerFiles(self, context:Context):
+    def FindTargetMoonrakerFiles(self, context:Context) -> None:
         Logger.Debug("Starting discovery.")
 
         # Print all of the file options, so we have them for debugging.
@@ -36,7 +37,7 @@ class Discovery:
                     return
 
         # If we are here, we either have no service file name but a config path, or neither.
-        pairList = []
+        pairList:List[ServiceFileConfigPathPair] = []
         if context.OsType == OsTypes.SonicPad:
             # For the Sonic Pad, we know exactly where the files are, so we don't need to do a lot of searching.
             pairList = self._SonicPadFindAllServiceFilesAndPairings(context)
@@ -115,7 +116,7 @@ class Discovery:
 
 
     # Note this must return the same result list as _CrealityOsFindAllServiceFilesAndPairings
-    def _FindAllServiceFilesAndPairings(self) -> list:
+    def _FindAllServiceFilesAndPairings(self) -> List[ServiceFileConfigPathPair]:
         # Look for any service file that matches moonraker*.service.
         # For simple installs, there will be one file called moonraker.service.
         # For more complex setups, we assume it will use the kiauh naming system, of moonraker-<name or number>.service
@@ -145,7 +146,7 @@ class Discovery:
 
     # A special function for Sonic Pad installs, since the location of the printer data is much more well known.
     # Note this must return the same result list as _FindAllServiceFilesAndPairings
-    def _SonicPadFindAllServiceFilesAndPairings(self, context:Context):
+    def _SonicPadFindAllServiceFilesAndPairings(self, context:Context) -> List[ServiceFileConfigPathPair]:
         # For the Sonic Pad, we know the name of the service files and the path.
         # They will be named moonraker_service and moonraker_service.*
         serviceFiles = self._FindAllFiles(Paths.CrealityOsServiceFilePath, "moonraker_service")
@@ -173,7 +174,7 @@ class Discovery:
 
     # A special function for K1 and K1 max installs.
     # Note this must return the same result list as _FindAllServiceFilesAndPairings
-    def _K1AndK2FindAllServiceFilesAndPairings(self, context:Context):
+    def _K1AndK2FindAllServiceFilesAndPairings(self, context:Context) -> List[ServiceFileConfigPathPair]:
 
         # The K1 doesn't have moonraker by default, but most users use a 3rd party script to install it.
         # For now we will just assume the setup that the script produces.
@@ -226,7 +227,7 @@ class Discovery:
         return [ ServiceFileConfigPathPair(moonrakerServiceFileName, moonrakerConfigFilePath) ]
 
 
-    def _TryToFindMatchingMoonrakerConfig(self, serviceFilePath:str) -> str or None:
+    def _TryToFindMatchingMoonrakerConfig(self, serviceFilePath:str) -> Optional[str]:
         try:
             # Using the service file to try to find the moonraker config that's associated.
             Logger.Debug(f"Searching for moonraker config for {serviceFilePath}")
@@ -335,7 +336,7 @@ class Discovery:
 
 
     # Recursively looks from the root path for the moonraker config file.
-    def _FindMoonrakerConfigFromPath(self, path, depth = 0):
+    def _FindMoonrakerConfigFromPath(self, path:str, depth:int=0) -> Optional[str]:
         if depth > 20:
             return None
 
@@ -384,7 +385,7 @@ class Discovery:
         return None
 
 
-    def _FindAllFiles(self, path:str, prefix:str = None, suffix:str = None, depth:int = 0):
+    def _FindAllFiles(self, path:str, prefix:Optional[str]=None, suffix:Optional[str]=None, depth:int=0) -> List[str]:
         results = []
         if depth > 10:
             return results
@@ -410,7 +411,7 @@ class Discovery:
         return results
 
 
-    def _PrintDebugPaths(self, context:Context):
+    def _PrintDebugPaths(self, context:Context) -> None:
         # Print all service files.
         Logger.Debug("Discovery - Service Files")
         self._PrintAllFilesAndSubFolders(Paths.GetServiceFileFolderPath(context))
@@ -428,7 +429,7 @@ class Discovery:
 
 
 
-    def _PrintAllFilesAndSubFolders(self, path:str, targetSuffix:str = None, depth = 0, depthStr = " "):
+    def _PrintAllFilesAndSubFolders(self, path:str, targetSuffix:Optional[str]=None, depth=0, depthStr=" ") -> None:
         if depth > 5:
             return
         # Use sorted, so the results are in a nice user presentable order.

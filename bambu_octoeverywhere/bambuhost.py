@@ -142,7 +142,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             stateTranslator = BambuStateTranslator(self.Logger)
             self.NotificationHandler = NotificationsHandler(self.Logger, stateTranslator)
             self.NotificationHandler.SetPrinterId(printerId)
-            self.NotificationHandler.SetBedCooldownThresholdTemp(self.Config.GetFloat(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)) #pyright: ignore[reportArgumentType]
+            self.NotificationHandler.SetBedCooldownThresholdTemp(self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault))
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
             # Setup the command handler

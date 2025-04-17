@@ -26,7 +26,7 @@ class SmartPause(ISmartPauseHandler):
         return SmartPause._Instance
 
 
-    def __init__(self, logger: logging.Logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
         self.LastPauseNotificationSuppressionTimeSec = 0.0
 

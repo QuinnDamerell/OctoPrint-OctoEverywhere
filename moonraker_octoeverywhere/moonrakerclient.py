@@ -24,50 +24,13 @@ from linux_host.config import Config
 from .filemetadatacache import FileMetadataCache
 from .moonrakercredentailmanager import MoonrakerCredentialManager
 from .interfaces import IMoonrakerConnectionStatusHandler
-
-# The response object for a json rpc request.
-# Contains information on the state, and if successful, the result.
-class JsonRpcResponse:
-
-    # Our specific errors
-    OE_ERROR_WS_NOT_CONNECTED = 99990001
-    OE_ERROR_TIMEOUT = 99990002
-    OE_ERROR_EXCEPTION = 99990003
-    # Range helpers.
-    OE_ERROR_MIN = OE_ERROR_WS_NOT_CONNECTED
-    OE_ERROR_MAX = OE_ERROR_EXCEPTION
-
-    def __init__(self, resultObj, errorCode=0, errorStr:Optional[str]=None) -> None:
-        self.Result = resultObj
-        self.ErrorCode = errorCode
-        self.ErrorStr = errorStr
-        if self.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
-            self.ErrorStr = "Timeout waiting for RPC response."
-        if self.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
-            self.ErrorStr = "No active websocket connected."
-
-    def HasError(self) -> bool:
-        return self.ErrorCode != 0
-
-    def GetErrorCode(self) -> int:
-        return self.ErrorCode
-
-    def IsErrorCodeOeError(self) -> bool:
-        return self.ErrorCode >= JsonRpcResponse.OE_ERROR_MIN and self.ErrorCode <= JsonRpcResponse.OE_ERROR_MAX
-
-    def GetErrorStr(self) -> Optional[str]:
-        return self.ErrorStr
-
-    def GetLoggingErrorStr(self) -> str:
-        return str(self.ErrorCode) + " - " + str(self.ErrorStr)
-
-    def GetResult(self):
-        return self.Result
+from .jsonrpcresponse import JsonRpcResponse
+from .interfaces import IMoonrakerClient
 
 
 # This class is our main interface to interact with moonraker. This includes the logic to make
 # requests with moonraker and logic to maintain a websocket connection.
-class MoonrakerClient:
+class MoonrakerClient(IMoonrakerClient):
 
     # The max amount of time we will wait for a request before we timeout.
     # For some reason, some calls seem to take a really long time to complete (like database calls), so we make this timeout quite high.
@@ -80,7 +43,7 @@ class MoonrakerClient:
     WebSocketMessageDebugging = False
 
     @staticmethod
-    def Init(logger, config:Config, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
+    def Init(logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
         MoonrakerClient._Instance = MoonrakerClient(logger, config, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr)
 
 
@@ -89,7 +52,7 @@ class MoonrakerClient:
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str) -> None:
         self.Logger = logger
         self.Config = config
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
@@ -104,9 +67,7 @@ class MoonrakerClient:
         self.JsonRpcWaitingContexts:dict[int, JsonRpcWaitingContext] = {}
 
         # Setup the Moonraker compat helper object.
-        cooldownThresholdTempC = self.Config.GetFloat(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
-        if cooldownThresholdTempC is None:
-            cooldownThresholdTempC = Config.GeneralBedCooldownThresholdTempCDefault
+        cooldownThresholdTempC = self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
         self.MoonrakerCompat = MoonrakerCompat(self.Logger, printerId, cooldownThresholdTempC)
 
         # Setup the non response message thread
@@ -166,7 +127,7 @@ class MoonrakerClient:
     # This is so every http call doesn't have to read the file, but as long as the WS is connected, we know the address is correct.
     def _UpdateMoonrakerHostAndPort(self) -> None:
         # If we aren't in companion mode, ensure there's a valid moonraker config file on disk
-        if Compat.IsCompanionMode() is False:
+        if Compat.IsCompanionMode() is False and self.MoonrakerConfigFilePath is not None:
             if os.path.exists(self.MoonrakerConfigFilePath) is False:
                 self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
                 raise NoSentryReportException("No moonraker config file found")
@@ -195,7 +156,7 @@ class MoonrakerClient:
                 return (ip, int(portStr))
 
             # Ensure we have a file.
-            if os.path.exists(self.MoonrakerConfigFilePath) is False:
+            if self.MoonrakerConfigFilePath is None or os.path.exists(self.MoonrakerConfigFilePath) is False:
                 self.Logger.error("GetMoonrakerHostAndPortFromConfig failed to find moonraker config file.")
                 return (currentHostStr, currentPortInt)
 
@@ -297,7 +258,7 @@ class MoonrakerClient:
             jsonStr = json.dumps(obj, default=str)
             if self._WebSocketSend(jsonStr) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
-                return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
+                return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
 
             # Wait for a response
             waitContext.GetEvent().wait(MoonrakerClient.RequestTimeoutSec)
@@ -306,30 +267,28 @@ class MoonrakerClient:
             result = waitContext.GetResult()
             if result is None:
                 self.Logger.info("Moonraker client timeout while waiting for request. "+str(id)+" "+method)
-                return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_TIMEOUT)
+                return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_TIMEOUT)
 
             # Check for an error if found, return the error state.
-            if "error" in result:
+            error = result.get("error", None)
+            if error is not None:
                 # Get the error parts
-                errorCode = JsonRpcResponse.OE_ERROR_EXCEPTION
-                errorStr = "Unknown"
-                if "code" in result["error"]:
-                    errorCode = result["error"]["code"]
-                if "message" in result["error"]:
-                    errorStr = result["error"]["message"]
-                return JsonRpcResponse(None, errorCode, errorStr)
+                errorCode = error.get("code", JsonRpcResponse.OE_ERROR_EXCEPTION)
+                errorStr = error.get("message", "Unknown")
+                return JsonRpcResponse.FromError(errorCode, errorStr)
 
             # If there's a result, return the entire response
-            if "result" in result:
-                return JsonRpcResponse(result["result"])
+            resultObj = result.get("result", None)
+            if resultObj is not None and isinstance(resultObj, dict):
+                return JsonRpcResponse.FromSuccess(resultObj)
 
             # Finally, both are missing?
             self.Logger.error("Moonraker client json rpc got a response that didn't have an error or result object? "+json.dumps(result))
-            return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object")
+            return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object")
 
         except Exception as e:
             Sentry.OnException("Moonraker client json rpc request failed to send.", e)
-            return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_EXCEPTION, str(e))
+            return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_EXCEPTION, str(e))
 
         finally:
             # Before leaving, always clean up any waiting contexts.

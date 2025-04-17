@@ -13,6 +13,7 @@ import paho.mqtt.client as mqtt
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.websocketimpl import Client
+from octoeverywhere.interfaces import IWebSocketClient
 
 # A helper class that's the result of a network search.
 class ElegooNetworkSearchResult:
@@ -276,7 +277,7 @@ class NetworkSearch:
             result = {}
             result["Event"] = threading.Event()
 
-            def onWsOpen(ws:Client):
+            def onWsOpen(ws:IWebSocketClient):
                 # We found an open websocket!
                 logger.debug(f"Elegoo {ipOrHostname} websocket connected.")
                 result["WsConnected"] = True
@@ -295,7 +296,7 @@ class NetworkSearch:
                     }
                 }).encode("utf-8")))
 
-            def onWsMessage(ws:Client, message:Buffer):
+            def onWsMessage(ws:IWebSocketClient, message:Buffer):
                 # We got a message back! We expect this to be the response to what we asked for.
                 try:
                     msgStr = message.GetBytesLike().decode("utf-8")

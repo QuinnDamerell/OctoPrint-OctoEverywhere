@@ -5,9 +5,10 @@ from typing import Any, Dict, List, Optional, Union
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.interfaces import IPlatformCommandHandler
 
-from .moonrakerclient import MoonrakerClient, JsonRpcResponse
+from .moonrakerclient import MoonrakerClient
 from .smartpause import SmartPause
 from .filemetadatacache import FileMetadataCache
+from .jsonrpcresponse import JsonRpcResponse
 
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler(IPlatformCommandHandler):

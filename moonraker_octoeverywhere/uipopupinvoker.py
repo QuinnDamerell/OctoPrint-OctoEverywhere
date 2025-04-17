@@ -1,13 +1,16 @@
 import logging
 import threading
 import time
+from typing import Optional
 
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.interfaces import IPopUpInvoker
 
-from .moonrakerclient import MoonrakerClient, JsonRpcResponse
+from .moonrakerclient import MoonrakerClient
+from .jsonrpcresponse import JsonRpcResponse
 
 # A class to handle the popup notification actions from the service.
-class UiPopupInvoker():
+class UiPopupInvoker(IPopUpInvoker):
 
     def __init__(self, logger:logging.Logger):
         self.Logger = logger
@@ -25,7 +28,7 @@ class UiPopupInvoker():
     # actionText - string, if not None or empty, this is the text to show on the action button or text link.
     # actionLink - string, if not None or empty, this is the URL to show on the action button or text link.
     # onlyShowIfLoadedViaOeBool - bool, if set, the message should only be shown on browsers loading the portal from OE.
-    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool):
+    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
         self.Logger.info("Popup Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; ShowFor:"+str(showForSec)+" OnlyOe: "+str(onlyShowIfLoadedViaOeBool))
 
         # Fire an agent custom event, so if any UI is listening it will hear it.
@@ -48,7 +51,7 @@ class UiPopupInvoker():
 
 
     def _NotificationTestWorker(self):
-        self.Logger.warn("Starting notification test worker!")
+        self.Logger.warning("Starting notification test worker!")
         while True:
             try:
                 time.sleep(20)

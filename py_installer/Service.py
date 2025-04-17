@@ -11,7 +11,7 @@ from .Context import OsTypes
 # Responsible for creating, running, and ensuring the service is installed and running.
 class Service:
 
-    def Install(self, context:Context):
+    def Install(self, context:Context) -> None:
         Logger.Header("Setting Up OctoEverywhere's System Service...")
 
         # We always re-write the service file, to make sure it's current.
@@ -63,7 +63,7 @@ class Service:
 
 
     # Install for debian setups
-    def _InstallDebian(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
+    def _InstallDebian(self, context:Context, argsJsonBase64:str, moduleNameToRun:str) -> None:
         serviceName = "Moonraker"
         optionalAfter = "moonraker.service"
         if context.IsBambuSetup:
@@ -113,7 +113,7 @@ class Service:
 
 
     # Install for sonic pad setups.
-    def _InstallSonicPadAndK2(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
+    def _InstallSonicPadAndK2(self, context:Context, argsJsonBase64:str, moduleNameToRun:str) -> None:
         # First, write the service file
         # Notes:
         #   Set start to be 66, so we start after Moonraker.
@@ -160,7 +160,7 @@ start_service() {{
 
 
     # Install for k1 and k1 max
-    def _InstallK1(self, context:Context, argsJsonBase64:str, moduleNameToRun:str):
+    def _InstallK1(self, context:Context, argsJsonBase64:str, moduleNameToRun:str)  -> None:
         # On the K1 start-stop-daemon is used to run services.
         # But, to launch our service, we have to use the py module run, which requires a environment var to be
         # set for PYTHONPATH. The command can't set the env, so we write this script to our store, where we then run
@@ -249,7 +249,7 @@ exit $?
 
 
     @staticmethod
-    def RestartK1Service(serviceFilePath:str, throwOnBadReturnCode = True):
+    def RestartK1Service(serviceFilePath:str, throwOnBadReturnCode = True)  -> None:
         # These some times fail depending on the state of the service, which is fine.
         Util.RunShellCommand(f"{serviceFilePath} stop", False)
 
@@ -261,7 +261,7 @@ exit $?
 
 
     @staticmethod
-    def RestartSonicPadService(serviceFilePath:str, throwOnBadReturnCode = True):
+    def RestartSonicPadService(serviceFilePath:str, throwOnBadReturnCode = True)  -> None:
         # These some times fail depending on the state of the service, which is fine.
         Util.RunShellCommand(f"{serviceFilePath} stop", False)
         Util.RunShellCommand(f"{serviceFilePath} reload", False)
@@ -270,7 +270,7 @@ exit $?
 
 
     @staticmethod
-    def RestartDebianService(serviceName:str, throwOnBadReturnCode = True):
+    def RestartDebianService(serviceName:str, throwOnBadReturnCode = True)  -> None:
         (returnCode, output, errorOut) = Util.RunShellCommand("systemctl stop "+serviceName, throwOnBadReturnCode)
         if returnCode != 0:
             Logger.Warn(f"Service {serviceName} might have failed to stop. Output: {output} Error: {errorOut}")

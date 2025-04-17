@@ -173,6 +173,14 @@ class Config:
         return defaultValue
 
 
+    # Just like GetStr, but it will always return a string and never none.
+    def GetStrRequired(self, section:str, key:str, defaultValue:str, keepInConfigIfNone=False) -> str:
+        r = self.GetStr(section, key, defaultValue, keepInConfigIfNone)
+        if r is None:
+            return defaultValue
+        return r
+
+
     # Gets a value from the config given the header and key.
     # If the value isn't set, the default value is returned and the default value is saved into the config.
     # If the default value is None, the default will not be written into the config.
@@ -189,13 +197,29 @@ class Config:
             result = self.GetStr(section, key, defaultValueAsStr)
             # If None is returned, don't int it, return None.
             if result is None:
-                return None
+                return defaultValue
             return int(result)
 
         except Exception as e:
             self.Logger.error(f"Config settings error! {key} failed to get as int. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, defaultValueAsStr)
             return defaultValue
+
+
+    # Just like GetInt, but it will always return a int and never none.
+    def GetIntRequired(self, section:str, key:str, defaultValue:int) -> int:
+        r = self.GetInt(section, key, defaultValue)
+        if r is None:
+            return defaultValue
+        return r
+
+
+    def SetInt(self, section:str, key:str, value:Optional[int], keepInConfigIfNone=False) -> None:
+        # Ensure the value is a string, unless it's None.
+        s:Optional[str] = None
+        if value is not None:
+            s = str(value)
+        self.SetStr(section, key, s, keepInConfigIfNone)
 
 
     # Gets a value from the config given the header and key.
@@ -212,15 +236,31 @@ class Config:
 
         try:
             result = self.GetStr(section, key, defaultValueAsStr)
-            # If None is returned, don't int it, return None.
+            # If None is returned, don't int it, return the default value, which might be None.
             if result is None:
-                return None
+                return defaultValue
             return float(result)
 
         except Exception as e:
             self.Logger.error(f"Config settings error! {key} failed to get as float. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, defaultValueAsStr)
             return defaultValue
+
+
+    # Just like GetFloat, but it will always return a float and never none.
+    def GetFloatRequired(self, section:str, key:str, defaultValue:float) -> float:
+        r = self.GetFloat(section, key, defaultValue)
+        if r is None:
+            return defaultValue
+        return r
+
+
+    def SetFloat(self, section:str, key:str, value:Optional[float], keepInConfigIfNone=False) -> None:
+        # Ensure the value is a string, unless it's None.
+        s:Optional[str] = None
+        if value is not None:
+            s = str(value)
+        self.SetStr(section, key, s, keepInConfigIfNone)
 
 
     # Gets a value from the config given the header and key.
@@ -237,9 +277,9 @@ class Config:
 
         try:
             strValue = self.GetStr(section, key, defaultValueAsStr)
-            # If None is returned, don't bool it, return None.
+            # If None is returned, don't bool it, return the default value, which might be None
             if strValue is None:
-                return None
+                return defaultValue
             # Match it to a bool value.
             strValue = strValue.lower()
             if strValue == "false":
@@ -251,6 +291,22 @@ class Config:
             self.Logger.error(f"Config settings error! {key} failed to get as bool. Value was `{result}`. Resetting to default. "+str(e))
             self.SetStr(section, key, defaultValueAsStr)
             return defaultValue
+
+
+    # Just like GetBool, but it will always return a bool and never none.
+    def GetBoolRequired(self, section:str, key:str, defaultValue:bool) -> bool:
+        r = self.GetBool(section, key, defaultValue)
+        if r is None:
+            return defaultValue
+        return r
+
+
+    def SetBool(self, section:str, key:str, value:Optional[bool], keepInConfigIfNone=False) -> None:
+        # Ensure the value is a string, unless it's None.
+        s:Optional[str] = None
+        if value is not None:
+            s = str(value)
+        self.SetStr(section, key, s, keepInConfigIfNone)
 
 
     # The same as Get, but this version ensures that the value matches a case insensitive value in the

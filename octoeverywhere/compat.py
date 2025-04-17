@@ -22,19 +22,19 @@ class Compat:
     def IsCompanionMode() -> bool:
         return Compat._IsCompanionMode
     @staticmethod
-    def SetIsOctoPrint(b):
+    def SetIsOctoPrint(b:bool):
         Compat._IsOctoPrintHost = b
     @staticmethod
-    def SetIsMoonraker(b):
+    def SetIsMoonraker(b:bool):
         Compat._IsMoonrakerHost = b
     @staticmethod
-    def SetIsCompanionMode(b):
+    def SetIsCompanionMode(b:bool):
         Compat._IsCompanionMode = b
     @staticmethod
-    def SetIsBambu(b):
+    def SetIsBambu(b:bool):
         Compat._IsBambu = b
     @staticmethod
-    def SetIsElegooOs(b):
+    def SetIsElegooOs(b:bool):
         Compat._IsElegooOs = b
 
 

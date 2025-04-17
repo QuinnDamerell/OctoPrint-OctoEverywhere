@@ -35,7 +35,7 @@ class MoonrakerCredentialManager:
 
 
     @staticmethod
-    def Init(logger:logging.Logger, moonrakerConfigFilePath:str, isCompanionMode:bool):
+    def Init(logger:logging.Logger, moonrakerConfigFilePath:Optional[str], isCompanionMode:bool):
         MoonrakerCredentialManager._Instance = MoonrakerCredentialManager(logger, moonrakerConfigFilePath, isCompanionMode)
 
 
@@ -44,7 +44,7 @@ class MoonrakerCredentialManager:
         return MoonrakerCredentialManager._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, isCompanionMode:bool) -> None:
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:Optional[str], isCompanionMode:bool) -> None:
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
         self.IsCompanionMode = isCompanionMode
@@ -158,6 +158,11 @@ class MoonrakerCredentialManager:
 
 
     def _TryToFindUnixSocket(self) -> Optional[str]:
+
+        # This is required to find the socket.
+        if self.MoonrakerConfigFilePath is None:
+            self.Logger.error("_TryToFindUnixSocket - No moonraker config file path provided - Is this a companion plugin?")
+            return None
 
         # First, try to parse the moonraker config to find the klipper socket path, since the moonraker socket should be similar.
         try:

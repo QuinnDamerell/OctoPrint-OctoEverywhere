@@ -1,6 +1,7 @@
 import os
 import time
 import configparser
+from typing import Optional
 
 from octoeverywhere.linkhelper import LinkHelper
 
@@ -14,7 +15,7 @@ class Linker:
 
     c_MinPrinterIdLength = 40
 
-    def Run(self, context:Context):
+    def Run(self, context:Context) -> None:
 
         # Get the amount of time we will wait for the plugin to install. For creality devices, give them more time since they are low powered.
         pluginStartWaitTimeBeforeWarningSec = 10.0
@@ -138,7 +139,7 @@ class Linker:
 
 
     # Returns the amount of time the code is valid for.
-    def _PrintShortCodeStyleOrFullUrl(self, printerId) -> int:
+    def _PrintShortCodeStyleOrFullUrl(self, printerId:str) -> Optional[int]:
         # To make the setup easier, we will present the user with a short code if we can get one.
         # If not, fallback to the full URL.
         try:
@@ -159,7 +160,7 @@ class Linker:
 
     # Get's the printer id from the instances secrets config file, if the config exists.
     @staticmethod
-    def GetPrinterIdFromServiceSecretsConfigFile(context:Context) -> str or None:
+    def GetPrinterIdFromServiceSecretsConfigFile(context:Context) -> Optional[str]:
         # This path and name must stay in sync with where the plugin will write the file.
         oeServiceConfigFilePath = os.path.join(context.LocalFileStorageFolder, "octoeverywhere.secrets")
 

@@ -284,6 +284,10 @@ class IWebSocketClient(ABC):
         pass
 
     @abstractmethod
+    def Send(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, isData:bool=True) -> None:
+        pass
+
+    @abstractmethod
     def SendWithOptCode(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, optCode=WebSocketOpCode.BINARY) -> None:
         pass
 

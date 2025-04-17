@@ -23,7 +23,7 @@ class Logger:
     PyLogger = None
 
     @staticmethod
-    def InitFile(userHomePath:str, userName:str):
+    def InitFile(userHomePath:str, userName:str) -> None:
         try:
             Logger.OutputFilePath = os.path.join(userHomePath, "octoeverywhere-installer.log")
 
@@ -41,10 +41,11 @@ class Logger:
 
 
     @staticmethod
-    def Finalize():
+    def Finalize() -> None:
         try:
-            Logger.OutputFile.flush()
-            Logger.OutputFile.close()
+            if Logger.OutputFile is not None:
+                Logger.OutputFile.flush()
+                Logger.OutputFile.close()
         except Exception:
             pass
 
@@ -60,16 +61,17 @@ class Logger:
 
 
     @staticmethod
-    def DeleteLogFile():
+    def DeleteLogFile() -> None:
         try:
             Logger.Finalize()
-            os.remove(Logger.OutputFilePath)
+            if Logger.OutputFilePath is not None:
+                os.remove(Logger.OutputFilePath)
         except Exception:
             pass
 
 
     @staticmethod
-    def EnableDebugLogging():
+    def EnableDebugLogging()  -> None:
         Logger.IsDebugEnabled = True
 
 
@@ -116,8 +118,10 @@ class Logger:
 
 
     @staticmethod
-    def _WriteToFile(level:str, msg:str):
+    def _WriteToFile(level:str, msg:str) -> None:
         try:
+            if Logger.OutputFile is None:
+                return
             Logger.OutputFile.write(str(datetime.now()) + " ["+level+"] - " + msg+"\n")
         except Exception:
             pass

@@ -11,7 +11,7 @@ class SystemConfigManager:
     # This also write a block that's used to allow the announcement system to show updates from our repo.
     # This function ensures they exist and are up to date. If not, they are fixed.
     @staticmethod
-    def EnsureUpdateManagerFilesSetup(logger:logging.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot):
+    def EnsureUpdateManagerFilesSetup(logger:logging.Logger, klipperConfigDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str):
 
         # Special case for K1 and K1 max setups. If the service file name is the special init.d name, we can just use
         # the started "octoeverywhere" and the update manager will find the right service to manage.
@@ -25,7 +25,7 @@ class SystemConfigManager:
         try:
             activateFilePath = os.path.join(pyVirtEnvRoot, "bin", "activate")
             if os.path.exists(activateFilePath) is False:
-                logger.warn("No virtual env active script was found, we are creating a dummy file.")
+                logger.warning("No virtual env active script was found, we are creating a dummy file.")
                 with open(activateFilePath, "w", encoding="utf-8") as file:
                     file.write("echo 'This is a dummy file created by the OctoEverywhere plugin to make Moonraker happy.'")
         except Exception as e:
@@ -91,7 +91,7 @@ subscriptions:
         try:
             SystemConfigManager._RunShellCommand("systemctl restart moonraker")
         except Exception as e:
-            logger.warn("Failed to restart moonraker service. "+str(e))
+            logger.warning("Failed to restart moonraker service. "+str(e))
 
 
     # This doesn't relate to the update manager, but if we put our service name in this file
@@ -99,7 +99,7 @@ subscriptions:
     # Details: https://moonraker.readthedocs.io/en/latest/configuration/#allowed-services
     # TODO - Eventually we will get our PR in that will add this to moonraker's default list.
     @staticmethod
-    def EnsureAllowedServicesFile(logger, klipperConfigDir, serviceName) -> None:
+    def EnsureAllowedServicesFile(logger:logging.Logger, klipperConfigDir:str, serviceName:str) -> None:
         # Make the expected file path, it should be one folder up from the config folder
         dataRootDir = os.path.abspath(os.path.join(klipperConfigDir, os.pardir))
         allowedServiceFile = os.path.join(dataRootDir, "moonraker.asvc")
@@ -132,7 +132,7 @@ subscriptions:
 
 
     @staticmethod
-    def _ensureMoonrakerConfigHasUpdateConfigInclude(klipperConfigDir, logger):
+    def _ensureMoonrakerConfigHasUpdateConfigInclude(klipperConfigDir:str, logger:logging.Logger):
         # Create the path where we should find the file, and make sure it exists. If not throw, so things blow up.
         moonrakerConfigFileName = "moonraker.conf"
         moonrakerConfigFilePath = os.path.join(klipperConfigDir, moonrakerConfigFileName)
@@ -160,7 +160,7 @@ subscriptions:
 
 
     @staticmethod
-    def _RunShellCommand(cmd):
+    def _RunShellCommand(cmd:str) -> None:
         status = subprocess.call(cmd, shell=True)
         if status != 0:
             raise Exception("Command "+cmd+" failed to execute. Code: "+str(status))

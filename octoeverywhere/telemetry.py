@@ -1,6 +1,6 @@
 import logging
 import threading
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from .httpsessions import HttpSessions
 
@@ -26,14 +26,14 @@ class Telemetry:
     #
     # Example: Telemetry.Write("Test", 1, { "FieldKey":"FieldValue", "FieldKey2":1.5 }, { "TagKey":"TagValue" })
     @staticmethod
-    def Write(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,str]]=None, tagsOpt:Optional[Dict[str,str]]=None):
+    def Write(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,Any]]=None, tagsOpt:Optional[Dict[str,str]]=None):
         thread = threading.Thread(target=Telemetry._WriteSync, args=(measureStr, valueInt, fieldsOpt, tagsOpt, ))
         thread.start()
 
 
     # Same as Write(), but it blocks on the request. True is returned on success, otherwise False.
     @staticmethod
-    def _WriteSync(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,str]]=None, tagsOpt:Optional[Dict[str,str]]=None):
+    def _WriteSync(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,Any]]=None, tagsOpt:Optional[Dict[str,str]]=None):
         try:
             # Ensure a value is set and ensure it's an int.
             if valueInt is None:

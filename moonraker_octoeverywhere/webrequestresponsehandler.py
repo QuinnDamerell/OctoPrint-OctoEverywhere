@@ -23,10 +23,8 @@ class ResponseHandlerContext:
 #    2) For camera-streamer WebRTC calls, it changes the local IP address to the public IP address, which then makes WebRTC connectable.
 class MoonrakerWebRequestResponseHandler(IWebRequestHandler):
 
-
     # The static instance.
-    _Instance = None
-
+    _Instance:"MoonrakerWebRequestResponseHandler" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
     def Init(logger:logging.Logger):
@@ -35,7 +33,7 @@ class MoonrakerWebRequestResponseHandler(IWebRequestHandler):
 
 
     @staticmethod
-    def Get():
+    def Get() -> "MoonrakerWebRequestResponseHandler":
         return MoonrakerWebRequestResponseHandler._Instance
 
 

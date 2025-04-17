@@ -1,5 +1,6 @@
 import sys
 import traceback
+from typing import Optional
 
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.httpsessions import HttpSessions
@@ -40,7 +41,7 @@ class Installer:
             Logger.Blank()
 
 
-    def _RunInternal(self):
+    def _RunInternal(self) -> None:
 
         #
         # Setup Phase
@@ -205,7 +206,7 @@ class Installer:
             Logger.DeleteLogFile()
 
 
-    def GetArgumentObjectStr(self) -> str:
+    def GetArgumentObjectStr(self) -> Optional[str]:
         # We want to skip arguments until we find the json string and then concat all args after that together.
         # The reason is the PY args logic will split the entire command line string by space, so any spaces in the json get broken
         # up into different args. This only really happens in the case of the CMD_LINE_ARGS, since it can be like "-companion -debug -whatever"
@@ -235,7 +236,7 @@ class Installer:
             installTarget = "K1"
         elif context.OsType == OsTypes.K2:
             installTarget = "K2"
-        Telemetry.Write(f"Installer-Phase-{phaseStr}", 1, {"OsType":context.OsType }, {"Target":installTarget})
+        Telemetry.Write(f"Installer-Phase-{phaseStr}", 1, {"OsType": context.OsType.value }, {"Target":installTarget})
         Logger.Debug(f"Installer Phase: {phaseStr}, OsType: {context.OsType}, Target: {installTarget}")
 
 

@@ -1,5 +1,6 @@
 import os
 import stat
+from typing import List
 
 from linux_host.version import Version
 
@@ -36,7 +37,7 @@ class Updater:
         # Enumerate all service file to find any local plugins, Sonic Pad plugins, companion service files, and bambu service files, since all service files contain this name.
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
-        foundOeServices = []
+        foundOeServices:List[str] = []
         fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f"Searching for OE services to update, found: {fileOrDirName}")

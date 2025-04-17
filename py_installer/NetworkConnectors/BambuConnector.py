@@ -1,3 +1,4 @@
+from typing import Optional, Tuple
 from linux_host.networksearch import NetworkSearch, NetworkValidationResult
 
 from py_installer.Util import Util
@@ -9,7 +10,7 @@ from py_installer.ConfigHelper import ConfigHelper
 class BambuConnector:
 
 
-    def EnsureBambuConnection(self, context:Context):
+    def EnsureBambuConnection(self, context:Context) -> None:
         Logger.Debug("Running bambu connect ensure config logic.")
 
         # For Bambu printers, we need the IP or Hostname, the port is static,
@@ -49,7 +50,7 @@ class BambuConnector:
 
     # Helps the user setup a bambu connection via auto scanning or manual setup.
     # Returns (ip:str, port:str, accessToken:str, printerSn:str)
-    def _SetupNewBambuConnection(self, context:Context):
+    def _SetupNewBambuConnection(self, context:Context) -> Tuple[str, str, str, str]:
         while True:
             Logger.Blank()
             Logger.Blank()
@@ -252,9 +253,12 @@ class BambuConnector:
 
     # Given either a validation result or required details, this gets the x1 carbon's ip camera state
     # and ensures it's enabled properly
-    def _EnsureX1CameraSetup(self, result:NetworkValidationResult = None,  ipOrHostname:str = None, accessToken:str = None, printerSn:str = None):
+    def _EnsureX1CameraSetup(self, result:Optional[NetworkValidationResult]=None, ipOrHostname:Optional[str]=None, accessToken:Optional[str]=None, printerSn:Optional[str]=None):
         # If we didn't get passed a result, get one now.
         if result is None:
+            if ipOrHostname is None or accessToken is None or printerSn is None:
+                Logger.Error("Ensure camera failed to get a validation result.")
+                return
             result = NetworkSearch.ValidateConnection_Bambu(Logger.GetPyLogger(), ipOrHostname, accessToken, printerSn)
         # If we didn't get something, it's a failure.
         if result is None:

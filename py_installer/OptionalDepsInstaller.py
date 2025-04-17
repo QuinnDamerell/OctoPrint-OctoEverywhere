@@ -3,6 +3,7 @@ import time
 import subprocess
 import threading
 import multiprocessing
+from typing import Optional
 
 from octoeverywhere.compression import Compression
 
@@ -15,8 +16,8 @@ from .Context import Context, OsTypes
 class OptionalDepsInstaller:
 
     # If there's an installer thread, it will be stored here.
-    _InstallThread:threading.Thread = None
-    _ThreadStatus:str = None
+    _InstallThread:Optional[threading.Thread] = None
+    _ThreadStatus:Optional[str] = None
 
 
     # Tries to install zstandard and ffmpeg, but this won't fail if the install fails.

@@ -114,6 +114,7 @@
         "journalctl",
         "JRPC",
         "jsonify",
+        "jsonrpcresponse",
         "kbytes",
         "keepalive",
         "kenv",

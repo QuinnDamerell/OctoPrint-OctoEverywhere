@@ -1,13 +1,15 @@
 import logging
 from typing import Optional, Tuple
 
+from .interfaces import IMoonrakerClient
+
 # A helper class that caches known file metadata info, so we don't have to pull it often.
 class FileMetadataCache:
 
     _Instance:"FileMetadataCache" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
-    def Init(logger:logging.Logger, moonrakerClient):
+    def Init(logger:logging.Logger, moonrakerClient:IMoonrakerClient) -> None:
         FileMetadataCache._Instance = FileMetadataCache(logger, moonrakerClient)
 
 
@@ -16,7 +18,7 @@ class FileMetadataCache:
         return FileMetadataCache._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerClient) -> None:
+    def __init__(self, logger:logging.Logger, moonrakerClient:IMoonrakerClient) -> None:
         self.Logger = logger
         self.MoonrakerClient = moonrakerClient
         self.FileName:Optional[str] = None

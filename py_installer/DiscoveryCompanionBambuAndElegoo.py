@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from .Logging import Logger
 from .Context import Context
@@ -18,7 +19,7 @@ class DiscoveryCompanionBambuAndElegoo:
     c_ElegooPluginDataRootFolder_Lower = ".octoeverywhere-elegoo"
 
 
-    def Discovery(self, context:Context):
+    def Discovery(self, context:Context) -> None:
         Logger.Debug("Starting companion discovery.")
 
         # Sanity check the context.
@@ -37,7 +38,7 @@ class DiscoveryCompanionBambuAndElegoo:
             pluginDataRootFolder = DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower
 
         # Look for existing companion or bambu data installs.
-        existingCompanionFolders = []
+        existingCompanionFolders:List[str] = []
         # Sort so the folder we find are ordered from 1-... This makes the selection process nicer, since the ID == selection.
         fileAndDirList = sorted(os.listdir(context.UserHomePath))
         for fileOrDirName in fileAndDirList:
@@ -114,7 +115,7 @@ class DiscoveryCompanionBambuAndElegoo:
         return
 
 
-    def _SetupContextFromVars(self, context:Context, folderName:str):
+    def _SetupContextFromVars(self, context:Context, folderName:str) -> None:
         # First, ensure we can parse the id and set it.
         context.CompanionInstanceId = self._GetCompanionBambuOrElegooIdFromFolderName(folderName)
 
@@ -126,7 +127,7 @@ class DiscoveryCompanionBambuAndElegoo:
 
 
     # Returns the instance id, for primary instances, this returns "1"
-    def _GetCompanionBambuOrElegooIdFromFolderName(self, folderName:str):
+    def _GetCompanionBambuOrElegooIdFromFolderName(self, folderName:str) -> str:
         folderName_lower = folderName.lower()
 
         # If the folder name starts with any of these, then its a folder we can get the instance for.
