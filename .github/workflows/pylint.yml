@@ -43,10 +43,5 @@ jobs:
 
     - name: 👉 Pyright
       run: |
-        # TODO - When everything is working in pyright we can just use `pyright .` instead of the individual folders
-        pyright .\linux_host\
-        pyright .\octoeverywhere\
-        pyright .\elegoo_octoeverywhere\
-        pyright .\octoprint_octoeverywhere\
-        pyright .\docker_octoeverywhere\
-        pyright .\bambu_octoeverywhere\
+        # Run pyright, which will use the pyrightconfig.json file to determine which files to check.
+        pyright

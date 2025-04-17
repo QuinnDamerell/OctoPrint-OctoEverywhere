@@ -221,6 +221,7 @@
         "pympler",
         "pypi",
         "pyright",
+        "pyrightconfig",
         "pythoncompat",
         "pythonhosted",
         "PYTHONPATH",
