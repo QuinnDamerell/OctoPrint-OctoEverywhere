@@ -29,10 +29,14 @@ class OsTypeIdentifier:
         if os.path.exists("/etc/openwrt_release"):
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
+                # We need to look for sonic first, because both contain "tina" and it will always be before sonic.
                 for l in lines:
                     l = l.lower()
                     if "sonic" in l:
                         return OsType.OsType.CrealitySonicPad
+
+                for l in lines:
+                    l = l.lower()
                     if "tina" in l:
                         return OsType.OsType.CrealityK2
 

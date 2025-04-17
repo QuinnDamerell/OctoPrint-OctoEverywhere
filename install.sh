@@ -73,16 +73,20 @@ fi
 # The K2 runs an openwrt distro called Tina. We detect that by looking at the openwrt_release file.
 # But this also seems to overlap with the sonic pad, so we also check for the webrtc binary.
 IS_K2_OS=0
-if grep -Fiqs "tina" /etc/openwrt_release
+if [[ $IS_SONIC_PAD_OS -eq 0 ]]
 then
-    if [[ -f /usr/bin/webrtc ]]
+    # Only check for the K2 if we aren't already in the sonic pad OS.
+    if grep -Fiqs "tina" /etc/openwrt_release
     then
-
-        IS_K2_OS=1
-        # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
-        HOME="/mnt/UDISK"
+        if [[ -f /usr/bin/webrtc ]]
+        then
+            IS_K2_OS=1
+            # On the K2, we always want the path to be /mnt/UDISK, since it has a lot of space there.
+            HOME="/mnt/UDISK"
+        fi
     fi
 fi
+
 
 
 # Get the root path of the repo, aka, where this script is executing

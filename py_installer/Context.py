@@ -294,7 +294,7 @@ class Context:
 
     def DetectOsType(self):
         #
-        # Note! This should closely resemble the ostype.py class in the plugin and the logic in the ./install.sh script!
+        # Note! This should closely resemble the ostypeidentifier.py class in the octoeverywhere module AND the logic in the ./install.sh script!
         #
 
         # For the k1 and k1 max, we look for the "buildroot" OS.
@@ -313,6 +313,9 @@ class Context:
         if os.path.exists("/etc/openwrt_release"):
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
+
+                # First, scan for the "sonic" string, which indicates the Sonic Pad.
+                # Note we have to scan the entire file first, otherwise the K2 detector will find "tina" first, since it's in both.
                 for l in lines:
                     l = l.lower()
                     if "sonic" in l:
@@ -321,6 +324,10 @@ class Context:
                             self.OsType = OsTypes.SonicPad
                             return
                         raise Exception("We detected a Sonic Pad, but can't determine the data path. Please contact support.")
+
+                # Now we scan for the "tina" string, which indicates the K2.
+                for l in lines:
+                    l = l.lower()
                     # The K2 is based on the OS release "tina" and then we look for the user data path.
                     if "tina" in l:
                         if os.path.exists(Paths.CrealityOsUserDataPath_K2):
