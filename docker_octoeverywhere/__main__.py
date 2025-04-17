@@ -9,6 +9,7 @@ import traceback
 import subprocess
 
 from enum import Enum
+from typing import Optional
 
 #
 # This docker host is the entry point for the docker container.
@@ -63,7 +64,7 @@ if __name__ == '__main__':
             exceptionClassType = e.__class__.__name__
         logger.error(f"{msg}; {str(exceptionClassType)} Exception: {str(e)}; {str(tb)}")
 
-    def EnsureIsPath(path: str) -> str:
+    def EnsureIsPath(path: Optional[str]) -> str:
         logger.info(f"Ensuring path exists: {path}")
         if path is None or not os.path.exists(path):
             raise Exception(f"Path does not exist: {path}")

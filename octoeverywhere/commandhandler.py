@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any, Dict, Optional
 
 from .buffer import Buffer
@@ -62,7 +63,7 @@ class CommandHandler:
 
 
     @staticmethod
-    def Init(logger, notificationHandler:INotificationHandler, platCommandHandler:IPlatformCommandHandler, hostCommandHandler:IHostCommandHandler):
+    def Init(logger:logging.Logger, notificationHandler:INotificationHandler, platCommandHandler:IPlatformCommandHandler, hostCommandHandler:IHostCommandHandler):
         CommandHandler._Instance = CommandHandler(logger, notificationHandler, platCommandHandler, hostCommandHandler)
 
 
@@ -71,7 +72,7 @@ class CommandHandler:
         return CommandHandler._Instance
 
 
-    def __init__(self, logger, notificationHandler:INotificationHandler, platCommandHandler:IPlatformCommandHandler, hostCommandHandler:IHostCommandHandler):
+    def __init__(self, logger:logging.Logger, notificationHandler:INotificationHandler, platCommandHandler:IPlatformCommandHandler, hostCommandHandler:IHostCommandHandler):
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PlatformCommandHandler = platCommandHandler

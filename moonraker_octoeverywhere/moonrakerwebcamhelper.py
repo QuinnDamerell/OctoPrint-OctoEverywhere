@@ -2,6 +2,7 @@ import threading
 import time
 import logging
 import json
+from typing import List
 
 import requests
 
@@ -87,7 +88,7 @@ class MoonrakerWebcamHelper():
     # Index 0 is used as the default webcam.
     # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
-    def GetWebcamConfig(self):
+    def GetWebcamConfig(self) -> List[WebcamSettingItem]:
 
         # Kick the settings worker since the webcam was accessed.
         self.KickOffWebcamSettingsUpdate()

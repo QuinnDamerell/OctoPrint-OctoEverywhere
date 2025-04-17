@@ -605,8 +605,8 @@ class NotificationsHandler(INotificationHandler):
         # We have two ways of computing the layer heights.
         # 1) On some platforms (Moonraker) we can query the actual layer from the system, so we don't have to guess.
         # 2) If the platform doesn't support getting the actual layer height, we can try to figure it out with z offsets.
-        currentLayer, totalLayers = self.PrinterStateInterface.GetCurrentLayerInfo()
-        if currentLayer is not None and totalLayers is not None:
+        currentLayer, _ = self.PrinterStateInterface.GetCurrentLayerInfo()
+        if currentLayer is not None:
             # We have layer info from the system, use this to handle the events.
 
             # If we are over the first layer and haven't sent the notification, start the timer.

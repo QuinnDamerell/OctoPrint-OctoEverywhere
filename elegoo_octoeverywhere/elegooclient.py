@@ -11,7 +11,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.buffer import Buffer
-from octoeverywhere.interfaces import WebSocketOpCode
+from octoeverywhere.interfaces import WebSocketOpCode, IWebSocketClient
 
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
@@ -361,7 +361,7 @@ class ElegooClient:
 
 
     # Fired when the websocket is connected.
-    def _OnWsConnect(self, ws:Client):
+    def _OnWsConnect(self, ws:IWebSocketClient):
         self.Logger.info("Connection to the Elegoo printer established!")
 
         # Set the connected flag now, so we can send messages.
@@ -382,7 +382,7 @@ class ElegooClient:
 
 
     # Fired when the websocket is closed.
-    def _OnWsClose(self, ws:Client):
+    def _OnWsClose(self, ws:IWebSocketClient):
         # Don't log this if we already know its due to too many clients.
         if self.LastConnectionFailedDueToTooManyClients is False:
             self.Logger.debug("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
@@ -403,7 +403,7 @@ class ElegooClient:
 
 
     # Fired when the websocket is closed.
-    def _OnWsError(self, ws:Client, e:Exception):
+    def _OnWsError(self, ws:IWebSocketClient, e:Exception):
         # There's a special case here where the Elegoo printers can have a limited number of connections.
         # When that happens, we want to note it so we don't just keep trying the same IP over and over.
         msg = str(e)
@@ -416,7 +416,7 @@ class ElegooClient:
 
 
     # Fired when the websocket is closed.
-    def _OnWsData(self, ws:Client, buffer:Buffer, msgType:WebSocketOpCode):
+    def _OnWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode):
         try:
             # Try to deserialize the message.
             msg = json.loads(buffer.GetBytesLike().decode("utf-8"))

@@ -31,27 +31,27 @@ class MoonrakerCredentialManager:
     c_MoonrakerUnixSocketFileNameWithCommsFolder = "comms/moonraker.sock"
 
     # The static instance.
-    _Instance = None
+    _Instance:"MoonrakerCredentialManager" = None #pyright: ignore[reportAssignmentType]
 
 
     @staticmethod
-    def Init(logger, moonrakerConfigFilePath:str, isCompanionMode:bool):
+    def Init(logger:logging.Logger, moonrakerConfigFilePath:str, isCompanionMode:bool):
         MoonrakerCredentialManager._Instance = MoonrakerCredentialManager(logger, moonrakerConfigFilePath, isCompanionMode)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "MoonrakerCredentialManager":
         return MoonrakerCredentialManager._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, isCompanionMode:bool):
+    def __init__(self, logger:logging.Logger, moonrakerConfigFilePath:str, isCompanionMode:bool) -> None:
         self.Logger = logger
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
         self.IsCompanionMode = isCompanionMode
 
 
     # Attempts to get the API key from moonraker. If it fails, it will return None.
-    def TryToGetOneshotToken(self, apiKey:str=None) -> Optional[str]:
+    def TryToGetOneshotToken(self, apiKey:Optional[str]=None) -> Optional[str]:
         try:
             # If we got an API key, try to set it.
             headers = {}
@@ -72,7 +72,7 @@ class MoonrakerCredentialManager:
                 raise Exception("Failed to get the oneshot token from moonraker. No content.")
 
             # Decode & parse the response.
-            jsonMsg = json.loads(buf.decode(encoding="utf-8"))
+            jsonMsg = json.loads(buf.GetBytesLike().decode(encoding="utf-8"))
             token = jsonMsg.get("result", None)
             if token is None:
                 raise Exception("Failed to get the oneshot token from moonraker. No result.")
@@ -214,7 +214,7 @@ class MoonrakerCredentialManager:
 
 
     # Returns the parent directory of the passed directory or file path.
-    def _GetParentDirectory(self, path):
+    def _GetParentDirectory(self, path:str) -> str:
         return os.path.abspath(os.path.join(path, os.pardir))
 
 

@@ -59,9 +59,9 @@ if __name__ == '__main__':
     # Run!
     try:
         # Create and run the main host!
-        host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone)
-        host.RunBlocking(KlipperConfigFolder, IsCompanion, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder,
-                        MoonrakerConfigFile, devConfig_CanBeNone)
+        host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+        host.RunBlocking(KlipperConfigFolder, IsCompanion, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+                        MoonrakerConfigFile, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main moonraker host class. Error:{str(e)}")
 

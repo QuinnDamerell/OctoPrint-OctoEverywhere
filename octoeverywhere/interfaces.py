@@ -159,13 +159,12 @@ class IPrinterStateReporter(ABC):
     def GetCurrentZOffsetMm(self) -> int:
         pass
 
-    # If this platform DOESN'T support getting the layer info from the system, this returns (None, None)
-    # If the platform does support it...
-    #     If the current value is unknown, (0,0) is returned.
-    #     If the values are known, (currentLayer(int), totalLayers(int)) is returned.
-    #          Note that total layers will always be > 0, but current layer can be 0!
+    # Returns:
+    #     (None, None) if the platform doesn't support layer info.
+    #     (0,0) if the current layer is unknown.
+    #     (currentLayer(int), totalLayers(int)) if the values are known.
     @abstractmethod
-    def GetCurrentLayerInfo(self) -> Tuple[int, int]:
+    def GetCurrentLayerInfo(self) -> Tuple[Optional[int], Optional[int]]:
         pass
 
     # Returns True if the printing timers (notifications and gadget) should be running, which is only the printing state. (not even paused)
@@ -244,7 +243,7 @@ class ISlipstreamHandler(ABC):
 
     # This will be called when the cache should be updated.
     @abstractmethod
-    def UpdateCache(self) -> None:
+    def UpdateCache(self, delay:int=0) -> None:
         pass
 
 
@@ -417,4 +416,11 @@ class IQuickCam(ABC):
     # Used to detach a new stream handler to receive callbacks when an image is ready.
     @abstractmethod
     def DetachImageStreamCallback(self, callback:Callable[[Buffer], None]):
+        pass
+
+
+class IOctoPrintPlugin(ABC):
+
+    @abstractmethod
+    def ShowSmartPausePopUpOnPortalLoad(self) -> None:
         pass

@@ -1,10 +1,11 @@
 import time
 import logging
 import threading
-from typing import Optional
+from typing import Dict, Optional
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.compat import Compat
+from octoeverywhere.buffer import Buffer
 from octoeverywhere.octohttprequest import PathTypes
 from octoeverywhere.interfaces import ISlipstreamHandler
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -157,9 +158,9 @@ class Slipstream(ISlipstreamHandler):
 
 
     # Starts a async thread to update the index cache.
-    def UpdateCache(self, delayMs:int):
+    def UpdateCache(self, delay:int=0) -> None:
         try:
-            th = threading.Thread(target=self._UpdateCacheThread, args=(delayMs,))
+            th = threading.Thread(target=self._UpdateCacheThread, args=(delay,))
             th.start()
         except Exception as e:
             Sentry.OnException("Slipstream failed to start index refresh thread. ", e)
@@ -212,7 +213,7 @@ class Slipstream(ISlipstreamHandler):
 
         # Make a copy of the buffer.
         indexBodyBuffer = bytearray()
-        indexBodyBuffer[:] = fullBodyBuffer.GetBytesLike()
+        indexBodyBuffer[:] = fullBodyBuffer.Get()
 
         # Add the index to the cache so it's ready now.
         with self.Lock:

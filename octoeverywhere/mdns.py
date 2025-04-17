@@ -29,7 +29,7 @@ class MDns:
 
 
     @staticmethod
-    def Init(logger, pluginDataFolderPath):
+    def Init(logger:logging.Logger, pluginDataFolderPath:str) -> None:
         MDns._Instance = MDns(logger, pluginDataFolderPath)
 
 

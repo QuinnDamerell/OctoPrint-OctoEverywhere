@@ -46,4 +46,7 @@ jobs:
         # TODO - When everything is working in pyright we can just use `pyright .` instead of the individual folders
         pyright .\linux_host\
         pyright .\octoeverywhere\
-        pyright .\elegoo-octoeverywhere\
+        pyright .\elegoo_octoeverywhere\
+        pyright .\octoprint_octoeverywhere\
+        pyright .\docker_octoeverywhere\
+        pyright .\bambu_octoeverywhere\

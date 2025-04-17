@@ -352,7 +352,7 @@ class WebcamHelper:
     # If the camera-streamer webrtc stream URL is found, the correct camera-streamer jmpeg stream is returned.
     # Otherwise None is returned.
     @staticmethod
-    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:str) -> Optional[str]:
+    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:Optional[str]) -> Optional[str]:
         # Ensure there's something to work with
         if streamUrl is None:
             return None

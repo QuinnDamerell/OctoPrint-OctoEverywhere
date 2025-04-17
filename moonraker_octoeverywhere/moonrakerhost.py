@@ -329,7 +329,7 @@ class MoonrakerHost:
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient every time the moonraker websocket is open and authed - BUT possibly not connected to klippy.
     # At this point it's ok to query things in moonraker like db items, webcam info, and such. But API calls that have to do with the physical printer will fail, since klippy might not be ready yet.
     #
-    def OnMoonrakerWsOpenAndAuthed(self):
+    def OnMoonrakerWsOpenAndAuthed(self) -> None:
 
         # Kick off the webcam settings helper, to ensure it pulls fresh settings if desired.
         # Use force, because the websocket might not open for some time and the first auto get might fail.
@@ -342,14 +342,14 @@ class MoonrakerHost:
     #
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when it gets a message that the webcam settings have changed.
     #
-    def OnWebcamSettingsChanged(self):
+    def OnWebcamSettingsChanged(self) -> None:
         # Set the force flag to true, since we know the settings just changed.
         self.MoonrakerWebcamHelper.KickOffWebcamSettingsUpdate(forceUpdate=True)
 
     #
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and klippy is fully ready to use.
     #
-    def OnMoonrakerClientConnected(self):
+    def OnMoonrakerClientConnected(self) -> None:
         pass
 
 

@@ -217,7 +217,7 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
     #     If the current value is unknown, (0,0) is returned.
     #     If the values are known, (currentLayer(int), totalLayers(int)) is returned.
     #          Note that total layers will always be > 0, but current layer can be 0!
-    def GetCurrentLayerInfo(self) -> tuple[int, int]:
+    def GetCurrentLayerInfo(self) -> Tuple[Optional[int], Optional[int]]:
         state = ElegooClient.Get().GetState()
         if state is None:
             # If we dont have a state yet, return 0,0, which means we can get layer info but we don't know yet.

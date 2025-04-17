@@ -4,6 +4,7 @@ import base64
 import logging
 import threading
 from enum import Enum
+from typing import Optional
 
 import requests
 
@@ -24,7 +25,7 @@ class LoginStatus(Enum):
 # The result of a get access token request.
 # If the token is None, the Status will indicate why.
 class AccessTokenResult():
-    def __init__(self, status:LoginStatus, token:str = None) -> None:
+    def __init__(self, status:LoginStatus, token:Optional[str] = None) -> None:
         self.Status = status
         self.AccessToken = token
 
@@ -34,7 +35,7 @@ class AccessTokenResult():
 # https://github.com/Doridian/OpenBambuAPI/blob/main/cloud-http.md
 class BambuCloud:
 
-    _Instance = None
+    _Instance:"BambuCloud" = None #pyright: ignore[reportAssignmentType]
 
 
     @staticmethod
@@ -43,7 +44,7 @@ class BambuCloud:
 
 
     @staticmethod
-    def Get():
+    def Get() -> "BambuCloud":
         return BambuCloud._Instance
 
 
@@ -137,7 +138,7 @@ class BambuCloud:
 
     # A helper to decode the access token and get the Bambu Cloud username.
     # Returns None on failure.
-    def GetUserNameFromAccessToken(self, accessToken: str) -> str:
+    def GetUserNameFromAccessToken(self, accessToken:str) -> Optional[str]:
         try:
             # The Access Token is a JWT, we need the second part to decode.
             accountInfoBase64 = accessToken.split(".")[1]
@@ -155,9 +156,12 @@ class BambuCloud:
     # Returns a list of the user's devices.
     # Returns None on failure.
     # Special Note: This function is used as a access token validation check. So if this fails due to the access token being invalid, the access token should be cleared so we try to login again.
-    def GetDeviceList(self) -> dict:
+    def GetDeviceList(self) -> Optional[dict]:
         tokenResult = self.GetAccessToken()
         if tokenResult.Status != LoginStatus.Success:
+            return None
+        if tokenResult.AccessToken is None:
+            self.Logger.error("Bambu Cloud GetDeviceList failed to get access token.")
             return None
 
         # Get the API
@@ -180,11 +184,14 @@ class BambuCloud:
 
 
     # Returns this device info from the Bambu Cloud API by matching the SN
-    def GetThisDeviceInfo(self) -> dict:
+    def GetThisDeviceInfo(self) -> Optional[dict]:
         devices = self.GetDeviceList()
         localSn = self.Config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
         if localSn is None:
             self.Logger.error("Bambu Cloud GetThisDeviceInfo has no local printer SN to match.")
+            return None
+        if devices is None:
+            self.Logger.error("Bambu Cloud GetThisDeviceInfo failed to get device list.")
             return None
         for d in devices:
             sn =  d.get('dev_id', None)
@@ -196,7 +203,7 @@ class BambuCloud:
 
 
     # Get's the known device info from the Bambu API and ensures it's synced with our config settings.
-    def SyncBambuCloudInfoAsync(self) -> bool:
+    def SyncBambuCloudInfoAsync(self) -> None:
         threading.Thread(target=self.SyncBambuCloudInfo, daemon=True).start()
 
 

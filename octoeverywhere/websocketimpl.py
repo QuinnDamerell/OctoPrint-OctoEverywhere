@@ -317,7 +317,7 @@ class Client(IWebSocketClient):
 
     # A helper for dealing with common websocket connection exceptions.
     @staticmethod
-    def IsCommonConnectionException(e:Exception):
+    def IsCommonConnectionException(e:Exception) -> bool:
         try:
             # This means a device was at the IP, but the port isn't open.
             if isinstance(e, ConnectionRefusedError):

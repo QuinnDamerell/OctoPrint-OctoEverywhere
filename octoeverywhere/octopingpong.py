@@ -33,12 +33,12 @@ class OctoPingPong:
 
 
     @staticmethod
-    def Init(logger, pluginDataFolderPath, printerId) -> None:
+    def Init(logger:logging.Logger, pluginDataFolderPath:str, printerId:str) -> None:
         OctoPingPong._Instance = OctoPingPong(logger, pluginDataFolderPath, printerId)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "OctoPingPong":
         return OctoPingPong._Instance
 
 

@@ -114,9 +114,9 @@ class Slipstream(ISlipstreamHandler):
 
     # !!! Interface Function For Slipstream in Compat Layer !!!
     # Starts a async thread to update the index cache.
-    def UpdateCache(self, delayMs=1000):
+    def UpdateCache(self, delay:int=0) -> None:
         try:
-            th = threading.Thread(target=self._UpdateCacheThread, args=(delayMs,), name="SlipstreamIndexRefresh")
+            th = threading.Thread(target=self._UpdateCacheThread, args=(delay,), name="SlipstreamIndexRefresh")
             th.start()
         except Exception as e:
             Sentry.OnException("Slipstream failed to start index refresh thread. ", e)
@@ -319,7 +319,7 @@ class Slipstream(ISlipstreamHandler):
 
         # Create a copy of the buffer
         indexBodyBuffer = bytearray()
-        indexBodyBuffer[:] = fullBodyBuffer.GetBytesLike()
+        indexBodyBuffer[:] = fullBodyBuffer.Get()
 
         # It's no ideal that we need to de-compress this, but it's fine since we are in the background.
         bodyStr = None

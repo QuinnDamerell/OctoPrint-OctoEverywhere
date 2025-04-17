@@ -10,7 +10,7 @@ from bambu_octoeverywhere.bambucloud import BambuCloud
 class BambuBootstrap:
 
     @staticmethod
-    def Bootstrap(logger:logging.LoggerAdapter, config:Config) -> None:
+    def Bootstrap(logger:logging.Logger, config:Config) -> None:
 
         # The serial number is always required, in both Bambu Cloud and local connection mode.
         # So we always get that first.

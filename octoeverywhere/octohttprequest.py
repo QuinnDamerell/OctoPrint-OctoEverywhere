@@ -321,10 +321,6 @@ class OctoHttpRequest:
             # This means that response.content will not be valid and we will always use the iter_content. But it also means
             # iter_content will ready into memory on demand and throw when the stream is consumed. This is important, because
             # our logic relies on the exception when the stream is consumed to end the http response stream.
-
-
-
-
             response = HttpSessions.GetSession(url).request(method, url, headers=headers, data=dataBuffer, timeout=1800, allow_redirects=allowRedirects, stream=True, verify=False)
         except Exception as e:
             logger.debug(attemptName + " http URL threw an exception: "+str(e))
