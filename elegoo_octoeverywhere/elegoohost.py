@@ -1,6 +1,6 @@
 import logging
 import traceback
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
@@ -38,7 +38,7 @@ from .elegoorelaywebcamurldetector import ElegooRelayWebcamUrlDetector
 # This file is the main host for the elegoo os service.
 class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
-    def __init__(self, configDir:str, logDir:str, devConfig_CanBeNone) -> None:
+    def __init__(self, configDir:str, logDir:str, devConfig:Optional[dict[str, Any]]) -> None:
         # When we create our class, make sure all of our core requirements are created.
         self.Secrets:Secrets = None #pyright: ignore[reportAttributeAccessIssue]
         self.NotificationHandler:NotificationsHandler = None #pyright: ignore[reportAttributeAccessIssue]
@@ -53,7 +53,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             self.Config = Config(configDir)
 
             # Setup the logger.
-            logLevelOverride = self.GetDevConfigStr(devConfig_CanBeNone, "LogLevel")
+            logLevelOverride = self.GetDevConfigStr(devConfig, "LogLevel")
             self.Logger = LoggerInit.GetLogger(self.Config, logDir, logLevelOverride)
             self.Config.SetLogger(self.Logger)
 
@@ -67,7 +67,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             raise
 
 
-    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[dict]) -> None:
+    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("####################################################")
@@ -219,7 +219,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
     # Tries to load a dev config option as a string.
     # If not found or it fails, this return None
-    def GetDevConfigStr(self, devConfig:Optional[dict], value:str) -> Optional[str]:
+    def GetDevConfigStr(self, devConfig:Optional[dict[str, Any]], value:str) -> Optional[str]:
         if devConfig is None:
             return None
         if value in devConfig:

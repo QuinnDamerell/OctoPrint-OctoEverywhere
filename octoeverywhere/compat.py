@@ -61,7 +61,7 @@ class Compat:
     def GetSmartPauseInterface():
         return Compat._SmartPauseInterfaceObj
     @staticmethod
-    def SetSmartPauseInterface(obj):
+    def SetSmartPauseInterface(obj:ISmartPauseHandler):
         Compat._SmartPauseInterfaceObj = obj
 
 

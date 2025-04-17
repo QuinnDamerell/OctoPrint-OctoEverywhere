@@ -47,7 +47,7 @@ class Gadget:
         # The most recent Gadget score sent back and the time it was received at.
         self.MostRecentGadgetScore = 0.0
         self.MostRecentGadgetScoreUpdateTimeSec = 0
-        self.ScoreHistory = []
+        self.ScoreHistory:List[float] = []
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         # These default to None, to indicate they haven't been done.
         self.MostRecentWarningTimeSec = None
@@ -285,7 +285,7 @@ class Gadget:
                 return
             resultObj = jsonResponse["Result"]
             if "NextInspectIntervalSec" not in resultObj:
-                self.Logger.warn("Gadget inspection result had no NextInspectIntervalSec field")
+                self.Logger.warning("Gadget inspection result had no NextInspectIntervalSec field")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
                 # On any error, clear the HostLock hostname, so we hit the root domain again.
                 self._clearHostLockHostname()
@@ -321,7 +321,7 @@ class Gadget:
                         self.Logger.info("Gadget ImageScaleCenterCropSize set to: "+str(newValue))
                         self.ImageScaleCenterCropSize = newValue
                 except Exception as e:
-                    self.Logger.warn("Gadget failed to parse IS_CCSize from response. "+str(e))
+                    self.Logger.warning("Gadget failed to parse IS_CCSize from response. "+str(e))
                     self.ImageScaleCenterCropSize = 0
             if "IS_MH" in resultObj:
                 try:
@@ -330,7 +330,7 @@ class Gadget:
                         self.Logger.info("Gadget ImageScaleMaxHeight set to: "+str(newValue))
                         self.ImageScaleMaxHeight = newValue
                 except Exception as e:
-                    self.Logger.warn("Gadget failed to parse IS_MH from response."+str(e))
+                    self.Logger.warning("Gadget failed to parse IS_MH from response."+str(e))
                     self.ImageScaleMaxHeight = 0
 
             # Check if we have a log object in response. If so, the server wants us to log information into the local log file.
@@ -340,7 +340,7 @@ class Gadget:
                     logStr = json.dumps(resultObj["Log"])
                     self.Logger.info("Gadget Server Log - id:"+str(self.NotificationHandler.GetPrintId())+" int:"+str(nextIntervalSec)+" s:"+str(self.MostRecentGadgetScore)+" - "+logStr)
                 except Exception as e:
-                    self.Logger.warn("Gadget failed to parse Log from response."+str(e))
+                    self.Logger.warning("Gadget failed to parse Log from response."+str(e))
 
             # Reset the failed attempts counter
             self.FailedConnectionAttempts = 0
@@ -395,7 +395,7 @@ class Gadget:
         self.HostLockHostname = None
 
 
-    def _setHostLockHostnameIfNeeded(self, hostname) -> None:
+    def _setHostLockHostnameIfNeeded(self, hostname:str) -> None:
         # If we are already host locked, don't set new values.
         # There will almost always be a value returned and it will always be the current server
         # with the lowest load. But the entire point of host lock is to try to stay stick on a single host.

@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .buffer import Buffer
 from .gadget import Gadget
@@ -91,7 +91,7 @@ class CommandHandler:
         jobStatus = None
         try:
             if self.PlatformCommandHandler is None:
-                self.Logger.warn("GetStatus command has no PlatformCommandHandler")
+                self.Logger.warning("GetStatus command has no PlatformCommandHandler")
             else:
                 # If the plugin is connected and in a good state, this should return the standard job status.
                 # On error, this should return None and then we send back the CommandHandler.c_CommandError_HostNotConnected error
@@ -115,7 +115,7 @@ class CommandHandler:
         try:
             if self.NotificationHandler is None:
                 # This shouldn't happen, even debug should have this.
-                self.Logger.warn("API command GetStatus has no notification handler")
+                self.Logger.warning("API command GetStatus has no notification handler")
             else:
                 gadget:Gadget = self.NotificationHandler.GetGadget()
                 octoeverywhereStatus = {
@@ -159,7 +159,7 @@ class CommandHandler:
         versionStr:Optional[str] = None
         try:
             if self.PlatformCommandHandler is None:
-                self.Logger.warn("GetStatus command has no PlatformCommandHandler")
+                self.Logger.warning("GetStatus command has no PlatformCommandHandler")
             else:
                 versionStr = self.PlatformCommandHandler.GetPlatformVersionStr()
         except Exception as e:
@@ -191,7 +191,7 @@ class CommandHandler:
             webcamSettingsItems = []
         # We need to convert the objects into a dic to serialize.
         # Note this format is also used for GetStatus!
-        webcams = []
+        webcams:List[Dict[str, Any]] = []
         for i in webcamSettingsItems:
             webcams.append(i.Serialize(includeUrls))
 
@@ -228,7 +228,7 @@ class CommandHandler:
         localWebcams = WebcamHelper.Get().GetPluginLocalWebcamList(returnDisabledItems=True)
 
         # Serialize them
-        webcamDicts = []
+        webcamDicts:List[Dict[str, Any]] = []
         for i in localWebcams:
             webcamDicts.append(i.Serialize())
 
@@ -241,7 +241,7 @@ class CommandHandler:
 
     # Must return a CommandResponse
     def SetPluginLocalWebcamSettingsItems(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
-        localWebcamSettingItems = []
+        localWebcamSettingItems:List[WebcamSettingItem] = []
         try:
             if jsonObjData is None:
                 raise Exception("No args passed")
@@ -324,7 +324,7 @@ class CommandHandler:
 
 
     def Rekey(self) -> CommandResponse:
-        self.Logger.warn("Rekey command received!")
+        self.Logger.warning("Rekey command received!")
         resultBool = self.HostCommandHandler.OnRekeyCommand()
         if resultBool:
             return CommandResponse.Success()

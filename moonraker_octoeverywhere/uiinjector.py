@@ -277,14 +277,14 @@ class UiInjector():
                 with open(indexHtmlFilePath, 'w', encoding="utf-8") as f:
                     f.write(htmlText)
             except PermissionError as e:
-                self.Logger.warn(f"Failed to write to {indexHtmlFilePath}, permission error. This is ok. "+str(e))
+                self.Logger.warning(f"Failed to write to {indexHtmlFilePath}, permission error. This is ok. "+str(e))
                 return False
 
             self.Logger.info("No existing ui tags found, so we added them")
             return True
         except Exception as e:
             if e is UnicodeDecodeError and "invalid continuation byte" in str(e):
-                self.Logger.warn("Failed to inject UI helpers into html, the html file has invalid utf-8")
+                self.Logger.warning("Failed to inject UI helpers into html, the html file has invalid utf-8")
             else:
                 Sentry.OnException("_InjectIntoHtml failed for "+indexHtmlFilePath, e)
             return False
@@ -304,7 +304,7 @@ class UiInjector():
         if os.path.exists(swJsFilePath) is False:
             # For the "Creality" frontend "in a folder called frontend" this js file won't be found.
             if "frontend" not in swJsFilePath:
-                self.Logger.warn(f"Failed to find sw.js at {swJsFilePath}")
+                self.Logger.warning(f"Failed to find sw.js at {swJsFilePath}")
             return
         try:
             # Read the entire file.
@@ -330,7 +330,7 @@ class UiInjector():
                     # Check without quotes.
                     indexHtmlStrPos = swTextLower.rfind("url:\"index.html\"", 0, indexHtmlStrPos)
                     if indexHtmlStrPos == -1:
-                        self.Logger.warn("_UpdateSwHash failed to find the right index.html")
+                        self.Logger.warning("_UpdateSwHash failed to find the right index.html")
                         return
                 # The url can be first or last in the json object, so we need to find the object.
                 jsonObjectStart = swTextLower.rfind('{', 0, indexHtmlStrPos)
@@ -352,14 +352,14 @@ class UiInjector():
                 revisionEnd = swTextLower.find('"', revisionStart)
                 if revisionEnd == -1:
                     # Try to find a different index.html string.
-                    self.Logger.warn("_UpdateSwHash failed to find revisionEnd json object.")
+                    self.Logger.warning("_UpdateSwHash failed to find revisionEnd json object.")
                     continue
                 # Success!
                 break
 
             # Sanity check we found something
             if revisionStart is None or revisionEnd is None:
-                self.Logger.warn("_UpdateSwHash broke the while loop with no revision start or end?")
+                self.Logger.warning("_UpdateSwHash broke the while loop with no revision start or end?")
                 return
 
             # Parse the current revision.

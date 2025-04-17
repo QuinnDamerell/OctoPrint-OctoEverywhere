@@ -120,7 +120,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
             elif gcodeState == "PREPARE":
                 state = "warmingup"
             else:
-                self.Logger.warn(f"Unknown gcode_state state in print state: {gcodeState}")
+                self.Logger.warning(f"Unknown gcode_state state in print state: {gcodeState}")
 
         # If we have a mapped sub state, set it.
         subState_CanBeNone = None

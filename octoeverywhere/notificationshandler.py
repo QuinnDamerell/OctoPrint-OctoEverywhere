@@ -5,7 +5,7 @@ import threading
 import secrets
 import string
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .gadget import Gadget
 from .sentry import Sentry
@@ -31,17 +31,17 @@ except Exception as _:
     pass
 
 class ProgressCompletionReportItem:
-    def __init__(self, value, reported):
+    def __init__(self, value:float, reported:bool):
         self.value = value
         self.reported = reported
 
-    def Value(self):
+    def Value(self) -> float:
         return self.value
 
-    def Reported(self):
+    def Reported(self) -> bool:
         return self.reported
 
-    def SetReported(self, reported):
+    def SetReported(self, reported:bool):
         self.reported = reported
 
 
@@ -84,7 +84,7 @@ class NotificationsHandler(INotificationHandler):
         self.ProgressCompletionReported = []
         self.RestorePrintProgressPercentage = False
 
-        self.SpammyEventTimeDict = {}
+        self.SpammyEventTimeDict:dict[str, SpammyEventContext] = {}
         self.SpammyEventLock = threading.Lock()
 
         # Call this to init all of the vars to their default values.
@@ -114,7 +114,7 @@ class NotificationsHandler(INotificationHandler):
         # Add an entry for each progress we want to report, not including 0 and 100%.
         # This list must be in order, from the lowest value to the highest.
         # See _getCurrentProgressFloat for usage.
-        self.ProgressCompletionReported = []
+        self.ProgressCompletionReported:List[ProgressCompletionReportItem] = []
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(10.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(20.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(30.0, False))
@@ -735,11 +735,11 @@ class NotificationsHandler(INotificationHandler):
         elif self.HasSendThirdLayerDoneMessage is False:
             # Sanity check we have a valid value for self.zOffsetLowestSeenMM, from the first layer notification.
             if self.zOffsetLowestSeenMM > 50.0:
-                self.Logger.warn("First layer notification has sent but third layer hans't but the zOffsetLowestSeenMM value is really high, seems like it's unset. Value: "+str(self.zOffsetLowestSeenMM))
+                self.Logger.warning("First layer notification has sent but third layer hans't but the zOffsetLowestSeenMM value is really high, seems like it's unset. Value: "+str(self.zOffsetLowestSeenMM))
                 self.HasSendThirdLayerDoneMessage = True
                 return False
             if self.zOffsetLowestSeenMM <= 0.0001:
-                self.Logger.warn("zOffsetLowestSeenMM is too low for third layer notification. Value: "+str(self.zOffsetLowestSeenMM))
+                self.Logger.warning("zOffsetLowestSeenMM is too low for third layer notification. Value: "+str(self.zOffsetLowestSeenMM))
                 self.HasSendThirdLayerDoneMessage = True
                 return False
 
@@ -833,8 +833,8 @@ class NotificationsHandler(INotificationHandler):
                         OE_FLIP_LEFT_RIGHT = 0
                         OE_FLIP_TOP_BOTTOM = 0
                         try:
-                            OE_FLIP_LEFT_RIGHT = Image.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue] this is imported in the try catch at the top of the file.
-                            OE_FLIP_TOP_BOTTOM = Image.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue] this is imported in the try catch at the top of the file.
+                            OE_FLIP_LEFT_RIGHT = Image.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue, reportUnknownMemberType] this is imported in the try catch at the top of the file.
+                            OE_FLIP_TOP_BOTTOM = Image.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue, reportUnknownMemberType] this is imported in the try catch at the top of the file.
                         except Exception:
                             OE_FLIP_LEFT_RIGHT = Image.Transpose.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
                             OE_FLIP_TOP_BOTTOM = Image.Transpose.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
@@ -887,7 +887,7 @@ class NotificationsHandler(INotificationHandler):
                                     resizeWidth = snapshotResizeParams.Size
                             # If we have things to resize, do it.
                             if resizeHeight is not None and resizeWidth is not None:
-                                pilImage = pilImage.resize((resizeWidth, resizeHeight))
+                                pilImage = pilImage.resize((resizeWidth, resizeHeight)) #pyright: ignore[reportUnknownMemberType]
                                 didWork = True
 
                             # Now if we want to crop square, use the resized image to crop the remaining side.
@@ -930,7 +930,7 @@ class NotificationsHandler(INotificationHandler):
                             snapshot = Buffer(buffer.getvalue())
                             buffer.close()
                     else:
-                        self.Logger.warn("Can't manipulate image because the Image rotation lib failed to import.")
+                        self.Logger.warning("Can't manipulate image because the Image rotation lib failed to import.")
                 except Exception as e:
                     # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
                     if "name 'Image' is not defined" in str(e):
@@ -1103,10 +1103,10 @@ class NotificationsHandler(INotificationHandler):
 
                     except Exception as e:
                         # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors, server not connectable, etc.
-                        self.Logger.warn("Failed to send notification due to a connection error. "+str(e))
+                        self.Logger.warning("Failed to send notification due to a connection error. "+str(e))
 
                     # On failure, log the issue.
-                    self.Logger.warn(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
+                    self.Logger.warning(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
 
                     # If the error is in the 400 class, don't retry since these are all indications there's something
                     # wrong with the request, which won't change. But we don't want to include anything above or below that.
@@ -1354,7 +1354,7 @@ class SpammyEventContext:
         self.LastSentTimeSec = time.time()
 
 
-    def ShouldSendEvent(self, baseTimeIntervalMinutesFloat) -> bool:
+    def ShouldSendEvent(self, baseTimeIntervalMinutesFloat:float) -> bool:
         # Figure out what the delay multiplier should be.
         delayMultiplier = 1
 

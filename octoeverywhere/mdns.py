@@ -3,7 +3,7 @@ import time
 import json
 import logging
 import threading
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import dns.resolver
 
@@ -187,7 +187,7 @@ class MDns:
 
                 # Look get the list of IPs returned from the query. Sometimes, there's a multiples. For example, we have seen if docker is installed
                 # there are sometimes 172.x addresses.
-                ipList = []
+                ipList:List[str] = []
                 if answers is not None:
                     for data in answers:
                         # Validate.
@@ -244,7 +244,7 @@ class MDns:
             self.LogDebug("Failed to get our local IP, using the first returned result.")
             return ipList[0]
 
-        matches = []
+        matches:List[bool] = []
         for ip in ipList:
             matches.append(True)
 
@@ -303,7 +303,7 @@ class MDns:
             c += 1
 
         # If we totally fail, just return the first.
-        self.Logger.warn("MDNS got to end of GetSameLanIp without selecting an ip.")
+        self.Logger.warning("MDNS got to end of GetSameLanIp without selecting an ip.")
         return ipList[0]
 
 
@@ -336,7 +336,7 @@ class MDns:
         return d
 
 
-    def GetUpdatedTimeSecFromEntryDict(self, d) -> float:
+    def GetUpdatedTimeSecFromEntryDict(self, d:dict[str, Any]) -> float:
         # Use a try catch incase there's anything that fails to due parsing of old files or such.
         try:
             return d["UpdateTimeSec"]
@@ -346,7 +346,7 @@ class MDns:
             return 0.0
 
 
-    def GetIpAddressFromEntryDict(self, d) -> str:
+    def GetIpAddressFromEntryDict(self, d:dict[str, Any]) -> str:
         # Use a try catch incase there's anything that fails to due parsing of old files or such.
         try:
             return d["IpAddress"]
@@ -415,7 +415,7 @@ class MDns:
         self.DoTest("http://localhost:80/hello", None)
 
 
-    def DoTest(self, i, expectedOutput):
+    def DoTest(self, i:str, expectedOutput:Optional[str]):
         self.Logger.info("~~~~ Starting Test For "+i)
         result = MDns.Get().TryToResolveIfLocalHostnameFound(i)
         if result != expectedOutput:

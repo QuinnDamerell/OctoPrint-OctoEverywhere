@@ -123,7 +123,7 @@ class Discovery:
         serviceFiles = self._FindAllFiles(Paths.SystemdServiceFilePath, "moonraker", ".service")
 
         # Based on the possible service files, see what moonraker config files we can match.
-        results = []
+        results:List[ServiceFileConfigPathPair] = []
         for f in serviceFiles:
             # Try to find a matching moonraker config file, based off the service file.
             moonrakerConfigPath = self._TryToFindMatchingMoonrakerConfig(f)
@@ -132,8 +132,8 @@ class Discovery:
                 try:
                     with open(f, "r", encoding="utf-8") as serviceFile:
                         lines = serviceFile.readlines()
-                        for l in lines:
-                            Logger.Debug(l)
+                        for line in lines:
+                            Logger.Debug(line)
                 except Exception:
                     pass
             else:
@@ -152,7 +152,7 @@ class Discovery:
         serviceFiles = self._FindAllFiles(Paths.CrealityOsServiceFilePath, "moonraker_service")
 
         # Based on the possible service files, see what moonraker config files we can match.
-        results = []
+        results:List[ServiceFileConfigPathPair]  = []
         for moonrakerServiceFilePath in serviceFiles:
             # Parse out the service number for each file. We know the exact file format.
             # If it has a ., it's .<number>. No . means it's the base printer.
@@ -233,7 +233,7 @@ class Discovery:
             Logger.Debug(f"Searching for moonraker config for {serviceFilePath}")
             with open(serviceFilePath, "r", encoding="utf-8") as serviceFile:
                 lines = serviceFile.readlines()
-                for l in lines:
+                for line in lines:
                     # Search for lines that might indicate the config path.
                     # For newer setups, we expect to see this EnvironmentFile line in the service.
                     # Ex EnvironmentFile=/home/pi/printer_1_data/systemd/moonraker.env
@@ -247,22 +247,22 @@ class Discovery:
                     #
                     # The logic below must be able to handle getting the path out of any of these!
                     #
-                    if "moonraker.env" in l.lower() or "moonraker.conf" in l.lower():
-                        Logger.Debug("Found possible path line: "+l)
+                    if "moonraker.env" in line.lower() or "moonraker.conf" in line.lower():
+                        Logger.Debug("Found possible path line: "+line)
 
                         # Try to parse the test path
                         # In some cases this path will be the full moonraker config file path, while in other cases it might be the printer data root folder, systemd folder, config folder.
                         testPath = ""
                         c_commandStringSearch = " -c "
-                        if l.lower().find(c_commandStringSearch) != -1:
+                        if line.lower().find(c_commandStringSearch) != -1:
                             #
                             # Handle the -c service file line.
                             #
-                            cmdFlagStart = l.lower().find(c_commandStringSearch)
+                            cmdFlagStart = line.lower().find(c_commandStringSearch)
                             cmdFlagStart += len(c_commandStringSearch) # Move past the " -c "
 
                             # Truncate the string after the known " -c ", so we can strip any more leading spaces off the string before trying to find the end.
-                            cmdStringAfterSearchStart = l[cmdFlagStart:]
+                            cmdStringAfterSearchStart = line[cmdFlagStart:]
                             cmdStringAfterSearchStart = cmdStringAfterSearchStart.strip()
 
                             # Now find the next space, which will be the next cmd line arg part.
@@ -281,20 +281,20 @@ class Discovery:
                             # When found, try to file the config path.
                             # It's important to use rfind, to find the last = for cases like
                             # Environment=MOONRAKER_CONF=/home/mks/klipper_config/moonraker.conf
-                            equalsPos = l.rfind('=')
+                            equalsPos = line.rfind('=')
                             if equalsPos == -1:
                                 continue
                             # Move past the = sign.
                             equalsPos += 1
 
                             # Find the end of the path.
-                            filePathEnd = l.find(' ', equalsPos)
+                            filePathEnd = line.find(' ', equalsPos)
                             if filePathEnd == -1:
-                                filePathEnd = len(l)
+                                filePathEnd = len(line)
 
                             # Get the file path.
                             # Sample path /home/pi/printer_1_data/systemd/moonraker.env
-                            testPath = l[equalsPos:filePathEnd]
+                            testPath = line[equalsPos:filePathEnd]
                             testPath = testPath.strip()
                             Logger.Debug(f"Parsed moonraker config path is [{testPath}] - From env parse.")
 
@@ -329,7 +329,7 @@ class Discovery:
                             Logger.Debug(f"Moonraker config found from printer data root {searchConfigPath}")
                             return moonrakerConfigFilePath
 
-                        Logger.Debug(f"No matching config file was found for line [{l}] in service file, looking for more lines...")
+                        Logger.Debug(f"No matching config file was found for line [{line}] in service file, looking for more lines...")
         except Exception as e:
             Logger.Warn(f"Failed to read service config file for config find.: {serviceFilePath} {str(e)}")
         return None
@@ -346,7 +346,7 @@ class Discovery:
             fileAndDirList = os.listdir(path)
 
             # First, check all of the files.
-            dirsToSearch = []
+            dirsToSearch:List[str] = []
             for fileOrDirName in fileAndDirList:
                 fullFileOrDirPath = os.path.join(path, fileOrDirName)
                 fileNameOrDirLower = fileOrDirName.lower()
@@ -386,7 +386,7 @@ class Discovery:
 
 
     def _FindAllFiles(self, path:str, prefix:Optional[str]=None, suffix:Optional[str]=None, depth:int=0) -> List[str]:
-        results = []
+        results:List[str] = []
         if depth > 10:
             return results
         # Use sorted, so the results are in a nice user presentable order.
@@ -414,7 +414,7 @@ class Discovery:
     def _PrintDebugPaths(self, context:Context) -> None:
         # Print all service files.
         Logger.Debug("Discovery - Service Files")
-        self._PrintAllFilesAndSubFolders(Paths.GetServiceFileFolderPath(context))
+        self._PrintAllFilesAndSubFolders(Paths.GetServiceFileFolderPath(context)) #pyright: ignore[reportUnknownMemberType]
 
         # We want to print files that might be printer data folders or names of other folders on other systems.
         Logger.Blank()

@@ -2,7 +2,7 @@ from enum import Enum
 import queue
 import logging
 import threading
-from typing import Callable, List, Optional, Dict
+from typing import Any, Callable, List, Optional, Dict
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.Proto.PathTypes import PathTypes
@@ -133,7 +133,7 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
         self.Logger = logger
         self.StateLock = threading.Lock()
         self.State:ProxyState = ProxyState.UnOpened
-        self.ReceiveQueue = queue.Queue()
+        self.ReceiveQueue:queue.Queue[ReceiveQueueContext] = queue.Queue()
 
         self.OnWsOpen = onWsOpen
         self.OnWsMsg = onWsMsg
@@ -243,7 +243,7 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
 
 
     # Support using with;
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any):
         try:
             self.Close()
         except Exception:

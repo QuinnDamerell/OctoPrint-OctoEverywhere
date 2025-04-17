@@ -1,6 +1,6 @@
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 from .jsonrpcresponse import JsonRpcResponse
 
@@ -24,5 +24,5 @@ class IMoonrakerConnectionStatusHandler(ABC):
 class IMoonrakerClient(ABC):
 
     @abstractmethod
-    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[dict]=None) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[dict[str, Any]]=None) -> JsonRpcResponse:
         pass

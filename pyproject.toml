@@ -1,0 +1,18 @@
+[tool.ruff]
+# Exclude the proto folder for Ruff since we can't control it.
+extend-exclude = ["octoeverywhere/Proto"]
+
+[tool.pyright]
+exclude = ["**/node_modules",
+    "**/__pycache__",
+    "**/Proto",
+    "**/.vscode",
+    "**/debugprofiler.py",
+]
+
+# TODO: Overtime sent more of these to strict so we can catch more issues.
+# Enable this to set all to strict
+#strict = ["**"]
+reportUnknownParameterType="error"
+reportUnknownMemberType="error"
+reportDeprecated="error"

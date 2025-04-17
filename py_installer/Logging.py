@@ -76,14 +76,14 @@ class Logger:
 
 
     @staticmethod
-    def Debug(msg) -> None:
+    def Debug(msg:str) -> None:
         Logger._WriteToFile("Debug", msg)
         if Logger.IsDebugEnabled is True:
             print(BashColors.Yellow+"DEBUG: "+BashColors.Green+msg+BashColors.Default)
 
 
     @staticmethod
-    def Header(msg)  -> None:
+    def Header(msg:str)  -> None:
         print(BashColors.Cyan+msg+BashColors.Default)
         Logger._WriteToFile("Info", msg)
 
@@ -94,25 +94,25 @@ class Logger:
 
 
     @staticmethod
-    def Info(msg) -> None:
+    def Info(msg:str) -> None:
         print(BashColors.Green+msg+BashColors.Default)
         Logger._WriteToFile("Info", msg)
 
 
     @staticmethod
-    def Warn(msg) -> None:
+    def Warn(msg:str) -> None:
         print(BashColors.Yellow+msg+BashColors.Default)
         Logger._WriteToFile("Warn", msg)
 
 
     @staticmethod
-    def Error(msg) -> None:
+    def Error(msg:str) -> None:
         print(BashColors.Red+msg+BashColors.Default)
         Logger._WriteToFile("Error", msg)
 
 
     @staticmethod
-    def Purple(msg) -> None:
+    def Purple(msg:str) -> None:
         print(BashColors.Magenta+msg+BashColors.Default)
         Logger._WriteToFile("Info", msg)
 

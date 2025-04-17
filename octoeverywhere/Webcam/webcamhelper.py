@@ -1,7 +1,7 @@
 import logging
 import os
 import json
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..sentry import Sentry
 from .webcamutil import WebcamUtil
@@ -10,6 +10,9 @@ from ..octohttprequest import OctoHttpRequest
 from ..interfaces import IWebcamPlatformHelper
 from .webcamsettingitem import WebcamSettingItem
 from ..httpresult import HttpResult, HttpResultOrNone
+from ..buffer import Buffer
+
+from ..Proto.HttpInitialContext import HttpInitialContext
 
 
 # The point of this class is to abstract the logic that needs to be done to reliably get a webcam snapshot and stream from many types of
@@ -105,7 +108,7 @@ class WebcamHelper:
     # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
     # It's important that this function returns a OctoHttpRequest that's very similar to what the default MakeHttpCall function
     # returns, to ensure the rest of the octostream http logic can handle the response.
-    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext, method, sendHeaders:Dict[str, str], uploadBuffer) -> HttpResultOrNone:
+    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext:HttpInitialContext, method:str, sendHeaders:Dict[str, str], uploadBuffer:Optional[Buffer]) -> HttpResultOrNone:
         cameraIndexOpt = self.GetOracleRequestCameraIndex(sendHeaders)
         if self.IsSnapshotOracleRequest(sendHeaders):
             return self.GetSnapshot(cameraIndexOpt)
@@ -252,7 +255,7 @@ class WebcamHelper:
             if cameraIndex is not None and cameraIndex >= 0 and cameraIndex < len(webcamItems):
                 return webcamItems[cameraIndex]
 
-            self.Logger.warn(f"_GetWebcamSettingObj asked for {cameraIndex} but it was out of bounds. Max: {len(webcamItems)}")
+            self.Logger.warning(f"_GetWebcamSettingObj asked for {cameraIndex} but it was out of bounds. Max: {len(webcamItems)}")
             return webcamItems[WebcamHelper.c_DefaultWebcamIndex]
         except Exception as e:
             Sentry.OnException("WebcamHelper _GetWebcamSettingObj exception.", e)
@@ -448,7 +451,7 @@ class WebcamHelper:
         if len(self.LocalPluginWebcamSettingsObjects) == 0 or returnDisabledItems:
             return self.LocalPluginWebcamSettingsObjects
         # Otherwise return the list of enabled objects.
-        ret = []
+        ret:List[WebcamSettingItem] = []
         for i in self.LocalPluginWebcamSettingsObjects:
             if i.Enabled:
                 ret.append(i)
@@ -474,7 +477,7 @@ class WebcamHelper:
     def _SavePluginWebcamSettings(self) -> bool:
         try:
             # Convert the local webcam settings objects to dicts
-            localWebcamSettingsDict = []
+            localWebcamSettingsDict:List[dict[str, Any]] = []
             for i in self.LocalPluginWebcamSettingsObjects:
                 localWebcamSettingsDict.append(i.Serialize())
 

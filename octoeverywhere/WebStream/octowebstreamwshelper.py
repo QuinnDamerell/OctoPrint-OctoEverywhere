@@ -326,7 +326,7 @@ class OctoWebStreamWsHelper:
         return False
 
 
-    def onWsData(self, ws, buffer:Buffer, msgType:WebSocketOpCode):
+    def onWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -402,7 +402,7 @@ class OctoWebStreamWsHelper:
             # Note its ok to have an empty buffer, we still want to send the ping.
             dataOffset = None
             if len(buffer) > 0:
-                dataOffset = builder.CreateByteVector(buffer.Get())
+                dataOffset = builder.CreateByteVector(buffer.Get()) #pyright: ignore[reportUnknownMemberType]
 
             # Setup the message to send.
             WebStreamMsg.Start(builder)
@@ -424,7 +424,7 @@ class OctoWebStreamWsHelper:
             self.WebStream.Close()
 
 
-    def onWsClosed(self, ws):
+    def onWsClosed(self, ws:IWebSocketClient):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -436,7 +436,7 @@ class OctoWebStreamWsHelper:
         self.WebStream.Close()
 
 
-    def onWsError(self, ws, error:Exception):
+    def onWsError(self, ws:IWebSocketClient, error:Exception):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -468,7 +468,7 @@ class OctoWebStreamWsHelper:
         self.WebStream.Close()
 
 
-    def onWsOpened(self, ws):
+    def onWsOpened(self, ws:IWebSocketClient):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return

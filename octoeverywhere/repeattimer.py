@@ -1,6 +1,6 @@
 import threading
 import logging
-from typing import Callable
+from typing import Any, Callable
 
 from .sentry import Sentry
 
@@ -55,5 +55,5 @@ class RepeatTimer(threading.Thread):
         return self
 
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any):
         self.Stop()

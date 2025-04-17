@@ -4,7 +4,6 @@ import threading
 import socket
 import time
 import logging
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Union, Tuple
 
 import flask
@@ -101,7 +100,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         return True
 
 
-    def get_wizard_details(self) -> Dict:
+    def get_wizard_details(self) -> Dict[str,str]:
         # Do some sanity checking logic, since this has been sensitive in the past.
         printerUrl = self.GetAddPrinterUrl()
         if printerUrl is None:
@@ -111,12 +110,12 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # Return the default settings.
-    def get_settings_defaults(self) -> Dict:
+    def get_settings_defaults(self) -> Dict[Any, Any]:
         return {}
 
 
     # Return the current printer key for the settings template
-    def get_template_vars(self) -> Dict:
+    def get_template_vars(self) -> Dict[str, Any]:
         printerUrl = self.GetAddPrinterUrl()
         if printerUrl is None:
             self.Logger.error("Failed to get OctoPrinter Url for settings.")
@@ -127,14 +126,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         )
 
 
-    def get_template_configs(self) -> List[Dict]:
+    def get_template_configs(self) -> List[Dict[str, Any]]:
         return [
             dict(type="settings", custom_bindings=False)
         ]
 
 
     ##~~ Softwareupdate hook
-    def get_update_information(self) -> Dict:
+    def get_update_information(self) -> Dict[str, Any]:
         # Define the configuration for your plugin to use with the Software Update
         # Plugin here. See https://docs.octoprint.org/en/master/bundledplugins/softwareupdate.html
         # for details.
@@ -286,7 +285,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions for the Simple API Mixin
     #
-    def get_api_commands(self) -> dict: #pyright: ignore[reportIncompatibleMethodOverride] OctoPrint's type def doesn't match what needs to be returned?
+    def get_api_commands(self) -> Dict[str, Any]: #pyright: ignore[reportIncompatibleMethodOverride] OctoPrint's type def doesn't match what needs to be returned?
         return dict(
             # Our frontend js logic calls this API when it detects a local LAN connection and reports the port used.
             # We use the port internally as a solid indicator for what port the http proxy in front of OctoPrint is on.
@@ -296,7 +295,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         )
 
 
-    def on_api_command(self, command:str, data:Dict) -> Optional[flask.Response]: #pyright: ignore[reportIncompatibleMethodOverride] OctoPrint's type def doesn't match what needs to be returned?
+    def on_api_command(self, command:str, data:Dict[str, Any]) -> Optional[flask.Response]: #pyright: ignore[reportIncompatibleMethodOverride] OctoPrint's type def doesn't match what needs to be returned?
         # Note this command is the only not handled in the api command handler.
         # But the command name must still be defined in the command handler.
         if command == "setFrontendLocalPort":
@@ -342,7 +341,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions are for the gcode receive plugin hook
     #
-    def received_gcode(self, comm_instance:MachineCom, line:str, *args, **kwargs) -> str:
+    def received_gcode(self, comm_instance:MachineCom, line:str, *args:Any, **kwargs:Any) -> str:
         # Blocking will block the printer commands from being handled so we can't block here!
 
         if line and self.NotificationHandler is not None:
@@ -370,7 +369,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # This can return a lot of different things, but we don't return anything.
-    def sent_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, *args, **kwargs) -> None:
+    def sent_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, *args:Any, **kwargs:Any) -> None:
         # Blocking will block the printer commands from being handled so we can't block here!
 
         # M600 is a filament change command.
@@ -406,7 +405,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # This can return a lot of different things, but we don't return anything.
-    def queuing_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, subcode=None, tags=None, *args, **kwargs) -> None:
+    def queuing_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, subcode:Any=None, tags:Any=None, *args:Any, **kwargs:Any) -> None:
         # Make sure smart pause is setup, since this can be called really early on startup.
         smartPause = SmartPause.Get()
         if smartPause is None:
@@ -416,7 +415,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # return: A 2-tuple in the form ``(prefix, postfix)``, 3-tuple in the form ``(prefix, postfix, variables)``, or None
-    def script_hook(self, comm_instance:MachineCom, script_type:str, script_name:str, *args, **kwargs) -> Optional[Union[Tuple[Optional[List[str]], Optional[List[str]]], Tuple[Optional[List[str]], Optional[List[str]], Optional[List[str]]]]]:
+    def script_hook(self, comm_instance:MachineCom, script_type:str, script_name:str, *args:Any, **kwargs:Any) -> Optional[Union[Tuple[Optional[List[str]], Optional[List[str]]], Tuple[Optional[List[str]], Optional[List[str]], Optional[List[str]]]]]:
         # Make sure smart pause is setup, since this can be called really early on startup.
         smartPause = SmartPause.Get()
         if smartPause is None:
@@ -429,7 +428,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions for the key validator hook.
     #
-    def key_validator(self, api_key:str, *args, **kwargs) -> Optional[User]:
+    def key_validator(self, api_key:str, *args:Any, **kwargs:Any) -> Optional[User]:
         try:
             # Use LocalAuth to handle the request.
             return LocalAuth.Get().ValidateApiKey(api_key)
@@ -448,7 +447,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # A dict helper
-    def _exists(self, dictObj:dict, key:str) -> bool:
+    def _exists(self, dictObj:Dict[str, Any], key:str) -> bool:
         return key in dictObj and dictObj[key] is not None
 
 
@@ -457,7 +456,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Note that on_event can actually fire before on_startup in some cases.
     #
-    def on_event(self, event:str, payload:Optional[dict]) -> None:
+    def on_event(self, event:str, payload:Optional[Dict[str, Any]]) -> None:
         # This can be called before on_startup where things are inited.
         # Never handle anything that's sent before then.
         if self.HasOnStartupBeenCalledYet is False:
@@ -483,7 +482,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             fileName = self.GetDictStringOrEmpty(payload, "name")
             # Gather some stats from other places, if they exist.
             octoPrintPrinterObj:PrinterInterface = self._printer #pyright: ignore[reportAssignmentType]
-            currentData:dict = octoPrintPrinterObj.get_current_data()
+            currentData:dict = octoPrintPrinterObj.get_current_data() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             fileSizeKBytes:int = 0
             if self._exists(currentData, "job") and self._exists(currentData["job"], "file") and self._exists(currentData["job"]["file"], "size"):
                 fileSizeKBytes = int(int(currentData["job"]["file"]["size"]) / 1024)
@@ -526,7 +525,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self.NotificationHandler.OnFilamentChange()
 
 
-    def GetDictStringOrEmpty(self, d:dict, key:str) -> str:
+    def GetDictStringOrEmpty(self, d:dict[str, Any], key:str) -> str:
         if d[key] is None:
             return ""
         return str(d[key])
@@ -567,7 +566,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
         # Ensure the system is still paused.
         octoPrintPrinterObj:PrinterInterface = self._printer #pyright: ignore[reportAssignmentType]
-        if octoPrintPrinterObj.is_paused() is False:
+        if octoPrintPrinterObj.is_paused() is False: #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             return
 
         # Show it now.
@@ -741,7 +740,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # onlyShowIfLoadedViaOeBool - bool, if set, the message should only be shown on browsers loading the portal from OE.
     def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
         data = {"title":title, "text":text, "type":msgType, "actionText":actionText, "actionLink":actionLink, "showForSec":showForSec, "onlyShowIfLoadedViaOeBool":onlyShowIfLoadedViaOeBool}
-        self._plugin_manager.send_plugin_message("octoeverywhere_ui_popup_msg", data) #pyright: ignore[reportAttributeAccessIssue]
+        self._plugin_manager.send_plugin_message("octoeverywhere_ui_popup_msg", data) #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType]
 
 
     # Fired when the connection to the primary server is established.
@@ -890,14 +889,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         return self.GetFromSettings("AddPrinterUrl", None)
 
 
-    def SetAddPrinterUrl(self, url):
+    def SetAddPrinterUrl(self, url:str):
         self.SaveToSettingsIfUpdated("AddPrinterUrl", url)
 
 
     # Gets the current setting or the default value.
     def GetBoolFromSettings(self, name:str, default:bool) -> bool:
         settings:PluginSettings = self._settings #pyright: ignore[reportAssignmentType]
-        value = settings.get([name])
+        value = settings.get([name]) #pyright: ignore[reportUnknownMemberType] octoprint has no typing
         if value is None:
             return default
         return value is True
@@ -906,14 +905,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     # Gets the current setting or the default value.
     def GetFromSettings(self, name:str, default:Any) -> Any:
         settings:PluginSettings = self._settings #pyright: ignore[reportAssignmentType]
-        value = settings.get([name])
+        value = settings.get([name]) #pyright: ignore[reportUnknownMemberType] octoprint has no typing
         if value is None:
             return default
         return value
 
 
     # Saves the value into to the settings object if the value changed.
-    def SaveToSettingsIfUpdated(self, name, value):
+    def SaveToSettingsIfUpdated(self, name:str, value:Any):
         #
         # A quick note about settings and creating / saving settings during startup!
         #
@@ -932,8 +931,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if curValue is None or curValue != value:
             self.Logger.info("Value "+str(name)+" has changed so we are updating the value in settings and saving.")
             settings:PluginSettings = self._settings #pyright: ignore[reportAssignmentType]
-            settings.set([name], value, force=True)
-            settings.save(force=True)
+            settings.set([name], value, force=True) #pyright: ignore[reportUnknownMemberType] octoprint has no typing
+            settings.save(force=True) #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
 
 __plugin_name__ = "OctoEverywhere!"

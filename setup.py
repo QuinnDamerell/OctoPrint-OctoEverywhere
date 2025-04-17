@@ -127,7 +127,7 @@ except Exception:
     import sys
     sys.exit(-1)
 
-setup_parameters = octoprint_setuptools.create_plugin_setup_parameters(
+setup_parameters = octoprint_setuptools.create_plugin_setup_parameters( #pyright: ignore[reportUnknownMemberType] octoprint is non-typed
 	identifier=plugin_identifier,
 	package=plugin_package,
 	name=plugin_name,

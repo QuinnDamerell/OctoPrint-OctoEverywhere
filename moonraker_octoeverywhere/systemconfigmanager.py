@@ -113,10 +113,10 @@ subscriptions:
         # Check if we are already in the file.
         with open(allowedServiceFile, "r", encoding="utf-8") as file:
             lines = file.readlines()
-            for l in lines:
+            for line in lines:
                 # Use in, because the lines will have new lines and such.
                 # Match case, because the entry in the file must match the service name case.
-                if serviceName in l:
+                if serviceName in line:
                     logger.info("We found our name existing in the moonraker allowed service file, so there's nothing to do.")
                     return
 
@@ -126,7 +126,7 @@ subscriptions:
                 # The current format this doc is not have a trailing \n, so we need to add one.
                 f.write("\n"+serviceName)
         except PermissionError as e:
-            logger.warn("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
+            logger.warning("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
             return
         logger.info("Our name wasn't found in moonraker's allowed service file, so we added it.")
 
@@ -143,8 +143,8 @@ subscriptions:
         includeText = "[include "+SystemConfigManager.c_updateConfigFileName+"]"
         with open(moonrakerConfigFilePath, "r", encoding="utf-8") as file:
             lines = file.readlines()
-            for l in lines:
-                if includeText.lower() in l.lower():
+            for line in lines:
+                if includeText.lower() in line.lower():
                     logger.info("Our existing update config file include was found in the moonraker config.")
                     return
 

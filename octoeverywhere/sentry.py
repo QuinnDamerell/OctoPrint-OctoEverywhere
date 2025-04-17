@@ -2,7 +2,7 @@ import os
 import logging
 import time
 import traceback
-from typing import Optional
+from typing import Any, Optional
 
 # import sentry_sdk
 # from sentry_sdk import Hub
@@ -86,7 +86,7 @@ class Sentry:
 
 
     @staticmethod
-    def _beforeSendFilter(event, hint):
+    def _beforeSendFilter(event:Any, hint:Any):
 
         # If we want to filter by package, do it now.
         if Sentry.FilterExceptionsByPackage:
@@ -138,7 +138,7 @@ class Sentry:
 
     # Adds a breadcrumb to the sentry log, which is helpful to figure out what happened before an exception.
     @staticmethod
-    def Breadcrumb(msg:str, data:Optional[dict]=None, level:str="info", category:str="breadcrumb"):
+    def Breadcrumb(msg:str, data:Optional[dict[Any, Any]]=None, level:str="info", category:str="breadcrumb"):
         #sentry_sdk.add_breadcrumb(message=msg, data=data, level=level, category=category)
         pass
 
@@ -146,7 +146,7 @@ class Sentry:
     # Sends an error log to sentry.
     # This is useful for debugging things that shouldn't be happening.
     @staticmethod
-    def LogError(msg:str, extras:Optional[dict]=None) -> None:
+    def LogError(msg:str, extras:Optional[dict[Any, Any]]=None) -> None:
         if Sentry._Logger is None:
             return
         Sentry._Logger.error(f"Sentry Error: {msg}")
@@ -163,19 +163,19 @@ class Sentry:
     # Logs and reports an exception.
     # If there's no exception, use LogError instead.
     @staticmethod
-    def OnException(msg:str, exception:Exception, extras:Optional[dict]=None):
+    def OnException(msg:str, exception:Exception, extras:Optional[dict[Any, Any]]=None):
         Sentry._handleException(msg, exception, True, extras)
 
 
     # Only logs an exception, without reporting.
     @staticmethod
-    def OnExceptionNoSend(msg:str, exception:Exception, extras:Optional[dict]=None):
+    def OnExceptionNoSend(msg:str, exception:Exception, extras:Optional[dict[Any, Any]]=None):
         Sentry._handleException(msg, exception, False, extras)
 
 
     # Does the work
     @staticmethod
-    def _handleException(msg:str, exception:Exception, sendException:bool, extras:Optional[dict]=None):
+    def _handleException(msg:str, exception:Exception, sendException:bool, extras:Optional[dict[Any, Any]]=None):
 
         # This could be called before the class has been inited, in such a case just return.
         if Sentry._Logger is None:

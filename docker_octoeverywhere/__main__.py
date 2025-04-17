@@ -9,7 +9,7 @@ import traceback
 import subprocess
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 #
 # This docker host is the entry point for the docker container.
@@ -147,7 +147,7 @@ if __name__ == '__main__':
         base64EncodedLaunchConfig =  base64.urlsafe_b64encode(bytes(launchConfigStr, "utf-8")).decode("utf-8")
 
         # Setup a ctl-c handler, so the docker container can be closed easily.
-        def signal_handler(sig, frame):
+        def signal_handler(sig:Any, frame:Any) -> None:
             logger.info("OctoEverywhere Connect Docker - container stop requested")
             sys.exit(0)
         signal.signal(signal.SIGINT, signal_handler)

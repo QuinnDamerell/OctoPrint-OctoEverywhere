@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.printinfo import PrintInfoManager
@@ -34,7 +34,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
     # Fired when any mqtt message comes in.
     # State will always be NOT NONE, since it's going to be created before this call.
     # The isFirstFullSyncResponse flag indicates if this is the first full state sync of a new connection.
-    def OnMqttMessage(self, msg:dict, bambuState:BambuState, isFirstFullSyncResponse:bool) -> None:
+    def OnMqttMessage(self, msg:dict[str, Any], bambuState:BambuState, isFirstFullSyncResponse:bool) -> None:
 
         # First, if we have a new connection and we just synced, make sure the notification handler is in sync.
         if isFirstFullSyncResponse:
@@ -237,7 +237,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         # Since we don't know 100% of the states, we will fail open.
         # Here's a possible list: https://github.com/greghesp/ha-bambulab/blob/e72e343acd3279c9bccba510f94bf0e291fe5aaa/custom_components/bambu_lab/pybambu/const.py#L83C1-L83C21
         if gcodeState == "IDLE" or gcodeState == "FINISH" or gcodeState == "FAILED":
-            self.Logger.warn("ShouldPrintingTimersBeRunning is not in a printing state: "+str(gcodeState))
+            self.Logger.warning("ShouldPrintingTimersBeRunning is not in a printing state: "+str(gcodeState))
             return False
         return True
 

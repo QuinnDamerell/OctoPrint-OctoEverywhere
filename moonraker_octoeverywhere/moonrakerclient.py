@@ -43,7 +43,7 @@ class MoonrakerClient(IMoonrakerClient):
     WebSocketMessageDebugging = False
 
     @staticmethod
-    def Init(logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
+    def Init(logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
         MoonrakerClient._Instance = MoonrakerClient(logger, config, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr)
 
 
@@ -72,7 +72,7 @@ class MoonrakerClient(IMoonrakerClient):
 
         # Setup the non response message thread
         # See _NonResponseMsgQueueWorker to why this is needed.
-        self.NonResponseMsgQueue = queue.Queue(20000)
+        self.NonResponseMsgQueue:queue.Queue[dict[str,Any]] = queue.Queue(20000)
         self.NonResponseMsgThread = threading.Thread(target=self._NonResponseMsgQueueWorker)
         self.NonResponseMsgThread.start()
 
@@ -182,11 +182,11 @@ class MoonrakerClient(IMoonrakerClient):
                 # Done!
                 return (currentHostStr, currentPortInt)
             except configparser.ParsingError as e:
-                self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+                self.Logger.warning("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
             except AttributeError as e:
                 # This seems to be a configparser bug.
                 if "'NoneType' object has no attribute 'append'" in str(e):
-                    self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+                    self.Logger.warning("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
                 else:
                     raise e
 
@@ -197,13 +197,13 @@ class MoonrakerClient(IMoonrakerClient):
                 foundPort = False
                 # Just look for the host and port lines.
                 lines = f.readlines()
-                for l in lines:
-                    lLower = l.lower()
+                for line in lines:
+                    lLower = line.lower()
                     if "host:" in lLower:
-                        currentHostStr = l.split(":", 1)[1].strip()
+                        currentHostStr = line.split(":", 1)[1].strip()
                         foundHost = True
                     if "port:" in lLower:
-                        currentPortInt = int(l.split(":", 1)[1].strip())
+                        currentPortInt = int(line.split(":", 1)[1].strip())
                         foundPort = True
                     if foundHost and foundPort:
                         break
@@ -230,7 +230,7 @@ class MoonrakerClient(IMoonrakerClient):
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[dict]=None) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[dict[Any, Any]]=None) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -363,7 +363,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Called when the websocket gets any other message that's not a RPC response.
     # If we throw from here, the websocket will close and restart.
-    def _OnWsNonResponseMessage(self, msg:dict) -> None:
+    def _OnWsNonResponseMessage(self, msg:dict[str, Any]) -> None:
         # Get the common method string
         method = msg.get("method", None)
         if method is None:
@@ -445,7 +445,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # If the message has a progress contained in the virtual_sdcard, this returns it. The progress is a float from 0.0->1.0
     # Otherwise None
-    def _GetProgressFromMsg(self, msg:dict) -> Optional[float]:
+    def _GetProgressFromMsg(self, msg:dict[str, Any]) -> Optional[float]:
         vsdContainerObj = self._GetWsMsgParam(msg, "virtual_sdcard")
         if vsdContainerObj is not None:
             vsd = vsdContainerObj["virtual_sdcard"]
@@ -456,7 +456,7 @@ class MoonrakerClient(IMoonrakerClient):
 
 
     # Given a property name, returns the correct param object that contains that object.
-    def _GetWsMsgParam(self, msg:dict, paramName:str) -> Optional[Dict]:
+    def _GetWsMsgParam(self, msg:dict[str, Any], paramName:str) -> Optional[Dict[str, Any]]:
         paramArray = msg.get("params")
         if paramArray is None:
             return None
@@ -674,7 +674,7 @@ class MoonrakerClient(IMoonrakerClient):
     def _onWsMsg(self, ws:IWebSocketClient, msgBytes:Buffer) -> None:
         try:
             # Parse the incoming message.
-            msgObj:dict = json.loads(msgBytes.GetBytesLike())
+            msgObj:dict[str, Any] = json.loads(msgBytes.GetBytesLike())
 
             # Get the method if there is one.
             method:Optional[str] = None
@@ -768,18 +768,18 @@ class JsonRpcWaitingContext:
     def __init__(self, msgId:int) -> None:
         self.Id = msgId
         self.WaitEvent = threading.Event()
-        self.Result:Optional[dict] = None
+        self.Result:Optional[dict[str, Any]] = None
 
 
     def GetEvent(self) -> threading.Event:
         return self.WaitEvent
 
 
-    def GetResult(self) -> Optional[dict]:
+    def GetResult(self) -> Optional[dict[str, Any]]:
         return self.Result
 
 
-    def SetResultAndEvent(self, result:dict) -> None:
+    def SetResultAndEvent(self, result:dict[str, Any]) -> None:
         self.Result = result
         self.WaitEvent.set()
 

@@ -303,7 +303,7 @@ class Slipstream(ISlipstreamHandler):
         return None
 
 
-    def RemoveCacheIfExists(self, url):
+    def RemoveCacheIfExists(self, url:str):
         with self.Lock:
             if url in self.Cache:
                 del self.Cache[url]

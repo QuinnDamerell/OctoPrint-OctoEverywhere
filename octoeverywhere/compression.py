@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import time
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 import zlib
 import logging
@@ -69,7 +69,7 @@ class CompressionContext:
         return self
 
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any):
         # Free anything that has been allocated in reverse order.
         # We use a lock to ensure we don't leak any of the resources, especially the rented ones.
         streamWriter = None
@@ -267,11 +267,11 @@ class Compression:
     def __init__(self, logger: logging.Logger, localFileStoragePath:str) -> None:
         self.Logger = logger
         self.LocalFileStoragePath = localFileStoragePath
-        self.ZStandardCompressorPool = []
+        self.ZStandardCompressorPool:List[Any] = []
         self.ZStandardCompressorPoolLock = threading.Lock()
         self.ZStandardCompressorCreatedCount = 0
 
-        self.ZStandardDecompressorPool = []
+        self.ZStandardDecompressorPool:List[Any]  = []
         self.ZStandardDecompressorPoolLock = threading.Lock()
         self.ZStandardDecompressorCreatedCount = 0
 
@@ -293,7 +293,7 @@ class Compression:
         self.CanUseZStandardLib = False
         try:
             #pylint: disable=import-outside-toplevel,unused-import
-            import zstandard as zstd
+            import zstandard as zstd # noqa: F401 - Disable ruff for this line.
 
             # Since we are using zlib, try to load the pre-trained dictionary.
             # This will throw if it fails, and we must load this dict to use zstandard, because the server expects it.
@@ -367,7 +367,7 @@ class Compression:
                 # Report how many we have created for leak detection.
                 self.ZStandardCompressorCreatedCount += 1
                 if self.ZStandardCompressorCreatedCount > 40:
-                    self.Logger.warn(f"Compression zstandard compressor pool has created {self.ZStandardCompressorCreatedCount} items, there might be a leak")
+                    self.Logger.warning(f"Compression zstandard compressor pool has created {self.ZStandardCompressorCreatedCount} items, there might be a leak")
 
                 #pylint: disable=import-outside-toplevel
                 import zstandard as zstd
@@ -399,7 +399,7 @@ class Compression:
                 # Report how many we have created for leak detection.
                 self.ZStandardDecompressorCreatedCount += 1
                 if self.ZStandardDecompressorCreatedCount > 40:
-                    self.Logger.warn(f"Compression zstandard decompressor pool has created {self.ZStandardDecompressorCreatedCount} items, there might be a leak")
+                    self.Logger.warning(f"Compression zstandard decompressor pool has created {self.ZStandardDecompressorCreatedCount} items, there might be a leak")
 
                 #pylint: disable=import-outside-toplevel
                 import zstandard as zstd

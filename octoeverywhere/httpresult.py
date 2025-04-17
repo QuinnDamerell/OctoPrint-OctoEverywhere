@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
 import requests
 from requests.structures import CaseInsensitiveDict
@@ -213,7 +213,7 @@ class HttpResult():
 
 
     # We need to support the with keyword incase we have an actual Response object.
-    def __exit__(self, t, v, tb):
+    def __exit__(self, t:Any, v:Any, tb:Any):
         if self._requestLibResponseObj is not None:
             self._requestLibResponseObj.__exit__(t, v, tb)
         if self._customBodyStreamClosedCallback is not None:

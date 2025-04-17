@@ -1,6 +1,6 @@
 import logging
 import traceback
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
@@ -217,7 +217,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
     # Tries to load a dev config option as a string.
     # If not found or it fails, this return None
-    def GetDevConfigStr(self, devConfig: Optional[dict], value: str) -> Optional[str]:
+    def GetDevConfigStr(self, devConfig: Optional[dict[str, Any]], value: str) -> Optional[str]:
         if devConfig is None:
             return None
         if value in devConfig:

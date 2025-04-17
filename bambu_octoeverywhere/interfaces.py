@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 from .bambumodels import BambuState
 
@@ -10,5 +11,5 @@ class IBambuStateTranslator(ABC):
         pass
 
     @abstractmethod
-    def OnMqttMessage(self, msg:dict, bambuState:BambuState, isFirstFullSyncResponse:bool) -> None:
+    def OnMqttMessage(self, msg:dict[str, Any], bambuState:BambuState, isFirstFullSyncResponse:bool) -> None:
         pass

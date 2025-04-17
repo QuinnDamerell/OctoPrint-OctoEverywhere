@@ -15,7 +15,7 @@ class Uninstall:
         # Ensure there's something to remove first.
         # Since all service names must use the same identifier in them, we can find any services using the same search.
         foundOeServices:List[str] = []
-        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
+        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context))) #pyright: ignore[reportUnknownMemberType] it can't be typed to prevent circular imports
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f"Searching for OE services to remove, found: {fileOrDirName}")
             if Configure.c_ServiceCommonName in fileOrDirName.lower():
@@ -137,15 +137,15 @@ class Uninstall:
     def RemoveOctoEverywhereSystemCfgInclude(self, moonrakerConfigPath:str):
         try:
             Logger.Debug(f"Looking for OE system config include in {moonrakerConfigPath}")
-            output = []
+            output:List[str] = []
             lineFound = False
             with open(moonrakerConfigPath, encoding="utf-8") as f:
                 lines = f.readlines()
-                for l in lines:
-                    if "octoeverywhere-system.cfg" in l.lower():
+                for line in lines:
+                    if "octoeverywhere-system.cfg" in line.lower():
                         lineFound = True
                     else:
-                        output.append(l)
+                        output.append(line)
 
             if lineFound is False:
                 Logger.Debug("system config include not found.")

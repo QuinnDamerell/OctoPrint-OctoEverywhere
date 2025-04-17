@@ -3,7 +3,7 @@ import signal
 import sys
 import secrets
 import string
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
@@ -58,7 +58,7 @@ PluginFilePathRoot = "C:\\Users\\quinn"
 
 # A mock of the popup UI interface.
 class UiPopupInvokerStub(IPopUpInvoker):
-    def __init__(self, logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
 
     def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
@@ -69,7 +69,7 @@ class UiPopupInvokerStub(IPopUpInvoker):
 # Implements a common interface shared by OctoPrint and Moonraker.
 class MockPrinterStateObject(IPrinterStateReporter):
 
-    def __init__(self, logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
 
     # ! Interface Function ! The entire interface must change if the function is changed.
@@ -117,7 +117,7 @@ class MockPrinterStateObject(IPrinterStateReporter):
 # A mock of the popup UI interface.
 NotificationHandlerInstance:Optional[NotificationsHandler] = None
 class StatusChangeHandlerStub(IStateChangeHandler):
-    def __init__(self, logger, printerId):
+    def __init__(self, logger:logging.Logger, printerId: str) -> None:
         self.Logger = logger
         self.PrinterId = printerId
 
@@ -157,7 +157,7 @@ class StatusChangeHandlerStub(IStateChangeHandler):
         self.Logger.info("On rekey required message.")
 
 
-def SignalHandler(sig, frame):
+def SignalHandler(sig:Any, frame:Any):
     print('Ctrl+C Pressed, Exiting!')
     sys.exit(0)
 

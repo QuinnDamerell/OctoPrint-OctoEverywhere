@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Tuple
 
 from octoeverywhere.notificationshandler import NotificationsHandler
@@ -13,7 +14,7 @@ from .interfaces import IStateTranslator
 # and to act as the printer state interface for Bambu printers.
 class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
 
-    def __init__(self, logger) -> None:
+    def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
         self.NotificationsHandler:NotificationsHandler = None #pyright: ignore[reportAttributeAccessIssue]
         self.LastStatus:Optional[str] = None

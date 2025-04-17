@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from octoprint.printer import PrinterInterface
 
@@ -18,7 +18,7 @@ class SmartPause(ISmartPauseHandler):
     _Instance:"SmartPause" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
-    def Init(logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:dict):
+    def Init(logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:dict[str,Any]):
         SmartPause._Instance = SmartPause(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj)
         Compat.SetSmartPauseInterface(SmartPause._Instance)
 
@@ -28,7 +28,7 @@ class SmartPause(ISmartPauseHandler):
         return SmartPause._Instance
 
 
-    def __init__(self, logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:dict) -> None:
+    def __init__(self, logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:dict[str,Any]) -> None:
         self.Logger = logger
         self.OctoPrintPrinterObj = octoPrintPrinterObj
         # This is a dict defined from https://docs.octoprint.org/en/master/modules/printer.html#module-octoprint.printer.profile
@@ -75,7 +75,7 @@ class SmartPause(ISmartPauseHandler):
             return
 
         # Ensure we are printing
-        if self.OctoPrintPrinterObj.is_printing() is False:
+        if self.OctoPrintPrinterObj.is_printing() is False: #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             self.Logger.warning("Smart Pause tried to pause but the OctoPrint is not in the printing state.")
             return
 
@@ -125,10 +125,10 @@ class SmartPause(ISmartPauseHandler):
         # Start the the hotend, order matters once again.
         # If we are doing both the hotend and bed, we want the bed to re-enable first, to ensure the print sticks.
         # We also need to make sure the cooling is done after the retraction.
-        currentTemps = self.OctoPrintPrinterObj.get_current_temperatures()
+        currentTemps:dict[str, Any] = self.OctoPrintPrinterObj.get_current_temperatures() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
         if disableHotendBool:
             # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.profile.PrinterProfileManager
-            extruder:dict = self.OctoPrintPrinterProfileObj.get("extruder") #pyright: ignore[reportAssignmentType]
+            extruder:dict[str, Any] = self.OctoPrintPrinterProfileObj.get("extruder") #pyright: ignore[reportAssignmentType]
             count = extruder.get("count", 1)
 
             # If there is a shared nozzle, only work with the first tool, if there is one.
@@ -168,7 +168,7 @@ class SmartPause(ISmartPauseHandler):
 
         # Now call pause on OctoPrint! This pause command will make the OnScriptHook fire, which will consume these scripts we made.
         self.Logger.info("Smart Print scripts created, calling pause on OctoPrint.")
-        self.OctoPrintPrinterObj.pause_print()
+        self.OctoPrintPrinterObj.pause_print() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
 
     def OnScriptHook(self, script_type: str, script_name: str) -> Optional[Tuple[Optional[List[str]], Optional[List[str]]]]:
@@ -230,7 +230,7 @@ class SmartPause(ISmartPauseHandler):
         self.LastPauseNotificationSuppressionTime = None
 
 
-    def _ArrayToString(self, array) -> str:
+    def _ArrayToString(self, array:List[str]) -> str:
         output = ""
         for element in array:
             output += element + ", "

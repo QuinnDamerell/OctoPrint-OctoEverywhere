@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 import octoflatbuffers
 
 from .buffer import Buffer
@@ -30,18 +30,18 @@ class OctoStreamMsgBuilder:
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
 
         # Setup strings
-        printerIdOffset = builder.CreateString(printerId)
-        privateKeyOffset = builder.CreateString(privateKey)
-        pluginVersionOffset = builder.CreateString(pluginVersion)
+        printerIdOffset = builder.CreateString(printerId) #pyright: ignore[reportUnknownMemberType]
+        privateKeyOffset = builder.CreateString(privateKey) #pyright: ignore[reportUnknownMemberType]
+        pluginVersionOffset = builder.CreateString(pluginVersion) #pyright: ignore[reportUnknownMemberType]
         localIpOffset = None
         deviceIdOffset = None
         if localIp is not None:
-            localIpOffset = builder.CreateString(localIp)
+            localIpOffset = builder.CreateString(localIp) #pyright: ignore[reportUnknownMemberType]
         if deviceId is not None:
-            deviceIdOffset = builder.CreateString(deviceId)
+            deviceIdOffset = builder.CreateString(deviceId) #pyright: ignore[reportUnknownMemberType]
 
         # Setup the data vectors
-        rasChallengeOffset = builder.CreateByteVector(rsaChallenge)
+        rasChallengeOffset = builder.CreateByteVector(rsaChallenge) #pyright: ignore[reportUnknownMemberType]
 
         # Build the handshake syn
         HandshakeSyn.Start(builder)
@@ -68,7 +68,7 @@ class OctoStreamMsgBuilder:
 
 
     @staticmethod
-    def CreateBuffer(size) -> octoflatbuffers.Builder:
+    def CreateBuffer(size:int) -> octoflatbuffers.Builder:
         return octoflatbuffers.Builder(size)
 
 
@@ -81,7 +81,7 @@ class OctoStreamMsgBuilder:
         streamMsgOffset = OctoStreamMessage.End(builder)
 
         # Finalize the message. We use the size prefixed
-        builder.FinishSizePrefixed(streamMsgOffset)
+        builder.FinishSizePrefixed(streamMsgOffset) #pyright: ignore[reportUnknownMemberType]
 
         # Instead of using Output, which will create a copy of the buffer that's trimmed, we return the fully built buffer
         # with the header offset set and size. Flatbuffers are built backwards, so there's usually space in the front were we can add data
@@ -93,7 +93,7 @@ class OctoStreamMsgBuilder:
 
 
     @staticmethod
-    def BytesToString(buf) -> Optional[str]:
+    def BytesToString(buf:Any) -> Optional[str]:
         # The default value for optional strings is None
         # So, we handle it.
         if buf is None:

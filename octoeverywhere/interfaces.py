@@ -37,7 +37,7 @@ class WebSocketOpCode(Enum):
 class CommandResponse():
 
     @staticmethod
-    def Success(resultDict:Optional[dict]=None):
+    def Success(resultDict:Optional[dict[str, Any]]=None):
         if resultDict is None:
             resultDict = {}
         return CommandResponse(200, resultDict, None)
@@ -48,7 +48,7 @@ class CommandResponse():
         return CommandResponse(statusCode, None, errorStr)
 
 
-    def __init__(self, statusCode:int, resultDict:Optional[dict], errorStr:Optional[str]):
+    def __init__(self, statusCode:int, resultDict:Optional[dict[str, Any]], errorStr:Optional[str]):
         self.StatusCode = statusCode
         self.ResultDict = resultDict
         self.ErrorStr = errorStr

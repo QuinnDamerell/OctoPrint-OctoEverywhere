@@ -10,7 +10,7 @@ import os
 import signal
 
 from enum import Enum
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import IO, Any, Callable, Dict, List, Optional, Tuple
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.interfaces import IQuickCam
@@ -542,7 +542,7 @@ class QuickCam_WebSocket:
 
     # Allows us to using the with: scope.
     # Must not throw!
-    def __exit__(self, t, v, tb):
+    def __exit__(self, t:Any, v:Any, tb:Any):
         # Close in the opposite order they were opened.
         try:
             if self.SslSocket is not None:
@@ -606,7 +606,7 @@ class QuickCam_Jmpeg:
 
     # Allows us to using the with: scope.
     # Must not throw!
-    def __exit__(self, t, v, tb):
+    def __exit__(self, t:Any, v:Any, tb:Any):
         try:
             if self.HttpResult is not None:
                 self.HttpResult.__exit__(t, v, tb)
@@ -629,7 +629,7 @@ class QuickCam_RTSP:
         self.Process:subprocess.Popen = None #pyright: ignore[reportAttributeAccessIssue]
 
         # Image getting stuff
-        self.Buffer = bytearray()
+        self.Buffer:Optional[bytes] = None
         self.SearchedIndex = 0
         self.JpegStartSequence = bytearray([0xff, 0xd8, 0xff, 0xfe, 0x00, 0x10])
         self.JpegStartSequenceLen = len(self.JpegStartSequence)
@@ -679,7 +679,7 @@ class QuickCam_RTSP:
                     ],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         # pylint: disable=no-member # Linux only
-        stdout = self.Process.stdout
+        stdout = self.Process.stdout #pyright: ignore[reportUnknownMemberType]
         if stdout is None:
             raise Exception("QuickCam_RTSP failed to start ffmpeg process. No stdout pipe.")
         os.set_blocking(stdout.fileno(), False)
@@ -694,12 +694,17 @@ class QuickCam_RTSP:
             self.Logger.debug("Ffmpeg process started.")
 
 
+    # We have to keep this as it's own function, to force the type for pyright.
+    def _Read(self, stdout:Optional[IO[bytes]], readSize:int) -> Optional[bytes]:
+        return stdout.read(readSize) #pyright: ignore[reportOptionalMemberAccess]
+
+
     # ~~ Interface Function ~~
     # Gets an image from the server. This should block until an image is ready.
     # This can return None to indicate there's no image but the connection is still good, this allows the host to check if we should still be running.
     # To indicate connection is closed or needs to be closed, this should throw.
     def GetImage(self) -> Buffer:
-        stdout = self.Process.stdout
+        stdout = self.Process.stdout #pyright: ignore[reportUnknownMemberType]
         if stdout is None:
             raise Exception("QuickCam_RTSP failed to start ffmpeg process. No stdout pipe.")
 
@@ -709,14 +714,14 @@ class QuickCam_RTSP:
             self.PipeSelect.select(QuickCam_RTSP.c_ReadTimeoutSec)
 
             # Read all of the data we can.
-            buffer:bytes = stdout.read(100000000)
+            buffer = self._Read(stdout, 100000000)
 
             # Check for a timeout. This can happen because the select timeout, or it's been too long since we got an image parsed.
             # This usually means that ffmpeg has died or is not running correctly.
-            if self.Process.returncode is not None or (time.time() - self.TimeSinceLastImg) > QuickCam_RTSP.c_ReadTimeoutSec:
-                if self.StdErrBuffer is None or len(self.StdErrBuffer) == 0:
+            if self.Process.returncode is not None or (time.time() - self.TimeSinceLastImg) > QuickCam_RTSP.c_ReadTimeoutSec: #pyright: ignore[reportUnknownMemberType]
+                if self.StdErrBuffer is None or len(self.StdErrBuffer) == 0: #pyright: ignore[reportUnknownMemberType]
                     self.StdErrBuffer = "<None>"
-                raise Exception(f"Ffmpeg read timeout. ffmpeg output:\n{self.StdErrBuffer}")
+                raise Exception(f"Ffmpeg read timeout. ffmpeg output:\n{self.StdErrBuffer}") #pyright: ignore[reportUnknownMemberType]
 
             # If we get an empty buffer, we just need to wait for more.
             if buffer is None or len(buffer) == 0:
@@ -780,7 +785,7 @@ class QuickCam_RTSP:
                 self._ResetLocalBufferIfOverLimit()
                 if QuickCam_RTSP.c_DebugLogging:
                     self.Logger.debug("RTSP slow path image received.")
-                return Buffer(imgBuffer)
+                return Buffer(imgBuffer)ruff
 
             # If we didn't find anything, check the limit.
             if QuickCam_RTSP.c_DebugLogging:
@@ -810,7 +815,7 @@ class QuickCam_RTSP:
             try:
                 # Use a selector, so we only wake up when there's data to be read.
                 with selectors.DefaultSelector() as selector:
-                    stderr = self.Process.stderr
+                    stderr = self.Process.stderr #pyright: ignore[reportUnknownMemberType]
                     if stderr is None:
                         raise Exception("QuickCam_RTSP failed to start ffmpeg process. No stderr pipe.")
                     selector.register(stderr, selectors.EVENT_READ)
@@ -827,10 +832,10 @@ class QuickCam_RTSP:
                         buffer = stderr.read(10000)
                         if buffer is not None and len(buffer) > 0:
                             # Append to the log
-                            self.StdErrBuffer += buffer.decode("utf-8")
+                            self.StdErrBuffer += buffer.decode("utf-8") #pyright: ignore[reportUnknownMemberType]
                             # Have some sanity limit
-                            if len(self.StdErrBuffer) > 100000:
-                                self.StdErrBuffer = self.StdErrBuffer[-100000:]
+                            if len(self.StdErrBuffer) > 100000: #pyright: ignore[reportUnknownMemberType]
+                                self.StdErrBuffer = self.StdErrBuffer[-100000:] #pyright: ignore[reportUnknownMemberType]
 
             except Exception as e:
                 Sentry.OnException("RTSP error reader thread failed.", e)
@@ -854,7 +859,7 @@ class QuickCam_RTSP:
 
     # Allows us to using the with: scope.
     # Must not throw!
-    def __exit__(self, t, v, tb):
+    def __exit__(self, t:Any, v:Any, tb:Any):
         # Close the error reader thread.
         # Killing the process will cause the error reader thread to exit.
         self.ErrorReaderThreadRunning = False
@@ -862,23 +867,23 @@ class QuickCam_RTSP:
         # First, we want to try to gracefully kill ffmpeg. That way it has time to tell the rtsp server it's
         # going away and clean up.
         try:
-            if self.Process is not None:
+            if self.Process is not None: #pyright: ignore[reportUnknownMemberType]
                 # Send sig int to emulate a ctl+c
-                self.Process.send_signal(signal.SIGINT)
+                self.Process.send_signal(signal.SIGINT) #pyright: ignore[reportUnknownMemberType]
 
                 # Use communicate which will wait for the process to end and read it's final output.
                 # We also try to issue the q terminal command to exit, just incase the ffmpeg needs it.
                 # Give ffmpeg a good amount of time to exit, so ideally it gracefully exits. (usually this is really quick)
-                _, stderr =self.Process.communicate("q\r\n".encode("utf-8"), timeout=10.0)
+                _, stderr =self.Process.communicate("q\r\n".encode("utf-8"), timeout=10.0) #pyright: ignore[reportUnknownMemberType]
 
                 # Report what happened.
                 # For some reason communicate will eat the output instead of it being sent to our reader above, so we just print it here as well.
                 if stderr is None:
                     stderr = b""
-                stderr = stderr.decode("utf-8")
+                stderr = stderr.decode("utf-8") #pyright: ignore[reportUnknownMemberType]
                 self.Logger.debug(f"ffmpeg gracefully killed. Remaining ffmpeg output:\n{stderr}")
         except Exception as e:
-            self.Logger.warn(f"Exception when trying to gracefully kill ffmpeg. {e}")
+            self.Logger.warning(f"Exception when trying to gracefully kill ffmpeg. {e}")
 
         # Close in the opposite order they were opened.
         try:
@@ -889,14 +894,14 @@ class QuickCam_RTSP:
 
         # Ensure the process is killed
         try:
-            if self.Process is not None:
-                self.Process.kill()
+            if self.Process is not None: #pyright: ignore[reportUnknownMemberType]
+                self.Process.kill() #pyright: ignore[reportUnknownMemberType]
         except Exception:
             pass
 
         # And then call exit to cleanup all of the pipes and process handles.
         try:
-            if self.Process is not None:
-                self.Process.__exit__(t, v, tb)
+            if self.Process is not None: #pyright: ignore[reportUnknownMemberType]
+                self.Process.__exit__(t, v, tb) #pyright: ignore[reportUnknownMemberType]
         except Exception:
             pass

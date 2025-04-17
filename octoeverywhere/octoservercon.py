@@ -12,7 +12,7 @@ from .repeattimer import RepeatTimer
 from .octopingpong import OctoPingPong
 from .threaddebug import ThreadDebug
 from .dnstest import DnsTest
-from .interfaces import IOctoStream, IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler
+from .interfaces import IOctoStream, IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler, IWebSocketClient
 
 #
 # This class is responsible for connecting and maintaining a connection to a server.
@@ -146,7 +146,7 @@ class OctoServerCon(IOctoStream):
         return self.CurrentEndpoint
 
 
-    def OnOpened(self, _) -> None:
+    def OnOpened(self, ws:IWebSocketClient) -> None:
         self.Logger.info("Connected To OctoEverywhere, server con "+self.GetConnectionString()+". Starting handshake...")
 
         # On success make the lowest latency endpoint possible again, since we successfully connected to it or the primary.
@@ -164,11 +164,11 @@ class OctoServerCon(IOctoStream):
         self.OctoSession.StartHandshake(self.SummonMethod)
 
 
-    def OnClosed(self, _):
+    def OnClosed(self, ws:IWebSocketClient):
         self.Logger.info("Service websocket closed.")
 
 
-    def OnError(self, _, err:Exception):
+    def OnError(self, ws:IWebSocketClient, err:Exception):
         # If this error happened while we were connecting, set the TempDisableLowestLatencyEndpoint to true to block the lowest latency endpoint.
         # This is because the host might not be available temporally, so we will use the default.
         if self.IsWsConnecting:
@@ -183,7 +183,7 @@ class OctoServerCon(IOctoStream):
             dnsTest.RunTestSync()
 
 
-    def OnMsg(self, _, msg:Buffer):
+    def OnMsg(self, ws:IWebSocketClient, msg:Buffer):
         # When we get any message, consider it user activity.
         self.LastUserActivityTime = datetime.now()
 
@@ -406,8 +406,7 @@ class OctoServerCon(IOctoStream):
             ws.Send(buffer, msgStartOffsetBytes, msgSize, True)
 
 
-    def GetWsId(self, ws) -> str:
-        ws = self.Ws
+    def GetWsId(self, ws:Optional[IWebSocketClient]) -> str:
         if ws is not None:
             return str(id(ws))
         return "UNKNOWN"

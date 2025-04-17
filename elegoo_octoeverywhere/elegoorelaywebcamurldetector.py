@@ -13,7 +13,7 @@ class ElegooRelayWebcamUrlDetector(IRelayWebcamStreamDetector):
 
     # !! Interface Function !!
     # This function takes in the incoming relay http request and rewrites the URL or adds to the request if needed.
-    def OnIncomingRelayRequest(self, relativeOrAbsolutePath:str, headers:dict) -> None:
+    def OnIncomingRelayRequest(self, relativeOrAbsolutePath:str, headers:dict[str, str]) -> None:
         # Since the Elegoo web frontend is always the same, we don't need to do anything too fancy.
         # <ip>:3031/video is the path the frontend uses, but the server must re-write it anyways to correct the port.
         urlLower = relativeOrAbsolutePath.lower()

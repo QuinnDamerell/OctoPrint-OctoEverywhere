@@ -38,7 +38,7 @@ class Updater:
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
         foundOeServices:List[str] = []
-        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context)))
+        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context))) #pyright: ignore[reportUnknownMemberType] it can't be typed to prevent circular imports
         for fileOrDirName in fileAndDirList:
             Logger.Debug(f"Searching for OE services to update, found: {fileOrDirName}")
             fileOrDirNameLower = fileOrDirName.lower()

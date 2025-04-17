@@ -85,7 +85,7 @@ class FinalSnap:
                     # Set something like our default snap interval.
                     targetArrayIndex = 5
                 if targetArrayIndex >= len(self.SnapHistory):
-                    self.Logger.warn(f"FinalSnap target image index is larger than our buffer. {targetArrayIndex} {len(self.SnapHistory)}")
+                    self.Logger.warning(f"FinalSnap target image index is larger than our buffer. {targetArrayIndex} {len(self.SnapHistory)}")
                     # Use the oldest image we have.
                     targetArrayIndex = len(self.SnapHistory) - 1
 
@@ -128,7 +128,7 @@ class FinalSnap:
                 desiredBufferDepth = FinalSnap.c_snapshotBufferDepth
                 minBufferDepthForFixedTime = int(math.ceil(float(FinalSnap.c_onCompleteSnapDelaySec) / float(FinalSnap.c_defaultSnapIntervalSec)))
                 if minBufferDepthForFixedTime > desiredBufferDepth:
-                    self.Logger.warn(f"Final snap had to expand the default buffer size due to the time. {minBufferDepthForFixedTime}")
+                    self.Logger.warning(f"Final snap had to expand the default buffer size due to the time. {minBufferDepthForFixedTime}")
                     desiredBufferDepth = minBufferDepthForFixedTime
 
                 # Sanity check.

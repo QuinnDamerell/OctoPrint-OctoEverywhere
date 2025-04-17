@@ -59,7 +59,7 @@ class OctoHttpRequest:
 
     # Based on the URL passed, this will return PathTypes.Relative or PathTypes.Absolute
     @staticmethod
-    def GetPathType(url) -> int:
+    def GetPathType(url:str) -> int:
         if url.find("://") != -1:
             # If there is a protocol, it's for sure absolute.
             return PathTypes.Absolute
@@ -334,7 +334,7 @@ class OctoHttpRequest:
             if response is not None and response.status_code == 431:
                 logger.info(url + " http call returned 431, too many headers. Trying again with no headers.")
             else:
-                logger.warn(url + " http call returned no response on Windows. Trying again with no headers.")
+                logger.warning(url + " http call returned no response on Windows. Trying again with no headers.")
             try:
                 response = HttpSessions.GetSession(url).request(method, url, headers={}, data=dataBuffer, timeout=1800, allow_redirects=False, stream=True, verify=False)
             except Exception as e:

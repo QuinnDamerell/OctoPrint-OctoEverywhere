@@ -4,7 +4,7 @@ import base64
 import logging
 import threading
 from enum import Enum
-from typing import Optional
+from typing import Any, List, Optional
 
 import requests
 
@@ -105,7 +105,7 @@ class BambuCloud:
             # The token expiration is usually 1 year, we just check it for now.
             expiresIn = int(j.get('expiresIn', 0))
             if expiresIn / 60 / 60 / 24 < 300:
-                self.Logger.warn(f"Login Bambu Cloud access token expires in {expiresIn} seconds")
+                self.Logger.warning(f"Login Bambu Cloud access token expires in {expiresIn} seconds")
 
             # Every time we login in, we also want to ensure the printer's cloud info is synced locally.
             # Right now this can only sync the access code, but this is important, because things like the webcam streaming need to know the access code.
@@ -156,7 +156,7 @@ class BambuCloud:
     # Returns a list of the user's devices.
     # Returns None on failure.
     # Special Note: This function is used as a access token validation check. So if this fails due to the access token being invalid, the access token should be cleared so we try to login again.
-    def GetDeviceList(self) -> Optional[dict]:
+    def GetDeviceList(self) -> Optional[List[dict[str, Any]]]:
         tokenResult = self.GetAccessToken()
         if tokenResult.Status != LoginStatus.Success:
             return None
@@ -184,7 +184,7 @@ class BambuCloud:
 
 
     # Returns this device info from the Bambu Cloud API by matching the SN
-    def GetThisDeviceInfo(self) -> Optional[dict]:
+    def GetThisDeviceInfo(self) -> Optional[dict[str, Any]]:
         devices = self.GetDeviceList()
         localSn = self.Config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
         if localSn is None:
@@ -194,12 +194,12 @@ class BambuCloud:
             self.Logger.error("Bambu Cloud GetThisDeviceInfo failed to get device list.")
             return None
         for d in devices:
-            sn =  d.get('dev_id', None)
-            self.Logger.debug(f"Bambu Cloud Printer Info. SN:{sn} Name:{(d.get('name', None))}")
+            sn = d.get('dev_id', None) #pyright: ignore[reportUnknownMemberType]
+            self.Logger.debug(f"Bambu Cloud Printer Info. SN:{sn} Name:{(d.get('name', None))}") #pyright: ignore[reportUnknownMemberType]
             if sn == localSn:
                 return d
         self.Logger.error("Bambu Cloud failed to find a matching printer SN on the user account.")
-        return None
+        return {}
 
 
     # Get's the known device info from the Bambu API and ensures it's synced with our config settings.
@@ -231,7 +231,7 @@ class BambuCloud:
     def _IsRegionChina(self) -> bool:
         region = self.Config.GetStr(Config.SectionBambu, Config.BambuCloudRegion, None)
         if region is None:
-            self.Logger.warn("Bambu Cloud region not set, assuming world wide.")
+            self.Logger.warning("Bambu Cloud region not set, assuming world wide.")
             region = "world"
         return region == "china"
 

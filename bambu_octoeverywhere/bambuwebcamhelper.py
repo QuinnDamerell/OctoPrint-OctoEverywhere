@@ -100,7 +100,7 @@ class BambuWebcamHelper(IWebcamPlatformHelper):
 
             # If we didn't get the state after a few attempts, we give up and default to the websocket stream.
             if stateGetAttempt > 5:
-                self.Logger.warn(f"BambuWebcamHelper wasn't able to get the printer state after {stateGetAttempt} attempts")
+                self.Logger.warning(f"BambuWebcamHelper wasn't able to get the printer state after {stateGetAttempt} attempts")
                 break
 
             # Sleep for a bit before trying again.

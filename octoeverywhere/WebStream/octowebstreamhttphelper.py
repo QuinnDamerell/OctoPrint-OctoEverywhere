@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import urllib3
@@ -240,7 +240,7 @@ class OctoWebStreamHttpHelper:
         # Since the request failed, we want to just close the stream, since it's not a protocol failure.
         if octoHttpResult is None:
             path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
-            self.Logger.warn(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None; url:"+str(path))
+            self.Logger.warning(self.getLogMsgPrefix() + " failed to make http request. octoHttpResult was None; url:"+str(path))
             self.WebStream.SetClosedDueToFailedRequestConnection()
             self.WebStream.Close()
             return
@@ -485,7 +485,7 @@ class OctoWebStreamHttpHelper:
                     if self.Logger.isEnabledFor(logging.DEBUG):
                         self.Logger.debug(f"Multipart Stats; reads per second: {str(self.MultipartReadsPerSecond)}, body read high water mark {str(format(self.BodyReadTimeHighWaterMarkSec*1000.0, '.2f'))}ms, socket write high water mark {str(format(self.ServiceUploadTimeHighWaterMarkSec*1000.0, '.2f'))}ms")
                     if self.MultipartReadsPerSecond > 255 or self.MultipartReadsPerSecond < 0:
-                        self.Logger.warn("self.MultipartReadsPerSecond is larger than uint8. "+str(self.MultipartReadsPerSecond))
+                        self.Logger.warning("self.MultipartReadsPerSecond is larger than uint8. "+str(self.MultipartReadsPerSecond))
                         self.MultipartReadsPerSecond  = 255
                     WebStreamMsg.AddMultipartReadsPerSecond(builder, self.MultipartReadsPerSecond)
                     self.MultipartReadsPerSecond = 0
@@ -553,25 +553,25 @@ class OctoWebStreamHttpHelper:
                 continue
 
             # Allocate strings
-            keyOffset = builder.CreateString(name)
-            valueOffset = builder.CreateString(value)
+            keyOffset = builder.CreateString(name) #pyright: ignore[reportUnknownMemberType]
+            valueOffset = builder.CreateString(value) #pyright: ignore[reportUnknownMemberType]
             # Create the header table
             HttpHeader.Start(builder)
             HttpHeader.AddKey(builder, keyOffset)
             HttpHeader.AddValue(builder, valueOffset)
-            headerTableOffsets.append(HttpHeader.End(builder))
+            headerTableOffsets.append(HttpHeader.End(builder)) #pyright: ignore[reportUnknownMemberType]
 
         # Check if there were any headers, if not, return null so we don't set the vector.
         if len(headerTableOffsets) == 0:
             return None
 
         # Build the heaver vector
-        HttpInitialContext.StartHeadersVector(builder, len(headerTableOffsets))
+        HttpInitialContext.StartHeadersVector(builder, len(headerTableOffsets)) #pyright: ignore[reportUnknownMemberType]
         for offset in headerTableOffsets:
             # This function was very hard to find, I eventually found an example in the
             # py samples in the flatbuffer repo.
-            builder.PrependUOffsetTRelative(offset)
-        return builder.EndVector()
+            builder.PrependUOffsetTRelative(offset) #pyright: ignore[reportUnknownMemberType]
+        return builder.EndVector() #pyright: ignore[reportUnknownMemberType]
 
 
     def finalizeUnknownUploadSizeIfNeeded(self) -> None:
@@ -613,7 +613,7 @@ class OctoWebStreamHttpHelper:
         # The full upload size will be the same size as we expect, but the compression will make the payload larger.
         # If we know the upload size, make sure this doesn't exceeded it.
         # if self.KnownFullStreamUploadSizeBytes is not None and thisMessageDataLen + self.UploadBytesReceivedSoFar > self.KnownFullStreamUploadSizeBytes:
-        #     self.Logger.warn(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(thisMessageDataLen)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
+        #     self.Logger.warning(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(thisMessageDataLen)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
 
         # Make sure the array has been allocated and it's still large enough.
         if self.UploadBuffer is None or thisMessageDataLen + self.UploadBytesReceivedSoFar > len(self.UploadBuffer):
@@ -732,7 +732,7 @@ class OctoWebStreamHttpHelper:
         # However, there are some we must send...
         # Quote - Note that the server generating a 304 response MUST generate any of the following header fields that would have been sent in a 200 (OK) response to the same request: Cache-Control, Content-Location, Date, ETag, Expires, and Vary.
         #         https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/If-None-Match
-        removeHeaders = []
+        removeHeaders:List[str] = []
         for key in octoHttpResult.Headers:
             keyLower = key.lower()
             if keyLower == "content-length":
@@ -931,12 +931,11 @@ class OctoWebStreamHttpHelper:
             builder = builderContext.Builder
             if builder is None:
                 raise Exception("The builder is None, but we are trying to create a flatbuffer message.")
-            return (originalBufferSize, len(finalDataBuffer), builder.CreateByteVector(finalDataBuffer)) #pyright: ignore[reportArgumentType]
+            return (originalBufferSize, len(finalDataBuffer), builder.CreateByteVector(finalDataBuffer)) #pyright: ignore[reportArgumentType, reportUnknownMemberType]
         finally:
             # If we used a memory view, release it.
             # This also means that the finalDataBuffer is a memory view.
             if finalDataBufferMv is not None:
-                finalDataBuffer.release() #pyright: ignore[reportAttributeAccessIssue,reportOptionalMemberAccess]
                 finalDataBufferMv.release()
 
 
@@ -998,7 +997,7 @@ class OctoWebStreamHttpHelper:
                         outputStr = headerStr
                         if len(outputStr) > 40:
                             outputStr = outputStr[:40]
-                        self.Logger.warn("We read a web stream body frame, but it didn't start with the expected boundary header. expected:'"+boundaryStr+"' got:^^"+outputStr+"^^")
+                        self.Logger.warning("We read a web stream body frame, but it didn't start with the expected boundary header. expected:'"+boundaryStr+"' got:^^"+outputStr+"^^")
                     self.MissingBoundaryWarningCounter += 1
 
                 # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
@@ -1063,7 +1062,7 @@ class OctoWebStreamHttpHelper:
 
             # Warn if twe didn't read it all
             if len(data) != toRead:
-                self.Logger.warn(self.getLogMsgPrefix()+" while reading a boundary chunk, doBodyRead didn't return the full size we requested.")
+                self.Logger.warning(self.getLogMsgPrefix()+" while reading a boundary chunk, doBodyRead didn't return the full size we requested.")
 
             # Copy this data into the temp buffer
             ba = self.BodyReadTempBuffer.ForceAsByteArray()
@@ -1085,7 +1084,7 @@ class OctoWebStreamHttpHelper:
             # Dump the counter value into the main stored value. This will be picked up by the message creation process and sent to the server.
             # Note if this spins multiple times, it will be zeroed out. That would mean there's a more than 1s gap in reading.
             if isFirstIncrement is False and self.MultipartReadsPerSecond == 0:
-                self.Logger.warn("Multipart read per second stats hit a period where 0 reads happened for more than second.")
+                self.Logger.warning("Multipart read per second stats hit a period where 0 reads happened for more than second.")
             self.MultipartReadsPerSecond = self.MissingBoundaryWarningCounter
             self.MissingBoundaryWarningCounter = 0
             isFirstIncrement = False
@@ -1247,7 +1246,7 @@ class OctoWebStreamHttpHelper:
 
         try:
             startSec = time.time()
-            chunkBufferList = None
+            chunkBufferList:Optional[List[bytes]] = None
 
             # Since we will always sleep for at least the min time, there's no need to do work until the min time is meet.
             # If we did do the loop, we would just end up spinning and sleeping again.
@@ -1294,7 +1293,7 @@ class OctoWebStreamHttpHelper:
             # Append all of the chunks together and return the buffer!
             # Optimize for the single chunk scenario.
             if len(chunkBufferList) == 1:
-                return chunkBufferList[0]
+                return Buffer(chunkBufferList[0])
 
             # Find the final buffer length.
             totalLength = sum(len(b) for b in chunkBufferList)
@@ -1372,7 +1371,7 @@ class UnknownBodyChunkReadContext:
         self.BufferDataReadyEvent = threading.Event()
 
         # We use a list so we can efficiently append all of the pending buffers at once when they are being sent.
-        self.BufferList = []
+        self.BufferList:List[bytes] = []
 
         # Set to true when the read is done either from the end of the body or an error.
         # Once true, it will never read again, but we do need to process the BufferList

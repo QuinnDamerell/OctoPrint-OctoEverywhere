@@ -2,7 +2,7 @@ import threading
 import time
 import logging
 import json
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import requests
 
@@ -307,7 +307,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Given a Moonraker webcam API result list item, this will try to parse it.
     # If successful, this will return a valid AbstractWebcamSettings object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseWebcamApiItem(self, webcamApiItem:dict) -> Optional[WebcamSettingItem]:
+    def _TryToParseWebcamApiItem(self, webcamApiItem:dict[str,Any]) -> Optional[WebcamSettingItem]:
         try:
             # This new converged logic is amazing, see this doc for the full schema
             # https://moonraker.readthedocs.io/en/latest/web_api/#webcam-apis
@@ -356,18 +356,18 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             # If the error was due to some issue talking to moonraker, we don't want to rest the webcam config to the defaults, SO WE RETURN True.
             # When the connection is re-established, we will force sync the webcam settings.
             if result.IsErrorCodeOeError():
-                self.Logger.warn("Moonraker webcam helper failed to query DB for webcams due to a coms issue. We won't reset the config. "+result.GetLoggingErrorStr())
+                self.Logger.warning("Moonraker webcam helper failed to query DB for webcams due to a coms issue. We won't reset the config. "+result.GetLoggingErrorStr())
                 return True
             # If this happens, it means there are no webcams configured in this DB entry
             if result.ErrorStr is not None and "Namespace 'webcams' not found".lower() in result.ErrorStr.lower():
                 self.Logger.debug("server.database.get_item returned no webcam namespace found.")
                 return False
-            self.Logger.warn("Moonraker webcam helper failed to query DB for webcams. "+result.GetLoggingErrorStr())
+            self.Logger.warning("Moonraker webcam helper failed to query DB for webcams. "+result.GetLoggingErrorStr())
             return False
 
         res = result.GetResult()
         if "value" not in res:
-            self.Logger.warn("Moonraker webcam helper failed to find value in DB result.")
+            self.Logger.warning("Moonraker webcam helper failed to find value in DB result.")
             return False
 
         # To help debugging, log the result.
@@ -399,7 +399,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Given a Moonraker webcam db entry, this will try to parse it.
     # If successful, this will return a valid WebcamSettingItem object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseMoonrakerWebcamDbEntry(self, webcamSettingsObj:dict) -> Optional[WebcamSettingItem]:
+    def _TryToParseMoonrakerWebcamDbEntry(self, webcamSettingsObj:dict[str, Any]) -> Optional[WebcamSettingItem]:
         try:
             # Skip if it's not set to enabled.
             if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:
@@ -471,12 +471,12 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             if result.ErrorStr is not None and "not found".lower() in result.ErrorStr.lower():
                 self.Logger.debug("server.database.get_item for custom FLUIDD namespace returned no webcam namespace found.")
                 return False
-            self.Logger.warn("Moonraker webcam helper failed to FLUIDD DB query for webcams. "+result.GetLoggingErrorStr())
+            self.Logger.warning("Moonraker webcam helper failed to FLUIDD DB query for webcams. "+result.GetLoggingErrorStr())
             return False
 
         res = result.GetResult()
         if "value" not in res:
-            self.Logger.warn("Moonraker webcam helper failed to find value in result FLUIDD DB.")
+            self.Logger.warning("Moonraker webcam helper failed to find value in result FLUIDD DB.")
             return False
 
         # To help debugging, log the result.
@@ -508,7 +508,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Given a Fluidd namespace webcam db entry, this will try to parse it.
     # If successful, this will return a valid WebcamSettingItem object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseFluiddCustomWebcamDbEntry(self, webcamSettingsObj:dict) -> Optional[WebcamSettingItem]:
+    def _TryToParseFluiddCustomWebcamDbEntry(self, webcamSettingsObj:dict[str, Any]) -> Optional[WebcamSettingItem]:
         try:
             # Skip if it's not set to enabled.
             if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:
@@ -604,7 +604,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             webcamSettings.FlipV = bool(webcamSettings.FlipV)
             webcamSettings.Rotation = int(webcamSettings.Rotation)
             if webcamSettings.Rotation != 0 and webcamSettings.Rotation != 90 and webcamSettings.Rotation != 180 and webcamSettings.Rotation != 270:
-                self.Logger.warn("Webcam helper found an invalid rotation, resetting to 0")
+                self.Logger.warning("Webcam helper found an invalid rotation, resetting to 0")
                 webcamSettings.Rotation = 0
 
             # Finally, do the standard webcam settings validation.
@@ -706,7 +706,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
                     break
                 i += 1
             if i == len(webcamSettingsItemResults):
-                self.Logger.warn(f"A non-default primary webcam name was set, but we didn't find a matching webcam config. name:{webcamNameToSelectLower}")
+                self.Logger.warning(f"A non-default primary webcam name was set, but we didn't find a matching webcam config. name:{webcamNameToSelectLower}")
 
         # Print for debugging.
         for i in webcamSettingsItemResults:

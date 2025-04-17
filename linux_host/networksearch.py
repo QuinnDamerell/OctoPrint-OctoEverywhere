@@ -7,7 +7,7 @@ import string
 import socket
 import logging
 import threading
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -17,7 +17,7 @@ from octoeverywhere.interfaces import IWebSocketClient
 
 # A helper class that's the result of a network search.
 class ElegooNetworkSearchResult:
-    def __init__(self, ip:str, tooManyClients:bool, mainboardMac:str) -> None:
+    def __init__(self, ip:str, tooManyClients:bool, mainboardMac:Optional[str]) -> None:
         self.Ip = ip
         self.TooManyClients = tooManyClients
         self.MainboardMac = mainboardMac
@@ -82,7 +82,7 @@ class NetworkSearch:
     # If a mainboardMac is specified, only printers with that mainboardMac will be considered.
     @staticmethod
     def ScanForInstances_Elegoo(logger:logging.Logger, mainboardMac:Optional[str]=None, portStr:Optional[str]=None, threadCount:Optional[int]=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
-        foundPrinters:dict = {}
+        foundPrinters:dict[str, NetworkValidationResult] = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
             # We want to keep track of successful printers and ones we know are Elegoo printers, but we can't connect to.
@@ -109,7 +109,7 @@ class NetworkSearch:
             return []
 
         # If we are looking for all printers, we can return all the results.
-        ret = []
+        ret:List[ElegooNetworkSearchResult] = []
         for ip, result in foundPrinters.items():
             ret.append(ElegooNetworkSearchResult(ip, result.TooManyClients, result.MainboardMac))
         return ret
@@ -117,7 +117,7 @@ class NetworkSearch:
 
     # The final two steps can happen in different orders, so we need to wait for both the sub success and state object to be received.
     @staticmethod
-    def _BambuConnectionDone(data:dict, client:mqtt.Client) -> bool:
+    def _BambuConnectionDone(data:dict[str,Any], client:mqtt.Client) -> bool:
         if "SnSubSuccess" in data and data["SnSubSuccess"] is True and "GotStateObj" in data and data["GotStateObj"] is True:
             data["Event"].set()
             client.disconnect()
@@ -138,11 +138,11 @@ class NetworkSearch:
             result = {}
             result["Event"] = threading.Event()
             client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=result) # pyright: ignore[reportPrivateImportUsage]
-            client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+            client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE) # pyright: ignore[reportUnknownMemberType]
             client.tls_insecure_set(True)
             client.username_pw_set("bblp", accessCode)
 
-            def connect(client:mqtt.Client, userdata:dict, flags, reason_code:mqtt.ReasonCode, properties): # pyright: ignore[reportPrivateImportUsage]
+            def connect(client:mqtt.Client, userdata:dict[Any, Any], flags:Any, reason_code:mqtt.ReasonCode, properties:Any): # pyright: ignore[reportPrivateImportUsage]
                 # If auth is wrong, we will get a connect callback with a failure "Not authorized"
                 if reason_code.is_failure:
                     logger.debug(f"Bambu {ipOrHostname} connection failure: {reason_code}")
@@ -163,11 +163,11 @@ class NetworkSearch:
                     userdata["Event"].set()
                 userdata["ReportMid"] = mid
 
-            def disconnect(client, userdata:dict, disconnect_flags, reason_code, properties):
+            def disconnect(client:Any, userdata:dict[str, Any], disconnect_flags:Any, reason_code:Any, properties:Any):
                 logger.debug(f"Bambu {ipOrHostname} disconnected.")
                 userdata["Event"].set()
 
-            def subscribe(client, userdata:dict, mid, reason_code_list:List[mqtt.ReasonCode], properties): # pyright: ignore[reportPrivateImportUsage]
+            def subscribe(client:Any, userdata:dict[str, Any], mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): # pyright: ignore[reportPrivateImportUsage]
                 if "ReportMid" in userdata and mid == userdata["ReportMid"]:
                     # If this is the sub report, check the status and disconnect.
                     failedSn = False
@@ -185,7 +185,7 @@ class NetworkSearch:
                         # Check if we are done, this will disconnect if we are.
                         NetworkSearch._BambuConnectionDone(userdata, client)
 
-            def message(client, userdata:dict, mqttMsg:mqtt.MQTTMessage):
+            def message(client:Any, userdata:dict[str, Any], mqttMsg:mqtt.MQTTMessage):
                 # When we get a message, check if it is a state object.
                 # We need info from the state object, and also it's a good validation the system is healthy.
                 try:
@@ -274,7 +274,7 @@ class NetworkSearch:
                 portStr = NetworkSearch.c_ElegooDefaultPortStr
             port = int(portStr)
             logger.debug(f"Testing for Elegoo printer on {ipOrHostname}:{port}")
-            result = {}
+            result:dict[str, Any] = {}
             result["Event"] = threading.Event()
 
             def onWsOpen(ws:IWebSocketClient):
@@ -318,12 +318,12 @@ class NetworkSearch:
                 except Exception as e:
                     logger.debug(f"Elegoo {ipOrHostname} ws msg error. {e}")
 
-            def onWsClose(ws):
+            def onWsClose(ws:IWebSocketClient):
                 # The websocket closed, ensure we set the done event.
                 logger.debug(f"Elegoo {ipOrHostname} ws closed.")
                 result["Event"].set()
 
-            def onWsError(ws, exception:Exception):
+            def onWsError(ws:IWebSocketClient, exception:Exception):
                 # The websocket hit an error, ensure we set the done event.
                 exceptionStr = str(exception)
                 logger.debug(f"Elegoo {ipOrHostname} ws error. %s", exceptionStr)
@@ -371,8 +371,8 @@ class NetworkSearch:
     # testConFunction must be a function func(ip:str) -> NetworkValidationResult
     # Returns a list of IPs that reported Success() == True
     @staticmethod
-    def _ScanForInstances(logger:logging.Logger, testConFunction, returnAfterNumberFound:int=0, threadCount:Optional[int]=None, perThreadDelaySec:float=0.0) -> List[str]:
-        foundIps = []
+    def _ScanForInstances(logger:logging.Logger, testConFunction:Callable[[str], NetworkValidationResult], returnAfterNumberFound:int=0, threadCount:Optional[int]=None, perThreadDelaySec:float=0.0) -> List[str]: # type: ignore
+        foundIps:List[str] = []
         try:
             localIp = NetworkSearch._TryToGetLocalIp()
             if localIp is None or len(localIp) == 0:
@@ -402,7 +402,7 @@ class NetworkSearch:
                 logger.debug("Low resource device detected, limiting threads to 30.")
                 totalThreads = 30
 
-            outstandingIpsToCheck = []
+            outstandingIpsToCheck:List[str] = []
             counter = 0
             while counter < 255:
                 # The first IP will be 1, the last 255
@@ -417,7 +417,7 @@ class NetworkSearch:
             doneEvent = threading.Event()
             counter = 0
             while counter < totalThreads:
-                def threadFunc(threadId):
+                def threadFunc(threadId:int):
                     ip = "none"
                     try:
                         # Loop until we run out of IPs or the test is done by the bool flag.

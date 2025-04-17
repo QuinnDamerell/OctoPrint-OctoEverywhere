@@ -189,7 +189,7 @@ class OctoPingPong:
 
         # Before we compute stats, remove any servers from our on disk stats that are no longer in the default response.
         # This is important to ensure the lowest latency server doesn't get stuck to a hostname that doesn't exist.
-        toRemove = []
+        toRemove:List[str] = []
         for sub in self.Stats[OctoPingPong.ServerStatsKey]:
             if sub not in defaultServerResult.ServersSubdomains:
                 toRemove.append(sub)
@@ -279,7 +279,7 @@ class OctoPingPong:
         self._ReportTelemetry(defaultServerResult.ThisServerSubdomain, defaultServerComputedAvgMs, lowestLatencySubName, lowestLatencyValueMs, selectedLatencyMs)
 
 
-    def _ReportTelemetry(self, defaultServerName, defaultServerLatencyMs, lowestLatencyName, lowestLatencyMs, selectedLatencyMs):
+    def _ReportTelemetry(self, defaultServerName:str, defaultServerLatencyMs:float, lowestLatencyName:str, lowestLatencyMs:float, selectedLatencyMs:Optional[float]) -> None:
         isDefaultLowest = defaultServerName == lowestLatencyName
         lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
         Telemetry.Write("PluginLatencyV4", int(defaultServerLatencyMs),

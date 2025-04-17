@@ -2,8 +2,7 @@ import json
 import socket
 import threading
 import ipaddress
-from token import OP
-from typing import Optional, Tuple, List
+from typing import Any, Optional, Tuple, List
 
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.interfaces import IWebSocketClient
@@ -203,7 +202,7 @@ class MoonrakerConnector:
     def _CheckForMoonraker(self, ip:str, port:str, apiKey:Optional[str]=None, timeoutSec:float=5.0) -> MoonrakerConnectionResult:
         doneEvent = threading.Event()
         lock = threading.Lock()
-        result = {}
+        result:dict[str, Any] = {}
 
         # Create the URL
         url = f"ws://{ip}:{port}/websocket"
@@ -299,7 +298,7 @@ class MoonrakerConnector:
     # Scans the subnet for Moonraker instances.
     # Returns a list of IPs where moonraker was found.
     def _ScanForMoonrakerInstances(self) -> List[MoonrakerScanResult]:
-        results = []
+        results:List[MoonrakerScanResult] = []
         try:
             localIp = self._TryToGetLocalIp()
             if localIp is None or len(localIp) == 0:
@@ -322,7 +321,7 @@ class MoonrakerConnector:
             doneEvent = threading.Event()
             while counter <= totalThreads:
                 fullIp = ipPrefix + str(counter)
-                def threadFunc(ip):
+                def threadFunc(ip:str):
                     try:
                         checkResult = self._CheckForMoonraker(ip, MoonrakerConnector.c_KlipperDefaultPortStr, apiKey=None, timeoutSec=5.0)
                         with threadLock:

@@ -26,6 +26,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install pylint
         pip install pyright
+        pip install ruff
         pip install octoprint
         pip install -r requirements.txt
         pip install "zstandard>=0.21.0,<0.23.0"
@@ -45,3 +46,7 @@ jobs:
       run: |
         # Run pyright, which will use the pyrightconfig.json file to determine which files to check.
         pyright
+
+    - name: 🐶 Ruff
+      run: |
+        ruff check

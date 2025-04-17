@@ -119,9 +119,10 @@ class ElegooConnector:
                 if result.TooManyClients:
                     self._ShowTooManyClientsError(result.Ip)
                     continue
-
-                Logger.Info(f"Found your Elegoo printer on your network at {result.Ip}.")
-                return (result.Ip, result.MainboardMac)
+                # If we have a mainboard id, we are good to go.
+                if result.MainboardMac is not None:
+                    Logger.Info(f"Found your Elegoo printer on your network at {result.Ip}.")
+                    return (result.Ip, result.MainboardMac)
 
             elif len(results) > 1:
                 # Handle multiple results.

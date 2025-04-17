@@ -1,3 +1,4 @@
+from typing import List
 from .Util import Util
 from .Logging import Logger
 
@@ -48,7 +49,7 @@ class TimeSync:
         targetFilePath = "/etc/systemd/timesyncd.conf"
         try:
             # After writing, read the file and insert any comments we have.
-            outputLines = []
+            outputLines:List[str] = []
             with open(targetFilePath, 'r', encoding="utf-8") as f:
                 lines = f.readlines()
                 for line in lines:

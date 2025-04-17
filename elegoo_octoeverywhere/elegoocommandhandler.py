@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, Union
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 from octoeverywhere.interfaces import IPlatformCommandHandler
@@ -9,7 +10,7 @@ from .elegoofilemanager import ElegooFileManager
 # This class implements the Platform Command Handler Interface
 class ElegooCommandHandler(IPlatformCommandHandler):
 
-    def __init__(self, logger) -> None:
+    def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
 
 

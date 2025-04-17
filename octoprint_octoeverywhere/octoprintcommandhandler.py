@@ -22,7 +22,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     # A helper for checking if things exist in dicts.
-    def _Exists(self, dictObj:dict, key:str):
+    def _Exists(self, dictObj:dict[str, Any], key:str):
         return key in dictObj and dictObj[key] is not None
 
 
@@ -41,7 +41,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         try:
             # Get the date from the octoprint printer object.
-            currentData = self.OctoPrintPrinterObject.get_current_data()
+            currentData:dict[str, Any] = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
             # Get progress
             progress = 0.0
@@ -80,7 +80,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             # For example, the printing state string in get_current_data can change if printing from an SD card
             # Possible Values - https://github.com/OctoPrint/OctoPrint/blob/260a1aef11432c421246019e25b6b744abbaed60/src/octoprint/util/comm.py#L432
             # There are a lot of values here. We only include some of them and then consider the rest "idle"
-            opStateStr = self.OctoPrintPrinterObject.get_state_id()
+            opStateStr = self.OctoPrintPrinterObject.get_state_id() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             state = "idle"
             if opStateStr == "PRINTING" or opStateStr == "STARTING" or opStateStr == "FINISHING":
                 # Special cases for printing
@@ -105,7 +105,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
             # Get the current temps if possible.
             # Note there will be no objects in the dic if the printer isn't connected or in other cases.
-            currentTemps = self.OctoPrintPrinterObject.get_current_temperatures()
+            currentTemps = self.OctoPrintPrinterObject.get_current_temperatures() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             hotendActual = 0.0
             hotendTarget = 0.0
             bedTarget = 0.0
@@ -170,7 +170,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         # Ensure we are printing, if not, respond with the common error.
-        if self.OctoPrintPrinterObject.is_printing() is False:
+        if self.OctoPrintPrinterObject.is_printing() is False: #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             self.Logger.info("ExecutePause is not doing anything because theres' no print in progress..")
             return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Printer state is not printing.")
 
@@ -182,7 +182,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                     SmartPause.Get().SetLastPauseNotificationSuppressionTimeNow()
 
                 # Do the pause.
-                self.OctoPrintPrinterObject.pause_print()
+                self.OctoPrintPrinterObject.pause_print() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
                 # Return success.
                 return CommandResponse.Success(None)
@@ -216,12 +216,12 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecuteResume(self) -> CommandResponse:
         # Ensure we are paused, if not, respond with the common error.
-        if self.OctoPrintPrinterObject.is_paused() is False and self.OctoPrintPrinterObject.is_pausing() is False:
+        if self.OctoPrintPrinterObject.is_paused() is False and self.OctoPrintPrinterObject.is_pausing() is False: #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             self.Logger.info("ExecuteResume is not doing anything because the printer isn't paused..")
             return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Printer state is not paused.")
 
         # Do the resume.
-        self.OctoPrintPrinterObject.resume_print()
+        self.OctoPrintPrinterObject.resume_print() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
         # Return success.
         return CommandResponse.Success(None)
@@ -233,13 +233,13 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecuteCancel(self) -> CommandResponse:
         # Ensure we are paused, if not, respond with the common error.
-        state = self.OctoPrintPrinterObject.get_state_id()
+        state = self.OctoPrintPrinterObject.get_state_id() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
         if state != "PRINTING" and state != "RESUMING" and state != "FINISHING" and state != "STARTING" and state != "PAUSED" and state != "PAUSING":
             self.Logger.info("ExecuteCancel is not doing anything because the printer printing.")
             return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Printer state is not printing.")
 
         # Do the cancel.
-        self.OctoPrintPrinterObject.cancel_print()
+        self.OctoPrintPrinterObject.cancel_print() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
         # Return success.
         return CommandResponse.Success(None)

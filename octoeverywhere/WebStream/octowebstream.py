@@ -2,7 +2,7 @@ import time
 import queue
 import threading
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from ..buffer import Buffer
 from ..sentry import Sentry
@@ -21,7 +21,7 @@ from ..debugprofiler import DebugProfiler, DebugProfilerFeatures
 class OctoWebStream(threading.Thread, IWebStream):
 
     # Created when an open message is sent for a new web stream from the server.
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None) -> None:
+    def __init__(self, group:Any=None, target:Any=None, name:Any=None, args:Any=(), kwargs:Any=None, verbose:Any=None) -> None:
         threading.Thread.__init__(self, group=group, target=target, name=name)
         self.Logger:logging.Logger = args[0]
         self.Id:int = args[1]
@@ -30,7 +30,7 @@ class OctoWebStream(threading.Thread, IWebStream):
         self.IsClosed = False
         self.HasSentCloseMessage = False
         self.StateLock = threading.Lock()
-        self.MsgQueue = queue.Queue()
+        self.MsgQueue:queue.Queue[Optional[WebStreamMsg.WebStreamMsg]] = queue.Queue()
         self.HttpHelper:Optional[OctoWebStreamHttpHelper] = None
         self.WsHelper:Optional[OctoWebStreamWsHelper] = None
         self.IsHelperClosed = False
@@ -188,7 +188,7 @@ class OctoWebStream(threading.Thread, IWebStream):
             # returning the correct returnValue, so if we see that we will call close to make sure things
             # are going down. Since Close() is guarded against multiple entries, this is totally fine.
             if self.HasSentCloseMessage is True and self.IsClosed is False:
-                self.Logger.warn("Web stream "+str(self.Id)+" processed a message and has sent a close message, but didn't call close on the web stream. Closing now.")
+                self.Logger.warning("Web stream "+str(self.Id)+" processed a message and has sent a close message, but didn't call close on the web stream. Closing now.")
                 self.Close()
                 return
 
@@ -254,7 +254,7 @@ class OctoWebStream(threading.Thread, IWebStream):
                     # We can only send one close flag, so only allow this to send if we haven't sent yet.
                     if self.HasSentCloseMessage:
                         if silentlyFail is False:
-                            self.Logger.warn("Web Stream "+str(self.Id)+" tried to send a close message after a close message was already sent")
+                            self.Logger.warning("Web Stream "+str(self.Id)+" tried to send a close message after a close message was already sent")
                         return
 
             # No matter what, if the close flag is set, set the has sent now.

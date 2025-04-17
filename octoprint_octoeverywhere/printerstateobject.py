@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from octoprint.printer import PrinterInterface
 
@@ -28,7 +28,7 @@ class PrinterStateObject(IPrinterStateReporter):
     def GetPrintTimeRemainingEstimateInSeconds(self) -> int:
         # Try to get the progress object from the current data. This is at least set by things like PrintTimeGenius and is more accurate.
         try:
-            currentData = self.OctoPrintPrinterObject.get_current_data()
+            currentData = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType]
             if "progress" in currentData:
                 if "printTimeLeft" in currentData["progress"]:
                     # When the print is just starting, the printTimeLeft will be None.
@@ -41,7 +41,7 @@ class PrinterStateObject(IPrinterStateReporter):
 
         # If that fails, try to use the default OctoPrint estimate.
         try:
-            jobData = self.OctoPrintPrinterObject.get_current_job()
+            jobData = self.OctoPrintPrinterObject.get_current_job() #pyright: ignore[reportUnknownMemberType]
             if "estimatedPrintTime" in jobData:
 
                 # When the print is first starting and there is no known time, this can be none.
@@ -80,7 +80,7 @@ class PrinterStateObject(IPrinterStateReporter):
 
             # We have seen in client logs sometimes this value doesn't exist,
             # and sometime it does, but it's just None.
-            currentData = self.OctoPrintPrinterObject.get_current_data()
+            currentData = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType]
             if "currentZ" in currentData and currentData["currentZ"] is not None:
                 currentZ = int(currentData["currentZ"])
                 return currentZ
@@ -108,13 +108,13 @@ class PrinterStateObject(IPrinterStateReporter):
         # States can be found here:
         # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.PrinterInterface.get_state_id
         # Note! The docs seem to be missing some states at the moment, like STATE_RESUMING, which can be found in comm.py
-        state = self.OctoPrintPrinterObject.get_state_id()
+        state = self.OctoPrintPrinterObject.get_state_id() #pyright: ignore[reportUnknownMemberType]
 
         # Return if the state is printing or not.
         if state == "PRINTING" or state == "RESUMING" or state == "FINISHING" or state == "STARTING":
             return True
 
-        self.Logger.warn("ShouldPrintingTimersBeRunning is not in a printing state: "+str(state))
+        self.Logger.warning("ShouldPrintingTimersBeRunning is not in a printing state: "+str(state))
         return False
 
 
@@ -123,7 +123,7 @@ class PrinterStateObject(IPrinterStateReporter):
     def IsPrintWarmingUp(self) -> bool:
         # Using the current state, if the print time is None or 0, the print hasn't started because the system is warming up..
         # Using the get_current_data in this way is the same way the /api/job uses it.
-        currentData = self.OctoPrintPrinterObject.get_current_data()
+        currentData = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType]
         if currentData is not None:
             progress = currentData["progress"]
             if progress is not None:
@@ -140,7 +140,7 @@ class PrinterStateObject(IPrinterStateReporter):
     def GetTemps(self) -> Tuple[Optional[float], Optional[float]]:
         # Get the current temps if possible.
         # Note there will be no objects in the dic if the printer isn't connected or in other cases.
-        currentTemps = self.OctoPrintPrinterObject.get_current_temperatures()
+        currentTemps = self.OctoPrintPrinterObject.get_current_temperatures() #pyright: ignore[reportUnknownMemberType]
         hotendActual = None
         bedActual = None
         if self._Exists(currentTemps, "tool0"):
@@ -155,5 +155,5 @@ class PrinterStateObject(IPrinterStateReporter):
 
 
     # A helper for checking if things exist in dicts.
-    def _Exists(self, dictObj:dict, key:str) -> bool:
+    def _Exists(self, dictObj:dict[str, Any], key:str) -> bool:
         return key in dictObj and dictObj[key] is not None

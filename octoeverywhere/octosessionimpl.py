@@ -18,7 +18,7 @@ from .threaddebug import ThreadDebug
 from .compression import Compression
 from .deviceid import DeviceId
 from .interfaces import IPopUpInvoker, IOctoStream, IOctoSession
-from .buffer import Buffer
+from .buffer import Buffer, ByteLikeOrMemoryView
 
 from .Proto.OctoStreamMessage import OctoStreamMessage
 from .Proto import HandshakeAck
@@ -150,12 +150,14 @@ class OctoSession(IOctoSession):
                 raise Exception("Server RAS challenge failed!")
 
             # Parse out the response and report.
-            connectedAccounts = []
+            connectedAccounts:List[str] = []
             connectedAccountsLen = handshakeAck.ConnectedAccountsLength()
             if handshakeAck.ConnectedAccountsLength() != 0:
                 i = 0
                 while i < connectedAccountsLen:
-                    connectedAccounts.append(OctoStreamMsgBuilder.BytesToString(handshakeAck.ConnectedAccounts(i)))
+                    account = OctoStreamMsgBuilder.BytesToString(handshakeAck.ConnectedAccounts(i))
+                    if account is not None:
+                        connectedAccounts.append(account)
                     i += 1
 
             # Parse out the OctoKey
@@ -218,7 +220,7 @@ class OctoSession(IOctoSession):
                     if isCloseMessage:
                         self.Logger.debug("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
                     else:
-                        self.Logger.warn("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
+                        self.Logger.warning("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
                     # Don't throw, because this message maybe be coming in from the server as the local side closed.
                     return
 
@@ -355,7 +357,7 @@ class OctoSession(IOctoSession):
 
 
     # Helper to unpack uint32
-    def Unpack32Int(self, buffer, bufferOffset) :
+    def Unpack32Int(self, buffer:ByteLikeOrMemoryView, bufferOffset:int):
         if sys.byteorder == "little":
             return (buffer[0 + bufferOffset]) + (buffer[1 + bufferOffset] << 8) + (buffer[2 + bufferOffset] << 16) + (buffer[3 + bufferOffset] << 24)
         else:
@@ -375,4 +377,4 @@ class OctoSession(IOctoSession):
             raise Exception("We got an OctoStreamMsg that's not the correct size! MsgSize:"+str(messageSize)+"; BufferLen:"+str(len(rawBuffer)))
 
         # Decode and return
-        return OctoStreamMessage.GetRootAs(rawBuffer, 4)
+        return OctoStreamMessage.GetRootAs(rawBuffer, 4) #pyright: ignore[reportUnknownMemberType]

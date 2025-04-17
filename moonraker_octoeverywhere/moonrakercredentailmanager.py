@@ -5,7 +5,7 @@ import json
 import logging
 import time
 
-from typing import Optional
+from typing import Any, Optional
 
 import configparser
 
@@ -90,7 +90,7 @@ class MoonrakerCredentialManager:
         # First, we need to find the unix socket to connect to
         moonrakerSocketFilePath = self._TryToFindUnixSocket()
         if moonrakerSocketFilePath is None:
-            self.Logger.warn("No moonraker unix socket file could be found.")
+            self.Logger.warning("No moonraker unix socket file could be found.")
             return None
 
         try:
@@ -126,7 +126,7 @@ class MoonrakerCredentialManager:
                 # Only messages with the ID field are responses, so we don't care about the others.
                 if "id" not in jsonRpcResponse:
                     if time.time() - startTime > 20.0:
-                        self.Logger.warn("TryToGetCredentials timeout waiting for db query response after "+str(msgCount)+" messages.")
+                        self.Logger.warning("TryToGetCredentials timeout waiting for db query response after "+str(msgCount)+" messages.")
                         return None
                     continue
 
@@ -136,16 +136,16 @@ class MoonrakerCredentialManager:
                     continue
                 # Check for error.
                 if "error" in jsonRpcResponse:
-                    self.Logger.warn("TryToGetCredentials got a response but it had an error. "+str(jsonRpcResponse["error"]))
+                    self.Logger.warning("TryToGetCredentials got a response but it had an error. "+str(jsonRpcResponse["error"]))
                     return None
 
                 # Look for the result string.
                 if "result" not in jsonRpcResponse:
-                    self.Logger.warn("TryToGetCredentials got a response but with no result object.")
+                    self.Logger.warning("TryToGetCredentials got a response but with no result object.")
                     return None
                 result  = jsonRpcResponse["result"]
                 if isinstance(result, str) is False:
-                    self.Logger.warn("TryToGetCredentials got a response but result is not a str. "+str(result))
+                    self.Logger.warning("TryToGetCredentials got a response but result is not a str. "+str(result))
                     return None
 
                 # We got it!
@@ -223,7 +223,7 @@ class MoonrakerCredentialManager:
         return os.path.abspath(os.path.join(path, os.pardir))
 
 
-    def _ReadSingleJsonObject(self, sock) -> Optional[str]:
+    def _ReadSingleJsonObject(self, sock:Any) -> Optional[str]:
         # Since sock.recv blocks, we must read each char one by one so we know when the message ends.
         # This is messy, but since it only happens very occasionally, it's fine.
         message = bytearray()

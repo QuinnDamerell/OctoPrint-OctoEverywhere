@@ -302,8 +302,8 @@ class Context:
         if os.path.exists("/etc/os-release"):
             with open("/etc/os-release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    if "ID=buildroot" in l:
+                for line in lines:
+                    if "ID=buildroot" in line:
                         # If we find it, make sure the user data path is where we expect it to be, and we are good.
                         if os.path.exists(Paths.CrealityOsUserDataPath_K1):
                             self.OsType = OsTypes.K1
@@ -314,16 +314,16 @@ class Context:
         if os.path.exists("/etc/openwrt_release"):
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    l = l.lower()
-                    if "sonic" in l:
+                for line in lines:
+                    line = line.lower()
+                    if "sonic" in line:
                         # If we find it, make sure the user data path is where we expect it to be, and we are good.
                         if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
                             self.OsType = OsTypes.SonicPad
                             return
                         raise Exception("We detected a Sonic Pad, but can't determine the data path. Please contact support.")
                     # The K2 is based on the OS release "tina" and then we look for the user data path.
-                    if "tina" in l:
+                    if "tina" in line:
                         if os.path.exists(Paths.CrealityOsUserDataPath_K2):
                             self.OsType = OsTypes.K2
                             return

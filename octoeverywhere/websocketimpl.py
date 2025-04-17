@@ -43,7 +43,7 @@ class Client(IWebSocketClient):
 
         # We use a send queue thread because it allows us to process downloads about 2x faster.
         # This is because the downstream work of the WS can be made faster if it's done in parallel
-        self.SendQueue = queue.Queue()
+        self.SendQueue:queue.Queue[SendQueueContext] = queue.Queue()
         self.SendThread:threading.Thread = None #pyright: ignore[reportAttributeAccessIssue]
 
         # Used to log more details about what's going on with the websocket.
@@ -69,7 +69,7 @@ class Client(IWebSocketClient):
         # Note that the API says this only takes one arg, but after looking into the code
         # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
         # sometimes it tried to send 3 when we only accepted 1.
-        def OnClosed(ws:WebSocket, _, __):
+        def OnClosed(ws:WebSocket, code:Any, msg:Any):
             # We need to check this special case.
             # If the error callback is pending, we need to defer the close callback until the error callback is fired.
             # Otherwise, we handle the error, kick off the thread to fire the error callback, and then fire close before the error callback.
@@ -140,7 +140,7 @@ class Client(IWebSocketClient):
                 if self.isClosed:
                     return
 
-            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt={"ca_certs":certifi.where()})
+            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt={"ca_certs":certifi.where()})  #pyright: ignore[reportUnknownMemberType]
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,
@@ -176,7 +176,7 @@ class Client(IWebSocketClient):
         # Always try to call close, even if we have already done it.
         # Now ensure the websocket is closing. Since it most likely already is, ignore any exceptions.
         try:
-            self.Ws.close()
+            self.Ws.close() #pyright: ignore[reportUnknownMemberType]
         except Exception as e:
             # This is a known bug in the websocket class, it happens when the WS is closing.
             if isinstance(e, AttributeError) and "object has no attribute 'close'" in str(e):
@@ -300,7 +300,7 @@ class Client(IWebSocketClient):
 
 
     # Support using with;
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any):
         self.Close()
 
 

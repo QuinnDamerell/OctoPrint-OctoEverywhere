@@ -1,7 +1,7 @@
 import logging
 import threading
 
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from octoeverywhere.sentry import Sentry
 
@@ -15,7 +15,7 @@ from .interfaces import IFileManager
 # But once a field is set, it can't be changed.
 class FileInfo:
 
-    def __init__(self, logger:logging.Logger, fileDirInfo:dict) -> None:
+    def __init__(self, logger:logging.Logger, fileDirInfo:dict[str, Any]) -> None:
         self.FileNameWithPath:str = fileDirInfo.get("name", "Unknown")
         # Get a version of the file name without the path.
         folderIndex = self.FileNameWithPath.rfind("/")
@@ -48,7 +48,7 @@ class FileInfo:
         return self.EstPrintTimeSec is not None or self.EstFilamentWeightMg is not None
 
 
-    def UpdateExtraFileInfo(self, fileInfo:dict) -> None:
+    def UpdateExtraFileInfo(self, fileInfo:dict[str, Any]) -> None:
         self.EstPrintTimeSec = fileInfo.get("EstTime", None)
         weightG = fileInfo.get("EstWeight", None)
         if weightG is not None:
@@ -192,7 +192,7 @@ class ElegooFileManager(IFileManager):
 
     def _SyncExtraFileInfo(self):
         # Under lock, get any files we need to get info for.
-        fileNamsAndPathsToSync = []
+        fileNamsAndPathsToSync:List[str] = []
         with self.Lock:
             for f in self.Files:
                 if f.HasExtraFileInfo() is False:

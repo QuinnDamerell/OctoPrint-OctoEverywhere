@@ -47,7 +47,7 @@ class OctoEverywhere(IOctoEverywhereHost):
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
-        self.SecondaryServerCons = {}
+        self.SecondaryServerCons:dict[str, threading.Thread] = {}
         self.SecondaryServerConsLock = threading.Lock()
 
 
@@ -91,7 +91,7 @@ class OctoEverywhere(IOctoEverywhereHost):
             self.SecondaryServerCons[summonConnectUrl] = thread
 
 
-    def _HandleSecondaryServerCon(self, summonConnectUrl, summonMethod):
+    def _HandleSecondaryServerCon(self, summonConnectUrl:str, summonMethod:int):
         # Run the secondary connection for until the RunFor time limit. Note RunFor will account for user activity.
         self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl)+ " method "+str(summonMethod))
         try:

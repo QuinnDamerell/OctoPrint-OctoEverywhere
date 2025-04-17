@@ -17,9 +17,9 @@ class Version:
         versionLine = None
         with open(setupFilePath, "r", encoding="utf-8") as f:
             lines = f.readlines()
-            for l in lines:
-                if l.startswith(expectedVersionKey):
-                    versionLine = l
+            for line in lines:
+                if line.startswith(expectedVersionKey):
+                    versionLine = line
                     break
 
         # Make sure we found it.

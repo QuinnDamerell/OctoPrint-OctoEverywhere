@@ -1,7 +1,7 @@
 import secrets
 import string
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
 from octoprint.access.permissions import Permissions
 from octoprint.access.users import UserManager, User
@@ -76,7 +76,7 @@ class LocalAuth(ILocalAuth):
         # We need to return a valid user with admin permissions.
         allUsers = self.OctoPrintUserManager.get_all_users()
         for user in allUsers:
-            if user.has_permission(Permissions.ADMIN):
+            if user.has_permission(Permissions.ADMIN): #pyright: ignore[reportUnknownMemberType] octoprint has no typing
                 return user
 
         self.Logger.warning("Failed to find local user with admin permissions to return for authed call.")

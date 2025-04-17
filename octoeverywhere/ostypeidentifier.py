@@ -21,19 +21,19 @@ class OsTypeIdentifier:
         if os.path.exists("/etc/os-release"):
             with open("/etc/os-release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    if "ID=buildroot" in l:
+                for line in lines:
+                    if "ID=buildroot" in line:
                         return OsType.CrealityK1
 
         # For the Sonic Pad, we look for the openwrt os
         if os.path.exists("/etc/openwrt_release"):
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    l = l.lower()
-                    if "sonic" in l:
+                for line in lines:
+                    line = line.lower()
+                    if "sonic" in line:
                         return OsType.CrealitySonicPad
-                    if "tina" in l:
+                    if "tina" in line:
                         return OsType.CrealityK2
 
         # Default the OS to debian.

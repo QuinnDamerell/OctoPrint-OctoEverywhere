@@ -53,7 +53,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         # Map the state
         state = "idle"
-        statusObjectOrEmptyDict:dict = res.get("status", {})
+        statusObjectOrEmptyDict:dict[str, Any] = res.get("status", {})
         mrState = statusObjectOrEmptyDict.get("print_stats", {}).get("state", None)
         if mrState is not None:
             # https://moonraker.readthedocs.io/en/latest/printer_objects/#print_stats
