@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from typing import Dict, Optional
+from typing import Optional
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.compat import Compat
@@ -90,7 +90,7 @@ class Slipstream(ISlipstreamHandler):
 
         self.Lock = threading.Lock()
         self.IsRefreshing = False
-        self.Cache:Dict[str, HttpResult] = {}
+        self.Cache:dict[str, HttpResult] = {}
 
         # Kick off a thread to grab the initial index, no delay we build the cache ASAP.
         # Note on server boot this index cache call can take a long time (25-30s)
