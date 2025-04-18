@@ -567,7 +567,7 @@ class NotificationsHandler(INotificationHandler):
 
 
     # Called by the bed cooldown watcher when the bed is done cooling down.
-    def OnBedCooldownComplete(self, bedTempCelsius:float):
+    def OnBedCooldownComplete(self, bedTempCelsius:float) -> None:
         if self._shouldIgnoreEvent():
             return
         self._sendEvent("bedcooldowncomplete", { "BedTempC": str(round(float(bedTempCelsius), 2)) })

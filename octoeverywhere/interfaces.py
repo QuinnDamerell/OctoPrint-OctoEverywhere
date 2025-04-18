@@ -404,7 +404,7 @@ class INotificationHandler(ABC):
         pass
 
     @abstractmethod
-    def OnBedCooldownComplete(self, bedTempCelsiusFloat:float) -> None:
+    def OnBedCooldownComplete(self, bedTempCelsius:float) -> None:
         pass
 
 
