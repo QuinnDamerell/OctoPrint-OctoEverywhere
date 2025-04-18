@@ -785,7 +785,7 @@ class QuickCam_RTSP:
                 self._ResetLocalBufferIfOverLimit()
                 if QuickCam_RTSP.c_DebugLogging:
                     self.Logger.debug("RTSP slow path image received.")
-                return Buffer(imgBuffer)ruff
+                return Buffer(imgBuffer)
 
             # If we didn't find anything, check the limit.
             if QuickCam_RTSP.c_DebugLogging:

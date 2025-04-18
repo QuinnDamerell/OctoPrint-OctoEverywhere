@@ -5,8 +5,7 @@ from typing import Optional
 
 from ..sentry import Sentry
 from ..repeattimer import RepeatTimer
-from ..notificationshandler import NotificationsHandler
-from ..interfaces import IPrinterStateReporter
+from ..interfaces import IPrinterStateReporter, INotificationHandler
 
 # A simple class to watch for the bed to cooldown and then fires a notification.
 class BedCooldownWatcher:
@@ -20,7 +19,7 @@ class BedCooldownWatcher:
     c_maxWatcherRuntimeSec = 60 * 60
 
 
-    def __init__(self, logger:logging.Logger, notificationHandler:NotificationsHandler, printerStateInterface:IPrinterStateReporter):
+    def __init__(self, logger:logging.Logger, notificationHandler:INotificationHandler, printerStateInterface:IPrinterStateReporter):
 
         # Default the  the bed is under ~100F, we will consider it cooled down.
         # This can be changed in the config by the user.

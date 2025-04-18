@@ -403,6 +403,10 @@ class INotificationHandler(ABC):
     def GetPrintStartTimeSec(self) -> float:
         pass
 
+    @abstractmethod
+    def OnBedCooldownComplete(self, bedTempCelsiusFloat:float) -> None:
+        pass
+
 
 class IQuickCam(ABC):
     # This should return the current image from the webcam.
