@@ -1,4 +1,4 @@
-from typing import Optional, Union, SupportsIndex
+from typing import Optional, Union
 
 # Define a type for bytes like objects, for ease of use.
 BufferOrNone = Union["Buffer", None]
@@ -144,7 +144,8 @@ class Buffer():
 
 
     # Allow the buffer to be sliced.
-    def __getslice__(self, start:SupportsIndex, end:SupportsIndex) -> ByteLikeOrMemoryView:
+    # TODO - Once we move past PY 3.7, we can use SupportsIndex for the start and end.
+    def __getslice__(self, start:int, end:int) -> ByteLikeOrMemoryView:
         if self._bytes is not None:
             return self._bytes[start:end]
         elif self._bytearray is not None:
@@ -156,7 +157,7 @@ class Buffer():
 
 
     # Allow the buffer to be indexed.
-    def __getitem__(self, key:int) -> SupportsIndex:
+    def __getitem__(self, key:int) -> int:
         if self._bytes is not None:
             return self._bytes[key]
         elif self._bytearray is not None:
