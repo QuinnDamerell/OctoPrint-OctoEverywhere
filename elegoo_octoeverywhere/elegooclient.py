@@ -4,7 +4,7 @@ import random
 import string
 import logging
 import threading
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
@@ -34,7 +34,7 @@ class ResponseMsg:
     OE_ERROR_MIN = OE_ERROR_WS_NOT_CONNECTED
     OE_ERROR_MAX = OE_ERROR_EXCEPTION
 
-    def __init__(self, resultObj:Optional[dict[str, Any]], errorCode=0, errorStr: Optional[str]=None) -> None:
+    def __init__(self, resultObj:Optional[Dict[str, Any]], errorCode=0, errorStr: Optional[str]=None) -> None:
         self.Result = resultObj
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
@@ -60,7 +60,7 @@ class ResponseMsg:
     def GetLoggingErrorStr(self) -> str:
         return str(self.ErrorCode) + " - " + str(self.ErrorStr)
 
-    def GetResult(self) -> Optional[dict[str, Any]]:
+    def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
 
 
@@ -202,7 +202,7 @@ class ElegooClient:
 
     # Sends a request to the printer and waits for a response.
     # Always returns a ResponseMsg, with various error codes.
-    def SendRequest(self, cmdId:int, data:Optional[dict[str, Any]]=None, waitForResponse:bool=True, timeoutSec:Optional[float]=None) -> ResponseMsg:
+    def SendRequest(self, cmdId:int, data:Optional[Dict[str, Any]]=None, waitForResponse:bool=True, timeoutSec:Optional[float]=None) -> ResponseMsg:
         # Generate a request id, which is a 32 char lowercase letter and number string
         requestId = ''.join(random.choices(string.ascii_lowercase + string.digits, k=32))
 
@@ -501,7 +501,7 @@ class ElegooClient:
             Sentry.OnException("Failed to handle incoming Elegoo message.", e)
 
 
-    def _HandleAttributesUpdate(self, attributes:dict[str, Any]):
+    def _HandleAttributesUpdate(self, attributes:Dict[str, Any]):
         # First update the attributes object.
         try:
             if self.Attributes is None:
@@ -566,7 +566,7 @@ class ElegooClient:
         self.Logger.info("Elegoo client connection finalized.")
 
 
-    def _HandleStatusUpdate(self, status:dict[str, Any]):
+    def _HandleStatusUpdate(self, status:Dict[str, Any]):
         # First update the state object.
         isFirstStateUpdate = self.State is None
         try:
@@ -666,7 +666,7 @@ class ElegooClient:
 
 
     # This sends our special OE message out through all of the mux websockets to the frontend.
-    def _SendMuxFrontendMessage(self, data:Optional[dict[str, Any]]=None) -> None:
+    def _SendMuxFrontendMessage(self, data:Optional[Dict[str, Any]]=None) -> None:
         # No data is fine, it just means we are sending a message with the plugin id and version.
         if data is None:
             data = {}
@@ -767,18 +767,18 @@ class MsgWaitingContext:
         self.Id = msgId
         self.WsId = wsId
         self.WaitEvent = threading.Event()
-        self.Result:Optional[dict[str, Any]] = None
+        self.Result:Optional[Dict[str, Any]] = None
 
 
     def GetEvent(self) -> threading.Event:
         return self.WaitEvent
 
 
-    def GetResult(self) -> Optional[dict[str, Any]]:
+    def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
 
 
-    def SetResultAndEvent(self, result:dict[str, Any]) -> None:
+    def SetResultAndEvent(self, result:Dict[str, Any]) -> None:
         if self.WsId is not None:
             raise Exception("This context is not for a local request.")
         self.Result = result

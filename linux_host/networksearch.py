@@ -7,7 +7,7 @@ import string
 import socket
 import logging
 import threading
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -117,7 +117,7 @@ class NetworkSearch:
 
     # The final two steps can happen in different orders, so we need to wait for both the sub success and state object to be received.
     @staticmethod
-    def _BambuConnectionDone(data:dict[str,Any], client:mqtt.Client) -> bool:
+    def _BambuConnectionDone(data:Dict[str,Any], client:mqtt.Client) -> bool:
         if "SnSubSuccess" in data and data["SnSubSuccess"] is True and "GotStateObj" in data and data["GotStateObj"] is True:
             data["Event"].set()
             client.disconnect()
@@ -142,7 +142,7 @@ class NetworkSearch:
             client.tls_insecure_set(True)
             client.username_pw_set("bblp", accessCode)
 
-            def connect(client:mqtt.Client, userdata:dict[Any, Any], flags:Any, reason_code:mqtt.ReasonCode, properties:Any): # pyright: ignore[reportPrivateImportUsage]
+            def connect(client:mqtt.Client, userdata:Dict[Any, Any], flags:Any, reason_code:mqtt.ReasonCode, properties:Any): # pyright: ignore[reportPrivateImportUsage]
                 # If auth is wrong, we will get a connect callback with a failure "Not authorized"
                 if reason_code.is_failure:
                     logger.debug(f"Bambu {ipOrHostname} connection failure: {reason_code}")
@@ -163,11 +163,11 @@ class NetworkSearch:
                     userdata["Event"].set()
                 userdata["ReportMid"] = mid
 
-            def disconnect(client:Any, userdata:dict[str, Any], disconnect_flags:Any, reason_code:Any, properties:Any):
+            def disconnect(client:Any, userdata:Dict[str, Any], disconnect_flags:Any, reason_code:Any, properties:Any):
                 logger.debug(f"Bambu {ipOrHostname} disconnected.")
                 userdata["Event"].set()
 
-            def subscribe(client:Any, userdata:dict[str, Any], mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): # pyright: ignore[reportPrivateImportUsage]
+            def subscribe(client:Any, userdata:Dict[str, Any], mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): # pyright: ignore[reportPrivateImportUsage]
                 if "ReportMid" in userdata and mid == userdata["ReportMid"]:
                     # If this is the sub report, check the status and disconnect.
                     failedSn = False
@@ -185,7 +185,7 @@ class NetworkSearch:
                         # Check if we are done, this will disconnect if we are.
                         NetworkSearch._BambuConnectionDone(userdata, client)
 
-            def message(client:Any, userdata:dict[str, Any], mqttMsg:mqtt.MQTTMessage):
+            def message(client:Any, userdata:Dict[str, Any], mqttMsg:mqtt.MQTTMessage):
                 # When we get a message, check if it is a state object.
                 # We need info from the state object, and also it's a good validation the system is healthy.
                 try:

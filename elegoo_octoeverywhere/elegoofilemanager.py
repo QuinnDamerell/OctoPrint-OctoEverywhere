@@ -1,7 +1,7 @@
 import logging
 import threading
 
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.sentry import Sentry
 
@@ -15,7 +15,7 @@ from .interfaces import IFileManager
 # But once a field is set, it can't be changed.
 class FileInfo:
 
-    def __init__(self, logger:logging.Logger, fileDirInfo:dict[str, Any]) -> None:
+    def __init__(self, logger:logging.Logger, fileDirInfo:Dict[str, Any]) -> None:
         self.FileNameWithPath:str = fileDirInfo.get("name", "Unknown")
         # Get a version of the file name without the path.
         folderIndex = self.FileNameWithPath.rfind("/")
@@ -48,7 +48,7 @@ class FileInfo:
         return self.EstPrintTimeSec is not None or self.EstFilamentWeightMg is not None
 
 
-    def UpdateExtraFileInfo(self, fileInfo:dict[str, Any]) -> None:
+    def UpdateExtraFileInfo(self, fileInfo:Dict[str, Any]) -> None:
         self.EstPrintTimeSec = fileInfo.get("EstTime", None)
         weightG = fileInfo.get("EstWeight", None)
         if weightG is not None:

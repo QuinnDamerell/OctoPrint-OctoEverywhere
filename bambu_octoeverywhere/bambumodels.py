@@ -1,7 +1,7 @@
 import time
 import logging
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from octoeverywhere.sentry import Sentry
 
@@ -42,7 +42,7 @@ class BambuState:
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, msg:dict[str,Any]) -> None:
+    def OnUpdate(self, msg:Dict[str,Any]) -> None:
         # Get a new value or keep the current.
         # Remember that most of these are partial updates and will only have some values.
         self.stg_cur = msg.get("stg_cur", self.stg_cur)
@@ -210,7 +210,7 @@ class BambuVersion:
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, msg:dict[str, Any]) -> None:
+    def OnUpdate(self, msg:Dict[str, Any]) -> None:
         module = msg.get("module", None)
         if module is None:
             return

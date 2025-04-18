@@ -43,7 +43,7 @@ class PrinterState:
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, state:dict[str, Any]) -> None:
+    def OnUpdate(self, state:Dict[str, Any]) -> None:
         # Each update contains all of the data, so we will either get the new value or we will clear it.
         currentStateArray = state.get("CurrentStatus", None)
         if currentStateArray is None or len(currentStateArray) == 0:
@@ -72,21 +72,21 @@ class PrinterState:
         self.MostRecentPrintInfo.Update(self)
 
 
-    def _GetIntOrNone(self, d:dict[str, Any], key:str) -> Optional[int]:
+    def _GetIntOrNone(self, d:Dict[str, Any], key:str) -> Optional[int]:
         v = d.get(key, None)
         if v is None:
             return None
         return int(v)
 
 
-    def _GetFloatOrNone(self, d:dict[str, Any], key:str) -> Optional[float]:
+    def _GetFloatOrNone(self, d:Dict[str, Any], key:str) -> Optional[float]:
         v = d.get(key, None)
         if v is None:
             return None
         return int(v)
 
 
-    def _GetStrOrNone(self, d:dict[str, Any], key:str) -> Optional[str]:
+    def _GetStrOrNone(self, d:Dict[str, Any], key:str) -> Optional[str]:
         v = d.get(key, None)
         if v is None or len(v) == 0:
             return None
@@ -347,7 +347,7 @@ class PrinterAttributes:
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, msg:dict[str, Any]) -> None:
+    def OnUpdate(self, msg:Dict[str, Any]) -> None:
         self.MainboardMac = msg.get("MainboardMAC", None)
         # if self.HasLoggedPrinterVersion is False:
         #     self.HasLoggedPrinterVersion = True

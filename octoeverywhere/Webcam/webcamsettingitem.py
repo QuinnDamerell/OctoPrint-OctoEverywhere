@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from ..sentry import Sentry
 
@@ -68,7 +68,7 @@ class WebcamSettingItem:
 
     # Used to serialize the object to a dict that can be used with json.
     # THESE PROPERTY NAMES CAN'T CHANGE, it's used for the API and it's used to serialize to disk.
-    def Serialize(self, includeUrls:bool = True) -> dict[str, Any]:
+    def Serialize(self, includeUrls:bool = True) -> Dict[str, Any]:
         d = {
             "Name": self.Name,
             "FlipH": self.FlipH,
@@ -85,7 +85,7 @@ class WebcamSettingItem:
     # Used to convert a dict back into a WebcamSettingItem object.
     # Returns None if there's a failure
     @staticmethod
-    def Deserialize(d:dict[str, Any], logger:logging.Logger) -> Optional["WebcamSettingItem"]:
+    def Deserialize(d:Dict[str, Any], logger:logging.Logger) -> Optional["WebcamSettingItem"]:
         try:
             name = d.get("Name")
             snapshotUrl = d.get("SnapshotUrl")

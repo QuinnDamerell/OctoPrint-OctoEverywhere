@@ -4,7 +4,7 @@ import base64
 import logging
 import threading
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -156,7 +156,7 @@ class BambuCloud:
     # Returns a list of the user's devices.
     # Returns None on failure.
     # Special Note: This function is used as a access token validation check. So if this fails due to the access token being invalid, the access token should be cleared so we try to login again.
-    def GetDeviceList(self) -> Optional[List[dict[str, Any]]]:
+    def GetDeviceList(self) -> Optional[List[Dict[str, Any]]]:
         tokenResult = self.GetAccessToken()
         if tokenResult.Status != LoginStatus.Success:
             return None
@@ -184,7 +184,7 @@ class BambuCloud:
 
 
     # Returns this device info from the Bambu Cloud API by matching the SN
-    def GetThisDeviceInfo(self) -> Optional[dict[str, Any]]:
+    def GetThisDeviceInfo(self) -> Optional[Dict[str, Any]]:
         devices = self.GetDeviceList()
         localSn = self.Config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
         if localSn is None:

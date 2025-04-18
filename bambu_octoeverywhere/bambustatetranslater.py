@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.printinfo import PrintInfoManager
@@ -34,7 +34,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
     # Fired when any mqtt message comes in.
     # State will always be NOT NONE, since it's going to be created before this call.
     # The isFirstFullSyncResponse flag indicates if this is the first full state sync of a new connection.
-    def OnMqttMessage(self, msg:dict[str, Any], bambuState:BambuState, isFirstFullSyncResponse:bool) -> None:
+    def OnMqttMessage(self, msg:Dict[str, Any], bambuState:BambuState, isFirstFullSyncResponse:bool) -> None:
 
         # First, if we have a new connection and we just synced, make sure the notification handler is in sync.
         if isFirstFullSyncResponse:

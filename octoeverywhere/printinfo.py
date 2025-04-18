@@ -3,7 +3,7 @@ import json
 import time
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
 # The goal of this class is to keep track of info about the current print.
@@ -54,7 +54,7 @@ class PrintInfo:
         return pi
 
 
-    def __init__(self, logger:logging.Logger, filePath:str, data:dict[str,Any]) -> None:
+    def __init__(self, logger:logging.Logger, filePath:str, data:Dict[str,Any]) -> None:
         self.Logger = logger
         self.FilePath = filePath
         self.Data = data

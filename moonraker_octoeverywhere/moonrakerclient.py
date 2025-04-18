@@ -230,7 +230,7 @@ class MoonrakerClient(IMoonrakerClient):
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[dict[Any, Any]]=None) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -363,7 +363,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Called when the websocket gets any other message that's not a RPC response.
     # If we throw from here, the websocket will close and restart.
-    def _OnWsNonResponseMessage(self, msg:dict[str, Any]) -> None:
+    def _OnWsNonResponseMessage(self, msg:Dict[str, Any]) -> None:
         # Get the common method string
         method = msg.get("method", None)
         if method is None:
@@ -445,7 +445,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # If the message has a progress contained in the virtual_sdcard, this returns it. The progress is a float from 0.0->1.0
     # Otherwise None
-    def _GetProgressFromMsg(self, msg:dict[str, Any]) -> Optional[float]:
+    def _GetProgressFromMsg(self, msg:Dict[str, Any]) -> Optional[float]:
         vsdContainerObj = self._GetWsMsgParam(msg, "virtual_sdcard")
         if vsdContainerObj is not None:
             vsd = vsdContainerObj["virtual_sdcard"]
@@ -456,7 +456,7 @@ class MoonrakerClient(IMoonrakerClient):
 
 
     # Given a property name, returns the correct param object that contains that object.
-    def _GetWsMsgParam(self, msg:dict[str, Any], paramName:str) -> Optional[Dict[str, Any]]:
+    def _GetWsMsgParam(self, msg:Dict[str, Any], paramName:str) -> Optional[Dict[str, Any]]:
         paramArray = msg.get("params")
         if paramArray is None:
             return None
@@ -768,18 +768,18 @@ class JsonRpcWaitingContext:
     def __init__(self, msgId:int) -> None:
         self.Id = msgId
         self.WaitEvent = threading.Event()
-        self.Result:Optional[dict[str, Any]] = None
+        self.Result:Optional[Dict[str, Any]] = None
 
 
     def GetEvent(self) -> threading.Event:
         return self.WaitEvent
 
 
-    def GetResult(self) -> Optional[dict[str, Any]]:
+    def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
 
 
-    def SetResultAndEvent(self, result:dict[str, Any]) -> None:
+    def SetResultAndEvent(self, result:Dict[str, Any]) -> None:
         self.Result = result
         self.WaitEvent.set()
 

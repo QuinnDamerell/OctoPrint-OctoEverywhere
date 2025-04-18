@@ -4,7 +4,7 @@ import time
 import json
 import socket
 import threading
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -377,7 +377,7 @@ class BambuClient:
 
 
     # Publishes a message and blocks until it knows if the message send was successful or not.
-    def _Publish(self, msg:dict[str, Any]) -> bool:
+    def _Publish(self, msg:Dict[str, Any]) -> bool:
         try:
             # Print for debugging if desired.
             if self.Logger.isEnabledFor(logging.DEBUG):
@@ -513,7 +513,7 @@ class BambuClient:
 # A class returned as the result of all commands.
 class BambuCommandResult:
 
-    def __init__(self, result:Optional[dict[str, Any]]=None, connected:bool=True, timeout:bool=False, otherError:Optional[str]=None, exception:Optional[Exception]=None) -> None:
+    def __init__(self, result:Optional[Dict[str, Any]]=None, connected:bool=True, timeout:bool=False, otherError:Optional[str]=None, exception:Optional[Exception]=None) -> None:
         self.Connected = connected
         self.Timeout = timeout
         self.OtherError = otherError

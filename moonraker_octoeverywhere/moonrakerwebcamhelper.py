@@ -2,7 +2,7 @@ import threading
 import time
 import logging
 import json
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -307,7 +307,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Given a Moonraker webcam API result list item, this will try to parse it.
     # If successful, this will return a valid AbstractWebcamSettings object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseWebcamApiItem(self, webcamApiItem:dict[str,Any]) -> Optional[WebcamSettingItem]:
+    def _TryToParseWebcamApiItem(self, webcamApiItem:Dict[str,Any]) -> Optional[WebcamSettingItem]:
         try:
             # This new converged logic is amazing, see this doc for the full schema
             # https://moonraker.readthedocs.io/en/latest/web_api/#webcam-apis
@@ -399,7 +399,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Given a Moonraker webcam db entry, this will try to parse it.
     # If successful, this will return a valid WebcamSettingItem object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseMoonrakerWebcamDbEntry(self, webcamSettingsObj:dict[str, Any]) -> Optional[WebcamSettingItem]:
+    def _TryToParseMoonrakerWebcamDbEntry(self, webcamSettingsObj:Dict[str, Any]) -> Optional[WebcamSettingItem]:
         try:
             # Skip if it's not set to enabled.
             if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:
@@ -508,7 +508,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Given a Fluidd namespace webcam db entry, this will try to parse it.
     # If successful, this will return a valid WebcamSettingItem object.
     # If the parse fails or the params are wrong, this will return None
-    def _TryToParseFluiddCustomWebcamDbEntry(self, webcamSettingsObj:dict[str, Any]) -> Optional[WebcamSettingItem]:
+    def _TryToParseFluiddCustomWebcamDbEntry(self, webcamSettingsObj:Dict[str, Any]) -> Optional[WebcamSettingItem]:
         try:
             # Skip if it's not set to enabled.
             if "enabled" in webcamSettingsObj and webcamSettingsObj["enabled"] is False:

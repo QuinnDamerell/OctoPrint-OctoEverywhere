@@ -336,7 +336,7 @@ class MDns:
         return d
 
 
-    def GetUpdatedTimeSecFromEntryDict(self, d:dict[str, Any]) -> float:
+    def GetUpdatedTimeSecFromEntryDict(self, d:Dict[str, Any]) -> float:
         # Use a try catch incase there's anything that fails to due parsing of old files or such.
         try:
             return d["UpdateTimeSec"]
@@ -346,7 +346,7 @@ class MDns:
             return 0.0
 
 
-    def GetIpAddressFromEntryDict(self, d:dict[str, Any]) -> str:
+    def GetIpAddressFromEntryDict(self, d:Dict[str, Any]) -> str:
         # Use a try catch incase there's anything that fails to due parsing of old files or such.
         try:
             return d["IpAddress"]

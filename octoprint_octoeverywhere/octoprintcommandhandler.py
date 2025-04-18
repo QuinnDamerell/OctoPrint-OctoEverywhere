@@ -22,7 +22,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     # A helper for checking if things exist in dicts.
-    def _Exists(self, dictObj:dict[str, Any], key:str):
+    def _Exists(self, dictObj:Dict[str, Any], key:str):
         return key in dictObj and dictObj[key] is not None
 
 

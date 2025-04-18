@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from octoprint.printer import PrinterInterface
 
@@ -155,5 +155,5 @@ class PrinterStateObject(IPrinterStateReporter):
 
 
     # A helper for checking if things exist in dicts.
-    def _Exists(self, dictObj:dict[str, Any], key:str) -> bool:
+    def _Exists(self, dictObj:Dict[str, Any], key:str) -> bool:
         return key in dictObj and dictObj[key] is not None

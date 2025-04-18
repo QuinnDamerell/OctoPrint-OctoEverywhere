@@ -1,6 +1,6 @@
 import logging
 import traceback
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
@@ -44,7 +44,7 @@ from .interfaces import IMoonrakerConnectionStatusHandler
 # This file is the main host for the moonraker service.
 class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, IStateChangeHandler):
 
-    def __init__(self, klipperConfigDir:str, klipperLogDir:str, devConfig:Optional[dict[str, Any]]) -> None:
+    def __init__(self, klipperConfigDir:str, klipperLogDir:str, devConfig:Optional[Dict[str, Any]]) -> None:
         # When we create our class, make sure all of our core requirements are created.
         self.MoonrakerWebcamHelper:MoonrakerWebcamHelper = None #pyright: ignore[reportAttributeAccessIssue]
         self.MoonrakerDatabase:MoonrakerDatabase = None #pyright: ignore[reportAttributeAccessIssue]
@@ -76,7 +76,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
 
     def RunBlocking(self, klipperConfigDir:str, isCompanionMode:bool, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
                     moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode
-                    devConfig:Optional[dict[str, Any]]) -> None:
+                    devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("################################################")
@@ -280,7 +280,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
 
     # Tries to load a dev config option as a string.
     # If not found or it fails, this return None
-    def GetDevConfigStr(self, devConfig:Optional[dict[str, str]], value:str) -> Optional[str]:
+    def GetDevConfigStr(self, devConfig:Optional[Dict[str, str]], value:str) -> Optional[str]:
         if devConfig is None:
             return None
         if value in devConfig:

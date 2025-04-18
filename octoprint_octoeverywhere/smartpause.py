@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from octoprint.printer import PrinterInterface
 
@@ -18,7 +18,7 @@ class SmartPause(ISmartPauseHandler):
     _Instance:"SmartPause" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
-    def Init(logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:dict[str,Any]):
+    def Init(logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:Dict[str,Any]):
         SmartPause._Instance = SmartPause(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj)
         Compat.SetSmartPauseInterface(SmartPause._Instance)
 
@@ -28,7 +28,7 @@ class SmartPause(ISmartPauseHandler):
         return SmartPause._Instance
 
 
-    def __init__(self, logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:dict[str,Any]) -> None:
+    def __init__(self, logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:Dict[str,Any]) -> None:
         self.Logger = logger
         self.OctoPrintPrinterObj = octoPrintPrinterObj
         # This is a dict defined from https://docs.octoprint.org/en/master/modules/printer.html#module-octoprint.printer.profile

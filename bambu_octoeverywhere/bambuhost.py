@@ -1,6 +1,6 @@
 import logging
 import traceback
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
@@ -35,7 +35,7 @@ from .bambustatetranslater import BambuStateTranslator
 # This file is the main host for the bambu service.
 class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
-    def __init__(self, configDir:str, logDir:str, devConfig:Optional[dict[str,str]]) -> None:
+    def __init__(self, configDir:str, logDir:str, devConfig:Optional[Dict[str,str]]) -> None:
         # When we create our class, make sure all of our core requirements are created.
         self.Secrets:Secrets = None #pyright: ignore[reportAttributeAccessIssue]
         self.NotificationHandler:Optional[NotificationsHandler] = None
@@ -64,7 +64,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             raise
 
 
-    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[dict[str,str]]) -> None:
+    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[Dict[str,str]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("################################################")
@@ -217,7 +217,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
     # Tries to load a dev config option as a string.
     # If not found or it fails, this return None
-    def GetDevConfigStr(self, devConfig: Optional[dict[str, Any]], value: str) -> Optional[str]:
+    def GetDevConfigStr(self, devConfig: Optional[Dict[str, Any]], value: str) -> Optional[str]:
         if devConfig is None:
             return None
         if value in devConfig:

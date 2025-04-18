@@ -10,6 +10,9 @@ exclude = ["**/node_modules",
     "**/debugprofiler.py",
 ]
 
+# Set the version to the oldest we support, so we can catch issues.
+pythonVersion = "3.7"
+
 # TODO: Overtime sent more of these to strict so we can catch more issues.
 # Enable this to set all to strict
 #strict = ["**"]

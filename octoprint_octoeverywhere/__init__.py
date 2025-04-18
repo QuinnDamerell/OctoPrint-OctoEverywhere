@@ -525,7 +525,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self.NotificationHandler.OnFilamentChange()
 
 
-    def GetDictStringOrEmpty(self, d:dict[str, Any], key:str) -> str:
+    def GetDictStringOrEmpty(self, d:Dict[str, Any], key:str) -> str:
         if d[key] is None:
             return ""
         return str(d[key])

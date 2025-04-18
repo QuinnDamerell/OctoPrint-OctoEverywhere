@@ -3,7 +3,7 @@ import sys
 import json
 import base64
 from enum import Enum
-from typing import Any, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 
 class ConfigDataTypes(Enum):
@@ -24,7 +24,7 @@ class Startup:
 
 
     # Given the process args, this returns the json config.
-    def GetJsonFromArgs(self, argv:List[str]) -> dict[str, Any]:
+    def GetJsonFromArgs(self, argv:List[str]) -> Dict[str, Any]:
         # The config and settings path is passed as the first arg when the service runs.
         # This allows us to run multiple services instances, each pointing at it's own config.
         if len(argv) < 1:
@@ -48,7 +48,7 @@ class Startup:
 
 
     # If there was a dev config passed, this parses it and returns the json object.
-    def GetDevConfigIfAvailable(self, argv:List[str]) -> Optional[dict[str, Any]]:
+    def GetDevConfigIfAvailable(self, argv:List[str]) -> Optional[Dict[str, Any]]:
         try:
             if len(argv) > 2:
                 devConfigJson = json.loads(argv[2])
@@ -61,7 +61,7 @@ class Startup:
 
     # A helper to get a specific value from the json config.
     # oldVarName allows us to stay compat with older installs.
-    def GetConfigVarAndValidate(self, jsonConfig:dict[str, Any], varName:str, dataType:ConfigDataTypes, oldVarName:Optional[str]=None) -> Union[bool, str]:
+    def GetConfigVarAndValidate(self, jsonConfig:Dict[str, Any], varName:str, dataType:ConfigDataTypes, oldVarName:Optional[str]=None) -> Union[bool, str]:
         var = None
         if varName in jsonConfig:
             var = jsonConfig[varName]

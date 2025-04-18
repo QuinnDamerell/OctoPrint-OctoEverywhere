@@ -1,7 +1,7 @@
 import secrets
 import string
 import logging
-from typing import Optional
+from typing import Dict, Optional
 
 from octoprint.access.permissions import Permissions
 from octoprint.access.users import UserManager, User
@@ -59,7 +59,7 @@ class LocalAuth(ILocalAuth):
 
 
     # Adds the auth header with the auth key.
-    def AddAuthHeader(self, headers: dict[str, str]) -> None:
+    def AddAuthHeader(self, headers: Dict[str, str]) -> None:
         # This will overwrite any existing keys.
         headers["X-Api-Key"] = self.ApiKey
 

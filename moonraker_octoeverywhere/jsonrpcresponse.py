@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 # The response object for a json rpc request made to Moonraker.
 # Contains information on the state, and if successful, the result.
@@ -18,7 +18,7 @@ class JsonRpcResponse:
 
 
     @staticmethod
-    def FromSuccess(resultObj:dict[str, Any]) -> 'JsonRpcResponse':
+    def FromSuccess(resultObj:Dict[str, Any]) -> 'JsonRpcResponse':
         return JsonRpcResponse(resultObj)
 
 
@@ -27,7 +27,7 @@ class JsonRpcResponse:
         return JsonRpcResponse(None, errorCode, errorStr=errorStr)
 
 
-    def __init__(self, resultObj:Optional[dict[str, Any]], errorCode=0, errorStr:Optional[str]=None) -> None:
+    def __init__(self, resultObj:Optional[Dict[str, Any]], errorCode=0, errorStr:Optional[str]=None) -> None:
         self.Result = resultObj
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
@@ -45,7 +45,7 @@ class JsonRpcResponse:
 
 
     # This can only be called after HasError is false.
-    def GetResult(self) -> dict[str, Any]:
+    def GetResult(self) -> Dict[str, Any]:
         if self.Result is None:
             raise Exception("JsonRpcResponse GetResult was called when the result was None. HasError needs to be called first.")
         return self.Result

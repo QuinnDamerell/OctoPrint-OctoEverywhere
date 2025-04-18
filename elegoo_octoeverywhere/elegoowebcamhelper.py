@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Optional
+from typing import List, Optional
 
 from linux_host.config import Config
 
@@ -25,7 +25,7 @@ class ElegooWebcamHelper(IWebcamPlatformHelper):
     # Index 0 is used as the default webcam.
     # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
-    def GetWebcamConfig(self) -> Optional[list[WebcamSettingItem]]:
+    def GetWebcamConfig(self) -> Optional[List[WebcamSettingItem]]:
         # For Elegoo OS printers, there's only one webcam setup by default, it's a jmpeg server running on 3031.
         #
         # BUT - The server only allows for one stream at a time, so we can't have multiple webcams.
