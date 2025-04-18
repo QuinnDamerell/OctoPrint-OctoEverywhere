@@ -477,7 +477,7 @@ class WebcamHelper:
     def _SavePluginWebcamSettings(self) -> bool:
         try:
             # Convert the local webcam settings objects to dicts
-            localWebcamSettingsDict:List[dict[str, Any]] = []
+            localWebcamSettingsDict:List[Dict[str, Any]] = []
             for i in self.LocalPluginWebcamSettingsObjects:
                 localWebcamSettingsDict.append(i.Serialize())
 

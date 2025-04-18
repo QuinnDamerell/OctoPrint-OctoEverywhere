@@ -27,7 +27,7 @@ HttpResultOrNone = Union["HttpResult", None]
 class HttpResult():
     def __init__(self,
                     statusCode:int,
-                    headers:Union[CaseInsensitiveDict[str], Dict[str, str]],
+                    headers:Union[CaseInsensitiveDict[str], Dict[str, str]], #pyright: ignore[unsubscriptable-object] this is required for later PY versions.
                     url:str,
                     didFallback:bool,
                     fullBodyBuffer:Optional[Buffer]=None,
@@ -78,7 +78,7 @@ class HttpResult():
 
 
     @property
-    def Headers(self) -> CaseInsensitiveDict[str]:
+    def Headers(self) -> CaseInsensitiveDict[str]: #pyright: ignore[unsubscriptable-object] this is required for later PY versions.
         return self._headers
 
 
