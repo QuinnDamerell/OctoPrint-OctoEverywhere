@@ -1,6 +1,7 @@
 import time
 import logging
 from enum import Enum
+from typing import Any, Dict, Optional
 
 from octoeverywhere.sentry import Sentry
 
@@ -19,29 +20,29 @@ class BambuState:
     def __init__(self) -> None:
         # We only parse out what we currently use.
         # We use the same naming as the json in the msg
-        self.stg_cur:int = None
-        self.gcode_state:str = None
-        self.layer_num:int = None
-        self.total_layer_num:int = None
-        self.subtask_name:str = None
-        self.mc_percent:int = None
-        self.nozzle_temper:float = None
-        self.nozzle_target_temper:float = None
-        self.bed_temper:float = None
-        self.bed_target_temper:float = None
-        self.mc_remaining_time:int = None
-        self.project_id:str = None
-        self.print_error:int = None
+        self.stg_cur:Optional[int] = None
+        self.gcode_state:Optional[str] = None
+        self.layer_num:Optional[int] = None
+        self.total_layer_num:Optional[int] = None
+        self.subtask_name:Optional[str] = None
+        self.mc_percent:Optional[int] = None
+        self.nozzle_temper:Optional[float] = None
+        self.nozzle_target_temper:Optional[float] = None
+        self.bed_temper:Optional[float] = None
+        self.bed_target_temper:Optional[float] = None
+        self.mc_remaining_time:Optional[int] = None
+        self.project_id:Optional[str] = None
+        self.print_error:Optional[int] = None
         # On the X1, this is empty is LAN viewing of off
         # It's a URL if streaming is enabled
         # On other printers, this doesn't exist, so it's None
-        self.rtsp_url:str = None
+        self.rtsp_url:Optional[str] = None
         # Custom fields
-        self.LastTimeRemainingWallClock:float = None
+        self.LastTimeRemainingWallClock:Optional[float] = None
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, msg:dict) -> None:
+    def OnUpdate(self, msg:Dict[str,Any]) -> None:
         # Get a new value or keep the current.
         # Remember that most of these are partial updates and will only have some values.
         self.stg_cur = msg.get("stg_cur", self.stg_cur)
@@ -69,7 +70,7 @@ class BambuState:
 
     # Returns a time reaming value that counts down in seconds, not just minutes.
     # Returns null if the time is unknown.
-    def GetContinuousTimeRemainingSec(self) -> int:
+    def GetContinuousTimeRemainingSec(self) -> Optional[int]:
         if self.mc_remaining_time is None or self.LastTimeRemainingWallClock is None:
             return None
         # The slicer holds a constant time while in preparing, so we don't want to fake our countdown either.
@@ -88,7 +89,7 @@ class BambuState:
 
     # We use this common method since "is this a printing state?" is complicated and we can to keep all of the logic common in the plugin
     @staticmethod
-    def IsPrintingState(state:str, includePausedAsPrinting:bool) -> bool:
+    def IsPrintingState(state:Optional[str], includePausedAsPrinting:bool) -> bool:
         if state is None:
             return False
         if state == "PAUSE" and includePausedAsPrinting:
@@ -104,7 +105,7 @@ class BambuState:
 
     # We use this common method to keep all of the logic common in the plugin
     @staticmethod
-    def IsPrepareOrSlicingState(state:str) -> bool:
+    def IsPrepareOrSlicingState(state:Optional[str]) -> bool:
         if state is None:
             return False
         return state == "SLICING" or state == "PREPARE"
@@ -131,7 +132,7 @@ class BambuState:
     # This string should be as unique as possible, but always the same for the same print.
     # If there is no active print, this should return None!
     # See details in NotificationHandler._RecoverOrRestForNewPrint
-    def GetPrintCookie(self) -> str:
+    def GetPrintCookie(self) -> Optional[str]:
         # If there's no project id or subtask name, we shouldn't make a cookie..
         if self.project_id is None or len(self.project_id) == 0 or self.subtask_name is None or len(self.subtask_name) == 0:
             return None
@@ -143,7 +144,7 @@ class BambuState:
 
     # If the printer is in an error state, this tries to return the type, if known.
     # If the printer is not in an error state, None is returned.
-    def GetPrinterError(self) -> BambuPrintErrors:
+    def GetPrinterError(self) -> Optional[BambuPrintErrors]:
         # If there is a printer error, this is not 0
         if self.print_error is None or self.print_error == 0:
             return None
@@ -200,16 +201,16 @@ class BambuVersion:
         self.Logger = logger
         self.HasLoggedPrinterVersion = False
         # We only parse out what we currently use.
-        self.SoftwareVersion:str = None
-        self.HardwareVersion:str = None
-        self.SerialNumber:str = None
-        self.ProjectName:str = None
-        self.Cpu:BambuCPUs = None
-        self.PrinterName:BambuPrinters = None
+        self.SoftwareVersion:Optional[str] = None
+        self.HardwareVersion:Optional[str] = None
+        self.SerialNumber:Optional[str] = None
+        self.ProjectName:Optional[str] = None
+        self.Cpu:Optional[BambuCPUs] = None
+        self.PrinterName:Optional[BambuPrinters] = None
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, msg:dict) -> None:
+    def OnUpdate(self, msg:Dict[str, Any]) -> None:
         module = msg.get("module", None)
         if module is None:
             return

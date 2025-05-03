@@ -1,37 +1,38 @@
-# namespace: WebStream
-
-import threading
-import traceback
 import time
 import queue
+import threading
+import logging
+from typing import Any, Optional
 
+from ..buffer import Buffer
 from ..sentry import Sentry
+from ..interfaces import IOctoSession, IWebStream
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from .octowebstreamhttphelper import OctoWebStreamHttpHelper
 from .octowebstreamwshelper import OctoWebStreamWsHelper
 from ..Proto import WebStreamMsg
-from ..Proto import MessageContext
-from ..Proto import MessagePriority
+from ..Proto.MessageContext import MessageContext
+from ..Proto.MessagePriority import MessagePriority
 from ..debugprofiler import DebugProfiler, DebugProfilerFeatures
 
 #
 # Represents a web stream, which is how we send http request and web socket messages.
 #
-class OctoWebStream(threading.Thread):
+class OctoWebStream(threading.Thread, IWebStream):
 
     # Created when an open message is sent for a new web stream from the server.
-    def __init__(self, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
+    def __init__(self, group:Any=None, target:Any=None, name:Any=None, args:Any=(), kwargs:Any=None, verbose:Any=None) -> None:
         threading.Thread.__init__(self, group=group, target=target, name=name)
-        self.Logger = args[0]
-        self.Id = args[1]
-        self.OctoSession = args[2]
-        self.OpenWebStreamMsg:WebStreamMsg.WebStreamMsg = None
+        self.Logger:logging.Logger = args[0]
+        self.Id:int = args[1]
+        self.OctoSession:IOctoSession = args[2]
+        self.OpenWebStreamMsg:Optional[WebStreamMsg.WebStreamMsg] = None
         self.IsClosed = False
         self.HasSentCloseMessage = False
         self.StateLock = threading.Lock()
-        self.MsgQueue = queue.Queue()
-        self.HttpHelper = None
-        self.WsHelper = None
+        self.MsgQueue:queue.Queue[Optional[WebStreamMsg.WebStreamMsg]] = queue.Queue()
+        self.HttpHelper:Optional[OctoWebStreamHttpHelper] = None
+        self.WsHelper:Optional[OctoWebStreamWsHelper] = None
         self.IsHelperClosed = False
         self.OpenedTime = time.time()
         self.ClosedDueToRequestConnectionError = False
@@ -47,7 +48,7 @@ class OctoWebStream(threading.Thread):
     #
     # This function is called on the main OctoSocket receive thread, so it should pass the
     # message off to the thread as quickly as possible.
-    def OnIncomingServerMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg):
+    def OnIncomingServerMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg) -> None:
         # Don't accept messages after we are closed.
         if self.IsClosed:
             self.Logger.info("Web stream class "+str(self.Id)+" got a incoming message after it has been closed.")
@@ -58,7 +59,7 @@ class OctoWebStream(threading.Thread):
         if webStreamMsg.IsCloseMsg():
             # Note right now we don't support getting close messages with data.
             if webStreamMsg.IsControlFlagsOnly is False:
-                self.Logger.warn("Web stream "+str(self.Id)+" got a close message with data. The data will be ignored.")
+                self.Logger.warning("Web stream "+str(self.Id)+" got a close message with data. The data will be ignored.")
             # Set this flag, because we don't need to send a close message if the server already did.
             self.HasSentCloseMessage = True
             # Call close.
@@ -71,11 +72,11 @@ class OctoWebStream(threading.Thread):
     # Closes the web stream and all related elements.
     # This is called from the main socket receive thread, so it should
     # execute as quickly as possible.
-    def Close(self):
+    def Close(self) -> None:
         # Check the state and set the flag. Only allow this code to run
         # once.
-        localHttpHelper = None
-        localWsHelper = None
+        localHttpHelper:Optional[OctoWebStreamHttpHelper] = None
+        localWsHelper:Optional[OctoWebStreamWsHelper] = None
 
         with self.StateLock:
             # If we are already closed, there's nothing to do.
@@ -115,26 +116,25 @@ class OctoWebStream(threading.Thread):
             if localWsHelper is not None:
                 localWsHelper.Close()
         except Exception as e:
-            Sentry.Exception("Web stream "+str(self.Id)+" helper threw an exception during close", e)
+            Sentry.OnException("Web stream "+str(self.Id)+" helper threw an exception during close", e)
 
 
-    def SetClosedDueToFailedRequestConnection(self):
+    def SetClosedDueToFailedRequestConnection(self) -> None:
         self.ClosedDueToRequestConnectionError = True
 
 
     # This is our main thread, where we will process all incoming messages.
-    def run(self):
+    def run(self) -> None:
         # Enable the profiler if needed- it will do nothing if not enabled.
         with DebugProfiler(self.Logger, DebugProfilerFeatures.WebStream):
             try:
                 self.mainThread()
             except Exception as e:
-                Sentry.Exception("Exception in web stream ["+str(self.Id)+"] connect loop.", e)
-                traceback.print_exc()
+                Sentry.OnException("Exception in web stream ["+str(self.Id)+"] connect loop.", e)
                 self.OctoSession.OnSessionError(0)
 
 
-    def mainThread(self):
+    def mainThread(self) -> None:
         # Loop until we are closed.
         while self.IsClosed is False:
 
@@ -142,7 +142,7 @@ class OctoWebStream(threading.Thread):
             # Timeout after 60 seconds just to check that we aren't closed.
             # It's important to set this value to None, otherwise on loops it will hold it's old value
             # which can accidentally re-process old messages.
-            webStreamMsg:WebStreamMsg.WebStreamMsg = None
+            webStreamMsg:Optional[WebStreamMsg.WebStreamMsg] = None
             try:
                 webStreamMsg = self.MsgQueue.get(timeout=60)
             except Exception as _:
@@ -188,12 +188,12 @@ class OctoWebStream(threading.Thread):
             # returning the correct returnValue, so if we see that we will call close to make sure things
             # are going down. Since Close() is guarded against multiple entries, this is totally fine.
             if self.HasSentCloseMessage is True and self.IsClosed is False:
-                self.Logger.warn("Web stream "+str(self.Id)+" processed a message and has sent a close message, but didn't call close on the web stream. Closing now.")
+                self.Logger.warning("Web stream "+str(self.Id)+" processed a message and has sent a close message, but didn't call close on the web stream. Closing now.")
                 self.Close()
                 return
 
 
-    def initFromOpenMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg):
+    def initFromOpenMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg) -> None:
         # Sanity check.
         if self.OpenWebStreamMsg is not None:
             # Throw so we reset the connection.
@@ -203,7 +203,7 @@ class OctoWebStream(threading.Thread):
         self.OpenWebStreamMsg = webStreamMsg
 
         # Check if this is high pri, if so, tell them system a high pri is active
-        if self.OpenWebStreamMsg.MsgPriority() < MessagePriority.MessagePriority.Normal:
+        if self.OpenWebStreamMsg.MsgPriority() < MessagePriority.Normal:
             self.IsHighPriStream = True
             self.highPriStreamStarted()
 
@@ -241,7 +241,7 @@ class OctoWebStream(threading.Thread):
 
 
     # Called by the helpers to send messages to the server.
-    def SendToOctoStream(self, buffer:bytearray, msgStartOffsetBytes:int, msgSize:int, isCloseFlagSet = False, silentlyFail = False):
+    def SendToOctoStream(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int, isCloseFlagSet=False, silentlyFail=False) -> None:
         # Make sure we aren't closed. If we are, don't allow the message to be sent.
         with self.StateLock:
             if self.IsClosed is True:
@@ -254,7 +254,7 @@ class OctoWebStream(threading.Thread):
                     # We can only send one close flag, so only allow this to send if we haven't sent yet.
                     if self.HasSentCloseMessage:
                         if silentlyFail is False:
-                            self.Logger.warn("Web Stream "+str(self.Id)+" tried to send a close message after a close message was already sent")
+                            self.Logger.warning("Web Stream "+str(self.Id)+" tried to send a close message after a close message was already sent")
                         return
 
             # No matter what, if the close flag is set, set the has sent now.
@@ -265,7 +265,7 @@ class OctoWebStream(threading.Thread):
         try:
             self.OctoSession.Send(buffer, msgStartOffsetBytes, msgSize)
         except Exception as e:
-            Sentry.Exception("Web stream "+str(self.Id)+ " failed to send a message to the OctoStream.", e)
+            Sentry.OnException("Web stream "+str(self.Id)+ " failed to send a message to the OctoStream.", e)
 
             # If this was the close message, set the has set flag back to false so we send again.
             # (this mostly won't matter, since the entire connection will go down anyways)
@@ -276,6 +276,7 @@ class OctoWebStream(threading.Thread):
 
             # Return since things are going down.
             return
+
 
     # Ensures the close message is always sent, but only once.
     # The only way the close message doesn't need to be sent is if
@@ -291,17 +292,18 @@ class OctoWebStream(threading.Thread):
             WebStreamMsg.AddIsCloseMsg(builder, True)
             WebStreamMsg.AddCloseDueToRequestConnectionFailure(builder, self.ClosedDueToRequestConnectionError)
             webStreamMsgOffset = WebStreamMsg.End(builder)
-            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.MessageContext.WebStreamMsg, webStreamMsgOffset)
+            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.CreateOctoStreamMsgAndFinalize(builder, MessageContext.WebStreamMsg, webStreamMsgOffset)
             # Set the flag to silently fail, since the message might have already been sent by the helper.
             self.SendToOctoStream(buffer, msgStartOffsetBytes, msgSizeBytes, True, True)
         except Exception as e:
             # This is bad, log it and kill the stream.
-            Sentry.Exception("Exception thrown while trying to send close message for web stream "+str(self.Id), e)
+            Sentry.OnException("Exception thrown while trying to send close message for web stream "+str(self.Id), e)
             self.OctoSession.OnSessionError(0)
+
 
     # Called by the OctoStreamHttpHelper if the request is normal pri.
     # If a high pri request is active, this should block until it's complete or for a little while.
-    def BlockIfHighPriStreamActive(self):
+    def BlockIfHighPriStreamActive(self) ->  None:
         # Check the counter, don't worry about taking the lock, worst case
         # this logic would allow one request through or not block one.
 
@@ -319,13 +321,15 @@ class OctoWebStream(threading.Thread):
         # Note that the http will call this function before the request and on each response read loop, so the delays add up.
         time.sleep(0.1)
 
+
     # Called when a high pri stream is started
-    def highPriStreamStarted(self):
+    def highPriStreamStarted(self) -> None:
         with self.HighPriLock:
             self.ActiveHighPriStreamCount += 1
             self.ActiveHighPriStreamStart = time.time()
 
+
     # Called when a high pri stream is ended.
-    def highPriStreamEnded(self):
+    def highPriStreamEnded(self)  -> None:
         with self.HighPriLock:
             self.ActiveHighPriStreamCount -= 1

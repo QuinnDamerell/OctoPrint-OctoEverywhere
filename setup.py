@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "4.1.3"
+plugin_version = "4.2.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -121,13 +121,13 @@ additional_setup_parameters = {}
 
 try:
     import octoprint_setuptools
-except Exception:
-    print("Could not import OctoPrint's setuptools, are you sure you are running that under "
+except Exception as e:
+    print(f"Could not import OctoPrint's setuptools: {e}. Are you sure you are running that under "
         "the same python installation that OctoPrint is installed under?")
     import sys
     sys.exit(-1)
 
-setup_parameters = octoprint_setuptools.create_plugin_setup_parameters(
+setup_parameters = octoprint_setuptools.create_plugin_setup_parameters( #pyright: ignore[reportUnknownMemberType] octoprint is non-typed
 	identifier=plugin_identifier,
 	package=plugin_package,
 	name=plugin_name,

@@ -1,13 +1,17 @@
+import logging
+from typing import Any, Dict, Union
+
 from octoeverywhere.commandhandler import CommandResponse
 from octoeverywhere.printinfo import PrintInfoManager
+from octoeverywhere.interfaces import IPlatformCommandHandler
 
 from .bambuclient import BambuClient
 from .bambumodels import BambuPrintErrors
 
 # This class implements the Platform Command Handler Interface
-class BambuCommandHandler:
+class BambuCommandHandler(IPlatformCommandHandler):
 
-    def __init__(self, logger) -> None:
+    def __init__(self, logger: logging.Logger) -> None:
         self.Logger = logger
 
 
@@ -66,7 +70,7 @@ class BambuCommandHandler:
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
-    def GetCurrentJobStatus(self):
+    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         # Try to get the current state.
         bambuState = BambuClient.Get().GetState()
 
@@ -116,7 +120,7 @@ class BambuCommandHandler:
             elif gcodeState == "PREPARE":
                 state = "warmingup"
             else:
-                self.Logger.warn(f"Unknown gcode_state state in print state: {gcodeState}")
+                self.Logger.warning(f"Unknown gcode_state state in print state: {gcodeState}")
 
         # If we have a mapped sub state, set it.
         subState_CanBeNone = None
@@ -205,7 +209,7 @@ class BambuCommandHandler:
 
     # !! Platform Command Handler Interface Function !!
     # This must return the platform version as a string.
-    def GetPlatformVersionStr(self):
+    def GetPlatformVersionStr(self) -> str:
         version = BambuClient.Get().GetVersion()
         if version is None:
             return "0.0.0"
@@ -216,7 +220,7 @@ class BambuCommandHandler:
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
-    def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup) -> CommandResponse:
+    def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         if BambuClient.Get().SendPause():
             return CommandResponse.Success(None)
         else:

@@ -1,16 +1,18 @@
 # namespace: WebStream
 
+import logging
 import time
 import threading
-
-import octowebsocket
+from typing import Optional
 
 from ..mdns import MDns
+from ..buffer import Buffer
 from ..sentry import Sentry
 from ..compat import Compat
 from ..websocketimpl import Client
+from ..interfaces import IWebStream, IWebSocketClient, WebSocketOpCode
 from ..localip import LocalIpHelper
-from ..compression import Compression, CompressionContext
+from ..compression import Compression, CompressionContext, CompressionResult
 from .octoheaderimpl import HeaderHelper
 from ..octohttprequest import OctoHttpRequest
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
@@ -31,7 +33,7 @@ class OctoWebStreamWsHelper:
 
     # Called by the main socket thread so this should be quick!
     # Throwing from here will shutdown the entire connection.
-    def __init__(self, streamId, logger, webStream, webStreamOpenMsg, openedTime):
+    def __init__(self, streamId:int, logger:logging.Logger, webStream:IWebStream, webStreamOpenMsg:WebStreamMsg.WebStreamMsg, openedTime:float):
         self.Id = streamId
         self.Logger = logger
         self.WebStream = webStream
@@ -39,9 +41,9 @@ class OctoWebStreamWsHelper:
         self.IsClosed = False
         self.StateLock = threading.Lock()
         self.OpenedTime = openedTime
-        self.Ws = None
+        self.Ws:Optional[IWebSocketClient] = None
         self.FirstWsMessageSentToLocal = False
-        self.ResolvedLocalHostnameUrl = None
+        self.ResolvedLocalHostnameUrl:Optional[str] = None
         self.LookingForConnectMsgAttempts = 0
         self.CompressionContext = CompressionContext(self.Logger)
 
@@ -52,9 +54,10 @@ class OctoWebStreamWsHelper:
         self.IsWsObjClosed = False
 
         # Capture the initial http context
-        self.HttpInitialContext = webStreamOpenMsg.HttpInitialContext()
-        if self.HttpInitialContext is None:
+        context = webStreamOpenMsg.HttpInitialContext()
+        if context is None:
             raise Exception("Web stream ws helper got a open message with no http context")
+        self.HttpInitialContext = context
 
         # Ensure that the http relay is enabled
         # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
@@ -117,8 +120,9 @@ class OctoWebStreamWsHelper:
                 # If we have an API handler, see if it wants to overwrite the URL.
                 # We have to do this first, because the generated URL might work, but not be the right one.
                 # Right now this is only used for moonraker. MapRelativePathToAbsolutePathIfNeeded will return None if there's nothing to do.
-                if Compat.HasApiRouterHandler():
-                    uri = Compat.GetApiRouterHandler().MapRelativePathToAbsolutePathIfNeeded(path, "ws://")
+                apiRouterHandler = Compat.GetApiRouterHandler()
+                if apiRouterHandler is not None:
+                    uri = apiRouterHandler.MapRelativePathToAbsolutePathIfNeeded(path, "ws://")
                 if uri is None:
                     # Try to connect using the main URL, this is what we expect to work.
                     uri = "ws://" + str(OctoHttpRequest.GetLocalhostAddress()) + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
@@ -197,12 +201,13 @@ class OctoWebStreamWsHelper:
         # On some platforms, we might have a websocket object that was provided by the platform.
         # If a websocket is provided, it must be a websocketimpl.Client or mock it's APIs exactly!
         ws = None
-        if Compat.HasRelayWebsocketProvider():
-            ws = Compat.GetRelayWebsocketProvider().GetWebsocketObject(path, pathType, self.HttpInitialContext,
+        relayWebsocketProvider = Compat.GetRelayWebsocketProvider()
+        if relayWebsocketProvider is not None:
+            ws = relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
                     self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
 
         if ws is None:
-            ws = Client(uri, self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
+            ws = Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
 
         # To ensure we never leak a websocket, we need to use this lock.
         # We need to check the is closed flag and then only set the ws if it's not closed.
@@ -217,8 +222,8 @@ class OctoWebStreamWsHelper:
 
             # We aren't closed, set the websocket and run it.
             # We have to be careful with this ws, because it needs to be closed to fully shutdown, but we can't use a with statement.
-            self.Ws = ws
-            self.Ws.RunAsync()
+            self.Ws = ws #pyright:ignore[reportAttributeAccessIssue]
+            ws.RunAsync()
 
         # Return true to indicate we are trying to connect again.
         return True
@@ -228,7 +233,7 @@ class OctoWebStreamWsHelper:
     # Called by the main socket thread so this should be quick!
     def Close(self):
         # Don't try to close twice.
-        wsToClose = None
+        wsToClose:Optional[IWebSocketClient] = None
         with self.StateLock:
             # If we are already closed, there's nothing to do.
             if self.IsClosed is True:
@@ -255,7 +260,7 @@ class OctoWebStreamWsHelper:
         try:
             self.CompressionContext.__exit__(None, None, None)
         except Exception as e:
-            Sentry.Exception("Websocket stream helper failed to clean up the compression context.", e)
+            Sentry.OnException("Websocket stream helper failed to clean up the compression context.", e)
 
 
     # Called when a new message has arrived for this stream from the server.
@@ -263,7 +268,7 @@ class OctoWebStreamWsHelper:
     # Returning true will case the websocket to close on return.
     # This function is called on it's own thread from the web stream, so it's ok to block
     # as long as it gets cleaned up when the socket closes.
-    def IncomingServerMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg):
+    def IncomingServerMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg) -> bool:
 
         # We can get messages from this web stream before the actual websocket has opened and is ready for messages.
         # If this happens, when we try to send the message on the socket and we will get an error saying "the socket is closed" (which is incorrect, it's not open yet).
@@ -282,6 +287,7 @@ class OctoWebStreamWsHelper:
         buffer = webStreamMsg.DataAsByteArray()
         if buffer == 0:
             buffer = bytearray(0)
+        buffer = Buffer(buffer)
 
         # If the message is compressed, decompress it.
         compressionType = webStreamMsg.DataCompression()
@@ -289,14 +295,14 @@ class OctoWebStreamWsHelper:
             buffer = Compression.Get().Decompress(self.CompressionContext, buffer, webStreamMsg.OriginalDataSize(), False, compressionType)
 
         # Get the send type.
-        sendType = 0
+        sendType = WebSocketOpCode.CLOSE
         msgType = webStreamMsg.WebsocketDataType()
         if msgType == WebSocketDataTypes.WebSocketDataTypes.Text:
-            sendType = octowebsocket.ABNF.OPCODE_TEXT
+            sendType = WebSocketOpCode.TEXT
         elif msgType == WebSocketDataTypes.WebSocketDataTypes.Binary:
-            sendType = octowebsocket.ABNF.OPCODE_BINARY
+            sendType = WebSocketOpCode.BINARY
         elif msgType == WebSocketDataTypes.WebSocketDataTypes.Close:
-            sendType = octowebsocket.ABNF.OPCODE_CLOSE
+            sendType = WebSocketOpCode.CLOSE
         else:
             raise Exception("Web stream ws was sent a data type that's unknown. "+str(msgType))
 
@@ -320,18 +326,17 @@ class OctoWebStreamWsHelper:
         return False
 
 
-    def onWsData(self, ws, buffer:bytes, msgType):
+    def onWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
 
         try:
             # Figure out the data type
-            # TODO - we should support the OPCODE_CONT type at some point. But it's not needed right now.
             sendType = WebSocketDataTypes.WebSocketDataTypes.None_
-            if msgType == octowebsocket.ABNF.OPCODE_BINARY:
+            if msgType == WebSocketOpCode.BINARY:
                 sendType = WebSocketDataTypes.WebSocketDataTypes.Binary
-            elif msgType == octowebsocket.ABNF.OPCODE_TEXT:
+            elif msgType == WebSocketOpCode.TEXT:
                 sendType = WebSocketDataTypes.WebSocketDataTypes.Text
                 # In PY3 using the modern websocket_client lib the text also comes as a byte buffer.
             else:
@@ -352,7 +357,7 @@ class OctoWebStreamWsHelper:
                 self.LookingForConnectMsgAttempts += 1
                 try:
                     c_configHashStringSearch = "config_hash"
-                    msgStr = buffer.decode(encoding="utf-8")
+                    msgStr = buffer.GetBytesLike().decode(encoding="utf-8")
                     indexOfConfigHash = msgStr.find(c_configHashStringSearch)
                     if indexOfConfigHash != -1:
                         # We found it!
@@ -373,19 +378,19 @@ class OctoWebStreamWsHelper:
                         # We don't need to find the end quote, we just need to inject our key into the string.
                         # since the hash is all lower case letters and numbers, use a similar thing for our header.
                         newStr = msgStr[:openStringQuote] + "oe" + msgStr[openStringQuote:]
-                        buffer = newStr.encode(encoding="utf-8")
+                        buffer = Buffer(newStr.encode(encoding="utf-8"))
                         # Set this number high, so we dont have to look anymore.
                         self.LookingForConnectMsgAttempts = 9999
                     elif self.LookingForConnectMsgAttempts >= 5:
-                        self.Logger.warn(self.getLogMsgPrefix()+" failed to to find OctoPrint connect message in the first few WS messages.")
+                        self.Logger.warning(self.getLogMsgPrefix()+" failed to to find OctoPrint connect message in the first few WS messages.")
                 except Exception as ex:
-                    Sentry.Exception("Websocket stream helper failed to parse websocket for config hash mod.", ex)
+                    Sentry.OnException("Websocket stream helper failed to parse websocket for config hash mod.", ex)
 
 
             # Figure out if we should compress the data.
             usingCompression = len(buffer) >= Compression.MinSizeToCompress
             originalDataSize = 0
-            compressionResult = None
+            compressionResult:Optional[CompressionResult] = None
             if usingCompression:
                 originalDataSize = len(buffer)
                 compressionResult = Compression.Get().Compress(self.CompressionContext, buffer)
@@ -397,14 +402,14 @@ class OctoWebStreamWsHelper:
             # Note its ok to have an empty buffer, we still want to send the ping.
             dataOffset = None
             if len(buffer) > 0:
-                dataOffset = builder.CreateByteVector(buffer)
+                dataOffset = builder.CreateByteVector(buffer.Get()) #pyright: ignore[reportUnknownMemberType]
 
             # Setup the message to send.
             WebStreamMsg.Start(builder)
             WebStreamMsg.AddStreamId(builder, self.Id)
             WebStreamMsg.AddIsControlFlagsOnly(builder, False)
             WebStreamMsg.AddWebsocketDataType(builder, sendType)
-            if usingCompression:
+            if compressionResult is not None:
                 WebStreamMsg.AddDataCompression(builder, compressionResult.CompressionType)
                 WebStreamMsg.AddOriginalDataSize(builder, originalDataSize)
             if dataOffset is not None:
@@ -415,11 +420,11 @@ class OctoWebStreamWsHelper:
             # Send it!
             self.WebStream.SendToOctoStream(buffer, msgStartOffsetBytes, msgSizeBytes)
         except Exception as e:
-            Sentry.Exception(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service.", e)
+            Sentry.OnException(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service.", e)
             self.WebStream.Close()
 
 
-    def onWsClosed(self, ws):
+    def onWsClosed(self, ws:IWebSocketClient):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -431,7 +436,7 @@ class OctoWebStreamWsHelper:
         self.WebStream.Close()
 
 
-    def onWsError(self, ws, error):
+    def onWsError(self, ws:IWebSocketClient, error:Exception):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -463,7 +468,7 @@ class OctoWebStreamWsHelper:
         self.WebStream.Close()
 
 
-    def onWsOpened(self, ws):
+    def onWsOpened(self, ws:IWebSocketClient):
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return

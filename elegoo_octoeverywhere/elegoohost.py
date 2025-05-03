@@ -1,5 +1,6 @@
 import logging
 import traceback
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
@@ -17,6 +18,7 @@ from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.compat import Compat
+from octoeverywhere.interfaces import IHostCommandHandler, IPopUpInvoker, IStateChangeHandler
 
 from linux_host.config import Config
 from linux_host.secrets import Secrets
@@ -34,12 +36,12 @@ from .elegoostatetranslater import ElegooStateTranslator
 from .elegoorelaywebcamurldetector import ElegooRelayWebcamUrlDetector
 
 # This file is the main host for the elegoo os service.
-class ElegooHost:
+class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
-    def __init__(self, configDir:str, logDir:str, devConfig_CanBeNone) -> None:
+    def __init__(self, configDir:str, logDir:str, devConfig:Optional[Dict[str, Any]]) -> None:
         # When we create our class, make sure all of our core requirements are created.
-        self.Secrets = None
-        self.NotificationHandler:NotificationsHandler = None
+        self.Secrets:Secrets = None #pyright: ignore[reportAttributeAccessIssue]
+        self.NotificationHandler:NotificationsHandler = None #pyright: ignore[reportAttributeAccessIssue]
 
         # Let the compat system know this is an elegoo host.
         Compat.SetIsElegooOs(True)
@@ -51,8 +53,8 @@ class ElegooHost:
             self.Config = Config(configDir)
 
             # Setup the logger.
-            logLevelOverride_CanBeNone = self.GetDevConfigStr(devConfig_CanBeNone, "LogLevel")
-            self.Logger = LoggerInit.GetLogger(self.Config, logDir, logLevelOverride_CanBeNone)
+            logLevelOverride = self.GetDevConfigStr(devConfig, "LogLevel")
+            self.Logger = LoggerInit.GetLogger(self.Config, logDir, logLevelOverride)
             self.Config.SetLogger(self.Logger)
 
             # Give the logger to Sentry ASAP.
@@ -65,7 +67,7 @@ class ElegooHost:
             raise
 
 
-    def RunBlocking(self, configPath, localStorageDir, repoRoot, devConfig_CanBeNone):
+    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("####################################################")
@@ -81,7 +83,7 @@ class ElegooHost:
 
             # As soon as we have the plugin version, setup Sentry
             # Enabling profiling and no filtering, since we are the only PY in this process.
-            Sentry.Setup(pluginVersionStr, "elegoo", devConfig_CanBeNone is not None, enableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
+            Sentry.Setup(pluginVersionStr, "elegoo", devConfig is not None, enableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
             self.Secrets = Secrets(self.Logger, localStorageDir)
@@ -92,12 +94,14 @@ class ElegooHost:
             # Get our required vars
             printerId = self.GetPrinterId()
             privateKey = self.GetPrivateKey()
+            if printerId is None or privateKey is None:
+                raise Exception("Printer ID or Private Key is None! This should never happen, please report this issue to the OctoEverywhere team.")
 
             # Set the printer ID into sentry.
             Sentry.SetPrinterId(printerId)
 
             # Unpack any dev vars that might exist
-            DevLocalServerAddress_CanBeNone = self.GetDevConfigStr(devConfig_CanBeNone, "LocalServerAddress")
+            DevLocalServerAddress_CanBeNone = self.GetDevConfigStr(devConfig, "LocalServerAddress")
             if DevLocalServerAddress_CanBeNone is not None:
                 self.Logger.warning("~~~ Using Local Dev Server Address: %s ~~~", DevLocalServerAddress_CanBeNone)
 
@@ -133,7 +137,7 @@ class ElegooHost:
             stateTranslator = ElegooStateTranslator(self.Logger)
             self.NotificationHandler = NotificationsHandler(self.Logger, stateTranslator)
             self.NotificationHandler.SetPrinterId(printerId)
-            self.NotificationHandler.SetBedCooldownThresholdTemp(self.Config.GetFloat(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault))
+            self.NotificationHandler.SetBedCooldownThresholdTemp(self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault))
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
             # Setup the command handler
@@ -159,7 +163,7 @@ class ElegooHost:
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo, False)
             oe.RunBlocking()
         except Exception as e:
-            Sentry.Exception("!! Exception thrown out of main host run function.", e)
+            Sentry.OnException("!! Exception thrown out of main host run function.", e)
 
         # Allow the loggers to flush before we exit
         try:
@@ -215,7 +219,7 @@ class ElegooHost:
 
     # Tries to load a dev config option as a string.
     # If not found or it fails, this return None
-    def GetDevConfigStr(self, devConfig, value):
+    def GetDevConfigStr(self, devConfig:Optional[Dict[str, Any]], value:str) -> Optional[str]:
         if devConfig is None:
             return None
         if value in devConfig:
@@ -244,14 +248,14 @@ class ElegooHost:
     # actionText - string, if not None or empty, this is the text to show on the action button or text link.
     # actionLink - string, if not None or empty, this is the URL to show on the action button or text link.
     # onlyShowIfLoadedViaOeBool - bool, if set, the message should only be shown on browsers loading the portal from OE.
-    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool):
+    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
         ElegooClient.Get().SendFrontendPopupMsg(title, text, msgType, actionText, actionLink, showForSec, onlyShowIfLoadedViaOeBool)
 
 
     #
     # StatusChangeHandler Interface - Called by the OctoEverywhere logic when the server connection has been established.
     #
-    def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
+    def OnPrimaryConnectionEstablished(self, octoKey:str, connectedAccounts:List[str]) -> None:
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
 
         # Give the octoKey to who needs it.
@@ -259,14 +263,16 @@ class ElegooHost:
 
         # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
         # This would be if the skipped the printer link or missed it in the setup script.
-        if connectedAccounts is None or len(connectedAccounts) == 0:
-            LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, self.GetPrinterId(), "elegoo_host")
+        if len(connectedAccounts) == 0:
+            printerId = self.GetPrinterId()
+            if printerId is not None:
+                LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "elegoo_host")
 
 
     #
     # StatusChangeHandler Interface - Called by the OctoEverywhere logic when a plugin update is required for this client.
     #
-    def OnPluginUpdateRequired(self):
+    def OnPluginUpdateRequired(self) -> None:
         self.Logger.error("!!! A Plugin Update Is Required -- If This Plugin Isn't Updated It Might Stop Working !!!")
         self.Logger.error("!!! Please SSH into the device running this plug-in and run the update script or update the docker container!  !!!")
 
@@ -274,12 +280,13 @@ class ElegooHost:
     #
     # StatusChangeHandler Interface - Called by the OctoEverywhere handshake when a rekey is required.
     #
-    def OnRekeyRequired(self):
+    def OnRekeyRequired(self) -> None:
         self.Rekey("Handshake Failed")
 
 
     #
     # Command Host Interface - Called by the command handler, when called the plugin must clear it's keys and restart to generate new ones.
     #
-    def OnRekeyCommand(self):
+    def OnRekeyCommand(self) -> bool:
         self.Rekey("Command")
+        return True

@@ -2,6 +2,7 @@ import os
 import logging
 import time
 import traceback
+from typing import Any, Dict, Optional
 
 # import sentry_sdk
 # from sentry_sdk import Hub
@@ -15,7 +16,7 @@ from .threaddebug import ThreadDebug
 class Sentry:
 
     # Holds the process logger.
-    _Logger:logging.Logger = None
+    _Logger:logging.Logger = None #pyright: ignore[reportAssignmentType]
 
     # Flags to help Sentry get setup.
     IsSentrySetup:bool = False
@@ -35,7 +36,7 @@ class Sentry:
     # This actually setups sentry.
     # It's only called after the plugin version is known, and thus it might be a little into the process lifetime.
     @staticmethod
-    def Setup(versionString:str, distType:str, isDevMode:bool = False, enableProfiling:bool = False, filterExceptionsByPackage:bool = False, restartOnCantCreateThreadBug:bool = False):
+    def Setup(versionString:str, distType:str, isDevMode:bool=False, enableProfiling:bool=False, filterExceptionsByPackage:bool=False, restartOnCantCreateThreadBug:bool=False):
         # Set the dev mode flag.
         Sentry.IsDevMode = isDevMode
         Sentry.FilterExceptionsByPackage = filterExceptionsByPackage
@@ -85,7 +86,7 @@ class Sentry:
 
 
     @staticmethod
-    def _beforeSendFilter(event, hint):
+    def _beforeSendFilter(event:Any, hint:Any):
 
         # If we want to filter by package, do it now.
         if Sentry.FilterExceptionsByPackage:
@@ -137,7 +138,7 @@ class Sentry:
 
     # Adds a breadcrumb to the sentry log, which is helpful to figure out what happened before an exception.
     @staticmethod
-    def Breadcrumb(msg:str, data:dict = None, level:str = "info", category:str = "breadcrumb"):
+    def Breadcrumb(msg:str, data:Optional[Dict[Any, Any]]=None, level:str="info", category:str="breadcrumb"):
         #sentry_sdk.add_breadcrumb(message=msg, data=data, level=level, category=category)
         pass
 
@@ -145,7 +146,7 @@ class Sentry:
     # Sends an error log to sentry.
     # This is useful for debugging things that shouldn't be happening.
     @staticmethod
-    def LogError(msg:str, extras:dict = None) -> None:
+    def LogError(msg:str, extras:Optional[Dict[Any, Any]]=None) -> None:
         if Sentry._Logger is None:
             return
         Sentry._Logger.error(f"Sentry Error: {msg}")
@@ -162,19 +163,19 @@ class Sentry:
     # Logs and reports an exception.
     # If there's no exception, use LogError instead.
     @staticmethod
-    def Exception(msg:str, exception:Exception, extras:dict = None):
+    def OnException(msg:str, exception:Exception, extras:Optional[Dict[Any, Any]]=None):
         Sentry._handleException(msg, exception, True, extras)
 
 
     # Only logs an exception, without reporting.
     @staticmethod
-    def ExceptionNoSend(msg:str, exception:Exception, extras:dict = None):
+    def OnExceptionNoSend(msg:str, exception:Exception, extras:Optional[Dict[Any, Any]]=None):
         Sentry._handleException(msg, exception, False, extras)
 
 
     # Does the work
     @staticmethod
-    def _handleException(msg:str, exception:Exception, sendException:bool, extras:dict = None):
+    def _handleException(msg:str, exception:Exception, sendException:bool, extras:Optional[Dict[Any, Any]]=None):
 
         # This could be called before the class has been inited, in such a case just return.
         if Sentry._Logger is None:
@@ -229,7 +230,7 @@ class Sentry:
         # Log the error
         ThreadDebug.DoThreadDumpLogout(logger, True)
         logger.error("~~~~~~~~~ Process Restarting Due To Threading Bug ~~~~~~~~~~~~")
-        Sentry.Exception("Can't start new thread - restarting the process.", e)
+        Sentry.OnException("Can't start new thread - restarting the process.", e)
 
         # Flush Sentry
         # Once this is called, Sentry is shutdown, so we must restart.

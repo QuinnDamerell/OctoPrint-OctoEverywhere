@@ -1,8 +1,13 @@
 import secrets
 import string
+import logging
+from typing import Dict, Optional
 
 from octoprint.access.permissions import Permissions
+from octoprint.access.users import UserManager, User
+
 from octoeverywhere.compat import Compat
+from octoeverywhere.interfaces import ILocalAuth
 
 # A class that manages the local auth rights of OctoEverywhere.
 #
@@ -17,26 +22,27 @@ from octoeverywhere.compat import Compat
 #
 # We use an plugin hook that only exists since OctoPrint 1.3.6. If this is running on older versions our authed calls will fail because we won't get the
 # ValidateApiKey callback. Less than 2% of all global OctoPrint instances are running 1.3.12
-class LocalAuth:
+class LocalAuth(ILocalAuth):
 
-    _Instance = None
+    _Instance: "LocalAuth" = None  # pyright: ignore[reportAssignmentType]
+
     # We use the same key length as OctoPrint, because why not.
     _ApiGeneratedKeyLength = 32
 
 
     @staticmethod
-    def Init(logger, userManager):
+    def Init(logger:logging.Logger, userManager:UserManager) -> None:
         LocalAuth._Instance = LocalAuth(logger, userManager)
         # Since this platform supports this object, set it in our compat layer.
         Compat.SetLocalAuth(LocalAuth._Instance)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "LocalAuth":
         return LocalAuth._Instance
 
 
-    def __init__(self, logger, userManager):
+    def __init__(self, logger:logging.Logger, userManager:UserManager) -> None:
         self.Logger = logger
         # Note our test running main.py passes None for the userManger.
         # But it will never call ValidateApiKey anyways.
@@ -47,13 +53,13 @@ class LocalAuth:
 
     # Used only for testing without actual OctoPrint, this can set the API key
     # that's actually created in a real OctoPrint instance.
-    def SetApiKeyForTesting(self, apiKey):
-        self.Logger.warn("LocalAuth is using a dev API key: "+str(apiKey))
+    def SetApiKeyForTesting(self, apiKey: str) -> None:
+        self.Logger.warning("LocalAuth is using a dev API key: "+str(apiKey))
         self.ApiKey = apiKey
 
 
     # Adds the auth header with the auth key.
-    def AddAuthHeader(self, headers):
+    def AddAuthHeader(self, headers: Dict[str, str]) -> None:
         # This will overwrite any existing keys.
         headers["X-Api-Key"] = self.ApiKey
 
@@ -61,17 +67,17 @@ class LocalAuth:
     # Called by OctoPrint when a request is made with an API key.
     # If the key is invalid or we don't know, return None, otherwise we must return a user.
     # See for an example: https://github.com/OctoPrint/OctoPrint/blob/master/src/octoprint/plugins/appkeys/__init__.py
-    def ValidateApiKey(self, api_key):
+    def ValidateApiKey(self, api_key: str) -> Optional[User]:
         # If the key doesn't match our auth key, we have nothing to do.
-        if(api_key is None or api_key != self.ApiKey):
+        if api_key is None or api_key != self.ApiKey:
             return None
 
         # This is us trying to make a request.
         # We need to return a valid user with admin permissions.
         allUsers = self.OctoPrintUserManager.get_all_users()
         for user in allUsers:
-            if user.has_permission(Permissions.ADMIN):
+            if user.has_permission(Permissions.ADMIN): #pyright: ignore[reportUnknownMemberType] octoprint has no typing
                 return user
 
-        self.Logger.warn("Failed to find local user with admin permissions to return for authed call.")
+        self.Logger.warning("Failed to find local user with admin permissions to return for authed call.")
         return None

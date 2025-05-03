@@ -1,16 +1,18 @@
 import logging
 import time
+from typing import List, Optional
 
 from linux_host.config import Config
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.Webcam.webcamsettingitem import WebcamSettingItem
+from octoeverywhere.interfaces import IWebcamPlatformHelper
 
 from .bambuclient import BambuClient
 
 
 # This class implements the webcam platform helper interface for bambu.
-class BambuWebcamHelper():
+class BambuWebcamHelper(IWebcamPlatformHelper):
 
 
     def __init__(self, logger:logging.Logger, config:Config) -> None:
@@ -25,7 +27,7 @@ class BambuWebcamHelper():
     # Index 0 is used as the default webcam.
     # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
-    def GetWebcamConfig(self):
+    def GetWebcamConfig(self) -> Optional[List[WebcamSettingItem]]:
         # Bambu has a special webcam setup where there's only one cam, and the streaming system is either RTSP or Websocket based.
         # We do support plugin local webcam items, which are webcams the user can setup from the website and are external webcams.
         # Note! This webcam name is shown on to the user in the UI, so it should be a good name that indicates this is a Bambu built in webcam.
@@ -98,7 +100,7 @@ class BambuWebcamHelper():
 
             # If we didn't get the state after a few attempts, we give up and default to the websocket stream.
             if stateGetAttempt > 5:
-                self.Logger.warn(f"BambuWebcamHelper wasn't able to get the printer state after {stateGetAttempt} attempts")
+                self.Logger.warning(f"BambuWebcamHelper wasn't able to get the printer state after {stateGetAttempt} attempts")
                 break
 
             # Sleep for a bit before trying again.

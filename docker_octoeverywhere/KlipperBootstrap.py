@@ -8,7 +8,7 @@ from linux_host.config import Config
 class KlipperBootstrap:
 
     @staticmethod
-    def Bootstrap(logger:logging.LoggerAdapter, config:Config) -> None:
+    def Bootstrap(logger:logging.Logger, config:Config) -> None:
 
         # The printer's IP is required.
         printerIp = os.environ.get("PRINTER_IP", None)

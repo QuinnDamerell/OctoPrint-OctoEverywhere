@@ -23,8 +23,8 @@ class Paths:
 
     # Returns the correct service file folder path based on the OS
     @staticmethod
-    def GetServiceFileFolderPath(context) -> str:
-        if context.IsCrealityOs():
+    def GetServiceFileFolderPath(context) -> str: #pyright: ignore[reportUnknownParameterType]
+        if context.IsCrealityOs(): #pyright: ignore[reportUnknownMemberType]
             return Paths.CrealityOsServiceFilePath
         else:
             return Paths.SystemdServiceFilePath

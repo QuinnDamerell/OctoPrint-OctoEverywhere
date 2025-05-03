@@ -1,12 +1,15 @@
 import logging
 import threading
+from typing import Dict
+
 import requests
+from requests import Session
 
 # A common class to cache http sessions per host.
 # This makes the connections more efficient as we can reuse the connections and the session isn't created every time.
 class HttpSessions:
 
-    _Instance = None
+    _Instance:"HttpSessions" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
     def Init(logger:logging.Logger):
@@ -20,7 +23,7 @@ class HttpSessions:
 
     def __init__(self, logger:logging.Logger):
         self.Logger = logger
-        self.Sessions = {}
+        self.Sessions:Dict[str, Session] = {}
         self.SessionsLock = threading.Lock()
 
 
@@ -28,12 +31,12 @@ class HttpSessions:
     # If the url is relative, it can be passed directly.
     # If the url is absolute, the host will be extracted and used.
     @staticmethod
-    def GetSession(hostOrUrl:str) -> requests.Session:
+    def GetSession(hostOrUrl:str) -> Session:
         #pylint: disable=protected-access
         return HttpSessions.Get()._GetSession(hostOrUrl)
 
 
-    def _GetSession(self, hostOrUrl:str) -> requests.Session:
+    def _GetSession(self, hostOrUrl:str) -> Session:
         # Get the root host from what's passed.
         host = ""
         if hostOrUrl.startswith('/'):

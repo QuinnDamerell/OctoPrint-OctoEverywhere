@@ -1,6 +1,7 @@
 import os
 import string
 import secrets
+from typing import Optional
 
 # Common functions that the hosts might need to use.
 class HostCommon:
@@ -20,22 +21,26 @@ class HostCommon:
     # MUST be wss!
     c_OctoEverywhereOctoClientWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
 
+
     # Returns a new printer Id. This needs to be crypo-random to make sure it's not predictable.
     @staticmethod
-    def GeneratePrinterId():
+    def GeneratePrinterId() -> str:
         return ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(HostCommon.c_OctoEverywherePrinterIdMaxLength))
+
 
     # Returns a new private key. This needs to be crypo-random to make sure it's not predictable.
     @staticmethod
-    def GeneratePrivateKey():
+    def GeneratePrivateKey() -> str:
         return ''.join(secrets.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(HostCommon.c_OctoEverywherePrivateKeyMinLength))
 
-    @staticmethod
-    def IsPrinterIdValid(printerId):
-        return printerId is not None and len(printerId) >= HostCommon.c_OctoEverywherePrinterIdMinLength and len(printerId) <= HostCommon.c_OctoEverywherePrinterIdMaxLength
 
     @staticmethod
-    def IsPrivateKeyValid(privateKey):
+    def IsPrinterIdValid(printerId:Optional[str]) -> bool:
+        return printerId is not None and len(printerId) >= HostCommon.c_OctoEverywherePrinterIdMinLength and len(printerId) <= HostCommon.c_OctoEverywherePrinterIdMaxLength
+
+
+    @staticmethod
+    def IsPrivateKeyValid(privateKey:Optional[str]) -> bool:
         return privateKey is not None and len(privateKey) >= HostCommon.c_OctoEverywherePrivateKeyMinLength and len(privateKey) <= HostCommon.c_OctoEverywherePrivateKeyMaxLength
 
 

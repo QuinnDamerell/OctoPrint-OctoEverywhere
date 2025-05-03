@@ -80,7 +80,7 @@ class DebugProfiler:
     }
 
 
-    def __init__(self, logger:logging.Logger, feature:DebugProfilerFeatures, disableAutoStart = False) -> None:
+    def __init__(self, logger:logging.Logger, feature:DebugProfilerFeatures, disableAutoStart=False) -> None:
         self.Logger = logger
         self.Feature = feature
         self.Profiler = None

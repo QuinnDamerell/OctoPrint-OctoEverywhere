@@ -9,6 +9,7 @@ import traceback
 import subprocess
 
 from enum import Enum
+from typing import Any, Optional
 
 #
 # This docker host is the entry point for the docker container.
@@ -63,7 +64,7 @@ if __name__ == '__main__':
             exceptionClassType = e.__class__.__name__
         logger.error(f"{msg}; {str(exceptionClassType)} Exception: {str(e)}; {str(tb)}")
 
-    def EnsureIsPath(path: str) -> str:
+    def EnsureIsPath(path: Optional[str]) -> str:
         logger.info(f"Ensuring path exists: {path}")
         if path is None or not os.path.exists(path):
             raise Exception(f"Path does not exist: {path}")
@@ -146,7 +147,7 @@ if __name__ == '__main__':
         base64EncodedLaunchConfig =  base64.urlsafe_b64encode(bytes(launchConfigStr, "utf-8")).decode("utf-8")
 
         # Setup a ctl-c handler, so the docker container can be closed easily.
-        def signal_handler(sig, frame):
+        def signal_handler(sig:Any, frame:Any) -> None:
             logger.info("OctoEverywhere Connect Docker - container stop requested")
             sys.exit(0)
         signal.signal(signal.SIGINT, signal_handler)

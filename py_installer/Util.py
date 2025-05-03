@@ -2,6 +2,7 @@ import os
 import subprocess
 # pylint: disable=import-error # Only exists on linux
 import pwd
+from typing import Tuple
 
 from .Logging import Logger
 from .Context import Context
@@ -10,14 +11,14 @@ class Util:
 
     # Returns the parent directory of the passed directory or file path.
     @staticmethod
-    def GetParentDirectory(path):
+    def GetParentDirectory(path:str) -> str:
         return os.path.abspath(os.path.join(path, os.pardir))
 
 
     # Runs a command as shell and returns the output.
     # Returns (return_code:int, output:str)
     @staticmethod
-    def RunShellCommand(cmd:str, throwOnNonZeroReturnCode:bool = True):
+    def RunShellCommand(cmd:str, throwOnNonZeroReturnCode:bool = True) -> Tuple[int, str, str]:
         # Check=true means if the process returns non-zero, an exception is thrown.
         # Shell=True is required so non absolute commands like "systemctl restart ..." work
         result = subprocess.run(cmd, check=throwOnNonZeroReturnCode, shell=True, capture_output=True, text=True)
@@ -27,7 +28,7 @@ class Util:
 
     # Ensures a folder exists, and optionally, it has permissions set correctly.
     @staticmethod
-    def EnsureDirExists(dirPath, context:Context, setPermissionsToUser = False):
+    def EnsureDirExists(dirPath:str, context:Context, setPermissionsToUser:bool=False) -> None:
         # Ensure it exists.
         Logger.Debug("Enuring path and permissions ["+dirPath+"]...")
         if os.path.exists(dirPath) is False:
@@ -48,7 +49,7 @@ class Util:
 
     # Ensures that all files and dirs down stream of this root dir path are owned by the requested user.
     @staticmethod
-    def SetFileOwnerRecursive(dirOrFilePath:str, userName:str):
+    def SetFileOwnerRecursive(dirOrFilePath:str, userName:str) -> None:
         uid = pwd.getpwnam(userName).pw_uid
         gid = pwd.getpwnam(userName).pw_gid
         # pylint: disable=no-member # Linux only
@@ -77,7 +78,7 @@ class Util:
 
 
     @staticmethod
-    def PrintServiceLogsToConsole(context:Context):
+    def PrintServiceLogsToConsole(context:Context) -> None:
         if context.ServiceName is None:
             Logger.Warn("Can't print service logs, there's no service name.")
             return

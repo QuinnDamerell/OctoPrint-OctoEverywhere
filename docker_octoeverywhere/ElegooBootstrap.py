@@ -8,7 +8,7 @@ from linux_host.config import Config
 class ElegooBootstrap:
 
     @staticmethod
-    def Bootstrap(logger:logging.LoggerAdapter, config:Config) -> None:
+    def Bootstrap(logger:logging.Logger, config:Config) -> None:
 
         # These are constants that are always used for Elegoo connect.
         # The Elegoo OS webserver is on 3030

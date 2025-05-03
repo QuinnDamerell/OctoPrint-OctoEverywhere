@@ -36,8 +36,8 @@ if __name__ == '__main__':
     # Run!
     try:
         # Create and run the main host!
-        host = BambuHost(ConfigFolder, LogFolder, devConfig_CanBeNone)
-        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, devConfig_CanBeNone)
+        host = BambuHost(ConfigFolder, LogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main bambu host class. Error:{str(e)}")
 

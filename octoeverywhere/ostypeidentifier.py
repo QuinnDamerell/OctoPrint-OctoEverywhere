@@ -1,7 +1,7 @@
 import os
 import platform
 
-from .Proto import OsType
+from .Proto.OsType import OsType
 
 
 class OsTypeIdentifier:
@@ -11,30 +11,34 @@ class OsTypeIdentifier:
     #
 
     @staticmethod
-    def DetectOsType() -> OsType:
+    def DetectOsType() -> int:
         # Do a quick check for windows first.
         # This is only possible on OctoPrint right now.
         if platform.system().lower == "windows":
-            return OsType.OsType.Windows
+            return OsType.Windows
 
         # For the k1 and k1 max, we look for the "buildroot" OS.
         if os.path.exists("/etc/os-release"):
             with open("/etc/os-release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    if "ID=buildroot" in l:
-                        return OsType.OsType.CrealityK1
+                for line in lines:
+                    if "ID=buildroot" in line:
+                        return OsType.CrealityK1
 
         # For the Sonic Pad, we look for the openwrt os
         if os.path.exists("/etc/openwrt_release"):
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    l = l.lower()
-                    if "sonic" in l:
-                        return OsType.OsType.CrealitySonicPad
-                    if "tina" in l:
-                        return OsType.OsType.CrealityK2
+                # We need to look for sonic first, because both contain "tina" and it will always be before sonic.
+                for line in lines:
+                    line = line.lower()
+                    if "sonic" in line:
+                        return OsType.CrealitySonicPad
+
+                for line in lines:
+                    line = line.lower()
+                    if "tina" in line:
+                        return OsType.CrealityK2
 
         # Default the OS to debian.
-        return OsType.OsType.Debian
+        return OsType.Debian

@@ -7,7 +7,7 @@ import traceback
 
 class ThreadDebug:
 
-    def Start(self, logger, delaySec):
+    def Start(self, logger:logging.Logger, delaySec:float):
         try:
             th = threading.Thread(target=self.threadWorker, args=(logger, delaySec))
             th.start()
@@ -15,7 +15,7 @@ class ThreadDebug:
             logger.error("Failed to start Thread Debug Thread: "+str(e))
 
 
-    def threadWorker(self, logger, delaySec):
+    def threadWorker(self, logger:logging.Logger, delaySec:float):
         while True:
             try:
                 logger.info("ThreadDump - Starting Thread Dump")

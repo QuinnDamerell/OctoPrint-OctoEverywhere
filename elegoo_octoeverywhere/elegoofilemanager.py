@@ -1,12 +1,13 @@
 import logging
 import threading
 
-from typing import List
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.sentry import Sentry
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
+from .interfaces import IFileManager
 
 
 # Holds data about a file on the printer.
@@ -14,8 +15,8 @@ from .elegoomodels import PrinterState
 # But once a field is set, it can't be changed.
 class FileInfo:
 
-    def __init__(self, logger:logging.Logger, fileDirInfo:dict) -> None:
-        self.FileNameWithPath:str = fileDirInfo.get("name", None)
+    def __init__(self, logger:logging.Logger, fileDirInfo:Dict[str, Any]) -> None:
+        self.FileNameWithPath:str = fileDirInfo.get("name", "Unknown")
         # Get a version of the file name without the path.
         folderIndex = self.FileNameWithPath.rfind("/")
         if folderIndex != -1:
@@ -25,20 +26,20 @@ class FileInfo:
             self.FileName = self.FileNameWithPath
         self.FileNameLower = self.FileName.lower()
 
-        self.CreateTimeSec:int = fileDirInfo.get("CreateTime", None)
-        self.TotalLayers:int = fileDirInfo.get("TotalLayers", None)
-        self.FileSizeKb:int = None
+        self.CreateTimeSec:Optional[int] = fileDirInfo.get("CreateTime", None)
+        self.TotalLayers:Optional[int] = fileDirInfo.get("TotalLayers", None)
+        self.FileSizeKb:Optional[int] = None
         fileSizeBytes = fileDirInfo.get("FileSize", None)
         if fileSizeBytes is not None:
             self.FileSizeKb = int(fileSizeBytes / 1024)
 
         # These are usually 0
-        self.LayerHeight:int = fileDirInfo.get("LayerHeight", None)
-        self.EstFilamentLength:int = fileDirInfo.get("EstFilamentLength", None)
+        self.LayerHeight:Optional[int] = fileDirInfo.get("LayerHeight", None)
+        self.EstFilamentLength:Optional[int] = fileDirInfo.get("EstFilamentLength", None)
 
         # These come from the extra file info.
-        self.EstPrintTimeSec:int = None
-        self.EstFilamentWeightMg:int = None
+        self.EstPrintTimeSec:Optional[int] = None
+        self.EstFilamentWeightMg:Optional[int] = None
 
 
     # Returns true if we have all of the file info.
@@ -47,7 +48,7 @@ class FileInfo:
         return self.EstPrintTimeSec is not None or self.EstFilamentWeightMg is not None
 
 
-    def UpdateExtraFileInfo(self, fileInfo:dict) -> None:
+    def UpdateExtraFileInfo(self, fileInfo:Dict[str, Any]) -> None:
         self.EstPrintTimeSec = fileInfo.get("EstTime", None)
         weightG = fileInfo.get("EstWeight", None)
         if weightG is not None:
@@ -55,9 +56,9 @@ class FileInfo:
 
 
 # The file manager and cache class for the Elegoo printer.
-class ElegooFileManager:
+class ElegooFileManager(IFileManager):
 
-    _Instance = None
+    _Instance: "ElegooFileManager" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
     def Init(logger:logging.Logger):
@@ -65,7 +66,7 @@ class ElegooFileManager:
 
 
     @staticmethod
-    def Get():
+    def Get() -> "ElegooFileManager":
         return ElegooFileManager._Instance
 
 
@@ -74,7 +75,7 @@ class ElegooFileManager:
 
         self.Files:List[FileInfo] = []
         self.Lock = threading.Lock()
-        self.SyncThread:threading.Thread = None
+        self.SyncThread:Optional[threading.Thread] = None
 
 
     # Kicks off an async sync of the file manager.
@@ -87,7 +88,7 @@ class ElegooFileManager:
 
 
     # Returns the file info for the current print.
-    def GetFileInfoFromState(self, printerState:PrinterState) -> FileInfo:
+    def GetFileInfoFromState(self, printerState:PrinterState) -> Optional[FileInfo]:
         fileName = printerState.FileName
         if fileName is None or len(fileName) == 0:
             fileName = printerState.MostRecentPrintInfo.FileName
@@ -95,7 +96,7 @@ class ElegooFileManager:
 
 
     # Given a file name, get the file info.
-    def GetFileInfo(self, fileName:str) -> FileInfo:
+    def GetFileInfo(self, fileName:Optional[str]) -> Optional[FileInfo]:
         # Ensure there's a name.
         if fileName is None or len(fileName) == 0:
             return None
@@ -125,7 +126,7 @@ class ElegooFileManager:
             with self.Lock:
                 self.Logger.debug(f"File manager sync complete. {len(self.Files)-currentFileCount} files added.")
         except Exception as e:
-            Sentry.Exception("Exception in ElegooFileManager.", e)
+            Sentry.OnException("Exception in ElegooFileManager.", e)
         finally:
             # When the sync thread is done, set it to None.
             with self.Lock:
@@ -143,6 +144,10 @@ class ElegooFileManager:
 
             # Get the data object from the result.
             r = result.GetResult()
+            if r is None:
+                self.Logger.error("ElegooFileManager file list cmd is missing the result object.")
+                return
+
             data = r.get("Data", None)
             if data is None:
                 self.Logger.error("ElegooFileManager file list cmd is missing the first data object.")
@@ -182,12 +187,12 @@ class ElegooFileManager:
                     if found is False:
                         self.Files.append(f)
         except Exception as e:
-            Sentry.Exception("_DoFileSystemSync", e)
+            Sentry.OnException("_DoFileSystemSync", e)
 
 
     def _SyncExtraFileInfo(self):
         # Under lock, get any files we need to get info for.
-        fileNamsAndPathsToSync = []
+        fileNamsAndPathsToSync:List[str] = []
         with self.Lock:
             for f in self.Files:
                 if f.HasExtraFileInfo() is False:
@@ -203,6 +208,10 @@ class ElegooFileManager:
 
                 # Get the data object from the result.
                 r = result.GetResult()
+                if r is None:
+                    self.Logger.error("ElegooFileManager file list cmd is missing the result object.")
+                    return
+
                 data = r.get("Data", None)
                 if data is None:
                     self.Logger.error(f"Failed to get file info for {fileNameAndPath}")
@@ -223,4 +232,4 @@ class ElegooFileManager:
                             f.UpdateExtraFileInfo(fileInfo)
                             break
         except Exception as e:
-            Sentry.Exception("Error in _SyncFileInfo", e)
+            Sentry.OnException("Error in _SyncFileInfo", e)

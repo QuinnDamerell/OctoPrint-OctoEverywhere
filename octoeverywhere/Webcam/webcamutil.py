@@ -1,13 +1,16 @@
 import logging
+from typing import Optional
 
 import urllib3
 
 from ..sentry import Sentry
-from ..octohttprequest import OctoHttpRequest
+from ..httpresult import HttpResult
+from ..buffer import Buffer
+
 
 # A simple class to hold the result of a GetSnapshotFromStream call.
 class GetSnapshotFromStreamResult:
-    def __init__(self, imageBuffer:bytes, contentType:str):
+    def __init__(self, imageBuffer:Buffer, contentType:str):
         self.ImageBuffer = imageBuffer
         self.ContentType = contentType
 
@@ -20,7 +23,7 @@ class WebcamUtil:
     # Note this WILL NOT close the response object, it's up to the caller to do that.
     # Returns None on failure.
     @staticmethod
-    def GetSnapshotFromStream(logger:logging.Logger, result:OctoHttpRequest.Result, validateMultiStreamHeader:bool = True) -> GetSnapshotFromStreamResult:
+    def GetSnapshotFromStream(logger:logging.Logger, result:HttpResult, validateMultiStreamHeader:bool = True) -> Optional[GetSnapshotFromStreamResult]:
         try:
             # Only validate if requested, so we don't have to do this constantly.
             if validateMultiStreamHeader:
@@ -101,32 +104,39 @@ class WebcamUtil:
                 return None
 
             # Read the entire first image into the buffer.
+            # We use a bytearray so we can slice it efficiently. Down stream uses of it also might need to modify it, and there's no cost difference here between the bytes copy and this.
             totalDesiredBufferSize = frameSizeInt + headerStrSize
             toRead = totalDesiredBufferSize - len(dataBuffer)
+            fullBuffer:bytearray
             if toRead > 0:
                 data = responseForBodyRead.raw.read(toRead)
                 if data is None:
                     logger.error("GetSnapshotFromStream - Failed, failed to read the rest of the image buffer.")
                     return None
-                dataBuffer += data
+                fullBuffer = bytearray(len(dataBuffer) + len(data))
+                fullBuffer[0:len(dataBuffer)] = dataBuffer
+                fullBuffer[len(dataBuffer):] = data
+            else:
+                # We already have the full buffer, just copy it.
+                fullBuffer = bytearray(dataBuffer)
 
             # If we got extra data trim it.
             # This shouldn't happen, but just incase the api changes.
-            if len(dataBuffer) > totalDesiredBufferSize:
-                dataBuffer = dataBuffer[:totalDesiredBufferSize]
+            if len(fullBuffer) > totalDesiredBufferSize:
+                fullBuffer = fullBuffer[:totalDesiredBufferSize]
 
             # Check we got what we wanted.
-            if len(dataBuffer) != totalDesiredBufferSize:
-                logger.warning("GetSnapshotFromStream - Failed, the data read loop didn't produce the expected data size. desired: "+str(totalDesiredBufferSize)+", got: "+str(len(dataBuffer)))
+            if len(fullBuffer) != totalDesiredBufferSize:
+                logger.warning("GetSnapshotFromStream - Failed, the data read loop didn't produce the expected data size. desired: "+str(totalDesiredBufferSize)+", got: "+str(len(fullBuffer)))
                 return None
 
             # Get only the jpeg buffer
-            imageBuffer = dataBuffer[headerStrSize:]
+            imageBuffer = fullBuffer[headerStrSize:]
             if len(imageBuffer) != frameSizeInt:
                 logger.warning("GetSnapshotFromStream - Failed, final image size was not the frame size. expected: "+str(frameSizeInt)+", got: "+str(len(imageBuffer)))
 
             # Success!
-            return GetSnapshotFromStreamResult(imageBuffer, contentType)
+            return GetSnapshotFromStreamResult(Buffer(imageBuffer), contentType)
         except Exception as e:
             if e is ConnectionError and "Read timed out" in str(e):
                 logger.debug("GetSnapshotFromStream - Failed, got a timeout while reading the stream.")
@@ -135,7 +145,7 @@ class WebcamUtil:
             elif e is urllib3.exceptions.ReadTimeoutError and "Read timed out" in str(e):
                 logger.debug("GetSnapshotFromStream - Failed, got a read timeout while reading stream.")
             else:
-                Sentry.Exception("Failed to get fallback snapshot.", e)
+                Sentry.OnException("Failed to get fallback snapshot.", e)
         return None
 
 
@@ -145,7 +155,7 @@ class WebcamUtil:
     # It also seems that the images returned by the Elegoo OS webcam server need this to render correctly in the browser.
     # To combat this, we will check if the image is a jpeg, and if so, ensure the header is set correctly.
     @staticmethod
-    def EnsureJpegHeaderInfo(logger:logging.Logger, buf:bytes) -> bytes:
+    def EnsureJpegHeaderInfo(logger:logging.Logger, buf:Buffer) -> Buffer:
 
         # Handle the buffer.
         # In a nutshell, all jpeg images have a lot of header segments, but they must have the app0 header.
@@ -190,39 +200,43 @@ class WebcamUtil:
                     if needsChanges is False:
                         return buf
 
+                    # We call the function on the buffer to get a reference to a buffer that can be editable.
+                    # If the buffer is already a bytearray, this is a no-op.
+                    buf.ConvertToEditableBuffer()
+
                     # To edit the byte array, we need a bytearray.
                     # This adds overhead, but it's required because bytes objects aren't editable.
-                    bufArray = bytearray(buf)
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x4a # J
+                    if buf[pos] == 0:
+                        buf[pos] = 0x4a # J
                     pos += 1
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x46 # F
+                    if buf[pos] == 0:
+                        buf[pos] = 0x46 # F
                     pos += 1
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x49 # I
+                    if buf[pos] == 0:
+                        buf[pos] = 0x49 # I
                     pos += 1
-                    if bufArray[pos] == 0:
-                        bufArray[pos] = 0x46 # F
+                    if buf[pos] == 0:
+                        buf[pos] = 0x46 # F
                     pos += 1
                     # This should be 0.
-                    if bufArray[pos] != 0:
-                        bufArray[pos] = 0 # /0
+                    if buf[pos] != 0:
+                        buf[pos] = 0 # /0
                     pos += 1
 
                     # Done, No need to process more headers.
-                    return bufArray
+                    return buf
                 else:
                     # This is some other header, skip it's length.
                     # First skip past the type two bytes.
                     pos += 2
                     # Now read the length, two bytes
-                    segLen = (buf[pos] << 8) + buf[pos+1]
+                    rawBuffer = buf.Get()
+                    segLen = (rawBuffer[pos] << 8) + rawBuffer[pos+1]
                     # Now skip past the segment length (the two length bytes are included in the length size)
                     pos += segLen
 
         except Exception as e:
-            Sentry.Exception("WebcamUtil EnsureJpegHeaderInfo failed to handle jpeg buffer", e)
+            Sentry.OnException("WebcamUtil EnsureJpegHeaderInfo failed to handle jpeg buffer", e)
             # On a failure, return the original result, since it's still good.
             return buf
 

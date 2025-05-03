@@ -3,6 +3,8 @@ import json
 import time
 import logging
 from pathlib import Path
+from typing import Any, Dict, Optional
+
 
 # The goal of this class is to keep track of info about the current print.
 # This is needed because sometimes we only get the info once, like at the start of a print, and then we want to keep it around for future notifications.
@@ -24,7 +26,7 @@ class PrintInfo:
     # Given a file path, this loads a print info if possible.
     # Returns None on failure.
     @staticmethod
-    def LoadFromFile(logger:logging.Logger, filePath:str):
+    def LoadFromFile(logger:logging.Logger, filePath:str) -> Optional["PrintInfo"]:
         try:
             with open(filePath, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -40,7 +42,7 @@ class PrintInfo:
     # Given a file path and required args, creates a new print context.
     # This will always return a PrintInfo! Even if it fails to write to disk.
     @staticmethod
-    def CreateNew(logger:logging.Logger, filePath:str, printCookie:str, printId:str):
+    def CreateNew(logger:logging.Logger, filePath:str, printCookie:str, printId:str) -> "PrintInfo":
         data = {
             PrintInfo.c_PrintCookieKey : printCookie,
             PrintInfo.c_PrintIdKey : printId,
@@ -52,7 +54,7 @@ class PrintInfo:
         return pi
 
 
-    def __init__(self, logger:logging.Logger, filePath:str, data:dict) -> None:
+    def __init__(self, logger:logging.Logger, filePath:str, data:Dict[str,Any]) -> None:
         self.Logger = logger
         self.FilePath = filePath
         self.Data = data
@@ -71,14 +73,14 @@ class PrintInfo:
     # Always exists, but it can be updated if the platform reports an exact time.
     def GetLocalPrintStartTimeSec(self) -> float:
         return self.Data[PrintInfo.c_PrintStartTimeSecKey]
-    def SetLocalPrintStartTimeSec(self, startTimeSec:float) -> float:
+    def SetLocalPrintStartTimeSec(self, startTimeSec:float) -> None:
         if self.GetLocalPrintStartTimeSec() != startTimeSec:
             self.Data[PrintInfo.c_PrintStartTimeSecKey] = startTimeSec
             self.Save()
 
 
     # The file name is optional.
-    def GetFileName(self) -> str:
+    def GetFileName(self) -> Optional[str]:
         return self.Data.get(PrintInfo.c_FileNameKey, None)
     def SetFileName(self, fileName:str) -> None:
         current = self.GetFileName()
@@ -116,7 +118,7 @@ class PrintInfo:
 
     # This is only set when the print is done.
     # Returns None if there isn't one.
-    def GetFinalPrintDurationSec(self) -> int:
+    def GetFinalPrintDurationSec(self) -> Optional[int]:
         return self.Data.get(PrintInfo.c_FinalPrintDurationSec, None)
     def SetFinalPrintDurationSec(self, totalDurationSec:int) -> None:
         self.Data[PrintInfo.c_FinalPrintDurationSec] = int(totalDurationSec)
@@ -152,7 +154,7 @@ class PrintInfoManager:
 
     c_ContextsFolder = "PrintInfos"
 
-    _Instance = None
+    _Instance:"PrintInfoManager" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
     def Init(logger:logging.Logger, localStorageFolderPath:str):
@@ -168,14 +170,14 @@ class PrintInfoManager:
         self.Logger = logger
         self.ContextFolderPath = os.path.join(localStorageFolderPath, PrintInfoManager.c_ContextsFolder)
         Path(self.ContextFolderPath).mkdir(parents=True, exist_ok=True)
-        self.CurrentContext:PrintInfo = None
+        self.CurrentContext:Optional[PrintInfo] = None
 
 
     # Given a print cookie, if a print info.
     # This print cookie should be as unique as possible, so print's dont get mixed up.
     # This cleans up all contexts on disk that dont match the requested cookie.
     # Returns None if no context is found for the given cookie.
-    def GetPrintInfo(self, printCookie:str) -> PrintInfo:
+    def GetPrintInfo(self, printCookie:Optional[str]) -> Optional[PrintInfo]:
         try:
             # If there's no cookie, return None.
             if printCookie is None:
@@ -225,16 +227,12 @@ class PrintInfoManager:
     # Creates a new Print Info and returns it.
     # This will always return a new PrintInfo, even if it fails to write to disk.
     def CreateNewPrintInfo(self, printCookie:str, printId:str) -> PrintInfo:
-        try:
-            fullPath = os.path.join(self.ContextFolderPath, self._GetPrintCookieFileName(printCookie))
-            self.CurrentContext = PrintInfo.CreateNew(self.Logger, fullPath, printCookie, printId)
-            return self.CurrentContext
-        except Exception as e:
-            self.Logger.error(f"Exception in PrintContextTracker.CreateNew: {e}")
-        return None
+        fullPath = os.path.join(self.ContextFolderPath, self._GetPrintCookieFileName(printCookie))
+        self.CurrentContext = PrintInfo.CreateNew(self.Logger, fullPath, printCookie, printId)
+        return self.CurrentContext
 
 
-    def _GetPrintCookieFileName(self, printCookie:str):
+    def _GetPrintCookieFileName(self, printCookie:str) -> str:
         return f"{printCookie}.json"
 
 

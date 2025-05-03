@@ -1,24 +1,27 @@
 import logging
+from typing import Optional, Tuple
+
+from .interfaces import IMoonrakerClient
 
 # A helper class that caches known file metadata info, so we don't have to pull it often.
 class FileMetadataCache:
 
-    _Instance = None
+    _Instance:"FileMetadataCache" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
-    def Init(logger:logging.Logger, moonrakerClient):
+    def Init(logger:logging.Logger, moonrakerClient:IMoonrakerClient) -> None:
         FileMetadataCache._Instance = FileMetadataCache(logger, moonrakerClient)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "FileMetadataCache":
         return FileMetadataCache._Instance
 
 
-    def __init__(self, logger:logging.Logger, moonrakerClient) -> None:
+    def __init__(self, logger:logging.Logger, moonrakerClient:IMoonrakerClient) -> None:
         self.Logger = logger
         self.MoonrakerClient = moonrakerClient
-        self.FileName:str = None
+        self.FileName:Optional[str] = None
         self.EstimatedPrintTimeSec:float = -1.0
         self.EstimatedFilamentUsageMm:int = -1
         self.FileSizeKBytes:int = -1
@@ -30,7 +33,7 @@ class FileMetadataCache:
 
 
     # Clears the cache from all current values.
-    def ResetCache(self):
+    def ResetCache(self) -> None:
         self.FileName = None
         self.EstimatedPrintTimeSec = -1.0
         self.EstimatedFilamentUsageMm = -1
@@ -43,7 +46,7 @@ class FileMetadataCache:
 
     # If the estimated time for the print can be gotten from the file metadata, this will return it.
     # It it's not known, returns -1.0
-    def GetEstimatedPrintTimeSec(self, filename:str) -> float:
+    def GetEstimatedPrintTimeSec(self, filename: str) -> float:
         # Check to see if we have checked for this file before.
         if self.FileName is not None:
             # Check if it's the same file, case sensitive.
@@ -94,7 +97,7 @@ class FileMetadataCache:
 
     # If the file size can be gotten from the file metadata, this will return it.
     # Any of the values will return -1 if they are unknown.
-    def GetLayerInfo(self, filename:str):
+    def GetLayerInfo(self, filename:str) -> Tuple[float, float, float, float]:
         # Check to see if we have checked for this file before.
         if self.FileName is not None:
             # Check if it's the same file, case sensitive.

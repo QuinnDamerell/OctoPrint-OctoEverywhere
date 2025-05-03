@@ -1,3 +1,4 @@
+from typing import Tuple
 from linux_host.networksearch import NetworkSearch, NetworkValidationResult
 
 from py_installer.Util import Util
@@ -12,7 +13,7 @@ class ElegooConnector:
     c_ElegooDefaultPort = 3030
 
 
-    def EnsureElegooPrinterConnection(self, context:Context):
+    def EnsureElegooPrinterConnection(self, context:Context) -> None:
         Logger.Debug("Running elegoo connect ensure config logic.")
 
         # For Elegoo printers, we need the IP or Hostname, the port is static, and the mainboard ID.
@@ -95,7 +96,7 @@ class ElegooConnector:
 
     # Helps the user setup a bambu connection via auto scanning or manual setup.
     # Returns (ip:str, mainboard:str)
-    def _SetupNewElegooConnection(self, context:Context):
+    def _SetupNewElegooConnection(self, context:Context) -> Tuple[str, str]:
         while True:
             Logger.Blank()
             Logger.Blank()
@@ -112,14 +113,16 @@ class ElegooConnector:
             results = NetworkSearch.ScanForInstances_Elegoo(Logger.GetPyLogger())
 
             # If there's only one result, handle things differently to make it easier.
+            reTryAuto = False
             if len(results) == 1:
                 result = results[0]
                 if result.TooManyClients:
                     self._ShowTooManyClientsError(result.Ip)
                     continue
-
-                Logger.Info(f"Found your Elegoo printer on your network at {result.Ip}.")
-                return (result.Ip, result.MainboardMac)
+                # If we have a mainboard id, we are good to go.
+                if result.MainboardMac is not None:
+                    Logger.Info(f"Found your Elegoo printer on your network at {result.Ip}.")
+                    return (result.Ip, result.MainboardMac)
 
             elif len(results) > 1:
                 # Handle multiple results.
@@ -136,7 +139,6 @@ class ElegooConnector:
 
                 # Ask the user to select the printer they want to connect to.
                 Logger.Blank()
-                reTryAuto = False
                 while True:
                     try:
                         i = input("Please select the printer number above you want to connect to this plugin: ")

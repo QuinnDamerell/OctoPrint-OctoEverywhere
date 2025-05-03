@@ -21,11 +21,14 @@ disable=
     R0915, # Too many statements
     R1702, # Too many nested blocks
     R0801, # duplicate-code
-    R0916, # Too many booleans in one if statment.
+    R0916, # Too many booleans in one if statement.
     R1730, # consider-using-min-builtin
     R1731, # consider-using-max-builtin
     R1724, # Unnecessary "else" after "break"
     R1715, # consider-using-get for dict gets.
+    R1711, # Useless return at end of function or method (useless-return)
+    E1136, # Value 'CaseInsensitiveDict' is unsubscriptable (unsubscriptable-object) - pyright and ruff will catch these.
+
 
 
 # A comma-separated list of package or module names from where C extensions may

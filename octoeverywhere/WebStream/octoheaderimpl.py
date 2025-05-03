@@ -1,4 +1,6 @@
 import logging
+from enum import Enum
+from typing import Dict, Optional, List
 
 from ..sentry import Sentry
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
@@ -6,7 +8,7 @@ from ..octohttprequest import OctoHttpRequest
 from ..Proto.HttpInitialContext import HttpInitialContext
 
 # Indicates the base protocol, not if it's secure or not.
-class BaseProtocol:
+class BaseProtocol(Enum):
     Http = 1
     WebSocket = 2
 
@@ -18,27 +20,30 @@ class HeaderHelper:
 
     # Called by slipstream and the main http class to gather and add required headers.
     @staticmethod
-    def GatherRequestHeaders(logger, httpInitialContextOptional:HttpInitialContext, protocol) :
+    def GatherRequestHeaders(logger:logging.Logger, httpInitialContext:Optional[HttpInitialContext], protocol:BaseProtocol) -> Dict[str, str]:
 
         hostAddress = OctoHttpRequest.GetLocalhostAddress()
 
         # Get the count of headers in the message.
         sendHeaders = {}
-        if httpInitialContextOptional is not None:
-            headersLen = httpInitialContextOptional.HeadersLength()
+        if httpInitialContext is not None:
+            headersLen = httpInitialContext.HeadersLength()
             # Convert each header and fix them up.
             i = 0
             while i < headersLen:
                 # Get the header
-                header = httpInitialContextOptional.Headers(i)
+                header = httpInitialContext.Headers(i)
                 i += 1
+                if header is None:
+                    logger.warning("GatherRequestHeaders found a null header.")
+                    continue
 
                 # Get the values & validate
                 # These Key() and Value() calls are relatively what expensive, so we only call them once.
                 name = OctoStreamMsgBuilder.BytesToString(header.Key())
                 value = OctoStreamMsgBuilder.BytesToString(header.Value())
                 if name is None or value is None:
-                    logger.warn("GatherRequestHeaders found a header that has a null name or value.")
+                    logger.warning("GatherRequestHeaders found a header that has a null name or value.")
                     continue
                 lowerName = name.lower()
 
@@ -88,8 +93,8 @@ class HeaderHelper:
         # will happen.
         #
         # Note that the function CorrectLocationResponseHeaderIfNeeded below depends upon this header!
-        if httpInitialContextOptional is not None:
-            octoHostBytes = httpInitialContextOptional.OctoHost()
+        if httpInitialContext is not None:
+            octoHostBytes = httpInitialContext.OctoHost()
             if octoHostBytes is None:
                 raise Exception("Http headers found no OctoHost in http initial context.")
             sendHeaders[HeaderHelper.c_xForwardedForHostHeaderName] = OctoStreamMsgBuilder.BytesToString(octoHostBytes)
@@ -112,12 +117,12 @@ class HeaderHelper:
         # Note this header is also force set in MakeHttpCall, because calls to things like camera-streamer must set it
         # and no users of the MakeHttpCall support handing response compression.
         sendHeaders["Accept-Encoding"] = "identity"
-
         return sendHeaders
+
 
     # Called only for websockets to get headers.
     @staticmethod
-    def GatherWebsocketRequestHeaders(logger:logging.Logger, httpInitialContext) -> dict:
+    def GatherWebsocketRequestHeaders(logger:logging.Logger, httpInitialContext:HttpInitialContext) -> Dict[str, str]:
         # Get the count of headers in the message.
         headersLen = httpInitialContext.HeadersLength()
 
@@ -127,12 +132,15 @@ class HeaderHelper:
             # Get the header
             header = httpInitialContext.Headers(i)
             i += 1
+            if header is None:
+                logger.warning("GatherWebsocketRequestHeaders found a null header.")
+                continue
 
             # Get the values & validate
             name = OctoStreamMsgBuilder.BytesToString(header.Key())
             value = OctoStreamMsgBuilder.BytesToString(header.Value())
             if name is None or value is None:
-                logger.warn("GatherWebsocketRequestHeaders found a header that has a null name or value.")
+                logger.warning("GatherWebsocketRequestHeaders found a header that has a null name or value.")
                 continue
             lowerName = name.lower()
 
@@ -148,7 +156,7 @@ class HeaderHelper:
 
     # Given an httpInitialContext returns if there are any web socket subprotocols being asked for.
     @staticmethod
-    def GetWebSocketSubProtocols(logger:logging.Logger, httpInitialContext) -> list:
+    def GetWebSocketSubProtocols(logger:logging.Logger, httpInitialContext:HttpInitialContext) -> Optional[List[str]]:
         # Get the count of headers in the message.
         headersLen = httpInitialContext.HeadersLength()
         i = 0
@@ -156,12 +164,21 @@ class HeaderHelper:
             # Get the header
             header = httpInitialContext.Headers(i)
             i += 1
+            if header is None:
+                logger.warning("GetWebSocketSubProtocols found a null header.")
+                continue
 
             # Check if it's the protocol headers\
             name = OctoStreamMsgBuilder.BytesToString(header.Key())
+            if name is None:
+                logger.warning("GetWebSocketSubProtocols found a header that has a null name.")
+                continue
             lowerName = name.lower()
             if lowerName == "sec-websocket-protocol":
                 valueList = OctoStreamMsgBuilder.BytesToString(header.Value())
+                if valueList is None:
+                    logger.warning("GetWebSocketSubProtocols found a header that has a null name.")
+                    return None
                 return valueList.split(",")
         return None
 
@@ -171,21 +188,21 @@ class HeaderHelper:
     #
     # This function must return the location value string again, either corrected or not.
     @staticmethod
-    def CorrectLocationResponseHeaderIfNeeded(logger:logging.Logger, requestUri:str, locationValue:str, sendHeaders):
+    def CorrectLocationResponseHeaderIfNeeded(logger:logging.Logger, requestUri:str, locationValue:str, sendHeaders:Dict[str, str]) -> str:
         # The sendHeaders is an dict that was generated by GatherRequestHeaders and were used to send the request.
 
         # Make sure the location is http(s) or ws(s), since that's all we deal with right now.
         if locationValue.lower().startswith("http") is False and locationValue.lower().startswith("ws"):
-            logger.warn("CorrectLocationResponseHeaderIfNeeded got a location string that wasn't http(s) or ws(s). "+locationValue)
+            logger.warning("CorrectLocationResponseHeaderIfNeeded got a location string that wasn't http(s) or ws(s). "+locationValue)
             return locationValue
 
         # Check if we have a X-Forwarded-Host. If we don't, we can't do anything, because we don't know the host to replace.
         if (HeaderHelper.c_xForwardedForHostHeaderName in sendHeaders) is False:
-            logger.warn("CorrectLocationResponseHeaderIfNeeded got a location header, but no X-Forwarded-Host header was set.")
+            logger.warning("CorrectLocationResponseHeaderIfNeeded got a location header, but no X-Forwarded-Host header was set.")
             return locationValue
         # Check if we have a X-Forwarded-Proto. If we don't, we can't do anything, because we don't know the proto to replace.
         if (HeaderHelper.c_xForwardedForProtoHeaderName in sendHeaders) is False:
-            logger.warn("CorrectLocationResponseHeaderIfNeeded got a location header, but no X-Forwarded-Proto header was set.")
+            logger.warning("CorrectLocationResponseHeaderIfNeeded got a location header, but no X-Forwarded-Proto header was set.")
             return locationValue
 
         # Build what the start of the URL should be.
@@ -227,5 +244,5 @@ class HeaderHelper:
             return correctedUrl
 
         except Exception as e:
-            Sentry.Exception("CorrectLocationResponseHeaderIfNeeded failed to parse location url "+locationValue, e)
+            Sentry.OnException("CorrectLocationResponseHeaderIfNeeded failed to parse location url "+locationValue, e)
             return locationValue

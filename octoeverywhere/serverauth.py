@@ -1,19 +1,22 @@
-import secrets
 import string
+import secrets
+import logging
+from typing import Optional
+
 import rsa
 
 from .sentry import Sentry
 
 # A helper class to handle server validation.
 #
-# The printer connection to OctoEverywhere is established over a secure websocket using the lastest TLS protocls and policies.
-# However, since OctoEverywhere handles very senstive access to phyical 3D printers, we want to make sure the connection is incredibly secure.
+# The printer connection to OctoEverywhere is established over a secure websocket using the latest TLS protocols and policies.
+# However, since OctoEverywhere handles very sensitive access to physical 3D printers, we want to make sure the connection is incredibly secure.
 # No bad actor should ever be able to generate a valid SSL cert for OctoEverywhere. But it would be possible to add a bad root cert to the
 # device and then generate certs based on it.
 #
 # Thus to add another layer of security, we will validate the secure websocket connection is connected to a valid OctoEverywhere server by also
 # doing an RSA challenge. We encrypt a random string the client generates with a public key and send it to the server. The server will use it's private key
-# to decrypt it and send the plan text challnege back (over the secure websocket). If the server can successfully decrypt our message, it knows the correct private
+# to decrypt it and send the plan text challenge back (over the secure websocket). If the server can successfully decrypt our message, it knows the correct private
 # key and thus can be trusted.
 class ServerAuthHelper:
 
@@ -26,23 +29,26 @@ class ServerAuthHelper:
     # Defines the length of the challenge we will encrypt.
     c_ServerAuthChallengeLength = 64
 
-    def __init__(self, logger):
+
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
 
         # Generate our random challenge string.
         self.Challenge =  ''.join(secrets.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(ServerAuthHelper.c_ServerAuthChallengeLength))
 
+
     # Returns a string that is our challenge encrypted with the public RSA key.
-    def GetEncryptedChallenge(self):
+    def GetEncryptedChallenge(self) -> Optional[bytes]:
         try:
-            publicKey = rsa.PublicKey.load_pkcs1(ServerAuthHelper.c_ServerPublicKey)
+            publicKey = rsa.PublicKey.load_pkcs1(ServerAuthHelper.c_ServerPublicKey.encode('utf8'))
             return rsa.encrypt(self.Challenge.encode('utf8'), publicKey)
         except Exception as e:
-            Sentry.Exception("GetEncryptedChallenge failed.", e)
+            Sentry.OnException("GetEncryptedChallenge failed.", e)
         return None
 
+
     # Validates the decrypted challenge the server returned is correct.
-    def ValidateChallengeResponse(self, response):
+    def ValidateChallengeResponse(self, response:Optional[str]) -> bool:
         if response is None:
             return False
         if response != self.Challenge:

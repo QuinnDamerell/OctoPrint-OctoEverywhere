@@ -1,36 +1,39 @@
 import time
 import json
+import logging
+from typing import Optional
 
 from octoeverywhere.compat import Compat
 from octoeverywhere.commandhandler import CommandResponse
+from octoeverywhere.interfaces import ISmartPauseHandler
 
 from .moonrakerclient import MoonrakerClient
 
 # Implements the platform specific logic for moonraker's smart pause.
-class SmartPause:
+class SmartPause(ISmartPauseHandler):
 
     # The static instance.
-    _Instance = None
+    _Instance:"SmartPause" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
-    def Init(logger):
+    def Init(logger:logging.Logger):
         SmartPause._Instance = SmartPause(logger)
         Compat.SetSmartPauseInterface(SmartPause._Instance)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "SmartPause":
         return SmartPause._Instance
 
 
-    def __init__(self, logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
-        self.LastPauseNotificationSuppressionTimeSec = 0
+        self.LastPauseNotificationSuppressionTimeSec = 0.0
 
 
     # Does the actual smart pause.
     # Must return a CommandResponse
-    def ExecuteSmartPause(self, suppressNotificationBool) -> CommandResponse:
+    def ExecuteSmartPause(self, suppressNotificationBool:bool) -> CommandResponse:
 
         # Set the pause suppress, if desired.
         # Do this first, since the notification will fire before we can suppress it.
@@ -57,7 +60,7 @@ class SmartPause:
 
     # !! Interface Function !! - See compat.py GetSmartPauseInterface for the details.
     # Returns None if there is no current suppression or the time of the last time it was requested
-    def GetAndResetLastPauseNotificationSuppressionTimeSec(self):
+    def GetAndResetLastPauseNotificationSuppressionTimeSec(self) -> Optional[float]:
         local = self.LastPauseNotificationSuppressionTimeSec
         self.LastPauseNotificationSuppressionTimeSec = None
         return local

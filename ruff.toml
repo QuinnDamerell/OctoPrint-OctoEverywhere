@@ -1,0 +1,5 @@
+# This config controls the ruff linter.
+# Note we can't use the pyproject.toml file, because it breaks the OctoPrint install for some reason.
+
+# Exclude the proto folder for Ruff since we can't control it.
+extend-exclude = ["octoeverywhere/Proto"]

@@ -17,7 +17,7 @@ class Configure:
     # This also MUST NOT CHANGE, as it's used by the Updater logic to find all of the locally running services.
     c_ServiceCommonName = "octoeverywhere"
 
-    def Run(self, context:Context):
+    def Run(self, context:Context) -> None:
 
         Logger.Header("Starting configuration...")
 
@@ -114,7 +114,7 @@ class Configure:
         Util.EnsureDirExists(context.LocalFileStorageFolder, context, True)
 
         # There's not a great way to find the log path from the config file, since the only place it's located is in the systemd file.
-        context.LogsFolder = None
+        context.LogsFolder = None #pyright: ignore[reportAttributeAccessIssue]
 
         # First, we will see if we can find a named folder relative to this folder.
         # This is the folder created for companion and bambu setups, so it should always exist in those cases.

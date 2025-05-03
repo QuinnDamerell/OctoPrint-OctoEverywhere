@@ -23,7 +23,7 @@ class Logger:
     PyLogger = None
 
     @staticmethod
-    def InitFile(userHomePath:str, userName:str):
+    def InitFile(userHomePath:str, userName:str) -> None:
         try:
             Logger.OutputFilePath = os.path.join(userHomePath, "octoeverywhere-installer.log")
 
@@ -41,10 +41,11 @@ class Logger:
 
 
     @staticmethod
-    def Finalize():
+    def Finalize() -> None:
         try:
-            Logger.OutputFile.flush()
-            Logger.OutputFile.close()
+            if Logger.OutputFile is not None:
+                Logger.OutputFile.flush()
+                Logger.OutputFile.close()
         except Exception:
             pass
 
@@ -60,28 +61,29 @@ class Logger:
 
 
     @staticmethod
-    def DeleteLogFile():
+    def DeleteLogFile() -> None:
         try:
             Logger.Finalize()
-            os.remove(Logger.OutputFilePath)
+            if Logger.OutputFilePath is not None:
+                os.remove(Logger.OutputFilePath)
         except Exception:
             pass
 
 
     @staticmethod
-    def EnableDebugLogging():
+    def EnableDebugLogging()  -> None:
         Logger.IsDebugEnabled = True
 
 
     @staticmethod
-    def Debug(msg) -> None:
+    def Debug(msg:str) -> None:
         Logger._WriteToFile("Debug", msg)
         if Logger.IsDebugEnabled is True:
             print(BashColors.Yellow+"DEBUG: "+BashColors.Green+msg+BashColors.Default)
 
 
     @staticmethod
-    def Header(msg)  -> None:
+    def Header(msg:str)  -> None:
         print(BashColors.Cyan+msg+BashColors.Default)
         Logger._WriteToFile("Info", msg)
 
@@ -92,32 +94,34 @@ class Logger:
 
 
     @staticmethod
-    def Info(msg) -> None:
+    def Info(msg:str) -> None:
         print(BashColors.Green+msg+BashColors.Default)
         Logger._WriteToFile("Info", msg)
 
 
     @staticmethod
-    def Warn(msg) -> None:
+    def Warn(msg:str) -> None:
         print(BashColors.Yellow+msg+BashColors.Default)
         Logger._WriteToFile("Warn", msg)
 
 
     @staticmethod
-    def Error(msg) -> None:
+    def Error(msg:str) -> None:
         print(BashColors.Red+msg+BashColors.Default)
         Logger._WriteToFile("Error", msg)
 
 
     @staticmethod
-    def Purple(msg) -> None:
+    def Purple(msg:str) -> None:
         print(BashColors.Magenta+msg+BashColors.Default)
         Logger._WriteToFile("Info", msg)
 
 
     @staticmethod
-    def _WriteToFile(level:str, msg:str):
+    def _WriteToFile(level:str, msg:str) -> None:
         try:
+            if Logger.OutputFile is None:
+                return
             Logger.OutputFile.write(str(datetime.now()) + " ["+level+"] - " + msg+"\n")
         except Exception:
             pass

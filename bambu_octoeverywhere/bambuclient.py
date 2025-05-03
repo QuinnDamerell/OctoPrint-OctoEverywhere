@@ -4,7 +4,7 @@ import time
 import json
 import socket
 import threading
-from typing import List
+from typing import Any, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -15,6 +15,7 @@ from linux_host.networksearch import NetworkSearch
 
 from .bambucloud import BambuCloud, LoginStatus
 from .bambumodels import BambuState, BambuVersion
+from .interfaces import IBambuStateTranslator
 
 
 class ConnectionContext:
@@ -29,29 +30,29 @@ class ConnectionContext:
 # Also responsible for dispatching out MQTT update messages.
 class BambuClient:
 
-    _Instance = None
+    _Instance:"BambuClient" = None #pyright: ignore[reportAssignmentType]
 
     # Useful for debugging.
     _PrintMQTTMessages = False
 
     @staticmethod
-    def Init(logger:logging.Logger, config:Config, stateTranslator):
+    def Init(logger:logging.Logger, config:Config, stateTranslator:IBambuStateTranslator) -> None:
         BambuClient._Instance = BambuClient(logger, config, stateTranslator)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "BambuClient":
         return BambuClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, stateTranslator) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, stateTranslator:IBambuStateTranslator) -> None:
         self.Logger = logger
         self.StateTranslator = stateTranslator # BambuStateTranslator
 
         # Used to keep track of the printer state
         # None means we are disconnected.
-        self.State:BambuState = None
-        self.Version:BambuVersion = None
+        self.State:Optional[BambuState] = None
+        self.Version:Optional[BambuVersion] = None
         self.HasDoneFirstFullStateSync = False
         self.ReportSubscribeMid = None
         self.IsPendingSubscribe = False
@@ -62,25 +63,27 @@ class BambuClient:
 
         # Get the required args.
         self.Config = config
-        self.PortStr  = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
         self.LanAccessCode  = config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
-        self.PrinterSn  = config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
+        portStr = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
+        printerSn  = config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
         # The port and SN are required, but the Access Code isn't, since sometimes it's not there for cloud connections.
-        if self.PortStr is None or self.PrinterSn is None:
+        if portStr is None or printerSn is None:
             raise Exception("Missing required args from the config")
+        self.PortStr = portStr
+        self.PrinterSn = printerSn
 
         # We use this var to keep track of consecutively failed connections
         self.ConsecutivelyFailedConnectionAttempts = 0
 
         # Start a thread to setup and maintain the connection.
-        self.Client:mqtt.Client = None
+        self.Client:Optional[mqtt.Client] = None
         t = threading.Thread(target=self._ClientWorker)
         t.start()
 
 
     # Returns the current local State object which is kept in sync with the printer.
     # Returns None if the printer is not connected and the state is unknown.
-    def GetState(self) -> BambuState:
+    def GetState(self) -> Optional[BambuState]:
         if self.State is None:
             # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
             self.SleepEvent.set()
@@ -90,7 +93,7 @@ class BambuClient:
 
     # Returns the current local Version object which is kept in sync with the printer.
     # Returns None if the printer is not connected and the state is unknown.
-    def GetVersion(self) -> BambuVersion:
+    def GetVersion(self) -> Optional[BambuVersion]:
         return self.Version
 
 
@@ -121,7 +124,7 @@ class BambuClient:
 
                 # We always connect locally. We use encryption, but the printer doesn't have a trusted
                 # cert root, so we have to disable the cert root checks.
-                self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+                self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2) #pyright: ignore[reportPrivateImportUsage]
 
                 # Since we are local, we can do more aggressive reconnect logic.
                 # The default is min=1 max=120 seconds.
@@ -139,11 +142,11 @@ class BambuClient:
                 if connectionContext.IsCloud:
                     self.Logger.info("Trying to connect to printer via Bambu Cloud...")
                     # We are connecting to Bambu Cloud, setup MQTT for it.
-                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS) #pyright: ignore[reportUnknownMemberType]
                 else:
                     # We are trying to connect to the printer locally, so configure mqtt for a local connection.
                     self.Logger.info("Trying to connect to printer via local connection...")
-                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)
+                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE) #pyright: ignore[reportUnknownMemberType]
                     self.Client.tls_insecure_set(True)
 
                 # Set the username and access token.
@@ -176,7 +179,7 @@ class BambuClient:
                     self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
-                    Sentry.Exception(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
+                    Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
@@ -198,7 +201,7 @@ class BambuClient:
     # This must be done async for most callers, since it blocks until the publish is acked. If this blocked on the main mqtt thread, it would
     # dead lock.
     # If this fails, it will disconnect the client.
-    def _ForceStateSyncAsync(self) -> bool:
+    def _ForceStateSyncAsync(self) -> None:
         def _FullSyncWorker():
             try:
                 self.Logger.info("Starting full state sync.")
@@ -211,8 +214,10 @@ class BambuClient:
                     raise Exception("Failed to publish full sync")
             except Exception as e:
                 # Report and disconnect since we are in an unknown state.
-                Sentry.Exception("BambuClient _ForceStateSyncAsync exception.", e)
-                self.Client.disconnect()
+                Sentry.OnException("BambuClient _ForceStateSyncAsync exception.", e)
+                c = self.Client
+                if c is not None:
+                    c.disconnect()
         t = threading.Thread(target=_FullSyncWorker)
         t.start()
 
@@ -235,41 +240,45 @@ class BambuClient:
 
 
     # Fired when the MQTT connection is made.
-    def _OnConnect(self, client:mqtt.Client, userdata, flags, reason_code, properties):
+    def _OnConnect(self, client:mqtt.Client, userdata:Any, flags:Any, reason_code:Any, properties:Any) -> None:
         self.Logger.info("Connection to the Bambu printer established! - Subscribing to the report subscription.")
+        c = self.Client
+        if c is None:
+            self.Logger.error("BambuClient _OnConnect called but client is None.")
+            return
         # After connect, we try to subscribe to the report feed.
         # We must do this before anything else, otherwise we won't get responses for things like
         # the full state sync. The result of the subscribe will be reported to _OnSubscribe
         # Note that at least for my P1P, if the SN is incorrect, the MQTT connection is closed with no _OnSubscribe callback.
         # Thus we set the self.IsPendingSubscribe flag, so we can give the user a better error message.
         self.IsPendingSubscribe = True
-        (result, self.ReportSubscribeMid) = self.Client.subscribe(f"device/{self.PrinterSn}/report")
+        (result, self.ReportSubscribeMid) = c.subscribe(f"device/{self.PrinterSn}/report")
         if result != mqtt.MQTT_ERR_SUCCESS or self.ReportSubscribeMid is None:
             # If we can't sub, disconnect, since we can't do anything.
-            self.Logger.warn(f"Failed to subscribe to the MQTT subscription using the serial number '{self.PrinterSn}'. Result: {result}. Disconnecting.")
-            self.Client.disconnect()
+            self.Logger.warning(f"Failed to subscribe to the MQTT subscription using the serial number '{self.PrinterSn}'. Result: {result}. Disconnecting.")
+            c.disconnect()
 
 
     # Fired when the MQTT connection is lost
-    def _OnDisconnect(self, client, userdata, disconnect_flags, reason_code, properties):
+    def _OnDisconnect(self, client:Any, userdata:Any, disconnect_flags:Any, reason_code:Any, properties:Any) -> None:
         # If the serial number is wrong in the subscribe call, instead of returning an error the Bambu Lab printers just disconnect.
         # So if we were pending a subscribe call, give the user a better error message so they know the likely cause.
         if self.IsPendingSubscribe:
             self.Logger.error("Bambu printer mqtt connection lost when trying to sub for events.")
             self.Logger.error(f"THIS USUALLY MEANS THE PRINTER SERIAL NUMBER IS WRONG. We tried to use the serial number '{self.PrinterSn}'. Double check the SN is correct.")
         else:
-            self.Logger.warn("Bambu printer connection lost. We will try to reconnect in a few seconds.")
+            self.Logger.warning("Bambu printer connection lost. We will try to reconnect in a few seconds.")
         # Clear the state since we lost the connection and won't stay synced.
         self._CleanupStateOnDisconnect()
 
 
     # Fired when the MQTT connection has something to log.
-    def _OnLog(self, client, userdata, level:int, msg:str):
+    def _OnLog(self, client:Any, userdata:Any, level:int, msg:str) -> None:
         if level == mqtt.MQTT_LOG_ERR:
             # If the string is something like "Caught exception in on_connect: ..."
             # It's a leaked exception from us.
             if "exception" in msg:
-                Sentry.Exception("MQTT leaked exception.", Exception(msg))
+                Sentry.OnException("MQTT leaked exception.", Exception(msg))
             else:
                 self.Logger.error(f"MQTT log error: {msg}")
         elif level == mqtt.MQTT_LOG_WARNING:
@@ -282,7 +291,7 @@ class BambuClient:
 
 
     # Fried when the MQTT subscribe result has come back.
-    def _OnSubscribe(self, client, userdata, mid, reason_code_list:List[mqtt.ReasonCode], properties):
+    def _OnSubscribe(self, client:Any, userdata:Any, mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): #pyright: ignore[reportPrivateImportUsage]
         # We only want to listen for the result of the report subscribe.
         if self.ReportSubscribeMid is not None and self.ReportSubscribeMid == mid:
             # Ensure the sub was successful.
@@ -290,7 +299,9 @@ class BambuClient:
                 if r.is_failure:
                     # On any failure, report it and disconnect.
                     self.Logger.error(f"Sub response for the report subscription reports failure. {r}")
-                    self.Client.disconnect()
+                    c = self.Client
+                    if c is not None:
+                        c.disconnect()
                     return
 
             # At this point, we know the connection was successful, the access code is correct, and the SN is correct.
@@ -301,7 +312,7 @@ class BambuClient:
 
 
     # Fired when there's an incoming MQTT message.
-    def _OnMessage(self, client, userdata, mqttMsg:mqtt.MQTTMessage):
+    def _OnMessage(self, client:Any, userdata:Any, mqttMsg:mqtt.MQTTMessage) -> None:
         try:
             # Try to deserialize the message.
             msg = json.loads(mqttMsg.payload)
@@ -325,7 +336,7 @@ class BambuClient:
                     else:
                         self.State.OnUpdate(printMsg)
                 except Exception as e:
-                    Sentry.Exception("Exception calling BambuState.OnUpdate", e)
+                    Sentry.OnException("Exception calling BambuState.OnUpdate", e)
 
                 # Try to detect if this is the response to the first full sync request.
                 if self.HasDoneFirstFullStateSync is False:
@@ -350,7 +361,7 @@ class BambuClient:
                     else:
                         self.Version.OnUpdate(msg["info"])
                 except Exception as e:
-                    Sentry.Exception("Exception calling BambuVersion.OnUpdate", e)
+                    Sentry.OnException("Exception calling BambuVersion.OnUpdate", e)
 
             # Send all messages to the state translator
             # This must happen AFTER we update the State object, so it's current.
@@ -359,14 +370,14 @@ class BambuClient:
                 if self.State is not None:
                     self.StateTranslator.OnMqttMessage(msg, self.State, isFirstFullSyncResponse)
             except Exception as e:
-                Sentry.Exception("Exception calling StateTranslator.OnMqttMessage", e)
+                Sentry.OnException("Exception calling StateTranslator.OnMqttMessage", e)
 
         except Exception as e:
-            Sentry.Exception(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
+            Sentry.OnException(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
 
 
     # Publishes a message and blocks until it knows if the message send was successful or not.
-    def _Publish(self, msg:dict) -> bool:
+    def _Publish(self, msg:Dict[str, Any]) -> bool:
         try:
             # Print for debugging if desired.
             if self.Logger.isEnabledFor(logging.DEBUG):
@@ -387,7 +398,7 @@ class BambuClient:
             state.wait_for_publish(20)
             return True
         except Exception as e:
-            Sentry.Exception("Failed to publish message to bambu printer.", e)
+            Sentry.OnException("Failed to publish message to bambu printer.", e)
         return False
 
 
@@ -425,12 +436,17 @@ class BambuClient:
             if configIpOrHostname is not None and len(configIpOrHostname) > 0:
                 return self._GetLocalConnectionContext(configIpOrHostname)
 
+        if configIpOrHostname is None or len(configIpOrHostname) == 0:
+            raise Exception("There's no valid companion ip_or_hostname set in the config.")
+
         # If we fail too many times, try to scan for the printer on the local subnet, the IP could have changed.
         # Since we 100% identify the printer by the access token and printer SN, we can try to scan for it.
         # Note we don't want to do this too often since it's CPU intensive and the printer might just be off.
         # We use a lower thread count and delay before each action to reduce the required load.
         # Using this config, it takes about 30 seconds to scan for the printer.
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
+        if self.LanAccessCode is None:
+            return self._GetLocalConnectionContext(configIpOrHostname)
         ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=25, delaySec=0.2)
 
         # If we get an IP back, it is the printer.
@@ -447,13 +463,18 @@ class BambuClient:
         return self._GetLocalConnectionContext(configIpOrHostname)
 
 
-    def _GetLocalConnectionContext(self, ipOrHostname) -> ConnectionContext:
+    def _GetLocalConnectionContext(self, ipOrHostname:str) -> ConnectionContext:
         # The username is always the same, we use the local LAN access token.
-        return ConnectionContext(False, ipOrHostname, "bblp", self.LanAccessCode)
+        accessCode = "000000"
+        if self.LanAccessCode is not None:
+            accessCode = self.LanAccessCode
+        else:
+            self.Logger.error("Missing access code in _GetLocalConnectionContext, can't connect to the printer.")
+        return ConnectionContext(False, ipOrHostname, "bblp", accessCode)
 
 
     # Returns a Bambu Cloud based connection context if it can be made, otherwise None
-    def _TryToGetCloudConnectContext(self) -> ConnectionContext:
+    def _TryToGetCloudConnectContext(self) -> Optional[ConnectionContext]:
         bCloud = BambuCloud.Get()
         if bCloud.HasContext() is False:
             return None
@@ -463,7 +484,7 @@ class BambuClient:
         accessTokenResult = BambuCloud.Get().GetAccessToken(forceLogin=True)
 
         # If we failed, make sure to log the reason, so it's obvious for the user.
-        if accessTokenResult.Status != LoginStatus.Success:
+        if accessTokenResult.Status != LoginStatus.Success or accessTokenResult.AccessToken is None:
             self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             self.Logger.error("                                                     Failed To Log Into Bambu Cloud")
             if accessTokenResult.Status == LoginStatus.BadUserNameOrPassword:
@@ -482,13 +503,17 @@ class BambuClient:
 
         # Return the connection object.
         accessToken = accessTokenResult.AccessToken
-        return ConnectionContext(True, bCloud.GetMqttHostname(), bCloud.GetUserNameFromAccessToken(accessToken), accessToken)
+        parsedToken = bCloud.GetUserNameFromAccessToken(accessToken)
+        if parsedToken is None:
+            self.Logger.error("Failed to parse the access token, can't connect to the printer.")
+            return None
+        return ConnectionContext(True, bCloud.GetMqttHostname(), parsedToken, accessToken)
 
 
 # A class returned as the result of all commands.
 class BambuCommandResult:
 
-    def __init__(self, result:dict = None, connected:bool = True, timeout:bool = False, otherError:str = None, exception:Exception = None) -> None:
+    def __init__(self, result:Optional[Dict[str, Any]]=None, connected:bool=True, timeout:bool=False, otherError:Optional[str]=None, exception:Optional[Exception]=None) -> None:
         self.Connected = connected
         self.Timeout = timeout
         self.OtherError = otherError

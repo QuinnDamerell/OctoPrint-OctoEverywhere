@@ -1,35 +1,41 @@
 import time
+import logging
+from typing import Any, Dict, List, Optional, Tuple
+
+from octoprint.printer import PrinterInterface
 
 from octoeverywhere.compat import Compat
+from octoeverywhere.interfaces import ISmartPauseHandler
 
 #
 # The point of this class is to allow pause commands (from Gadget and else where) that are less likely to cause harm to the current print.
 # This is done by moving the hotend back from the print and even cooling it down. This protects the print from heat harm and also prevents the filament
 # in the hot end from getting harmed.
 #
-class SmartPause:
+class SmartPause(ISmartPauseHandler):
 
     # The static instance.
-    _Instance = None
+    _Instance:"SmartPause" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
-    def Init(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj):
+    def Init(logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:Dict[str,Any]):
         SmartPause._Instance = SmartPause(logger, octoPrintPrinterObj, octoPrintPrinterProfileObj)
         Compat.SetSmartPauseInterface(SmartPause._Instance)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "SmartPause":
         return SmartPause._Instance
 
 
-    def __init__(self, logger, octoPrintPrinterObj, octoPrintPrinterProfileObj):
+    def __init__(self, logger:logging.Logger, octoPrintPrinterObj:PrinterInterface, octoPrintPrinterProfileObj:Dict[str,Any]) -> None:
         self.Logger = logger
         self.OctoPrintPrinterObj = octoPrintPrinterObj
+        # This is a dict defined from https://docs.octoprint.org/en/master/modules/printer.html#module-octoprint.printer.profile
         self.OctoPrintPrinterProfileObj = octoPrintPrinterProfileObj
 
         # Indicates if there is a pause notification suppression.
-        self.LastPauseNotificationSuppressionTimeSec = None
+        self.LastPauseNotificationSuppressionTimeSec:Optional[float] = None
 
         # Keeps track of the last position mode commands we saw in the gcode.
         # Default to the common modes.
@@ -39,38 +45,38 @@ class SmartPause:
         # Used to hold any pause or resume scripts that should be applied when we get
         # the hook for pause and resume. Since that hook fires whenever the printer does a pause
         # and resume, these will stay empty until we do our smart pause and resume.
-        self.PauseScripts = []
-        self.ResumeScripts = []
+        self.PauseScripts:list[str] = []
+        self.ResumeScripts:list[str] = []
         self._ResetScripts()
 
 
     # !! Interface Function !! - See compat.py GetSmartPauseInterface for the details.
     # Returns None if there is no current suppression or the time of the last time it was requested
-    def GetAndResetLastPauseNotificationSuppressionTimeSec(self):
+    def GetAndResetLastPauseNotificationSuppressionTimeSec(self) -> Optional[float]:
         local = self.LastPauseNotificationSuppressionTimeSec
         self.LastPauseNotificationSuppressionTimeSec = None
         return local
 
 
     # Sets the suppress time to now.
-    def SetLastPauseNotificationSuppressionTimeNow(self):
+    def SetLastPauseNotificationSuppressionTimeNow(self) -> None:
         self.Logger.info("Setting pause time to suppress the pause notification.")
         self.LastPauseNotificationSuppressionTimeSec = time.time()
 
 
     # Set up the scripts and executes a pause!
-    def DoSmartPause(self, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, suppressNotificationBool):
+    def DoSmartPause(self, disableHotendBool:bool, disableBedBool: bool, zLiftMm: Optional[float], retractFilamentMm: Optional[float], suppressNotificationBool: bool) -> None:
         # Clear any existing script
         self._ResetScripts()
 
         # Check for the debug setup.
         if self.OctoPrintPrinterObj is None or self.OctoPrintPrinterProfileObj is None:
-            self.Logger.warn("Smart Pause doesn't have required OctoPrint objects")
+            self.Logger.warning("Smart Pause doesn't have required OctoPrint objects")
             return
 
         # Ensure we are printing
-        if self.OctoPrintPrinterObj.is_printing() is False:
-            self.Logger.warn("Smart Pause tried to pause but the OctoPrint is not in the printing state.")
+        if self.OctoPrintPrinterObj.is_printing() is False: #pyright: ignore[reportUnknownMemberType] octoprint has no typing
+            self.Logger.warning("Smart Pause tried to pause but the OctoPrint is not in the printing state.")
             return
 
         # Marlin command guide:
@@ -119,10 +125,10 @@ class SmartPause:
         # Start the the hotend, order matters once again.
         # If we are doing both the hotend and bed, we want the bed to re-enable first, to ensure the print sticks.
         # We also need to make sure the cooling is done after the retraction.
-        currentTemps = self.OctoPrintPrinterObj.get_current_temperatures()
+        currentTemps:dict[str, Any] = self.OctoPrintPrinterObj.get_current_temperatures() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
         if disableHotendBool:
             # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.profile.PrinterProfileManager
-            extruder = self.OctoPrintPrinterProfileObj.get("extruder")
+            extruder:dict[str, Any] = self.OctoPrintPrinterProfileObj.get("extruder") #pyright: ignore[reportAssignmentType]
             count = extruder.get("count", 1)
 
             # If there is a shared nozzle, only work with the first tool, if there is one.
@@ -162,10 +168,10 @@ class SmartPause:
 
         # Now call pause on OctoPrint! This pause command will make the OnScriptHook fire, which will consume these scripts we made.
         self.Logger.info("Smart Print scripts created, calling pause on OctoPrint.")
-        self.OctoPrintPrinterObj.pause_print()
+        self.OctoPrintPrinterObj.pause_print() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
 
-    def OnScriptHook(self, script_type, script_name):
+    def OnScriptHook(self, script_type: str, script_name: str) -> Optional[Tuple[Optional[List[str]], Optional[List[str]]]]:
         # We use OctoPrint's scripts system to dynamically insert commands on the pause and resume events.
         # We only need to do this is the pause event was invoked by OctoEverywhere.
         #
@@ -203,7 +209,7 @@ class SmartPause:
         return None
 
 
-    def OnGcodeQueuing(self, cmd):
+    def OnGcodeQueuing(self, cmd:str) -> None:
         # We need to keep track of the current positioning modes so we can resume them
         # after we do the pause command.
         if cmd is None:
@@ -218,13 +224,13 @@ class SmartPause:
             self.LastM8Command = cmd
 
 
-    def _ResetScripts(self):
+    def _ResetScripts(self) -> None:
         self.PauseScripts = []
         self.ResumeScripts = []
         self.LastPauseNotificationSuppressionTime = None
 
 
-    def _ArrayToString(self, array):
+    def _ArrayToString(self, array:List[str]) -> str:
         output = ""
         for element in array:
             output += element + ", "

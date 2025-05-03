@@ -1,10 +1,25 @@
+from enum import Enum
 import os
-from typing import Tuple
+from typing import Optional, Tuple
 
 from linux_host.config import Config
 
 from .Logging import Logger
 from .Context import Context
+
+
+# Frontends that are known.
+class KnownFrontends(Enum):
+    Unknown  = 1
+    Mainsail = 2
+    Fluidd   = 3
+    Creality = 4 # This is Creality's K1 default web interface (not nearly as good as the others)
+    Elegoo   = 5 # This is Elegoo's default web interface.
+
+    # Makes to str() cast not to include the class name.
+    def __str__(self):
+        return self.name
+
 
 # Since the installer shares the common config class as the plugin, this helper helps the installer access it.
 # Mostly, since the config is held in memory in the plugin, changes made by the installer should only hold the Config
@@ -19,7 +34,7 @@ class ConfigHelper:
     # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
     # Returns (portStr:str, frontendHint:str (can be None))
     @staticmethod
-    def TryToGetFrontendDetails(context:Context):
+    def TryToGetFrontendDetails(context:Context) -> Tuple[Optional[str], Optional[str]]:
         try:
             # Load the config, if this returns None, there is no existing file.
             c = ConfigHelper._GetConfig(context)
@@ -37,13 +52,14 @@ class ConfigHelper:
 
     # Writes the frontend details to the config file
     @staticmethod
-    def WriteFrontendDetails(context:Context, portStr:str, frontendHint_CanBeNone:str):
+    def WriteFrontendDetails(context:Context, portStr:str, frontendHint:Optional[KnownFrontends]) -> None:
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
             # Write the new values
             c.SetStr(Config.RelaySection, Config.RelayFrontEndPortKey, portStr)
-            c.SetStr(Config.RelaySection, Config.RelayFrontEndTypeHintKey, frontendHint_CanBeNone)
+            if frontendHint is not None:
+                c.SetStr(Config.RelaySection, Config.RelayFrontEndTypeHintKey, str(frontendHint))
         except Exception as e:
             Logger.Error("Failed to write frontend details to config. "+str(e))
             raise Exception("Failed to write frontend details to config") from e
@@ -58,7 +74,7 @@ class ConfigHelper:
     # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
     # Returns (ipOrHostname:str, portStr:str)
     @staticmethod
-    def TryToGetCompanionDetails(context:Context = None, configFolderPath:str = None) -> Tuple[str, str]:
+    def TryToGetCompanionDetails(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Tuple[Optional[str], Optional[str]]:
         try:
             # Load the config, if this returns None, there is no existing file.
             c = ConfigHelper._GetConfig(context, configFolderPath)
@@ -79,7 +95,7 @@ class ConfigHelper:
     def WriteCompanionDetails(context:Context, ipOrHostname:str, portStr:str):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
             # Write the new values
             c.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ipOrHostname)
             c.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, portStr)
@@ -96,7 +112,7 @@ class ConfigHelper:
     # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
     # Returns (accessToken:str, printerSn:str)
     @staticmethod
-    def TryToGetBambuData(context:Context = None, configFolderPath:str = None):
+    def TryToGetBambuData(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Tuple[Optional[str], Optional[str]]:
         try:
             # Load the config, if this returns None, there is no existing file.
             c = ConfigHelper._GetConfig(context, configFolderPath)
@@ -117,7 +133,7 @@ class ConfigHelper:
     def WriteBambuDetails(context:Context, accessToken:str, printerSn:str):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
             # Write the new values
             c.SetStr(Config.SectionBambu, Config.BambuAccessToken, accessToken)
             c.SetStr(Config.SectionBambu, Config.BambuPrinterSn, printerSn)
@@ -134,7 +150,7 @@ class ConfigHelper:
 
 
     @staticmethod
-    def TryToGetElegooData(context:Context = None, configFolderPath:str = None) -> str:
+    def TryToGetElegooData(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Optional[str]:
         try:
             # Load the config, if this returns None, there is no existing file.
             c = ConfigHelper._GetConfig(context, configFolderPath)
@@ -153,7 +169,7 @@ class ConfigHelper:
     def WriteElegooDetails(context:Context, mainboardMac:str):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
             # Write the new values
             c.SetStr(Config.SectionElegoo, Config.ElegooMainboardMac, mainboardMac)
         except Exception as e:
@@ -168,7 +184,7 @@ class ConfigHelper:
     # If any data is found, it will be returned. If there's no config or the data doesn't exist, it will return None.
     # Returns (apiKey:str)
     @staticmethod
-    def TryToGetMoonrakerDetails(context:Context = None, configFolderPath:str = None) -> str:
+    def TryToGetMoonrakerDetails(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Optional[str]:
         try:
             # Load the config, if this returns None, there is no existing file.
             c = ConfigHelper._GetConfig(context, configFolderPath)
@@ -185,10 +201,10 @@ class ConfigHelper:
 
     # Writes the moonraker details to the config file
     @staticmethod
-    def WriteMoonrakerDetails(context:Context, apiKey:str):
+    def WriteMoonrakerDetails(context:Context, apiKey:Optional[str]):
         try:
             # Load the config, force it to be created if it doesn't exist.
-            c = ConfigHelper._GetConfig(context, createIfNotExisting=True)
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
             # Write the new values
             c.SetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, apiKey, True)
         except Exception as e:
@@ -202,7 +218,7 @@ class ConfigHelper:
 
     # Given a context or folder path, this will return if there's any existing config file yet or not.
     @staticmethod
-    def DoesConfigFileExist(context:Context = None, configFolderPath:str = None) -> bool:
+    def DoesConfigFileExist(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> bool:
         configFilePath = None
         if context is not None:
             configFilePath = ConfigHelper.GetConfigFilePath(context)
@@ -210,13 +226,15 @@ class ConfigHelper:
             configFilePath = ConfigHelper.GetConfigFilePath(configFolderPath=configFolderPath)
         else:
             raise Exception("DoesConfigFileExist no context or file path passed.")
+        if configFilePath is None:
+            raise Exception("DoesConfigFileExist no context or file path passed.")
         return os.path.exists(configFilePath) and os.path.isfile(configFilePath)
 
 
     # Given a context or config file path, this returns file path of the config.
     # If the context is missing the ConfigFolder, None is returned.
     @staticmethod
-    def GetConfigFilePath(context:Context = None, configFolderPath:str = None):
+    def GetConfigFilePath(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Optional[str]:
         if context is not None:
             if context.ConfigFolder is None:
                 # Don't throw here, return None and let the caller handle it, incase it's ok to not have a config folder set.
@@ -231,7 +249,7 @@ class ConfigHelper:
     # If the file doesn't exist and createIfNotExisting is False, None is returned.
     # Otherwise a new config will be created.
     @staticmethod
-    def _GetConfig(context:Context = None, configFolderPath:str = None, createIfNotExisting:bool = False):
+    def _GetConfig(context:Optional[Context]=None, configFolderPath:Optional[str]=None, createIfNotExisting:bool = False) -> Optional[Config]:
         if ConfigHelper.DoesConfigFileExist(context, configFolderPath) is False:
             if createIfNotExisting:
                 # Fallthrough, the Config class will create a file if none exists.
@@ -239,9 +257,19 @@ class ConfigHelper:
             else:
                 return None
         # Get the config folder path.
-        if configFolderPath is None:
+        if configFolderPath is None and context is not None:
             configFolderPath = context.ConfigFolder
         if configFolderPath is None:
             raise Exception("_GetConfig was called with an invalid context and now config folder path.")
         # Open or create the config.
         return Config(configFolderPath)
+
+
+    @staticmethod
+    def _GetConfig_CreateIfNotExisting(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Config:
+        # This is a helper to create the config if it doesn't exist.
+        # This is used by the other functions to ensure the config exists before trying to access it.
+        c = ConfigHelper._GetConfig(context, configFolderPath, True)
+        if c is None:
+            raise Exception("_GetConfigCreateIfNotExisting failed to create config when createIfNotExisting was set.")
+        return c

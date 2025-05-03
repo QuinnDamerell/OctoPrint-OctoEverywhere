@@ -1,4 +1,5 @@
 import logging
+from typing import Any, Dict, Optional
 
 from ..sentry import Sentry
 
@@ -17,9 +18,7 @@ class WebcamSettingItem:
     #  snapshotUrl OR streamUrl can be None if the values aren't available, but not both.
     #  flipHBool & flipVBool & rotationInt must exist.
     #  rotationInt must be 0, 90, 180, or 270
-    def __init__(self, name:str = "", snapshotUrl:str = "", streamUrl:str = "", flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0, enabled:bool = True):
-        self._name = ""
-        self.Name = name
+    def __init__(self, name:str = "", snapshotUrl:Optional[str]=None, streamUrl:Optional[str]=None, flipHBool:bool = False, flipVBool:bool = False, rotationInt:int = 0, enabled:bool = True) -> None:
         self.SnapshotUrl = snapshotUrl
         self.StreamUrl = streamUrl
         self.FlipH = flipHBool
@@ -27,15 +26,18 @@ class WebcamSettingItem:
         self.Rotation = rotationInt
         # This is a special flag mostly used for the local plugin webcams to indicate they are no enabled.
         self.Enabled = enabled
+        # Define the _name but use the Name setter to run the set logic.
+        self._name = ""
+        self.Name = name
 
 
     @property
-    def Name(self):
+    def Name(self) -> str:
         return self._name
 
 
     @Name.setter
-    def Name(self, value):
+    def Name(self, value:str) -> None:
         # When the name is set, make sure we convert it to the string style we use internally.
         # This ensures that the name can be used and is consistent across the platform.
         if value is not None and len(value) > 0:
@@ -66,7 +68,7 @@ class WebcamSettingItem:
 
     # Used to serialize the object to a dict that can be used with json.
     # THESE PROPERTY NAMES CAN'T CHANGE, it's used for the API and it's used to serialize to disk.
-    def Serialize(self, includeUrls:bool = True) -> dict:
+    def Serialize(self, includeUrls:bool = True) -> Dict[str, Any]:
         d = {
             "Name": self.Name,
             "FlipH": self.FlipH,
@@ -83,7 +85,7 @@ class WebcamSettingItem:
     # Used to convert a dict back into a WebcamSettingItem object.
     # Returns None if there's a failure
     @staticmethod
-    def Deserialize(d:dict, logger:logging.Logger):
+    def Deserialize(d:Dict[str, Any], logger:logging.Logger) -> Optional["WebcamSettingItem"]:
         try:
             name = d.get("Name")
             snapshotUrl = d.get("SnapshotUrl")
@@ -99,11 +101,11 @@ class WebcamSettingItem:
                 raise Exception("Failed to validate WebcamSettingItem.")
             return i
         except Exception as e:
-            Sentry.Exception("Failed to deserialize WebcamSettingItem", e)
+            Sentry.OnException("Failed to deserialize WebcamSettingItem", e)
         return None
 
 
-    def _MoonrakerToInternalWebcamNameConvert(self, name:str):
+    def _MoonrakerToInternalWebcamNameConvert(self, name:str) -> str:
         if name is not None and len(name) > 0:
             # Enforce max name length.
             if len(name) > WebcamSettingItem.c_MaxWebcamNameLength:

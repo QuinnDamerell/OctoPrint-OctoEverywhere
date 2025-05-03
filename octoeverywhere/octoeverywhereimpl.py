@@ -1,15 +1,18 @@
 import time
+import logging
 import threading
+from typing import Optional
 
 from .sentry import Sentry
 from .threaddebug import ThreadDebug
 from .octoservercon import OctoServerCon
 from .Proto import SummonMethods
+from .interfaces import IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler
 
 #
 # This is the main running class that will connect and keep a connection to the service.
 #
-class OctoEverywhere:
+class OctoEverywhere(IOctoEverywhereHost):
 
     # How long the primary connection will stay connected before recycling.
     # We want to reconnect occasionally to make sure we are connected to the most ideal sever in terms of latency.
@@ -22,7 +25,19 @@ class OctoEverywhere:
     # die but then a user tries to use it quickly, we will just summon the connection again.
     SecondaryConnectionRunForTimeSec = 60 * 15 # 15 minutes.
 
-    def __init__(self, endpoint, printerId, privateKey, logger, uiPopupInvoker, statusChangeHandler, pluginVersion, serverHostType, isCompanion):
+
+    def __init__(
+                self,
+                endpoint:str,
+                printerId:str,
+                privateKey:str,
+                logger:logging.Logger,
+                uiPopupInvoker:IPopUpInvoker,
+                statusChangeHandler:IStateChangeHandler,
+                pluginVersion:str,
+                serverHostType:int,
+                isCompanion:bool
+                ) -> None:
         self.Endpoint = endpoint
         self.PrinterId = printerId
         self.PrivateKey = privateKey
@@ -32,8 +47,9 @@ class OctoEverywhere:
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
-        self.SecondaryServerCons = {}
+        self.SecondaryServerCons:dict[str, threading.Thread] = {}
         self.SecondaryServerConsLock = threading.Lock()
+
 
     def RunBlocking(self):
         # This is the main thread for the entire plugin, and it hosts the primary connection.
@@ -51,30 +67,31 @@ class OctoEverywhere:
                 #msg = str(e)
                 #if "can't start new thread" in msg:
                 ThreadDebug.DoThreadDumpLogout(self.Logger)
-                Sentry.Exception("RuntimeError in OctoEverywhere's main RunBlocking function.", e)
+                Sentry.OnException("RuntimeError in OctoEverywhere's main RunBlocking function.", e)
                 # Sleep for a long time, since this can't be recovered from easily.
                 time.sleep(60 * 60 * 2)
             except Exception as e:
-                Sentry.Exception("Exception in OctoEverywhere's main RunBlocking function.", e)
+                Sentry.OnException("Exception in OctoEverywhere's main RunBlocking function.", e)
                 # Sleep for just a bit and try again.
                 time.sleep(5)
 
-    def OnSummonRequest(self, summonConnectUrl, summonMethod):
+
+    def OnSummonRequest(self, summonConnectUrl:str, summonMethod:int):
         # Grab the map lock.
         with self.SecondaryServerConsLock:
-
             # Check if we already have a secondary connection to this server.
-            if summonConnectUrl in self.SecondaryServerCons :
-                self.Logger.warn("We got a summon request for a server that we already have a secondary connection to. "+str(summonConnectUrl)+", method "+str(summonMethod))
+            if summonConnectUrl in self.SecondaryServerCons:
+                self.Logger.warning("We got a summon request for a server that we already have a secondary connection to. "+str(summonConnectUrl)+", method "+str(summonMethod))
                 return
 
             # We don't have a connection, so make a new connection now.
-            thread = threading.Thread(target=self.HandleSecondaryServerCon, args=(summonConnectUrl, summonMethod,))
+            thread = threading.Thread(target=self._HandleSecondaryServerCon, args=(summonConnectUrl, summonMethod,))
             thread.daemon = True
             thread.start()
             self.SecondaryServerCons[summonConnectUrl] = thread
 
-    def HandleSecondaryServerCon(self, summonConnectUrl, summonMethod):
+
+    def _HandleSecondaryServerCon(self, summonConnectUrl:str, summonMethod:int):
         # Run the secondary connection for until the RunFor time limit. Note RunFor will account for user activity.
         self.Logger.info("Starting a secondary connection to "+str(summonConnectUrl)+ " method "+str(summonMethod))
         try:
@@ -82,20 +99,21 @@ class OctoEverywhere:
             serverCon = self.createOctoServerCon(summonConnectUrl, False, False, None, self.SecondaryConnectionRunForTimeSec, summonMethod)
             serverCon.RunBlocking()
         except Exception as e:
-            Sentry.Exception("Exception in HandleSecondaryServerCon function.", e)
+            Sentry.OnException("Exception in HandleSecondaryServerCon function.", e)
 
         # Since this is a secondary connection, when RunBlocking() returns we want to be done.
         with self.SecondaryServerConsLock:
             try:
                 # Check if we already have a secondary connection to this server.
-                if summonConnectUrl in self.SecondaryServerCons :
+                if summonConnectUrl in self.SecondaryServerCons:
                     del self.SecondaryServerCons[summonConnectUrl]
                 else:
                     self.Logger.error("Secondary ended but there's not an ref of it in the map?")
-            except Exception as _:
-                Sentry.Exception("Exception when removing secondary connection from map.", e)
+            except Exception as e:
+                Sentry.OnException("Exception when removing secondary connection from map.", e)
 
         self.Logger.info("Secondary connection to "+str(summonConnectUrl)+" has ended")
 
-    def createOctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, statusChangeHandler, runTime, summonMethod):
+
+    def createOctoServerCon(self, endpoint:str, isPrimary:bool, shouldUseLowestLatencyServer:bool, statusChangeHandler:Optional[IStateChangeHandler], runTime:int, summonMethod:int):
         return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType, self.IsCompanion)

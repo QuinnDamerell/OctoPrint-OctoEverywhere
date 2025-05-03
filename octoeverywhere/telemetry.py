@@ -1,16 +1,20 @@
 import logging
 import threading
+from typing import Any, Dict, Optional
 
 from .httpsessions import HttpSessions
 
 # A helper class for reporting telemetry.
 class Telemetry:
-    Logger = None
+
+    Logger:logging.Logger = None #pyright: ignore[reportAssignmentType]
     ServerProtocolAndDomain = "https://octoeverywhere.com"
+
 
     @staticmethod
     def Init(logger:logging.Logger):
         Telemetry.Logger = logger
+
 
     # Sends a telemetry data point to the service. These data points are suggestions, they are filtered and limited
     # by the service, so it may or may not actually accept them.
@@ -22,16 +26,17 @@ class Telemetry:
     #
     # Example: Telemetry.Write("Test", 1, { "FieldKey":"FieldValue", "FieldKey2":1.5 }, { "TagKey":"TagValue" })
     @staticmethod
-    def Write(measureStr:str, valueInt:int, fieldsOpt:dict=None, tagsOpt:dict=None):
+    def Write(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,Any]]=None, tagsOpt:Optional[Dict[str,str]]=None):
         thread = threading.Thread(target=Telemetry._WriteSync, args=(measureStr, valueInt, fieldsOpt, tagsOpt, ))
         thread.start()
 
+
     # Same as Write(), but it blocks on the request. True is returned on success, otherwise False.
     @staticmethod
-    def _WriteSync(measureStr:str, valueInt:int, fieldsOpt:dict=None, tagsOpt:dict=None):
+    def _WriteSync(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,Any]]=None, tagsOpt:Optional[Dict[str,str]]=None):
         try:
             # Ensure a value is set and ensure it's an int.
-            if valueInt is None :
+            if valueInt is None:
                 valueInt = 1
             valueInt = int(valueInt)
 
@@ -57,9 +62,9 @@ class Telemetry:
             if response.status_code == 200:
                 return True
 
-            Telemetry.Logger.warn("Failed to report "+measureStr+", code: "+str(response.status_code))
+            Telemetry.Logger.warning("Failed to report "+measureStr+", code: "+str(response.status_code))
         except Exception as e:
-            Telemetry.Logger.warn("Failed to report "+measureStr+", error: "+str(e))
+            Telemetry.Logger.warning("Failed to report "+measureStr+", error: "+str(e))
         return False
 
 

@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import logging.handlers
+from typing import Optional
 
 from .config import Config
 
@@ -9,7 +10,7 @@ class LoggerInit:
 
     # Sets up and returns the main logger object
     @staticmethod
-    def GetLogger(config:Config, logDir:str, logLevelOverride_CanBeNone:str) -> logging.Logger:
+    def GetLogger(config:Config, logDir:str, logLevelOverride:Optional[str]) -> logging.Logger:
         logger = logging.getLogger()
 
         # From the possible logging values, read the current value from the config.
@@ -28,10 +29,10 @@ class LoggerInit:
             logLevel = "DEBUG"
 
         # Allow the dev config to override the log level.
-        if logLevelOverride_CanBeNone is not None:
-            logLevelOverride_CanBeNone = logLevelOverride_CanBeNone.upper()
-            print("Dev config override log level from "+logLevel+" to "+logLevelOverride_CanBeNone)
-            logLevel = logLevelOverride_CanBeNone
+        if logLevelOverride is not None:
+            logLevelOverride = logLevelOverride.upper()
+            print("Dev config override log level from "+logLevel+" to "+logLevelOverride)
+            logLevel = logLevelOverride
 
         # Set the final log level.
         logger.setLevel(logLevel)

@@ -36,7 +36,7 @@ class DnsTest:
             self.Logger.error(f"RunTestSync test failed. {e}")
 
 
-    def _TestUrl(self, url: str, recordType:str = "A") -> None:
+    def _TestUrl(self, url:str, recordType:str="A") -> None:
         try:
             self.Logger.debug(f"Starting DNS resolve test for {url} with record type {recordType}")
             startSec = time.time()
@@ -45,10 +45,10 @@ class DnsTest:
             result = dnsResolver.query(url, recordType)
             resolveTimeSec = time.time() - startSec
             c = 0
-            for r in result:
+            for r in result: #pyright: ignore
                 c += 1
-                self.Logger.info(f"[{c}/{len(result)}] Resolved {url}:{recordType} to {r} in {resolveTimeSec:.3f} seconds.")
-            if len(result) == 0:
+                self.Logger.info(f"[{c}/{len(result)}] Resolved {url}:{recordType} to {r} in {resolveTimeSec:.3f} seconds.") #pyright: ignore
+            if len(result) == 0: #pyright: ignore
                 self.Logger.info(f"[?/?] FAILED TO RESOLVE {url}:{recordType} in {resolveTimeSec:.3f} seconds - no result returned.")
         except Exception as e:
             self.Logger.info(f"TestUrl test failed. Url: {url}, Error: {e}")

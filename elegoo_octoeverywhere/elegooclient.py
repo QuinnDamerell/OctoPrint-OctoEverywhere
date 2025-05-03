@@ -4,17 +4,20 @@ import random
 import string
 import logging
 import threading
-import octowebsocket
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.buffer import Buffer
+from octoeverywhere.interfaces import WebSocketOpCode, IWebSocketClient
 
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
 
 from .elegoomodels import PrinterState, PrinterAttributes
+from .interfaces import IStateTranslator, IFileManager, IWebsocketMux
 
 # The response object for a request message.
 # Contains information on the state, and if successful, the result.
@@ -31,7 +34,7 @@ class ResponseMsg:
     OE_ERROR_MIN = OE_ERROR_WS_NOT_CONNECTED
     OE_ERROR_MAX = OE_ERROR_EXCEPTION
 
-    def __init__(self, resultObj:dict, errorCode = 0, errorStr : str = None) -> None:
+    def __init__(self, resultObj:Optional[Dict[str, Any]], errorCode=0, errorStr: Optional[str]=None) -> None:
         self.Result = resultObj
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
@@ -51,13 +54,13 @@ class ResponseMsg:
     def IsErrorCodeOeError(self) -> bool:
         return self.ErrorCode >= ResponseMsg.OE_ERROR_MIN and self.ErrorCode <= ResponseMsg.OE_ERROR_MAX
 
-    def GetErrorStr(self) -> str:
+    def GetErrorStr(self) -> Optional[str]:
         return self.ErrorStr
 
     def GetLoggingErrorStr(self) -> str:
         return str(self.ErrorCode) + " - " + str(self.ErrorStr)
 
-    def GetResult(self) -> dict:
+    def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
 
 
@@ -68,38 +71,38 @@ class ElegooClient:
     RequestTimeoutSec = 10.0
 
     # Logic for a static singleton
-    _Instance = None
+    _Instance: "ElegooClient" = None #pyright: ignore[reportAssignmentType]
 
     # If enabled, this prints all of the websocket messages sent and received.
     WebSocketMessageDebugging = False
 
     @staticmethod
-    def Init(logger:logging.Logger, config:Config, pluginId, pluginVersion, stateTranslator, websocketMux, fileManger):
-        ElegooClient._Instance = ElegooClient(logger, config, pluginId, pluginVersion, stateTranslator, websocketMux, fileManger)
+    def Init(logger:logging.Logger, config:Config, pluginId:str, pluginVersion:str, stateTranslator:IStateTranslator, websocketMux:IWebsocketMux, fileManager:IFileManager) -> None:
+        ElegooClient._Instance = ElegooClient(logger, config, pluginId, pluginVersion, stateTranslator, websocketMux, fileManager)
 
 
     @staticmethod
-    def Get():
+    def Get() -> 'ElegooClient':
         return ElegooClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, pluginId:str, pluginVersion:str, stateTranslator, websocketMux, fileManger) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, pluginId:str, pluginVersion:str, stateTranslator:IStateTranslator, websocketMux:IWebsocketMux, fileManager:IFileManager) -> None:
         self.Logger = logger
         self.Config = config
         self.PluginId = pluginId
         self.PluginVersion = pluginVersion
-        self.StateTranslator = stateTranslator # ElegooStateTranslator
-        self.WebsocketMux = websocketMux # ElegooWebsocketMux
-        self.FileManger = fileManger # ElegooFileManager
+        self.StateTranslator = stateTranslator
+        self.WebsocketMux = websocketMux
+        self.FileManger = fileManager
 
         # Setup the request response system.
         self.RequestLock = threading.Lock()
-        self.RequestPendingContexts = {}
+        self.RequestPendingContexts:dict[str, MsgWaitingContext] = {}
 
         #
         # Websocket Vars
         #
-        self.WebSocket:Client = None
+        self.WebSocket:Optional[Client] = None
         # Set when the websocket is connected and ready to send messages.
         self.WebSocketConnected = False
         # Set when the first attribute msg is received and we verified the mainboard id.
@@ -111,15 +114,15 @@ class ElegooClient:
         # Set if we know the last IP attempt was successful, but we failed bc there were too many clients.
         self.LastConnectionFailedDueToTooManyClients = False
         # Hold the IP we are currently connected to, so when it's successful, we can update the config.
-        self.WebSocketConnectionIp:str = None
+        self.WebSocketConnectionIp:Optional[str] = None
         # This is the event we will sleep on between connection attempts, which allows us to be poked to connect now.
         self.SleepEvent:threading.Event = threading.Event()
 
         # We keep track of the states locally so we know the delta between states and
         # So we don't have to ping the printer for every state change.
         # These will be None until we get the first messages!
-        self.State:PrinterState = None
-        self.Attributes:PrinterAttributes = None
+        self.State:Optional[PrinterState] = None
+        self.Attributes:Optional[PrinterAttributes] = None
         self._CleanupStateOnDisconnect()
 
         # Note that EITHER the IP address or mainboard mac are required.
@@ -149,7 +152,7 @@ class ElegooClient:
 
     # Returns the local printer state object with the most up-to-date information.
     # Returns None if the printer is not connected or the state is unknown.
-    def GetState(self) -> PrinterState:
+    def GetState(self) -> Optional[PrinterState]:
         if self.State is None:
             # Set the sleep event, so if the socket is waiting to reconnect, it will wake up and try again.
             self.SleepEvent.set()
@@ -159,7 +162,7 @@ class ElegooClient:
 
     # Returns the local printer attributes object with the most up-to-date information.
     # Returns None if the printer is not connected or the attributes is unknown.
-    def GetAttributes(self, waitForResponse:bool=True) -> PrinterAttributes:
+    def GetAttributes(self) -> Optional[PrinterAttributes]:
         return self.Attributes
 
 
@@ -182,7 +185,7 @@ class ElegooClient:
 
 
     # Sends a command to all connected frontends to show a popup message.
-    def SendFrontendPopupMsg(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
+    def SendFrontendPopupMsg(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
         data = {
             "Notification": {
                 "title": title,
@@ -199,7 +202,7 @@ class ElegooClient:
 
     # Sends a request to the printer and waits for a response.
     # Always returns a ResponseMsg, with various error codes.
-    def SendRequest(self, cmdId:int, data:dict=None, waitForResponse:bool=True, timeoutSec:float=None) -> ResponseMsg:
+    def SendRequest(self, cmdId:int, data:Optional[Dict[str, Any]]=None, waitForResponse:bool=True, timeoutSec:Optional[float]=None) -> ResponseMsg:
         # Generate a request id, which is a 32 char lowercase letter and number string
         requestId = ''.join(random.choices(string.ascii_lowercase + string.digits, k=32))
 
@@ -267,7 +270,7 @@ class ElegooClient:
             return ResponseMsg(result)
 
         except Exception as e:
-            Sentry.Exception("Moonraker client json rpc request failed to send.", e)
+            Sentry.OnException("Moonraker client json rpc request failed to send.", e)
             return ResponseMsg(None, ResponseMsg.OE_ERROR_EXCEPTION, str(e))
 
         finally:
@@ -298,9 +301,9 @@ class ElegooClient:
         try:
             # Since we must encode the data, which will create a copy, we might as well just send the buffer as normal,
             # without adding the extra space for the header. We can add the header here or in the WS lib, it's the same amount of work.
-            localWs.Send(jsonStr.encode("utf-8"), isData=False)
+            localWs.Send(Buffer(jsonStr.encode("utf-8")), isData=False)
         except Exception as e:
-            Sentry.Exception("Elegoo client exception in websocket send.", e)
+            Sentry.OnException("Elegoo client exception in websocket send.", e)
             return False
         return True
 
@@ -329,7 +332,7 @@ class ElegooClient:
                     # Time ping timeout must be less than the ping interval.
                     self.WebSocket.RunUntilClosed(pingIntervalSec=30)
             except Exception as e:
-                Sentry.Exception("Elegoo client exception in main WS loop.", e)
+                Sentry.OnException("Elegoo client exception in main WS loop.", e)
 
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
@@ -353,12 +356,12 @@ class ElegooClient:
         self.State = None
         self.Attributes = None
         self.WebSocketConnected = False
-        self.WebSocketConnectFinalized = None
+        self.WebSocketConnectFinalized = False
         self.WebSocketConnectionIp = None
 
 
     # Fired when the websocket is connected.
-    def _OnWsConnect(self, ws:Client):
+    def _OnWsConnect(self, ws:IWebSocketClient):
         self.Logger.info("Connection to the Elegoo printer established!")
 
         # Set the connected flag now, so we can send messages.
@@ -379,7 +382,7 @@ class ElegooClient:
 
 
     # Fired when the websocket is closed.
-    def _OnWsClose(self, ws:Client):
+    def _OnWsClose(self, ws:IWebSocketClient):
         # Don't log this if we already know its due to too many clients.
         if self.LastConnectionFailedDueToTooManyClients is False:
             self.Logger.debug("Elegoo printer connection lost. We will try to reconnect in a few seconds.")
@@ -400,7 +403,7 @@ class ElegooClient:
 
 
     # Fired when the websocket is closed.
-    def _OnWsError(self, ws:Client, e:Exception):
+    def _OnWsError(self, ws:IWebSocketClient, e:Exception):
         # There's a special case here where the Elegoo printers can have a limited number of connections.
         # When that happens, we want to note it so we don't just keep trying the same IP over and over.
         msg = str(e)
@@ -409,14 +412,14 @@ class ElegooClient:
             self.Logger.warning("Elegoo printer connection failed due to too many already connected clients.")
         else:
             self.LastConnectionFailedDueToTooManyClients = False
-            Sentry.Exception("Elegoo printer websocket error.", e)
+            Sentry.OnException("Elegoo printer websocket error.", e)
 
 
     # Fired when the websocket is closed.
-    def _OnWsData(self, ws:Client, buffer:bytearray, msgType):
+    def _OnWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode):
         try:
             # Try to deserialize the message.
-            msg = json.loads(buffer.decode("utf-8"))
+            msg = json.loads(buffer.GetBytesLike().decode("utf-8"))
             if msg is None:
                 raise Exception("Parsed json message returned None")
 
@@ -495,10 +498,10 @@ class ElegooClient:
                     self.WebsocketMux.OnIncomingMessage(None, buffer, msgType)
 
         except Exception as e:
-            Sentry.Exception("Failed to handle incoming Elegoo message.", e)
+            Sentry.OnException("Failed to handle incoming Elegoo message.", e)
 
 
-    def _HandleAttributesUpdate(self, attributes:dict):
+    def _HandleAttributesUpdate(self, attributes:Dict[str, Any]):
         # First update the attributes object.
         try:
             if self.Attributes is None:
@@ -510,7 +513,7 @@ class ElegooClient:
             else:
                 self.Attributes.OnUpdate(attributes)
         except Exception as e:
-            Sentry.Exception("Failed to update printer attributes object", e)
+            Sentry.OnException("Failed to update printer attributes object", e)
 
         # We only need to handle the finalize once.
         if self.WebSocketConnectFinalized is True:
@@ -530,10 +533,16 @@ class ElegooClient:
         self.FileManger.Sync()
 
         # Kick off the slipstream cache
-        if Compat.HasSlipstream():
-            Compat.GetSlipstream().UpdateCache()
+        slipStream = Compat.GetSlipstream()
+        if slipStream is not None:
+            slipStream.UpdateCache()
 
-        # Try to get the mainbaord mac
+        # Sanity check we have this
+        if self.Attributes is None:
+            self.Logger.warning("Elegoo client finalized but we don't have Attributes.")
+            return
+
+        # Try to get the mainboard mac
         # Note, in the past we tried to use the mainboard id, but it changed for some users on update.
         if self.Attributes.MainboardMac is None or len(self.Attributes.MainboardMac) == 0:
             self.Logger.warning("Elegoo client finalized but we don't have a mainboard mac address.")
@@ -557,7 +566,7 @@ class ElegooClient:
         self.Logger.info("Elegoo client connection finalized.")
 
 
-    def _HandleStatusUpdate(self, status:dict):
+    def _HandleStatusUpdate(self, status:Dict[str, Any]):
         # First update the state object.
         isFirstStateUpdate = self.State is None
         try:
@@ -570,14 +579,18 @@ class ElegooClient:
             else:
                 self.State.OnUpdate(status)
         except Exception as e:
-            Sentry.Exception("Failed to update printer states object", e)
+            Sentry.OnException("Failed to update printer states object", e)
+
+        if self.State is None:
+            self.Logger.warning("Elegoo client finalized but we don't have a state object.")
+            return
 
         # After the state is updated, invoke the state translator.
         self.StateTranslator.OnStatusUpdate(self.State, isFirstStateUpdate)
 
 
     # Returns the IP for the next connection attempt
-    def _GetIpForConnectionAttempt(self, isConnectAttemptFromEventBump:bool) -> str:
+    def _GetIpForConnectionAttempt(self, isConnectAttemptFromEventBump:bool) -> Optional[str]:
         # Always increment the failed attempts - no matter the reason.
         self.ConsecutivelyFailedConnectionAttempts += 1
 
@@ -653,7 +666,7 @@ class ElegooClient:
 
 
     # This sends our special OE message out through all of the mux websockets to the frontend.
-    def _SendMuxFrontendMessage(self, data:dict=None) -> None:
+    def _SendMuxFrontendMessage(self, data:Optional[Dict[str, Any]]=None) -> None:
         # No data is fine, it just means we are sending a message with the plugin id and version.
         if data is None:
             data = {}
@@ -677,16 +690,16 @@ class ElegooClient:
         # Serialize and send to all of the active mux sockets.
         # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
         jsonStr = json.dumps(obj, default=str).encode("utf-8")
-        self.WebsocketMux.OnIncomingMessage(None, jsonStr, octowebsocket.ABNF.OPCODE_TEXT)
+        self.WebsocketMux.OnIncomingMessage(None, Buffer(jsonStr), WebSocketOpCode.TEXT)
 
 
     # Called by ElegooWebsocketMux when a mux client sends a message.
     # This returns true if the message was sent, false on failure.
-    def MuxSendMessage(self, wsId:int, buffer:bytearray, msgStartOffsetBytes:int, msgSize:int, optCode) -> bool:
+    def MuxSendMessage(self, wsId:int, buffer:Buffer, msgStartOffsetBytes:Optional[int], msgSize:Optional[int], optCode:WebSocketOpCode) -> bool:
         try:
             # We only handle text messages right now
-            if optCode != octowebsocket.ABNF.OPCODE_TEXT:
-                raise Exception(f"Elegoo client only supports text messages. We got: {octowebsocket.ABNF.OPCODE_TEXT}")
+            if optCode != WebSocketOpCode.TEXT:
+                raise Exception(f"Elegoo client only supports text messages. We got: {optCode}")
 
             # Trim the buffer if needed.
             needsToTrim = False
@@ -699,11 +712,11 @@ class ElegooClient:
                 endTrim = msgSize
                 needsToTrim = True
             if needsToTrim:
-                buffer = buffer[startTrim:endTrim]
+                buffer = Buffer(buffer.Get()[startTrim:endTrim])
 
             # For us to be able to map messages back, we need to be able to read the request id if there is one.
             # So if this fails, we can't handle the message.
-            msgStr = buffer.decode("utf-8")
+            msgStr = buffer.GetBytesLike().decode("utf-8")
             msg = json.loads(msgStr)
 
             # Try to get the data object and the request id.
@@ -723,7 +736,7 @@ class ElegooClient:
             return self._WebSocketSend(msgStr)
 
         except Exception as e:
-            Sentry.Exception("Elegoo client exception in MuxSendMessage.", e)
+            Sentry.OnException("Elegoo client exception in MuxSendMessage.", e)
             return False
 
 
@@ -737,7 +750,7 @@ class ElegooClient:
     def MuxWebsocketClosed(self, wsId:int) -> None:
         # Cleanup any pending requests for this websocket.
         with self.RequestLock:
-            toDelete = []
+            toDelete:List[str] = []
             for k, v in self.RequestPendingContexts.items():
                 if v.WsId == wsId:
                     toDelete.append(k)
@@ -750,22 +763,22 @@ class MsgWaitingContext:
 
     # If WsId is set, this message is for a specific mux websocket.
     # When the response is received, the result is set and the event is triggered.
-    def __init__(self, msgId:str, wsId:int=None) -> None:
+    def __init__(self, msgId:str, wsId:Optional[int]=None) -> None:
         self.Id = msgId
         self.WsId = wsId
         self.WaitEvent = threading.Event()
-        self.Result:dict = None
+        self.Result:Optional[Dict[str, Any]] = None
 
 
     def GetEvent(self) -> threading.Event:
         return self.WaitEvent
 
 
-    def GetResult(self) -> dict:
+    def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
 
 
-    def SetResultAndEvent(self, result:dict) -> None:
+    def SetResultAndEvent(self, result:Dict[str, Any]) -> None:
         if self.WsId is not None:
             raise Exception("This context is not for a local request.")
         self.Result = result

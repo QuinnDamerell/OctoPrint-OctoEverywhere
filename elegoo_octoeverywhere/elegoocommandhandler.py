@@ -1,13 +1,16 @@
+import logging
+from typing import Any, Dict, Union
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
+from octoeverywhere.interfaces import IPlatformCommandHandler
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
 from .elegoofilemanager import ElegooFileManager
 
 # This class implements the Platform Command Handler Interface
-class ElegooCommandHandler:
+class ElegooCommandHandler(IPlatformCommandHandler):
 
-    def __init__(self, logger) -> None:
+    def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
 
 
@@ -23,7 +26,7 @@ class ElegooCommandHandler:
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
-    def GetCurrentJobStatus(self):
+    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         # Try to get the current state.
         printerState = ElegooClient.Get().GetState()
 
@@ -58,6 +61,9 @@ class ElegooCommandHandler:
         # Get the time so far and time remaining
         durationSec = printerState.DurationSec if printerState.DurationSec is not None else 0
         timeLeftSec = printerState.GetTimeRemainingSec()
+        if timeLeftSec is not None:
+            # In some system buggy cases, the time left can be super high and won't fit into a int32, so we cap it.
+            timeLeftSec = min(timeLeftSec, 2147483600)
 
         # Either of these can be set, or both or none.
         filamentUsedMm = 0
@@ -87,8 +93,7 @@ class ElegooCommandHandler:
             {
                 "Progress" : progress,
                 "DurationSec" : durationSec,
-                # In some system buggy cases, the time left can be super high and won't fit into a int32, so we cap it.
-                "TimeLeftSec" : min(timeLeftSec, 2147483600),
+                "TimeLeftSec" : timeLeftSec,
                 "FileName" : fileName,
                 "EstTotalFilUsedMm" : filamentUsedMm,
                 "EstTotalFilWeightMg" : filamentWeightMg,
@@ -108,7 +113,7 @@ class ElegooCommandHandler:
 
     # !! Platform Command Handler Interface Function !!
     # This must return the platform version as a string.
-    def GetPlatformVersionStr(self):
+    def GetPlatformVersionStr(self) -> str:
         # TODO - Ideally we would get this from teh attributes object, but there's nothing in there
         # right now we know IDs the printer.
         return "Elegoo-Centauri"
@@ -118,7 +123,7 @@ class ElegooCommandHandler:
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
-    def ExecutePause(self, smartPause, suppressNotificationBool, disableHotendBool, disableBedBool, zLiftMm, retractFilamentMm, showSmartPausePopup) -> CommandResponse:
+    def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         result = ElegooClient.Get().SendRequest(129)
         if result.HasError():
             return CommandResponse.Error(400, "Failed to send command to printer.")

@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from typing import Tuple
+from typing import Optional, Tuple
 
 from .httpsessions import HttpSessions
 
@@ -16,7 +16,7 @@ class LinkHelper:
     #   1 - bool - Is the printer connected to the service
     #   2 - string - If the printer is setup on an account, the printer name.
     @staticmethod
-    def IsPrinterConnectedToAnAccount(logger:logging.Logger, printerId:str):
+    def IsPrinterConnectedToAnAccount(logger:logging.Logger, printerId:str) -> Tuple[bool, Optional[str]]:
         # Adding retry logic, since one call can fail if the server is updating or whatever.
         attempt = 0
         while True:
@@ -64,7 +64,7 @@ class LinkHelper:
     # Returns the short code string and the amount of time it's valid for in seconds.
     # Returns None if it fails.
     @staticmethod
-    def GetLinkShortCode(logger:logging.Logger, printerId:str) -> Tuple[str, int]:
+    def GetLinkShortCode(logger:logging.Logger, printerId:str) -> Tuple[Optional[str], int]:
         # To make the setup easier, we will present the user with a short code if we can get one.
         # If not, fallback to the full URL.
         # Add retry logic to handle server update cases.
@@ -101,7 +101,7 @@ class LinkHelper:
 
     # Given the printer id this will print a QR code directly to the console.
     @staticmethod
-    def PrintLinkUrlQrCodeToConsole(logger:logging.Logger, printerId:str, source:str=None) -> bool:
+    def PrintLinkUrlQrCodeToConsole(logger:logging.Logger, printerId:str, source:Optional[str]=None) -> bool:
         try:
             # Update the source
             if source is None:
@@ -127,7 +127,7 @@ class LinkHelper:
 
     # Given the printer id, this will return the full URL to the setup page.
     @staticmethod
-    def GetAddPrinterUrl(printerId:str, source:str=None) -> str:
+    def GetAddPrinterUrl(printerId:str, source:Optional[str]=None) -> str:
         # By default this should return a non decorated, since it's printed directly to the user.
         # If a source is set, we will add it to the URL.
         extraArgs = ""
@@ -138,7 +138,7 @@ class LinkHelper:
 
     # This will async run a thread that will provide the user with a link to the printer.
     @staticmethod
-    def RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:str=None) -> None:
+    def RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:Optional[str]=None) -> None:
         t = threading.Thread(target=LinkHelper._RunLinkPluginConsolePrinterAsync, args=(logger, printerId, source))
         t.daemon = True
         t.start()
@@ -146,7 +146,7 @@ class LinkHelper:
 
     # Used by the plugins if they connect to the service and there's no account setup.
     @staticmethod
-    def _RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:str=None):
+    def _RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:Optional[str]=None):
         # This is kicked off when the plugin first connects to the service.
         # In most cases, the user has just installed the plugin and is setting it up, so we want to make the process as easy as possible.
         # So for a bit we will use the short code setup method, and then fallback to the full plugin id URL.
@@ -182,7 +182,7 @@ class LinkHelper:
 
 
     @staticmethod
-    def _DoShortCodeLinkLogic(logger:logging.Logger, printerId:str, source:str=None) -> bool:
+    def _DoShortCodeLinkLogic(logger:logging.Logger, printerId:str, source:Optional[str]=None) -> bool:
         # Since the codes are valid for 15 minutes, that's long enough and we don't really need to loop.
         # But we use this loop for control logic, so we can just keep it here.
         attempt = 0

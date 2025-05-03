@@ -2,9 +2,11 @@ import json
 import socket
 import threading
 import ipaddress
-from typing import Tuple, List
+from typing import Any, Optional, Tuple, List
 
 from octoeverywhere.websocketimpl import Client
+from octoeverywhere.interfaces import IWebSocketClient
+from octoeverywhere.buffer import Buffer
 
 from py_installer.Util import Util
 from py_installer.Logging import Logger
@@ -14,7 +16,7 @@ from py_installer.ConfigHelper import ConfigHelper
 
 # A simple helper that's returned from the moonraker connection test.
 class MoonrakerConnectionResult:
-    def __init__(self, success:bool, unauthorized:bool, exception:Exception=None):
+    def __init__(self, success:bool, unauthorized:bool, exception:Optional[Exception]=None):
         self.Success = success
         self.Unauthorized = unauthorized
         self.Exception = exception
@@ -32,7 +34,7 @@ class MoonrakerConnector:
 
     c_KlipperDefaultPortStr = "7125"
 
-    def EnsureCompanionMoonrakerConnection(self, context:Context):
+    def EnsureCompanionMoonrakerConnection(self, context:Context) -> None:
         Logger.Debug("Running companion ensure config logic.")
 
         # See if there's a valid config already.
@@ -71,7 +73,7 @@ class MoonrakerConnector:
 
     # Helps the user setup a moonraker connection via auto scanning or manual setup.
     # Returns (ip:str, port:str, apiKey:str)
-    def _SetupNewMoonrakerConnection(self) -> Tuple[str, str, str]:
+    def _SetupNewMoonrakerConnection(self) -> Tuple[str, str, Optional[str]]:
         Logger.Blank()
         Logger.Blank()
         Logger.Blank()
@@ -182,7 +184,7 @@ class MoonrakerConnector:
 
 
     # For a given IP address, this will check if the server requires an API key.
-    def _PromptForApiKeyAndValidate(self, ip:str) -> str:
+    def _PromptForApiKeyAndValidate(self, ip:str) -> Optional[str]:
         Logger.Blank()
         Logger.Warn("This Klipper printer requires an API key for authentication.")
         Logger.Info("You can generate a Moonraker API key from either Mainsail or Fluidd, and then paste or enter it here.")
@@ -197,16 +199,16 @@ class MoonrakerConnector:
 
 
     # Given an ip or hostname and port, this will try to detect if there's a moonraker instance.
-    def _CheckForMoonraker(self, ip:str, port:str, apiKey:str=None, timeoutSec:float=5.0) -> MoonrakerConnectionResult:
+    def _CheckForMoonraker(self, ip:str, port:str, apiKey:Optional[str]=None, timeoutSec:float=5.0) -> MoonrakerConnectionResult:
         doneEvent = threading.Event()
         lock = threading.Lock()
-        result = {}
+        result:dict[str, Any] = {}
 
         # Create the URL
         url = f"ws://{ip}:{port}/websocket"
 
         # Setup the callback functions
-        def OnOpened(ws:Client):
+        def OnOpened(ws:IWebSocketClient):
             Logger.Debug(f"Test [{url}] - WS Opened")
             # After the websocket is open, we must send this message to identify ourselves.
             # This is required to check if the server needs auth or not.
@@ -233,15 +235,15 @@ class MoonrakerConnector:
             # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
             jsonStr = json.dumps(obj, default=str)
             jsonBytes = jsonStr.encode("utf-8")
-            ws.Send(jsonBytes, 0, len(jsonBytes), False)
+            ws.Send(Buffer(jsonBytes), 0, len(jsonBytes), False)
 
-        def OnMsg(ws:Client, msg:bytes):
+        def OnMsg(ws:IWebSocketClient, msg:Buffer):
             with lock:
                 if "success" in result:
                     return
                 try:
                     # Try to see if the message looks like one of the first moonraker messages.
-                    msgStr = msg.decode('utf-8')
+                    msgStr = msg.GetBytesLike().decode('utf-8')
                     Logger.Debug(f"Test [{url}] - WS message `{msgStr}`")
                     msgStrLower = msgStr.lower()
 
@@ -258,10 +260,10 @@ class MoonrakerConnector:
                         doneEvent.set()
                 except Exception:
                     pass
-        def OnClosed(ws:Client):
+        def OnClosed(ws:IWebSocketClient):
             Logger.Debug(f"Test [{url}] - Closed")
             doneEvent.set()
-        def OnError(ws:Client, exception:Exception):
+        def OnError(ws:IWebSocketClient, exception:Exception):
             Logger.Debug(f"Test [{url}] - Error: {str(exception)}")
             with lock:
                 result["exception"] = exception
@@ -296,7 +298,7 @@ class MoonrakerConnector:
     # Scans the subnet for Moonraker instances.
     # Returns a list of IPs where moonraker was found.
     def _ScanForMoonrakerInstances(self) -> List[MoonrakerScanResult]:
-        results = []
+        results:List[MoonrakerScanResult] = []
         try:
             localIp = self._TryToGetLocalIp()
             if localIp is None or len(localIp) == 0:
@@ -319,7 +321,7 @@ class MoonrakerConnector:
             doneEvent = threading.Event()
             while counter <= totalThreads:
                 fullIp = ipPrefix + str(counter)
-                def threadFunc(ip):
+                def threadFunc(ip:str):
                     try:
                         checkResult = self._CheckForMoonraker(ip, MoonrakerConnector.c_KlipperDefaultPortStr, apiKey=None, timeoutSec=5.0)
                         with threadLock:
@@ -358,4 +360,4 @@ class MoonrakerConnector:
             pass
         finally:
             s.close()
-        return ip
+        return str(ip)

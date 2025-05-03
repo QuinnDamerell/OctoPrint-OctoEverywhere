@@ -1,5 +1,9 @@
+import logging
+from typing import Optional
+
 from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.interfaces import IApiRouteHandler
 
 from .moonrakerclient import MoonrakerClient
 
@@ -10,25 +14,26 @@ from .moonrakerclient import MoonrakerClient
 #
 # Note that we only do this for moonraker, since the webcams are already setup to be shared, we dont have to mess
 # with them.
-class MoonrakerApiRouter:
+class MoonrakerApiRouter(IApiRouteHandler):
 
     # The static instance.
-    _Instance = None
+    _Instance: "MoonrakerApiRouter" = None #pyright: ignore[reportAssignmentType]
+
 
     @staticmethod
-    def Init(logger):
+    def Init(logger:logging.Logger):
         MoonrakerApiRouter._Instance = MoonrakerApiRouter(logger)
         Compat.SetApiRouterHandler(MoonrakerApiRouter._Instance)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "MoonrakerApiRouter":
         return MoonrakerApiRouter._Instance
 
 
-    def __init__(self, logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
-        self.MoonrakerPortStr = None
+        self.MoonrakerPortStr: Optional[str] = None
 
         # Get the moonraker port from the config.
         (ipOrHostnameStr, portInt) = MoonrakerClient.Get().GetMoonrakerHostAndPortFromConfig()
@@ -46,7 +51,7 @@ class MoonrakerApiRouter:
     # Since the subdomain will map the request to the correct instance bound to the moonraker instance, the
     # plugin can figure which calls are for moonraker and map them to the known instance port.
     # Note this will be used by both websockets and http calls.
-    def MapRelativePathToAbsolutePathIfNeeded(self, relativeUrl, protocol):
+    def MapRelativePathToAbsolutePathIfNeeded(self, relativeUrl:str, protocol:str) -> Optional[str]:
         # If we have no port, do nothing.
         if self.MoonrakerHostAndPortStr is None:
             return None
@@ -61,5 +66,5 @@ class MoonrakerApiRouter:
             if relativeUrlLower.startswith("/websocket") or relativeUrlLower.startswith("/printer/") or relativeUrlLower.startswith("/api/") or relativeUrlLower.startswith("/access/") or relativeUrlLower.startswith("/machine/") or relativeUrlLower.startswith("/server/") or relativeUrlLower.startswith("/debug/"):
                 return protocol + self.MoonrakerHostAndPortStr + relativeUrl
         except Exception as e:
-            Sentry.Exception("MoonrakerApiRouter exception while handling MapRelativePathToAbsolutePathIfNeeded.", e)
+            Sentry.OnException("MoonrakerApiRouter exception while handling MapRelativePathToAbsolutePathIfNeeded.", e)
         return None

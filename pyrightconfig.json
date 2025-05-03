@@ -1,0 +1,23 @@
+{
+    "comment":"Note we can not use the pyproject.toml file because it breaks OctoPrint installs.",
+    "exclude": [
+        "**/node_modules",
+        "**/__pycache__",
+        "**/Proto",
+        "**/.vscode",
+        "**/debugprofiler.py",
+    ],
+
+    "pythonVersion_c":"Set the version to the oldest we support, so we can catch issues.",
+    "pythonVersion": "3.7",
+    "pythonPlatform": "Linux",
+
+    "_strict_c_1":"TODO: Overtime sent more of these to strict so we can catch more issues",
+    "_strict_c_2":"Enable this to set all to strict (remove the _)",
+    "_strict": ["**"],
+
+    "reportUnknownParameterType":"error",
+    "reportUnknownMemberType":"error",
+    "reportDeprecated":"error",
+    "useless-return":"error",
+  }

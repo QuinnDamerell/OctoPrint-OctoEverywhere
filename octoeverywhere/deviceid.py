@@ -3,6 +3,7 @@ import sys
 import logging
 import platform
 import subprocess
+from typing import Optional
 
 from .sentry import Sentry
 
@@ -10,7 +11,7 @@ from .sentry import Sentry
 # Inspired by https://github.com/keygen-sh/py-machineid/blob/master/machineid/__init__.py
 class DeviceId:
 
-    _Instance = None
+    _Instance:"DeviceId" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
     def Init(logger: logging.Logger):
@@ -18,7 +19,7 @@ class DeviceId:
 
 
     @staticmethod
-    def Get():
+    def Get() -> "DeviceId":
         return DeviceId._Instance
 
 
@@ -29,15 +30,15 @@ class DeviceId:
     # Get's a unique ID for the platform. The ID should be unique per platform and ideally not change even when the OS is re-installed.
     # This ID can't not be written to disk it must come from the system level some how.
     # If nothing can be found, None is return.
-    def GetId(self) -> str:
+    def GetId(self) -> Optional[str]:
         try:
             return self._GetIdInternal()
         except Exception as e:
-            Sentry.Exception("Exception in DeviceId.GetId", e)
+            Sentry.OnException("Exception in DeviceId.GetId", e)
         return None
 
 
-    def _GetIdInternal(self) -> str:
+    def _GetIdInternal(self) -> Optional[str]:
         # We have a few options to get a unique id for the device.
         # Try each possible method and return the first one that works.
         # We prefix each system, to ensure there are no collisions
@@ -98,13 +99,13 @@ class DeviceId:
                 self.Logger.debug(f"Found device id from kenv -q smbios.system.uuid: {fid}")
                 return self._BuildId("bsd-k", fid)
 
-        self.Logger.warn(f"Found device ID not found on platform: {sys.platform}")
+        self.Logger.warning(f"Found device ID not found on platform: {sys.platform}")
         return None
 
 
     # If the file exists and is readable, returns the body.
     # Otherwise None
-    def _ReadFile(self, path: str) -> str:
+    def _ReadFile(self, path: str) -> Optional[str]:
         try:
             with open(path, encoding="utf-8") as f:
                 return f.read().strip()
@@ -114,7 +115,7 @@ class DeviceId:
 
     # Runs the command and returns stdout.
     # Otherwise None
-    def _RunCmd(self, cmd: str) -> str:
+    def _RunCmd(self, cmd: str) -> Optional[str]:
         try:
             return subprocess.run(cmd, shell=True, capture_output=True, check=True, encoding="utf-8").stdout.strip()
         except Exception:

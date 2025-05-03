@@ -6,6 +6,7 @@ import queue
 import logging
 import math
 import configparser
+from typing import Any, Dict, Optional, Tuple
 
 import octowebsocket
 
@@ -15,77 +16,43 @@ from octoeverywhere.websocketimpl import Client
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.exceptions import NoSentryReportException
 from octoeverywhere.debugprofiler import DebugProfiler, DebugProfilerFeatures
+from octoeverywhere.buffer import Buffer
+from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter
 
 from linux_host.config import Config
 
 from .filemetadatacache import FileMetadataCache
 from .moonrakercredentailmanager import MoonrakerCredentialManager
-
-# The response object for a json rpc request.
-# Contains information on the state, and if successful, the result.
-class JsonRpcResponse:
-
-    # Our specific errors
-    OE_ERROR_WS_NOT_CONNECTED = 99990001
-    OE_ERROR_TIMEOUT = 99990002
-    OE_ERROR_EXCEPTION = 99990003
-    # Range helpers.
-    OE_ERROR_MIN = OE_ERROR_WS_NOT_CONNECTED
-    OE_ERROR_MAX = OE_ERROR_EXCEPTION
-
-    def __init__(self, resultObj, errorCode = 0, errorStr : str = None) -> None:
-        self.Result = resultObj
-        self.ErrorCode = errorCode
-        self.ErrorStr = errorStr
-        if self.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
-            self.ErrorStr = "Timeout waiting for RPC response."
-        if self.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
-            self.ErrorStr = "No active websocket connected."
-
-    def HasError(self) -> bool:
-        return self.ErrorCode != 0
-
-    def GetErrorCode(self) -> int:
-        return self.ErrorCode
-
-    def IsErrorCodeOeError(self) -> bool:
-        return self.ErrorCode >= JsonRpcResponse.OE_ERROR_MIN and self.ErrorCode <= JsonRpcResponse.OE_ERROR_MAX
-
-    def GetErrorStr(self) -> str:
-        return self.ErrorStr
-
-    def GetLoggingErrorStr(self) -> str:
-        return str(self.ErrorCode) + " - " + str(self.ErrorStr)
-
-    def GetResult(self):
-        return self.Result
+from .interfaces import IMoonrakerConnectionStatusHandler
+from .jsonrpcresponse import JsonRpcResponse
+from .interfaces import IMoonrakerClient
 
 
 # This class is our main interface to interact with moonraker. This includes the logic to make
 # requests with moonraker and logic to maintain a websocket connection.
-class MoonrakerClient:
+class MoonrakerClient(IMoonrakerClient):
 
     # The max amount of time we will wait for a request before we timeout.
     # For some reason, some calls seem to take a really long time to complete (like database calls), so we make this timeout quite high.
     RequestTimeoutSec = 60.0
 
     # Logic for a static singleton
-    _Instance = None
+    _Instance:"MoonrakerClient" = None #pyright: ignore[reportAssignmentType]
 
     # If enabled, this prints all of the websocket messages sent and received.
     WebSocketMessageDebugging = False
 
     @staticmethod
-    def Init(logger, config, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler, pluginVersionStr:str):
+    def Init(logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
         MoonrakerClient._Instance = MoonrakerClient(logger, config, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "MoonrakerClient":
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, moonrakerConfigFilePath:str, printerId:str, connectionStatusHandler, pluginVersionStr:str) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str) -> None:
         self.Logger = logger
         self.Config = config
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
@@ -97,15 +64,15 @@ class MoonrakerClient:
         # Setup the json-rpc vars
         self.JsonRpcIdLock = threading.Lock()
         self.JsonRpcIdCounter = 0
-        self.JsonRpcWaitingContexts = {}
+        self.JsonRpcWaitingContexts:dict[int, JsonRpcWaitingContext] = {}
 
         # Setup the Moonraker compat helper object.
-        cooldownThresholdTempC = self.Config.GetFloat(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
+        cooldownThresholdTempC = self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
         self.MoonrakerCompat = MoonrakerCompat(self.Logger, printerId, cooldownThresholdTempC)
 
         # Setup the non response message thread
         # See _NonResponseMsgQueueWorker to why this is needed.
-        self.NonResponseMsgQueue = queue.Queue(20000)
+        self.NonResponseMsgQueue:queue.Queue[dict[str,Any]] = queue.Queue(20000)
         self.NonResponseMsgThread = threading.Thread(target=self._NonResponseMsgQueueWorker)
         self.NonResponseMsgThread.start()
 
@@ -115,15 +82,15 @@ class MoonrakerClient:
         self.MoonrakerApiKey = self.Config.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, keepInConfigIfNone=True)
         # Same idea, but sometimes we need to get the oneshot_token to access the system.
         # This code is only valid for 5 seconds, so it will be retrieved when we need it.
-        self.OneshotToken = None
+        self.OneshotToken:Optional[str] = None
 
         # Setup the WS vars and a websocket worker thread.
         # Don't run it until StartRunningIfNotAlready is called!
-        self.WebSocket = None
+        self.WebSocket:Optional[Client] = None
         self.WebSocketConnected = False
         self.WebSocketKlippyReady = False
         self.WebSocketLock = threading.Lock()
-        self.WebSocketDebugProfiler:DebugProfiler = None # Must be created on the thread.
+        self.WebSocketDebugProfiler:Optional[DebugProfiler] = None # Must be created on the thread.
         self.WsThread = threading.Thread(target=self._WebSocketWorkerThread)
         self.WsThreadRunning = False
         self.WsThread.daemon = True
@@ -133,11 +100,11 @@ class MoonrakerClient:
         return self.MoonrakerCompat.GetNotificationHandler()
 
 
-    def GetMoonrakerCompat(self):
+    def GetMoonrakerCompat(self) -> "MoonrakerCompat":
         return self.MoonrakerCompat
 
 
-    def GetIsKlippyReady(self):
+    def GetIsKlippyReady(self) -> bool:
         return self.WebSocketKlippyReady
 
 
@@ -160,7 +127,7 @@ class MoonrakerClient:
     # This is so every http call doesn't have to read the file, but as long as the WS is connected, we know the address is correct.
     def _UpdateMoonrakerHostAndPort(self) -> None:
         # If we aren't in companion mode, ensure there's a valid moonraker config file on disk
-        if Compat.IsCompanionMode() is False:
+        if Compat.IsCompanionMode() is False and self.MoonrakerConfigFilePath is not None:
             if os.path.exists(self.MoonrakerConfigFilePath) is False:
                 self.Logger.error("Moonraker client failed to find a moonraker config. Re-run the ./install.sh script from the OctoEverywhere repo to update the path.")
                 raise NoSentryReportException("No moonraker config file found")
@@ -175,7 +142,7 @@ class MoonrakerClient:
     # Parses the config file for the hostname and port.
     # If no file is found or the server block is missing, this will return the default values.
     # Always returns the hostname as a string, and the port as an int.
-    def GetMoonrakerHostAndPortFromConfig(self):
+    def GetMoonrakerHostAndPortFromConfig(self) -> Tuple[str, int]:
         currentPortInt = 7125
         currentHostStr = "0.0.0.0"
         try:
@@ -189,7 +156,7 @@ class MoonrakerClient:
                 return (ip, int(portStr))
 
             # Ensure we have a file.
-            if os.path.exists(self.MoonrakerConfigFilePath) is False:
+            if self.MoonrakerConfigFilePath is None or os.path.exists(self.MoonrakerConfigFilePath) is False:
                 self.Logger.error("GetMoonrakerHostAndPortFromConfig failed to find moonraker config file.")
                 return (currentHostStr, currentPortInt)
 
@@ -215,11 +182,11 @@ class MoonrakerClient:
                 # Done!
                 return (currentHostStr, currentPortInt)
             except configparser.ParsingError as e:
-                self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+                self.Logger.warning("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
             except AttributeError as e:
                 # This seems to be a configparser bug.
                 if "'NoneType' object has no attribute 'append'" in str(e):
-                    self.Logger.warn("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
+                    self.Logger.warning("Failed to parse moonraker config file. We will try a manual parse. "+str(e))
                 else:
                     raise e
 
@@ -230,13 +197,13 @@ class MoonrakerClient:
                 foundPort = False
                 # Just look for the host and port lines.
                 lines = f.readlines()
-                for l in lines:
-                    lLower = l.lower()
+                for line in lines:
+                    lLower = line.lower()
                     if "host:" in lLower:
-                        currentHostStr = l.split(":", 1)[1].strip()
+                        currentHostStr = line.split(":", 1)[1].strip()
                         foundHost = True
                     if "port:" in lLower:
-                        currentPortInt = int(l.split(":", 1)[1].strip())
+                        currentPortInt = int(line.split(":", 1)[1].strip())
                         foundPort = True
                     if foundHost and foundPort:
                         break
@@ -246,9 +213,9 @@ class MoonrakerClient:
             if "Source contains parsing errors" in str(e):
                 self.Logger.error("Failed to parse moonraker config file. "+str(e))
             else:
-                Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
+                Sentry.OnException("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
         except Exception as e:
-            Sentry.Exception("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
+            Sentry.OnException("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
         return (currentHostStr, currentPortInt)
 
 
@@ -263,7 +230,7 @@ class MoonrakerClient:
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    def SendJsonRpcRequest(self, method:str, paramsDict = None) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -291,7 +258,7 @@ class MoonrakerClient:
             jsonStr = json.dumps(obj, default=str)
             if self._WebSocketSend(jsonStr) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
-                return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
+                return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
 
             # Wait for a response
             waitContext.GetEvent().wait(MoonrakerClient.RequestTimeoutSec)
@@ -300,30 +267,28 @@ class MoonrakerClient:
             result = waitContext.GetResult()
             if result is None:
                 self.Logger.info("Moonraker client timeout while waiting for request. "+str(id)+" "+method)
-                return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_TIMEOUT)
+                return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_TIMEOUT)
 
             # Check for an error if found, return the error state.
-            if "error" in result:
+            error = result.get("error", None)
+            if error is not None:
                 # Get the error parts
-                errorCode = JsonRpcResponse.OE_ERROR_EXCEPTION
-                errorStr = "Unknown"
-                if "code" in result["error"]:
-                    errorCode = result["error"]["code"]
-                if "message" in result["error"]:
-                    errorStr = result["error"]["message"]
-                return JsonRpcResponse(None, errorCode, errorStr)
+                errorCode = error.get("code", JsonRpcResponse.OE_ERROR_EXCEPTION)
+                errorStr = error.get("message", "Unknown")
+                return JsonRpcResponse.FromError(errorCode, errorStr)
 
             # If there's a result, return the entire response
-            if "result" in result:
-                return JsonRpcResponse(result["result"])
+            resultObj = result.get("result", None)
+            if resultObj is not None and isinstance(resultObj, dict):
+                return JsonRpcResponse.FromSuccess(resultObj)
 
             # Finally, both are missing?
             self.Logger.error("Moonraker client json rpc got a response that didn't have an error or result object? "+json.dumps(result))
-            return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object")
+            return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object")
 
         except Exception as e:
-            Sentry.Exception("Moonraker client json rpc request failed to send.", e)
-            return JsonRpcResponse(None, JsonRpcResponse.OE_ERROR_EXCEPTION, str(e))
+            Sentry.OnException("Moonraker client json rpc request failed to send.", e)
+            return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_EXCEPTION, str(e))
 
         finally:
             # Before leaving, always clean up any waiting contexts.
@@ -354,9 +319,9 @@ class MoonrakerClient:
             try:
                 # Since we must encode the data, which will create a copy, we might as well just send the buffer as normal,
                 # without adding the extra space for the header. We can add the header here or in the WS lib, it's the same amount of work.
-                localWs.Send(jsonStr.encode("utf-8"), isData=False)
+                localWs.Send(Buffer(jsonStr.encode("utf-8")), isData=False)
             except Exception as e:
-                Sentry.Exception("Moonraker client exception in websocket send.", e)
+                Sentry.OnException("Moonraker client exception in websocket send.", e)
                 return False
         return True
 
@@ -364,7 +329,7 @@ class MoonrakerClient:
     # Called when a new websocket is connected and klippy is ready.
     # At this point, we should setup anything we need to do and sync any state required.
     # This is called on a background thread, so we can block this.
-    def _OnWsOpenAndKlippyReady(self):
+    def _OnWsOpenAndKlippyReady(self) -> None:
         self.Logger.info("Moonraker client setting up default notification hooks")
         # First, we need to setup our notification subs
         # https://moonraker.readthedocs.io/en/latest/web_api/#subscribe-to-printer-object-status
@@ -398,12 +363,13 @@ class MoonrakerClient:
 
     # Called when the websocket gets any other message that's not a RPC response.
     # If we throw from here, the websocket will close and restart.
-    def _OnWsNonResponseMessage(self, msg:str):
+    def _OnWsNonResponseMessage(self, msg:Dict[str, Any]) -> None:
         # Get the common method string
-        if "method" not in msg:
-            self.Logger.warn("Moonraker WS message received with no method "+json.dumps(msg))
+        method = msg.get("method", None)
+        if method is None:
+            self.Logger.warning("Moonraker WS message received with no method "+json.dumps(msg))
             return
-        method = msg["method"].lower()
+        method = method.lower()
 
         # These objects can come in all shapes and sizes. So we only look for exactly what we need, if we don't find it
         # We ignore the object, someone else might match it.
@@ -417,9 +383,9 @@ class MoonrakerClient:
                     jobContainerObj = self._GetWsMsgParam(msg, "job")
                     if jobContainerObj is not None:
                         jobObj = jobContainerObj["job"]
-                        if "filename" in jobObj:
-                            fileName = jobObj["filename"]
-                            self.MoonrakerCompat.OnPrintStart(fileName)
+                        filename = jobObj.get("filename", None)
+                        if filename is not None:
+                            self.MoonrakerCompat.OnPrintStart(filename)
                             return
                 elif action == "finished":
                     # This can be a finish canceled or failed.
@@ -442,14 +408,14 @@ class MoonrakerClient:
 
         if method == "notify_status_update":
             # This is shared by a few things, so get it once.
-            progressFloat_CanBeNone = self._GetProgressFromMsg(msg)
+            progressFloat = self._GetProgressFromMsg(msg)
 
             # Check for a state container
             stateContainerObj = self._GetWsMsgParam(msg, "print_stats")
             if stateContainerObj is not None:
                 ps = stateContainerObj["print_stats"]
-                if "state" in ps:
-                    state = ps["state"]
+                state = ps.get("state", None)
+                if state is not None:
                     # Check for pause
                     if state == "paused":
                         self.MoonrakerCompat.OnPrintPaused()
@@ -459,7 +425,7 @@ class MoonrakerClient:
                     # 0.01 == 1%, so if the print is resumed before then, this won't fire. For small prints, we need to have a high threshold,
                     # so they don't trigger something too much lower too easily.
                     elif state == "printing":
-                        if progressFloat_CanBeNone is None or progressFloat_CanBeNone > 0.01:
+                        if progressFloat is None or progressFloat > 0.01:
                             Sentry.Breadcrumb("Sending Resume Notification", stateContainerObj)
                             self.MoonrakerCompat.OnPrintResumed()
                             return
@@ -469,8 +435,8 @@ class MoonrakerClient:
 
             # Report progress. Do this after the others so they will report before a potential progress update.
             # Progress updates super frequently (like once a second) so there's plenty of chances.
-            if progressFloat_CanBeNone is not None:
-                self.MoonrakerCompat.OnPrintProgress(progressFloat_CanBeNone)
+            if progressFloat is not None:
+                self.MoonrakerCompat.OnPrintProgress(progressFloat)
 
         # When the webcams change, kick the webcam helper.
         if method == "notify_webcams_changed":
@@ -479,20 +445,21 @@ class MoonrakerClient:
 
     # If the message has a progress contained in the virtual_sdcard, this returns it. The progress is a float from 0.0->1.0
     # Otherwise None
-    def _GetProgressFromMsg(self, msg):
+    def _GetProgressFromMsg(self, msg:Dict[str, Any]) -> Optional[float]:
         vsdContainerObj = self._GetWsMsgParam(msg, "virtual_sdcard")
         if vsdContainerObj is not None:
             vsd = vsdContainerObj["virtual_sdcard"]
-            if "progress" in vsd:
-                return vsd["progress"]
+            progress = vsd.get("progress", None)
+            if progress is not None:
+                return float(progress)
         return None
 
 
     # Given a property name, returns the correct param object that contains that object.
-    def _GetWsMsgParam(self, msg, paramName):
-        if "params" not in msg:
+    def _GetWsMsgParam(self, msg:Dict[str, Any], paramName:str) -> Optional[Dict[str, Any]]:
+        paramArray = msg.get("params")
+        if paramArray is None:
             return None
-        paramArray = msg["params"]
         for p in paramArray:
             # Only test things that are dicts.
             if isinstance(p, dict) and paramName in p:
@@ -500,7 +467,7 @@ class MoonrakerClient:
         return None
 
 
-    def _WebSocketWorkerThread(self):
+    def _WebSocketWorkerThread(self) -> None:
         self.Logger.info("Moonraker client starting websocket connection thread.")
         self.WebSocketDebugProfiler = DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsThread)
         while True:
@@ -521,11 +488,10 @@ class MoonrakerClient:
                 self.Logger.info("Connecting to moonraker: "+url)
                 with self.WebSocketLock:
                     self.WebSocket = Client(url,
-                                    self._OnWsOpened,
-                                    self._onWsMsg,
-                                    None, # self._onWsData, all messages are passed to data and msg, so we don't need this.
-                                    self._onWsClose,
-                                    self._onWsError
+                                    onWsOpen=self._OnWsOpened,
+                                    onWsMsg=self._onWsMsg,
+                                    onWsClose=self._onWsClose,
+                                    onWsError=self._onWsError
                                     )
 
                 # Run until the socket closes
@@ -534,7 +500,7 @@ class MoonrakerClient:
                     self.WebSocket.RunUntilClosed()
 
             except Exception as e:
-                Sentry.Exception("Moonraker client exception in main WS loop.", e)
+                Sentry.OnException("Moonraker client exception in main WS loop.", e)
 
             # Inform that we lost the connection.
             self.Logger.info("Moonraker client websocket connection lost. We will try to restart it soon.")
@@ -557,7 +523,7 @@ class MoonrakerClient:
 
     # Based on the docs: https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     # After the websocket is open, we need to do this sequence to make sure the system is healthy and ready.
-    def _AfterOpenReadyWaiter(self, targetWsObjRef):
+    def _AfterOpenReadyWaiter(self, targetWsObjRef:IWebSocketClient) -> None:
         logCounter = 0
         self.Logger.info("Moonraker client waiting for klippy ready...")
         try:
@@ -588,11 +554,11 @@ class MoonrakerClient:
                 # trying to monitor is gone and the system has started a new one.
                 testWs = self.WebSocket
                 if testWs is None or testWs is not targetWsObjRef:
-                    self.Logger.warn("The target websocket changed while waiting on klippy ready.")
+                    self.Logger.warning("The target websocket changed while waiting on klippy ready.")
                     return
 
                 # Query the state, use the force flag to make sure we send even though klippy ready is not set.
-                result = self.SendJsonRpcRequest("server.info", None)
+                result = self.SendJsonRpcRequest("server.info")
 
                 # Check for error
                 if result.HasError():
@@ -648,7 +614,7 @@ class MoonrakerClient:
                 raise Exception(f"Unknown klippy waiting state. {state}")
 
         except Exception as e:
-            Sentry.Exception("Moonraker client exception in klippy waiting logic.", e)
+            Sentry.OnException("Moonraker client exception in klippy waiting logic.", e)
             # Shut down the websocket so we do the reconnect logic.
             self._RestartWebsocket()
 
@@ -682,7 +648,7 @@ class MoonrakerClient:
 
 
     # Kills the current websocket connection. Our logic will auto try to reconnect.
-    def _RestartWebsocket(self):
+    def _RestartWebsocket(self) -> None:
         with self.WebSocketLock:
             if self.WebSocket is None:
                 return
@@ -692,7 +658,7 @@ class MoonrakerClient:
 
 
     # Called when the websocket is opened.
-    def _OnWsOpened(self, ws):
+    def _OnWsOpened(self, ws:IWebSocketClient) -> None:
         self.Logger.info("Moonraker client websocket opened.")
 
         # Set that the websocket is open.
@@ -705,32 +671,33 @@ class MoonrakerClient:
         t.start()
 
 
-    def _onWsMsg(self, ws, msgBytes: bytes):
+    def _onWsMsg(self, ws:IWebSocketClient, msgBytes:Buffer) -> None:
         try:
             # Parse the incoming message.
-            msgObj = json.loads(msgBytes)
+            msgObj:dict[str, Any] = json.loads(msgBytes.GetBytesLike())
 
             # Get the method if there is one.
-            method_CanBeNone = None
+            method:Optional[str] = None
             if "method" in msgObj:
-                method_CanBeNone = msgObj["method"]
+                method = msgObj["method"]
 
             # Print for debugging
             if MoonrakerClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
                 # Exclude this really chatty message.
-                msgStr = msgBytes.decode(encoding="utf-8")
+                msgStr = msgBytes.GetBytesLike().decode(encoding="utf-8")
                 if "moonraker_stats" not in msgStr:
                     self.Logger.debug("Ws <-: %s", msgStr)
 
             # Check if this is a response to a request
             # info: https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
-            if "id" in msgObj:
+            idInt:Optional[int] = msgObj.get("id", None)
+            if idInt is not None:
                 with self.JsonRpcIdLock:
-                    idInt = int(msgObj["id"])
-                    if idInt in self.JsonRpcWaitingContexts:
-                        self.JsonRpcWaitingContexts[idInt].SetResultAndEvent(msgObj)
+                    context = self.JsonRpcWaitingContexts.get(idInt, None)
+                    if context is not None:
+                        context.SetResultAndEvent(msgObj)
                     else:
-                        self.Logger.warn("Moonraker RPC response received for request "+str(idInt) + ", but there is no waiting context.")
+                        self.Logger.warning("Moonraker RPC response received for request "+str(idInt) + ", but there is no waiting context.")
                     # If once the response is handled, we are done.
                     return
 
@@ -739,8 +706,8 @@ class MoonrakerClient:
             # nuke the WS and start again.
             # The system seems to use both of these at different times. If there's a print running it uses notify_klippy_shutdown, where as if there's not
             # it seems to use notify_klippy_disconnected. We handle them both as the same.
-            if method_CanBeNone is not None and (method_CanBeNone == "notify_klippy_disconnected" or method_CanBeNone == "notify_klippy_shutdown"):
-                self.Logger.info("Moonraker client received %s notification, so we will restart our client connection.", method_CanBeNone)
+            if method is not None and (method == "notify_klippy_disconnected" or method == "notify_klippy_shutdown"):
+                self.Logger.info("Moonraker client received %s notification, so we will restart our client connection.", method)
                 self._RestartWebsocket()
                 self.MoonrakerCompat.KlippyDisconnectedOrShutdown()
                 return
@@ -753,36 +720,38 @@ class MoonrakerClient:
             self.NonResponseMsgQueue.put_nowait(msgObj)
 
         except Exception as e:
-            Sentry.Exception("Exception while handing moonraker client websocket message.", e)
+            Sentry.OnException("Exception while handing moonraker client websocket message.", e)
             # Raise again which will cause the websocket to close and reset.
             raise e
 
-        self.WebSocketDebugProfiler.ReportIfNeeded()
+        finally:
+            if self.WebSocketDebugProfiler is not None:
+                self.WebSocketDebugProfiler.ReportIfNeeded()
 
 
-    def _NonResponseMsgQueueWorker(self):
+    def _NonResponseMsgQueueWorker(self) -> None:
         try:
             # The profiler will do nothing if it's not enabled.
             with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsMsgThread) as profiler:
                 while True:
                     # Wait for a message to process.
-                    msg = self.NonResponseMsgQueue.get()
+                    msg:dict = self.NonResponseMsgQueue.get()
                     # Process and then wait again.
                     self._OnWsNonResponseMessage(msg)
                     # Let the profiler report if needed
                     profiler.ReportIfNeeded()
         except Exception as e:
-            Sentry.Exception("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
+            Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
         self._RestartWebsocket()
 
 
     # Called when the websocket is closed for any reason, connection loss or exception
-    def _onWsClose(self, ws):
+    def _onWsClose(self, ws:IWebSocketClient) -> None:
         self.Logger.info("Moonraker websocket connection closed.")
 
 
     # Called if the websocket hits an error and is closing.
-    def _onWsError(self, ws, exception):
+    def _onWsError(self, ws:IWebSocketClient, exception:Exception) -> None:
         if Client.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
             pass
@@ -790,39 +759,39 @@ class MoonrakerClient:
             # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
             self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
         else:
-            Sentry.Exception("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
+            Sentry.OnException("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
 
 
 # A helper class used for waiting rpc requests
 class JsonRpcWaitingContext:
 
-    def __init__(self, msgId) -> None:
+    def __init__(self, msgId:int) -> None:
         self.Id = msgId
         self.WaitEvent = threading.Event()
-        self.Result = None
+        self.Result:Optional[Dict[str, Any]] = None
 
 
-    def GetEvent(self):
+    def GetEvent(self) -> threading.Event:
         return self.WaitEvent
 
 
-    def GetResult(self):
+    def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
 
 
-    def SetResultAndEvent(self, result):
+    def SetResultAndEvent(self, result:Dict[str, Any]) -> None:
         self.Result = result
         self.WaitEvent.set()
 
 
-    def SetSocketClosed(self):
+    def SetSocketClosed(self) -> None:
         self.Result = None
         self.WaitEvent.set()
 
 
 # The goal of this class it add any needed compatibility logic to allow the moonraker system plugin into the
 # common OctoEverywhere logic.
-class MoonrakerCompat:
+class MoonrakerCompat(IPrinterStateReporter):
 
     def __init__(self, logger:logging.Logger, printerId:str, bedCooldownThresholdTempC:float) -> None:
         self.Logger = logger
@@ -841,11 +810,11 @@ class MoonrakerCompat:
         self.NotificationHandler.SetBedCooldownThresholdTemp(bedCooldownThresholdTempC)
 
 
-    def SetOctoKey(self, octoKey:str):
+    def SetOctoKey(self, octoKey:str) -> None:
         self.NotificationHandler.SetOctoKey(octoKey)
 
 
-    def GetNotificationHandler(self):
+    def GetNotificationHandler(self) -> NotificationsHandler:
         return self.NotificationHandler
 
 
@@ -873,7 +842,7 @@ class MoonrakerCompat:
 
 
     # Called when a new websocket is established to moonraker.
-    def OnMoonrakerClientConnected(self):
+    def OnMoonrakerClientConnected(self) -> None:
 
         # This is the hardest of all the calls. The reason being, this call can happen if our service or moonraker restarted, an print
         # can be running while either of those restart. So we need to sync the state here, and make sure things like Gadget and the
@@ -887,7 +856,7 @@ class MoonrakerCompat:
 
     # Called when moonraker's connection to klippy disconnects.
     # The systems seems to use disconnect and shutdown at different times for the same purpose, so we handle both the same.
-    def KlippyDisconnectedOrShutdown(self):
+    def KlippyDisconnectedOrShutdown(self) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
@@ -912,15 +881,12 @@ class MoonrakerCompat:
             if MoonrakerClient.Get().GetIsKlippyReady() is False:
                 # Send a notification to the user.
                 self.NotificationHandler.OnError("Klipper Disconnected")
-
-        # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
         thread = threading.Thread(target=disconnectWaiter)
-        thread.isDaemon = True
         thread.start()
 
 
     # Called when a new print is starting.
-    def OnPrintStart(self, fileName):
+    def OnPrintStart(self, fileName:str) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
@@ -941,7 +907,7 @@ class MoonrakerCompat:
         self.NotificationHandler.OnStarted(self._GetPrintCookie(fileName), fileName, fileSizeKBytes, filamentUsageMm)
 
 
-    def OnDone(self):
+    def OnDone(self) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
@@ -952,7 +918,7 @@ class MoonrakerCompat:
 
 
     # Called when a print ends due to a failure or was cancelled
-    def OnFailedOrCancelled(self, fileName, totalDurationSecFloat):
+    def OnFailedOrCancelled(self, fileName:str, totalDurationSec:float) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
@@ -960,39 +926,39 @@ class MoonrakerCompat:
         # The API expects the duration as a float of seconds, as a string.
         # The API expects either cancelled or error for the reason. This is the only two strings OctoPrint produces.
         # We can't differentiate between printer errors and user canceling the print right now, so we always use cancelled.
-        self.NotificationHandler.OnFailed(fileName, str(totalDurationSecFloat), "cancelled")
+        self.NotificationHandler.OnFailed(fileName, str(totalDurationSec), "cancelled")
 
 
     # Called the the print is paused.
-    def OnPrintPaused(self):
+    def OnPrintPaused(self) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
 
         # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
         stats = self._GetCurrentPrintStats()
-        fileName = None
+        fileName:Optional[str] = None
         if stats is not None:
-            fileName = stats["filename"]
+            fileName = stats.get("filename", None)
         self.NotificationHandler.OnPaused(fileName)
 
 
     # Called the the print is resumed.
-    def OnPrintResumed(self):
+    def OnPrintResumed(self) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
 
         # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
         stats = self._GetCurrentPrintStats()
-        fileName = None
+        fileName:Optional[str] = None
         if stats is not None:
-            fileName = stats["filename"]
+            fileName = stats.get("filename", None)
         self.NotificationHandler.OnResume(fileName)
 
 
     # Called when there's a print percentage progress update.
-    def OnPrintProgress(self, progressFloat):
+    def OnPrintProgress(self, progress:float) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
@@ -1005,7 +971,7 @@ class MoonrakerCompat:
         self.TimeSinceLastProgressUpdate = nowSec
 
         # Moonraker uses from 0->1 to progress while we assume 100->0
-        self.NotificationHandler.OnPrintProgress(None, progressFloat*100.0)
+        self.NotificationHandler.OnPrintProgress(None, progress * 100.0)
 
 
     #
@@ -1015,7 +981,7 @@ class MoonrakerCompat:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # This function will get the estimated time remaining for the current print.
     # Returns -1 if the estimate is unknown.
-    def GetPrintTimeRemainingEstimateInSeconds(self):
+    def GetPrintTimeRemainingEstimateInSeconds(self) -> int:
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
             "objects": {
@@ -1032,7 +998,7 @@ class MoonrakerCompat:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self):
+    def GetCurrentZOffsetMm(self) -> int:
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
             "objects": {
@@ -1041,8 +1007,8 @@ class MoonrakerCompat:
             }
         })
         if result.HasError():
-            self.Logger.error("GetCurrentZOffset failed to query toolhead objects: "+result.GetLoggingErrorStr())
-            return False
+            self.Logger.error("GetCurrentZOffsetMm failed to query toolhead objects: "+result.GetLoggingErrorStr())
+            return -1
 
         # If we are warming up, don't return a value, since the z-axis could be at any level before the print starts.
         if self.CheckIfPrinterIsWarmingUp_WithPrintStats(result):
@@ -1054,17 +1020,16 @@ class MoonrakerCompat:
             zAxisPositionFloat = res["toolhead"]["position"][2]
             return zAxisPositionFloat
         except Exception as e:
-            Sentry.Exception("GetCurrentZOffset exception. ", e)
+            Sentry.OnException("GetCurrentZOffsetMm exception. ", e)
         return -1
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
-    # If this platform DOESN'T support getting the layer info from the system, this returns (None, None)
-    # If the platform does support it...
-    #     If the current value is unknown, (0,0) is returned.
-    #     If the values are known, (currentLayer(int), totalLayers(int)) is returned.
-    #          Note that total layers will always be > 0, but current layer can be 0!
-    def GetCurrentLayerInfo(self):
+    # Returns:
+    #     (None, None) if the platform doesn't support layer info.
+    #     (0,0) if the current layer is unknown.
+    #     (currentLayer(int), totalLayers(int)) if the values are known.
+    def GetCurrentLayerInfo(self) -> Tuple[Optional[int], Optional[int]]:
         try:
             result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
             {
@@ -1078,14 +1043,12 @@ class MoonrakerCompat:
                 return (0,0)
 
             res = result.GetResult()
-            printStats = res["status"]["print_stats"]
-            gcodeMove = res["status"]["gcode_move"]
+            status = res["status"]
+            printStats = status["print_stats"]
+            gcodeMove = status["gcode_move"]
 
             # Get the file name, required for looking up layer info.
-            if "filename" not in printStats:
-                # This happens when there's no file loaded, which is fine if nothing is printing.
-                return (0,0)
-            fileName = printStats["filename"]
+            fileName:Optional[str] = printStats.get("filename", None)
             if fileName is None or len(fileName) == 0:
                 # This happens when there's no file loaded, which is fine if nothing is printing.
                 return (0,0)
@@ -1097,8 +1060,9 @@ class MoonrakerCompat:
             # First, try to get the total layer height
             # Note these calculations are done similar to Moonraker and Fluidd, so that the values show the same for users on all interfaces.
             totalLayers = 0
-            if "info" in printStats and "total_layer" in printStats["info"] and printStats["info"]["total_layer"] is not None:
-                totalLayers = int(printStats["info"]["total_layer"])
+            printStatusTotalLayers = printStats.get("info", {}).get("total_layer", None)
+            if printStatusTotalLayers is not None:
+                totalLayers = int(printStatusTotalLayers)
             if totalLayers == 0 and layerCount > 0:
                 totalLayers = int(layerCount)
             if totalLayers == 0 and firstLayerHeight > 0 and layerHeight > 0 and objectHeight > 0:
@@ -1108,15 +1072,13 @@ class MoonrakerCompat:
             if totalLayers == 0:
                 if self.Logger.isEnabledFor(logging.DEBUG):
                     self.Logger.debug("GetCurrentLayerInfo failed to get a total layer count. "+json.dumps(printStats))
-                # Dont log, this seems to be somewhat common on some printers like the K1 and others.
-                #self.Logger.warn("GetCurrentLayerInfo failed to get a total layer count.")
-                return (0,0)
 
             # Next, try to get the current layer.
-            currentLayer = -1
-            if "info" in printStats and "current_layer" in printStats["info"] and printStats["info"]["current_layer"] is not None:
-                currentLayer = int(printStats["info"]["current_layer"])
-            if currentLayer == -1 and firstLayerHeight > 0 and layerHeight > 0 and "gcode_position" in gcodeMove and len(gcodeMove["gcode_position"]) > 2:
+            currentLayer = 0
+            printStatusCurrentLayer = printStats.get("info", {}).get("current_layer", None)
+            if printStatusCurrentLayer is not None:
+                currentLayer = int(printStatusCurrentLayer)
+            if currentLayer == 0 and firstLayerHeight > 0 and layerHeight > 0 and "gcode_position" in gcodeMove and len(gcodeMove["gcode_position"]) > 2:
                 # Note that we need to check print_duration before checking this, because print duration will only start going after the hotend is in print position.
                 # If we take the zAxisPosition before that, the z axis might be up in a pre-print position, and we will get the wrong value.
                 if "print_duration" not in printStats:
@@ -1130,26 +1092,25 @@ class MoonrakerCompat:
                 else:
                     # If the print hasn't started yet, the layer height is 0.
                     currentLayer = 0
-            if currentLayer == -1:
-                self.Logger.error("GetCurrentLayerInfo failed to get a current layer count.")
-                return (0,0)
+            if currentLayer == 0:
+                if self.Logger.isEnabledFor(logging.DEBUG):
+                    self.Logger.debug("GetCurrentLayerInfo failed to get a current layer count. "+json.dumps(printStats))
 
             # Sanity check.
             currentLayer = min(currentLayer, totalLayers)
-
             return (currentLayer, totalLayers)
         except Exception as e:
-            Sentry.Exception("GetCurrentLayerInfo exception. ", e)
+            Sentry.OnException("GetCurrentLayerInfo exception. ", e)
         return (0,0)
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # Returns True if the printing timers (notifications and gadget) should be running, which is only the printing state. (not even paused)
     # False if the printer state is anything else, which means they should stop.
-    def ShouldPrintingTimersBeRunning(self):
+    def ShouldPrintingTimersBeRunning(self) -> bool:
         stats = self._GetCurrentPrintStats()
         if stats is None:
-            self.Logger.warn("ShouldPrintingTimersBeRunning failed to get current state.")
+            self.Logger.warning("ShouldPrintingTimersBeRunning failed to get current state.")
             return True
         # For moonraker, printing is the only state we want to allow the timers to run in.
         # All other states will resume them when moved out of.
@@ -1158,7 +1119,7 @@ class MoonrakerCompat:
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If called while the print state is "Printing", returns True if the print is currently in the warm-up phase. Otherwise False
-    def IsPrintWarmingUp(self):
+    def IsPrintWarmingUp(self) -> bool:
         # For moonraker, we have found that if the print_stats reports a state of "printing"
         # but the "print_duration" is still 0, it means we are warming up. print_duration is the time actually spent printing
         # so it doesn't increment while the system is heating.
@@ -1174,7 +1135,7 @@ class MoonrakerCompat:
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # Returns the current hotend temp and bed temp as a float in celsius if they are available, otherwise None.
-    def GetTemps(self):
+    def GetTemps(self) -> Tuple[Optional[float], Optional[float]]:
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
             "objects": {
@@ -1194,14 +1155,12 @@ class MoonrakerCompat:
         # Shared code with MoonrakerCommandHandler.GetCurrentJobStatus
         hotendActual = None
         bedActual = None
-        if "status" in res and "extruder" in res["status"]:
-            extruder = res["status"]["extruder"]
-            if "temperature" in extruder:
-                hotendActual = round(float(extruder["temperature"]), 2)
-        if "status" in res and "heater_bed" in res["status"]:
-            heater_bed = res["status"]["heater_bed"]
-            if "temperature" in heater_bed:
-                bedActual = round(float(heater_bed["temperature"]), 2)
+        extruderTemperature = res.get("status", {}).get("extruder", {}).get("temperature", None)
+        if extruderTemperature is not None:
+            hotendActual = round(float(extruderTemperature), 2)
+        heaterBedTemperature = res.get("status", {}).get("heater_bed", {}).get("temperature", None)
+        if heaterBedTemperature is not None:
+            bedActual = round(float(heaterBedTemperature), 2)
 
         return (hotendActual, bedActual)
 
@@ -1214,7 +1173,7 @@ class MoonrakerCompat:
     # Returns a unique string for this print.
     # This string should be as unique as possible, but always the same for the same print.
     # See details in NotificationHandler._RecoverOrRestForNewPrint
-    def _GetPrintCookie(self, fileName:str) -> str:
+    def _GetPrintCookie(self, fileName:Optional[str]) -> str:
         # For Moonraker, there's no way to differentiate between prints beyond the basic things like the file name.
         # This means that there is a possibility that the print cookie will match, on back to back prints.
         # However on each start we will clear any Print info that exists, so it will clear each time.
@@ -1225,7 +1184,7 @@ class MoonrakerCompat:
         return fileName
 
 
-    def _InitPrintStateForFreshConnect(self):
+    def _InitPrintStateForFreshConnect(self) -> None:
         # Get the current state
         stats = self._GetCurrentPrintStats()
         if stats is None:
@@ -1235,15 +1194,15 @@ class MoonrakerCompat:
         # What this logic is trying to do is re-sync the notification handler with the current state.
         # The only tricky part is if there's an on-going print that we aren't tracking, we need to restore
         # the state as well as possible to get notifications in sync.
-        state = stats["state"]
-        fileName_CanBeNone = stats["filename"]
+        state:str = stats["state"]
+        fileName:Optional[str] = stats["filename"]
         self.Logger.info("Printer state at socket connect is: "+state)
-        self.NotificationHandler.OnRestorePrintIfNeeded(state == "printing", state == "paused", self._GetPrintCookie(fileName_CanBeNone))
+        self.NotificationHandler.OnRestorePrintIfNeeded(state == "printing", state == "paused", self._GetPrintCookie(fileName))
 
 
     # Queries moonraker for the current printer stats.
     # Returns null if the call falls or the resulting object DOESN'T contain at least: filename, state, total_duration, print_duration
-    def _GetCurrentPrintStats(self):
+    def _GetCurrentPrintStats(self) -> Optional[Dict[str, Any]]:
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
             "objects": {
@@ -1255,10 +1214,10 @@ class MoonrakerCompat:
             self.Logger.error("Moonraker client failed _GetCurrentPrintStats. "+result.GetLoggingErrorStr())
             return None
         res = result.GetResult()
-        if "status" not in res or "print_stats" not in res["status"]:
-            self.Logger.error("Moonraker client didn't find status in _GetCurrentPrintStats.")
+        printStats = res.get("status", {}).get("print_stats", None)
+        if printStats is None:
+            self.Logger.error("Moonraker client didn't find print_stats in _GetCurrentPrintStats.")
             return None
-        printStats = res["status"]["print_stats"]
         if "state" not in printStats or "filename" not in printStats or "total_duration" not in printStats or "print_duration" not in printStats:
             self.Logger.error("Moonraker client didn't find required field in _GetCurrentPrintStats. "+json.dumps(printStats))
             return None
@@ -1267,7 +1226,7 @@ class MoonrakerCompat:
 
     # A common function to check for the "warming up" state.
     # Returns True if the printer is warming up, otherwise False
-    def CheckIfPrinterIsWarmingUp_WithPrintStats(self, result):
+    def CheckIfPrinterIsWarmingUp_WithPrintStats(self, result:JsonRpcResponse) -> bool:
         # Check the result.
         if result.HasError():
             self.Logger.error("CheckIfPrinterIsWarmingUp_WithPrintStats failed to query print objects: "+result.GetLoggingErrorStr())
@@ -1283,14 +1242,14 @@ class MoonrakerCompat:
                 return True
             return False
         except Exception as e:
-            Sentry.Exception("IsPrintWarmingUp exception. ", e)
+            Sentry.OnException("IsPrintWarmingUp exception. ", e)
         return False
 
 
     # Using the result of printer.objects.query with print_stats and virtual_sdcard, this will get the estimated time remaining in the best way possible.
     # If it can be gotten, it's returned as an int.
     # If it fails, it's returns -1
-    def GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(self, result):
+    def GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsVirtualSdCardAndGcodeMoveResult(self, result:JsonRpcResponse) -> int:
         # This logic is taken from the moonraker docs, that suggest how to find a good ETA
         # https://moonraker.readthedocs.io/en/latest/web_api/#basic-print-status
         #
@@ -1357,5 +1316,5 @@ class MoonrakerCompat:
             return int(basicEtaFloatSec * inverseSpeedFactorFloat)
 
         except Exception as e:
-            Sentry.Exception("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
+            Sentry.OnException("GetPrintTimeRemainingEstimateInSeconds exception while computing ETA. ", e)
         return -1

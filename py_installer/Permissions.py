@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 from .Context import Context
 from .Logging import Logger
@@ -50,14 +51,14 @@ class Permissions:
     #
     # We always set the permissions for all of the files we touch, to ensure if something in the setup process
     # did it wrong, a user changed them, or some other service changed them, they are all correct.
-    def EnsureFinalPermissions(self, context:Context):
+    def EnsureFinalPermissions(self, context:Context) -> None:
 
         # A helper to set file permissions.
         # We try to set permissions to all paths and files in the context, some might be null
         # due to the setup mode. We don't care to difference the setup mode here, because the context
         # validation will do that for us already. Thus if a field is None, its ok.
         # NOTE - In update mode, most of the paths in the context are None, since it's updating all plugins at once, which is fine.
-        def SetPermissions(path:str):
+        def SetPermissions(path:Optional[str]) -> None:
             if path is not None and len(path) != 0:
                 Util.SetFileOwnerRecursive(path, context.UserName)
 

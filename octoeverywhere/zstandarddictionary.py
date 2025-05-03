@@ -3,12 +3,13 @@ import glob
 import random
 import base64
 import logging
+from typing import List
 
 # A helper classed used for training the zstandard lib pre made dictionary.
 # This is only used for training the dictionary, so it's not used in the main code.
 class ZStandardDictionary:
 
-    _Instance = None
+    _Instance:"ZStandardDictionary" = None #pyright: ignore[reportAssignmentType]
 
     # These are only used for dev building.
     _TrainingPath = "/home/pi/zstandard-training-samples"
@@ -27,14 +28,14 @@ class ZStandardDictionary:
 
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
-        self.TrainingDataNamePrefix:str = None
+        self.TrainingDataNamePrefix:str = None #pyright: ignore[reportAttributeAccessIssue]
 
         # This will be None if we aren't using zstandard in this runtime.
         self.PreTrainedDict = None
 
 
     # The check for zstandard lib must be made before we can call this, but if we are using zstandard, we must load this dict.
-    def InitPreComputedDict(self):
+    def InitPreComputedDict(self) -> None:
         # To make things easier, we include the dict in the source code as a based64 encoded string.
         # This prevents us from doing any kind of file IO or network calls to load the dict.
         dictData = base64.b64decode(ZStandardDictionary.c_Dict1)
@@ -48,7 +49,7 @@ class ZStandardDictionary:
 
         # Doing pre-compute now makes it so we don't have to use compute the dict on first use.
         # We must specify a level, so we use the same level we use elsewhere, which is the default of 3.
-        localDict.precompute_compress(level=3)
+        localDict.precompute_compress(level=3) #pyright: ignore[reportUnknownMemberType]
 
         # Success! We are using the pre-trained dict, so set it.
         self.PreTrainedDict = localDict
@@ -58,7 +59,7 @@ class ZStandardDictionary:
     # DEV ONLY
     # Used only in dev builds to init training data samples.
     # You must also add SubmitData into the Compression class to get the samples submitted.
-    def InitTrainingOutputDataFile(self, namePrefix:str):
+    def InitTrainingOutputDataFile(self, namePrefix:str) -> None:
         if input(f"Are you sure you want to add to the training data with prefix [{namePrefix}]? (y/n) ") != "y":
             return
         self.TrainingDataNamePrefix = namePrefix
@@ -74,7 +75,7 @@ class ZStandardDictionary:
     def SubmitData(self, data:bytes) -> None:
         # Check state to see if we are training.
         if self.TrainingDataNamePrefix is None:
-            self.Logger.warn("ZStandardDictionary.SubmitData was called but we aren't training!")
+            self.Logger.warning("ZStandardDictionary.SubmitData was called but we aren't training!")
             return
 
         try:
@@ -92,14 +93,14 @@ class ZStandardDictionary:
 
 
     # Used by dev builds to build a new training dict.
-    def BuildTrainingDict(self):
+    def BuildTrainingDict(self) -> None:
         try:
             #pylint: disable=import-outside-toplevel
             import zstandard as zstd
 
             # Train a new dict.
             # Collect all of the samples that are in the samples folder.
-            inputSamples = []
+            inputSamples:List[bytes] = []
             searchStr = os.path.join(ZStandardDictionary._TrainingPath, "*")
             for file in glob.glob(searchStr):
                 with open(file, "rb") as f:
@@ -111,7 +112,7 @@ class ZStandardDictionary:
             #   - Threads defines how many threads will be used when trying to optimize the function prams.
             #   - Steps defines how many steps we will take when optimize the function prams.
             self.Logger.info(f"ZStandard Dict starting training on {len(inputSamples)} samples.")
-            dataDict = zstd.train_dictionary(dict_size=112640, samples=inputSamples, dict_id=1, threads=-1, steps=100)
+            dataDict = zstd.train_dictionary(dict_size=112640, samples=inputSamples, dict_id=1, threads=-1, steps=100) #pyright: ignore[reportArgumentType]
 
             # Done!
             # The k and d values are only used for the training process.

@@ -1,4 +1,4 @@
-from enum import Enum
+from typing import List, Optional, Tuple
 import requests
 
 from linux_host.networksearch import NetworkSearch
@@ -6,19 +6,7 @@ from linux_host.networksearch import NetworkSearch
 from .Util import Util
 from .Logging import Logger
 from .Context import Context
-from .ConfigHelper import ConfigHelper
-
-# Frontends that are known.
-class KnownFrontends(Enum):
-    Unknown  = 1
-    Mainsail = 2
-    Fluidd   = 3
-    Creality = 4 # This is Creality's K1 default web interface (not nearly as good as the others)
-    Elegoo   = 5 # This is Elegoo's default web interface.
-
-    # Makes to str() cast not to include the class name.
-    def __str__(self):
-        return self.name
+from .ConfigHelper import ConfigHelper, KnownFrontends
 
 # A helper class.
 class DiscoveryPair:
@@ -32,7 +20,7 @@ class Frontend:
 
     # If called, this will walk the user though picking a frontend for the targeted device (local or remote for companion).
     # The frontend will be saved into the OE config, so this should be done before the service starts, if this is a first time run.
-    def DoFrontendSetup(self, context:Context):
+    def DoFrontendSetup(self, context:Context) -> None:
 
         # There's no frontend for bambu connect.
         if context.IsBambuSetup:
@@ -68,14 +56,14 @@ class Frontend:
                 return
 
         # Get a frontend port from the user.
-        (portInt, frontendHint_CanBeNone) = self._GetDesiredFrontend(context)
+        (portInt, frontendHint) = self._GetDesiredFrontend(context)
 
         # We got a port, save it.
-        ConfigHelper.WriteFrontendDetails(context, str(portInt), frontendHint_CanBeNone)
+        ConfigHelper.WriteFrontendDetails(context, str(portInt), frontendHint)
 
 
     # Returns the (port (int), frontendNameHint:str or None) of the frontend the user wants to use.
-    def _GetDesiredFrontend(self, context:Context):
+    def _GetDesiredFrontend(self, context:Context) -> Tuple[int, Optional[KnownFrontends]]:
         # Find the target. If this is a local install, the target is local.
         # Otherwise, it's whatever the companion target is.
         targetIpOrHostname = "127.0.0.1"
@@ -94,7 +82,7 @@ class Frontend:
             if len(foundFrontends) == 1:
                 item = foundFrontends[0]
                 Logger.Info(f"Only one frontend was found [{str(item.Frontend)} - {str(item.Port)}] so we will use it for remote access.")
-                return (item.Port, str(item.Frontend))
+                return (item.Port, item.Frontend)
 
             Logger.Blank()
             Logger.Info("The following web interfaces were discovered:")
@@ -115,7 +103,7 @@ class Frontend:
                     tempInt = int(response.lower().strip()) - 1
                     if tempInt >= 0 and tempInt < len(foundFrontends):
                         item = foundFrontends[tempInt]
-                        return (item.Port, str(item.Frontend))
+                        return (item.Port, item.Frontend)
                 except Exception as _:
                     Logger.Warn("Invalid input, try again.")
         else:
@@ -204,7 +192,7 @@ class Frontend:
                 # Ask the user, let them return it even if it's invalid.
                 if Util.AskYesOrNoQuestion("Is this the web interface you want to use?"):
                     if frontend != KnownFrontends.Unknown:
-                        return (int(response), str(frontend))
+                        return (int(response), frontend)
                     else:
                         return (int(response), None)
 
@@ -215,7 +203,7 @@ class Frontend:
 
     # If we can find a known frontend, this will return it.
     # Returns a list of DiscoveryPair, if any are found.
-    def _DiscoverKnownFrontends(self, ipOrHostname:str):
+    def _DiscoverKnownFrontends(self, ipOrHostname:str) -> List[DiscoveryPair]:
         # We can't scan all ports, it will take to long. Instead we will scan known ports used by known common setups.
         # Note these ports are in order of importance, where ports near the top are more likely to be what the user wants.
         knownFrontendPorts = [
@@ -229,7 +217,7 @@ class Frontend:
         ]
 
         # Try to find what we can.
-        foundFrontends = []
+        foundFrontends:List[DiscoveryPair] = []
         for port in knownFrontendPorts:
             (isValid, _, frontend) = self.CheckIfValidFrontend(ipOrHostname, str(port))
             if isValid:
@@ -241,7 +229,7 @@ class Frontend:
 
     # Checks if the hostname and ip are a valid http endpoint.
     # Returns (isValid:bool, isHttps:bool, frontendName:KnownFrontends)
-    def CheckIfValidFrontend(self, ipOrHostname:str, portStr:str, timeoutSec:float = 2.0):
+    def CheckIfValidFrontend(self, ipOrHostname:str, portStr:str, timeoutSec:float=2.0) -> Tuple[bool, bool, KnownFrontends]:
         try:
             # Don't allow redirects, so we can detect https upgrades redirects.
             url = f"http://{ipOrHostname}:{portStr}"

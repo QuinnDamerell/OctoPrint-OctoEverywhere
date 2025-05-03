@@ -3,6 +3,9 @@ import threading
 import logging
 
 import configparser
+from typing import Optional
+
+from .config import Config
 
 # This class is very similar to the config class, but since the klipper config files are often backup in public places, the secrets are stored else where.
 # This is also used for the companion and the bambu host.
@@ -23,7 +26,7 @@ class Secrets:
     ]
 
 
-    def __init__(self, logger:logging.Logger, octoeverywhereStoragePath:str, moonrakerConfig = None) -> None:
+    def __init__(self, logger:logging.Logger, octoeverywhereStoragePath:str, moonrakerConfig:Optional[Config]=None) -> None:
         self.Logger = logger
 
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
@@ -31,7 +34,7 @@ class Secrets:
 
         # A lock to keep file access super safe
         self.ConfigLock = threading.Lock()
-        self.Config = None
+        self.Config:configparser.ConfigParser = None #pyright: ignore[reportAttributeAccessIssue]
 
         # Load the secret config on init, to ensure it exists.
         # This will throw if there's an error reading the config.
@@ -44,28 +47,28 @@ class Secrets:
 
 
     # Returns the printer id if one exists, otherwise None.
-    def GetPrinterId(self) -> str:
+    def GetPrinterId(self) -> Optional[str]:
         return self._GetStr(Secrets._SecretsSection, Secrets._PrinterIdKey)
 
 
     # Sets the printer id and saves the file.
-    def SetPrinterId(self, printerId):
+    def SetPrinterId(self, printerId:Optional[str]) -> None:
         self._SetStr(Secrets._SecretsSection, Secrets._PrinterIdKey, printerId)
 
 
     # Returns the private key if one exists, otherwise None.
-    def GetPrivateKey(self) -> str:
+    def GetPrivateKey(self) -> Optional[str]:
         return self._GetStr(Secrets._SecretsSection, Secrets._PrivateKeyKey)
 
 
     # Sets the printer id and saves the file.
-    def SetPrivateKey(self, privateKey):
+    def SetPrivateKey(self, privateKey:Optional[str]) -> None:
         self._SetStr(Secrets._SecretsSection, Secrets._PrivateKeyKey, privateKey)
 
 
     # Migrates any old secrets from the config to the new location, if needed.
     # This must be called before the printer id or private key are accessed!
-    def _DoConfigMigrationIfNeeded(self, config):
+    def _DoConfigMigrationIfNeeded(self, config:Config) -> None:
         # Try to get the old values, if they exist.
         # We keep the old strings here, incase they ever change in new config updates.
         configServerSection = "server"
@@ -97,7 +100,7 @@ class Secrets:
 
     # Gets a value from the config given the header and key.
     # If the value doesn't exist, None is returned.
-    def _GetStr(self, section, key) -> str:
+    def _GetStr(self, section:str, key:str) -> Optional[str]:
         with self.ConfigLock:
             # Ensure we have the config.
             self._LoadConfigIfNeeded_UnderLock()
@@ -109,7 +112,7 @@ class Secrets:
 
 
     # Sets the value into the config and saves it.
-    def _SetStr(self, section, key, value) -> None:
+    def _SetStr(self, section:str, key:str, value:Optional[str]=None) -> None:
         # Ensure the value is a string.
         if value is not None:
             value = str(value)
@@ -128,7 +131,7 @@ class Secrets:
             self._SaveConfig_UnderLock()
 
 
-    def _LoadConfigIfNeeded_UnderLock(self, forceRead = False) -> None:
+    def _LoadConfigIfNeeded_UnderLock(self, forceRead=False) -> None:
         if self.Config is not None and forceRead is False:
             return
 

@@ -4,6 +4,7 @@ import base64
 import logging
 import threading
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -24,7 +25,7 @@ class LoginStatus(Enum):
 # The result of a get access token request.
 # If the token is None, the Status will indicate why.
 class AccessTokenResult():
-    def __init__(self, status:LoginStatus, token:str = None) -> None:
+    def __init__(self, status:LoginStatus, token:Optional[str] = None) -> None:
         self.Status = status
         self.AccessToken = token
 
@@ -34,7 +35,7 @@ class AccessTokenResult():
 # https://github.com/Doridian/OpenBambuAPI/blob/main/cloud-http.md
 class BambuCloud:
 
-    _Instance = None
+    _Instance:"BambuCloud" = None #pyright: ignore[reportAssignmentType]
 
 
     @staticmethod
@@ -43,7 +44,7 @@ class BambuCloud:
 
 
     @staticmethod
-    def Get():
+    def Get() -> "BambuCloud":
         return BambuCloud._Instance
 
 
@@ -104,7 +105,7 @@ class BambuCloud:
             # The token expiration is usually 1 year, we just check it for now.
             expiresIn = int(j.get('expiresIn', 0))
             if expiresIn / 60 / 60 / 24 < 300:
-                self.Logger.warn(f"Login Bambu Cloud access token expires in {expiresIn} seconds")
+                self.Logger.warning(f"Login Bambu Cloud access token expires in {expiresIn} seconds")
 
             # Every time we login in, we also want to ensure the printer's cloud info is synced locally.
             # Right now this can only sync the access code, but this is important, because things like the webcam streaming need to know the access code.
@@ -114,7 +115,7 @@ class BambuCloud:
             return LoginStatus.Success
 
         except Exception as e:
-            Sentry.Exception("Bambu Cloud login exception", e)
+            Sentry.OnException("Bambu Cloud login exception", e)
         return  LoginStatus.UnknownError
 
 
@@ -137,7 +138,7 @@ class BambuCloud:
 
     # A helper to decode the access token and get the Bambu Cloud username.
     # Returns None on failure.
-    def GetUserNameFromAccessToken(self, accessToken: str) -> str:
+    def GetUserNameFromAccessToken(self, accessToken:str) -> Optional[str]:
         try:
             # The Access Token is a JWT, we need the second part to decode.
             accountInfoBase64 = accessToken.split(".")[1]
@@ -148,16 +149,19 @@ class BambuCloud:
             jsonAuthToken = json.loads(base64.b64decode(accountInfoBase64))
             return jsonAuthToken["username"]
         except Exception as e:
-            Sentry.Exception("Bambu Cloud GetUserNameFromAccessToken exception", e)
+            Sentry.OnException("Bambu Cloud GetUserNameFromAccessToken exception", e)
         return None
 
 
     # Returns a list of the user's devices.
     # Returns None on failure.
     # Special Note: This function is used as a access token validation check. So if this fails due to the access token being invalid, the access token should be cleared so we try to login again.
-    def GetDeviceList(self) -> dict:
+    def GetDeviceList(self) -> Optional[List[Dict[str, Any]]]:
         tokenResult = self.GetAccessToken()
         if tokenResult.Status != LoginStatus.Success:
+            return None
+        if tokenResult.AccessToken is None:
+            self.Logger.error("Bambu Cloud GetDeviceList failed to get access token.")
             return None
 
         # Get the API
@@ -180,23 +184,26 @@ class BambuCloud:
 
 
     # Returns this device info from the Bambu Cloud API by matching the SN
-    def GetThisDeviceInfo(self) -> dict:
+    def GetThisDeviceInfo(self) -> Optional[Dict[str, Any]]:
         devices = self.GetDeviceList()
         localSn = self.Config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
         if localSn is None:
             self.Logger.error("Bambu Cloud GetThisDeviceInfo has no local printer SN to match.")
             return None
+        if devices is None:
+            self.Logger.error("Bambu Cloud GetThisDeviceInfo failed to get device list.")
+            return None
         for d in devices:
-            sn =  d.get('dev_id', None)
-            self.Logger.debug(f"Bambu Cloud Printer Info. SN:{sn} Name:{(d.get('name', None))}")
+            sn = d.get('dev_id', None) #pyright: ignore[reportUnknownMemberType]
+            self.Logger.debug(f"Bambu Cloud Printer Info. SN:{sn} Name:{(d.get('name', None))}") #pyright: ignore[reportUnknownMemberType]
             if sn == localSn:
                 return d
         self.Logger.error("Bambu Cloud failed to find a matching printer SN on the user account.")
-        return None
+        return {}
 
 
     # Get's the known device info from the Bambu API and ensures it's synced with our config settings.
-    def SyncBambuCloudInfoAsync(self) -> bool:
+    def SyncBambuCloudInfoAsync(self) -> None:
         threading.Thread(target=self.SyncBambuCloudInfo, daemon=True).start()
 
 
@@ -217,14 +224,14 @@ class BambuCloud:
                 self.Logger.info("Bambu Cloud SyncBambuCloudInfo updated the access code.")
             return True
         except Exception as e:
-            Sentry.Exception("SyncBambuCloudInfo exception", e)
+            Sentry.OnException("SyncBambuCloudInfo exception", e)
         return False
 
 
     def _IsRegionChina(self) -> bool:
         region = self.Config.GetStr(Config.SectionBambu, Config.BambuCloudRegion, None)
         if region is None:
-            self.Logger.warn("Bambu Cloud region not set, assuming world wide.")
+            self.Logger.warning("Bambu Cloud region not set, assuming world wide.")
             region = "world"
         return region == "china"
 
@@ -257,7 +264,7 @@ class BambuCloud:
             self.Config.SetStr(Config.SectionBambu, Config.BambuCloudContext, token)
             return True
         except Exception as e:
-            Sentry.Exception("Bambu Cloud set email exception", e)
+            Sentry.OnException("Bambu Cloud set email exception", e)
         return False
 
 
@@ -285,7 +292,7 @@ class BambuCloud:
                 return (None, None)
             return (e, p)
         except Exception as e:
-            Sentry.Exception("Bambu Cloud login exception", e)
+            Sentry.OnException("Bambu Cloud login exception", e)
         return (None, None)
 
 

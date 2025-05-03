@@ -1,4 +1,4 @@
-name: Pylint
+name: Python Lint & Type Check
 
 on:
   push:
@@ -9,27 +9,31 @@ jobs:
     # We must limit the OS to ubuntu-22.04 instead of the default ubuntu-latest, to keep PY3.7 available.
     runs-on: ubuntu-22.04
     strategy:
+      # Using this allows all builds to run and keep going if one fails.
+      fail-fast: false
       matrix:
-        # The sonic pad runs 3.7, so it's important to keep it here to make sure all of our required dependencies work
+        # The sonic pad and other common printers runs 3.7, so it's important to keep it here to make sure all of our required dependencies work
         python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: 🐍 Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
+    - name: 🏗️ Install dependencies
       # We always install zstandard by hand, since it's an optional lib.
       # Ideally this version will stay in sync with Compression.ZStandardPipPackageString
       run: |
         python -m pip install --upgrade pip
         pip install pylint
+        pip install pyright
+        pip install ruff
         pip install octoprint
         pip install -r requirements.txt
         pip install "zstandard>=0.21.0,<0.23.0"
 
-    - name: Analyzing the code with PYLint
+    - name: 👖 Running Pylint
       run: |
         pylint ./octoeverywhere/
         pylint ./octoprint_octoeverywhere/
@@ -39,3 +43,11 @@ jobs:
         pylint ./linux_host/
         pylint ./py_installer/
         pylint ./docker_octoeverywhere/
+
+    - name: 👉 Pyright
+      run: |
+        pyright
+
+    - name: 🐶 Ruff
+      run: |
+        ruff check

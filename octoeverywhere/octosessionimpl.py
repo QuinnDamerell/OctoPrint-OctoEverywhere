@@ -1,15 +1,13 @@
 import sys
-import struct
 import threading
-import traceback
 import logging
-
+from typing import Dict, List
 
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
 #
 
-from .WebStream import octowebstream
+from .WebStream.octowebstream import OctoWebStream
 from .octohttprequest import OctoHttpRequest
 from .localip import LocalIpHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
@@ -19,8 +17,10 @@ from .ostypeidentifier import OsTypeIdentifier
 from .threaddebug import ThreadDebug
 from .compression import Compression
 from .deviceid import DeviceId
+from .interfaces import IPopUpInvoker, IOctoStream, IOctoSession
+from .buffer import Buffer, ByteLikeOrMemoryView
 
-from .Proto import OctoStreamMessage
+from .Proto.OctoStreamMessage import OctoStreamMessage
 from .Proto import HandshakeAck
 from .Proto import MessageContext
 from .Proto import WebStreamMsg
@@ -29,10 +29,21 @@ from .Proto import OctoNotificationTypes
 from .Proto import OctoSummon
 from .Proto.DataCompression import DataCompression
 
-class OctoSession:
+class OctoSession(IOctoSession):
 
-    def __init__(self, octoStream, logger:logging.Logger, printerId:str, privateKey:str, isPrimarySession:bool, sessionId, uiPopupInvoker, pluginVersion, serverHostType, isCompanion):
-        self.ActiveWebStreams = {}
+    def __init__(self,
+                    octoStream:IOctoStream,
+                    logger:logging.Logger,
+                    printerId:str,
+                    privateKey:str,
+                    isPrimarySession:bool,
+                    sessionId:int,
+                    uiPopupInvoker:IPopUpInvoker,
+                    pluginVersion:str,
+                    serverHostType:int,
+                    isCompanion:bool
+                ):
+        self.ActiveWebStreams:Dict[int,OctoWebStream] = {}
         self.ActiveWebStreamsLock = threading.Lock()
         self.IsAcceptingStreams = True
 
@@ -51,36 +62,48 @@ class OctoSession:
         self.ServerAuth = ServerAuthHelper(self.Logger)
 
 
-    def OnSessionError(self, backoffModifierSec):
+    def OnSessionError(self, backoffModifierSec:int) -> None:
         # Just forward
         self.OctoStream.OnSessionError(self.SessionId, backoffModifierSec)
 
 
-    def Send(self, buffer:bytearray, msgStartOffsetBytes:int, msgSize:int):
+    def Send(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int):
         # The message is already encoded, pass it along to the socket.
         self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSize)
 
 
-    def HandleSummonRequest(self, msg):
+    def HandleSummonRequest(self, msg:OctoStreamMessage):
         try:
+            context = msg.Context()
+            if context is None:
+                self.Logger.error("Summon message is missing context.")
+                return
+
+            # Parse the summon message
             summonMsg = OctoSummon.OctoSummon()
-            summonMsg.Init(msg.Context().Bytes, msg.Context().Pos)
+            summonMsg.Init(context.Bytes, context.Pos)
             serverConnectUrl = OctoStreamMsgBuilder.BytesToString(summonMsg.ServerConnectUrl())
             summonMethod = summonMsg.SummonMethod()
             if serverConnectUrl is None or len(serverConnectUrl) == 0:
                 self.Logger.error("Summon notification is missing a server url.")
                 return
+
             # Process it!
             self.OctoStream.OnSummonRequest(self.SessionId, serverConnectUrl, summonMethod)
         except Exception as e:
-            Sentry.Exception("Failed to handle summon request ", e)
+            Sentry.OnException("Failed to handle summon request ", e)
 
 
-    def HandleClientNotification(self, msg):
+    def HandleClientNotification(self, msg:OctoStreamMessage):
         try:
+            context = msg.Context()
+            if context is None:
+                self.Logger.error("Client notification message is missing context.")
+                return
+
             # Handles a notification
             notificationMsg = OctoNotification.OctoNotification()
-            notificationMsg.Init(msg.Context().Bytes, msg.Context().Pos)
+            notificationMsg.Init(context.Bytes, context.Pos)
             title = OctoStreamMsgBuilder.BytesToString(notificationMsg.Title())
             text = OctoStreamMsgBuilder.BytesToString(notificationMsg.Text())
             msgType = notificationMsg.Type()
@@ -106,13 +129,18 @@ class OctoSession:
             # Send it to the UI
             self.UiPopupInvoker.ShowUiPopup(title, text, typeStr, actionText, actionLink, showForSec, onlyShowIfLoadedViaOeBool)
         except Exception as e:
-            Sentry.Exception("Failed to handle octo notification message.", e)
+            Sentry.OnException("Failed to handle octo notification message.", e)
 
 
-    def HandleHandshakeAck(self, msg):
+    def HandleHandshakeAck(self, msg:OctoStreamMessage):
+        # Get the context.
+        context = msg.Context()
+        if context is None:
+            raise Exception("HandleHandshakeAck message is missing context.")
+
         # Handles a handshake ack message.
         handshakeAck = HandshakeAck.HandshakeAck()
-        handshakeAck.Init(msg.Context().Bytes, msg.Context().Pos)
+        handshakeAck.Init(context.Bytes, context.Pos)
 
         if handshakeAck.Accepted():
             # Accepted!
@@ -120,18 +148,24 @@ class OctoSession:
             rasChallengeResponse = OctoStreamMsgBuilder.BytesToString(handshakeAck.RsaChallengeResult())
             if self.ServerAuth.ValidateChallengeResponse(rasChallengeResponse) is False:
                 raise Exception("Server RAS challenge failed!")
+
             # Parse out the response and report.
-            connectedAccounts = None
+            connectedAccounts:List[str] = []
             connectedAccountsLen = handshakeAck.ConnectedAccountsLength()
             if handshakeAck.ConnectedAccountsLength() != 0:
                 i = 0
-                connectedAccounts = []
                 while i < connectedAccountsLen:
-                    connectedAccounts.append(OctoStreamMsgBuilder.BytesToString(handshakeAck.ConnectedAccounts(i)))
+                    account = OctoStreamMsgBuilder.BytesToString(handshakeAck.ConnectedAccounts(i))
+                    if account is not None:
+                        connectedAccounts.append(account)
                     i += 1
 
             # Parse out the OctoKey
             octoKey = OctoStreamMsgBuilder.BytesToString(handshakeAck.Octokey())
+            if octoKey is None:
+                raise Exception("Handshake ack is missing octokey.")
+
+            # Handle it.
             self.OctoStream.OnHandshakeComplete(self.SessionId, octoKey, connectedAccounts)
         else:
             # Pull out the error.
@@ -157,14 +191,19 @@ class OctoSession:
             self.OnSessionError(backoffModifierSec)
 
 
-    def HandleWebStreamMessage(self, msg):
+    def HandleWebStreamMessage(self, msg:OctoStreamMessage):
+        # Get the context.
+        context = msg.Context()
+        if context is None:
+            raise Exception("HandleWebStreamMessage message is missing context.")
+
         # Handles a web stream.
         webStreamMsg = WebStreamMsg.WebStreamMsg()
-        webStreamMsg.Init(msg.Context().Bytes, msg.Context().Pos)
+        webStreamMsg.Init(context.Bytes, context.Pos)
 
         # Get the stream id
-        streamId = webStreamMsg.StreamId()
-        if streamId == 0:
+        streamId:int = webStreamMsg.StreamId()
+        if streamId <= 0:
             self.Logger.error("We got a web stream message for an invalid stream id of 0")
             # throwing here will terminate this entire OcotoSocket and reset.
             raise Exception("We got a web stream message for an invalid stream id of 0")
@@ -172,11 +211,8 @@ class OctoSession:
         # Grab the lock before messing with the map.
         localStream = None
         with self.ActiveWebStreamsLock:
-            # First, check if the stream exists.
-            if streamId in self.ActiveWebStreams :
-                # It exists, so use it.
-                localStream = self.ActiveWebStreams[streamId]
-            else:
+            localStream = self.ActiveWebStreams.get(streamId, None)
+            if localStream is None:
                 # It doesn't exist. Validate this is a open message.
                 if webStreamMsg.IsOpenMsg() is False:
                     # TODO - Handle messages that arrive for just closed streams better.
@@ -184,7 +220,7 @@ class OctoSession:
                     if isCloseMessage:
                         self.Logger.debug("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
                     else:
-                        self.Logger.warn("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
+                        self.Logger.warning("We got a web stream message for a stream id [" + str(streamId) + "] that doesn't exist and isn't an open message. IsClose:"+str(isCloseMessage))
                     # Don't throw, because this message maybe be coming in from the server as the local side closed.
                     return
 
@@ -194,7 +230,7 @@ class OctoSession:
                     return
 
                 # Create the new stream object now.
-                localStream = octowebstream.OctoWebStream(name="OctoWebStreamPumper", args=(self.Logger, streamId, self, ))
+                localStream = OctoWebStream(name="OctoWebStreamPumper", args=(self.Logger, streamId, self, ))
                 # Set it in the map
                 self.ActiveWebStreams[streamId] = localStream
                 # Start it's main worker thread
@@ -204,19 +240,19 @@ class OctoSession:
         localStream.OnIncomingServerMessage(webStreamMsg)
 
 
-    def WebStreamClosed(self, streamId):
+    def WebStreamClosed(self, sessionId:int) -> None:
         # Called from the webstream when it's closing.
         with self.ActiveWebStreamsLock:
-            if streamId in self.ActiveWebStreams :
-                self.ActiveWebStreams.pop(streamId)
-            else:
+            # Provide none so this doesn't thrown
+            foundStream = self.ActiveWebStreams.pop(sessionId, None)
+            if foundStream is None:
                 self.Logger.error("A web stream asked to close that wasn't in our webstream map.")
 
 
     def CloseAllWebStreamsAndDisable(self):
         # The streams will remove them selves from the map when they close, so all we need to do is ask them
         # to close.
-        localWebStreamList = []
+        localWebStreamList:List[OctoWebStream] = []
         with self.ActiveWebStreamsLock:
             # Close them all.
             self.Logger.info("Closing all open web stream sockets ("+str(len(self.ActiveWebStreams))+")")
@@ -236,12 +272,12 @@ class OctoSession:
                 try:
                     webStream.Close()
                 except Exception as e:
-                    Sentry.Exception("Exception thrown while closing web streamId", e)
+                    Sentry.OnException("Exception thrown while closing web streamId", e)
         except Exception as ex:
-            Sentry.Exception("Exception thrown while closing all web streams.", ex)
+            Sentry.OnException("Exception thrown while closing all web streams.", ex)
 
 
-    def StartHandshake(self, summonMethod):
+    def StartHandshake(self, summonMethod:int):
         # Send the handshakesyn
         try:
             # Get our unique challenge
@@ -268,7 +304,7 @@ class OctoSession:
             # Send!
             self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSizeBytes)
         except Exception as e:
-            Sentry.Exception("Failed to send handshake syn.", e)
+            Sentry.OnException("Failed to send handshake syn.", e)
             self.OnSessionError(0)
 
 
@@ -276,13 +312,13 @@ class OctoSession:
     # Since all web stream messages use their own threads, we don't spin off a thread
     # for messages here. However, that means we need to be careful to not do any
     # long processing in the function, since it will delay all incoming messages.
-    def HandleMessage(self, msgBytes):
+    def HandleMessage(self, msgBytes:Buffer) -> None:
         # Decode the message.
         msg = None
         try:
             msg = self.DecodeOctoStreamMessage(msgBytes)
         except Exception as e:
-            Sentry.Exception("Failed to decode message local request.", e)
+            Sentry.OnException("Failed to decode message local request.", e)
             self.OnSessionError(0)
             return
 
@@ -313,37 +349,32 @@ class OctoSession:
             return
 
         except Exception as e:
-            # If anything throws, we consider it a protocol failure.
-            traceback.print_exc()
             # We have seen "failed to create thread" here before, so we do this to debug that.
             ThreadDebug.DoThreadDumpLogout(self.Logger)
-            Sentry.Exception("Failed to handle octo message.", e)
+            Sentry.OnException("Failed to handle octo message.", e)
             self.OnSessionError(0)
             return
 
-    # Helper to unpack uint32
-    def Unpack32Int(self, buffer, bufferOffset) :
-        if sys.byteorder == "little":
-            if sys.version_info[0] < 3:
-                return (struct.unpack('1B', buffer[0 + bufferOffset])[0]) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 8) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[3 + bufferOffset])[0] << 24)
-            else:
-                return (buffer[0 + bufferOffset]) + (buffer[1 + bufferOffset] << 8) + (buffer[2 + bufferOffset] << 16) + (buffer[3 + bufferOffset] << 24)
-        else:
-            if sys.version_info[0] < 3:
-                return (struct.unpack('1B', buffer[0 + bufferOffset])[0] << 24) + (struct.unpack('1B', buffer[1 + bufferOffset])[0] << 16) + (struct.unpack('1B', buffer[2 + bufferOffset])[0] << 8) + struct.unpack('1B', buffer[3 + bufferOffset])[0]
-            else:
-                return (buffer[0 + bufferOffset] << 24) + (buffer[1 + bufferOffset] << 16) + (buffer[2 + bufferOffset] << 8) + (buffer[3 + bufferOffset])
 
-    def DecodeOctoStreamMessage(self, buf):
+    # Helper to unpack uint32
+    def Unpack32Int(self, buffer:ByteLikeOrMemoryView, bufferOffset:int):
+        if sys.byteorder == "little":
+            return (buffer[0 + bufferOffset]) + (buffer[1 + bufferOffset] << 8) + (buffer[2 + bufferOffset] << 16) + (buffer[3 + bufferOffset] << 24)
+        else:
+            return (buffer[0 + bufferOffset] << 24) + (buffer[1 + bufferOffset] << 16) + (buffer[2 + bufferOffset] << 8) + (buffer[3 + bufferOffset])
+
+
+    def DecodeOctoStreamMessage(self, buf:Buffer) -> OctoStreamMessage:
         # Our wire protocol is a uint32 followed by the flatbuffer message.
+        rawBuffer = buf.Get()
 
         # First, read the message size.
         # We add 4 to account for the full buffer size, including the uint32.
-        messageSize = self.Unpack32Int(buf, 0) + 4
+        messageSize = self.Unpack32Int(rawBuffer, 0) + 4
 
         # Check that things make sense.
-        if messageSize != len(buf):
-            raise Exception("We got an OctoStreamMsg that's not the correct size! MsgSize:"+str(messageSize)+"; BufferLen:"+str(len(buf)))
+        if messageSize != len(rawBuffer):
+            raise Exception("We got an OctoStreamMsg that's not the correct size! MsgSize:"+str(messageSize)+"; BufferLen:"+str(len(rawBuffer)))
 
         # Decode and return
-        return OctoStreamMessage.OctoStreamMessage.GetRootAs(buf, 4)
+        return OctoStreamMessage.GetRootAs(rawBuffer, 4) #pyright: ignore[reportUnknownMemberType]

@@ -3,12 +3,14 @@ import threading
 import time
 import json
 import logging
+from typing import List, Optional
 
 from .sentry import Sentry
 from .snapshotresizeparams import SnapshotResizeParams
 from .repeattimer import RepeatTimer
 from .debugprofiler import DebugProfiler, DebugProfilerFeatures
 from .httpsessions import HttpSessions
+from .interfaces import INotificationHandler, IPrinterStateReporter
 
 class Gadget:
 
@@ -26,26 +28,26 @@ class Gadget:
     # Assuming 20 second checks, 100 checks is about 30 minutes of data.
     c_maxScoreHistoryItems = 100
 
-    def __init__(self, logger:logging.Logger, notificationHandler, printerStateInterface):
+    def __init__(self, logger:logging.Logger, notificationHandler:INotificationHandler, printerStateInterface:IPrinterStateReporter):
         self.Logger = logger
         self.NotificationHandler = notificationHandler
         self.PrinterStateInterface = printerStateInterface
         self.Lock = threading.Lock()
-        self.Timer = None
-        self.Profiler = None
+        self.Timer:Optional[RepeatTimer] = None
+        self.Profiler:Optional[DebugProfiler] = None
         self.DefaultProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
         self.FailedConnectionAttempts = 0
 
         # If there is a current host lock, this is the hostname.
         # This is cleared on error and as the start of each print.
-        self.HostLockHostname = None
+        self.HostLockHostname:Optional[str] = None
         # Dev param, can be set to disable host lock.
         self.DisableHostLock = False
 
         # The most recent Gadget score sent back and the time it was received at.
         self.MostRecentGadgetScore = 0.0
         self.MostRecentGadgetScoreUpdateTimeSec = 0
-        self.ScoreHistory = []
+        self.ScoreHistory:List[float] = []
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         # These default to None, to indicate they haven't been done.
         self.MostRecentWarningTimeSec = None
@@ -60,14 +62,14 @@ class Gadget:
         self.ImageScaleMaxHeight = 0
 
 
-    def SetServerProtocolAndDomain(self, protocolAndDomain:str):
+    def SetServerProtocolAndDomain(self, protocolAndDomain:str) -> None:
         # If a custom domain is set, disable host lock, so we don't jump off it.
         self.Logger.info("Gadget default protocol and hostname set to: "+protocolAndDomain + " Host Lock Is DISABLED")
         self.DefaultProtocolAndDomain = protocolAndDomain
         self.DisableHostLock = True
 
 
-    def StartWatching(self):
+    def StartWatching(self) -> None:
         with self.Lock:
             # Stop any running timer.
             self._stopTimerUnderLock()
@@ -82,32 +84,32 @@ class Gadget:
             self.Timer.start()
 
 
-    def StopWatching(self):
+    def StopWatching(self) -> None:
         with self.Lock:
             self._stopTimerUnderLock()
 
 
     # Returns the last score Gadget sent us back.
     # Defaults to 0.0
-    def GetLastGadgetScoreFloat(self):
+    def GetLastGadgetScoreFloat(self) -> float:
         # * 1.0 to ensure it's a float.
         return self.MostRecentGadgetScore * 1.0
 
 
     # Returns the history of scores for this print.
     # Defaults to an empty list.
-    def GetScoreHistoryFloats(self):
+    def GetScoreHistoryFloats(self) -> List[float]:
         return self.ScoreHistory
 
 
     # Returns the seconds since the last Gadget score update.
     # The default time is very large, since it's the time since 0.
-    def GetLastTimeSinceScoreUpdateSecFloat(self):
+    def GetLastTimeSinceScoreUpdateSecFloat(self) -> float:
         return time.time() - self.MostRecentGadgetScoreUpdateTimeSec
 
 
     # Returns the current interval Gadget has set for us.
-    def GetCurrentIntervalSecFloat(self):
+    def GetCurrentIntervalSecFloat(self) -> float:
         # Note we can't use _getTimerInterval because the timer interval is set to the default
         # at the start of each call for error handling.
         # * 1.0 to ensure it's a float.
@@ -115,7 +117,7 @@ class Gadget:
 
 
     # Returns None if there has been no pause, otherwise, the amount of time since in seconds.
-    def GetTimeOrNoneSinceLastPauseIntSec(self):
+    def GetTimeOrNoneSinceLastPauseIntSec(self) -> Optional[int]:
         timeSec = self.MostRecentPauseTimeSec
         if timeSec is None:
             return None
@@ -123,7 +125,7 @@ class Gadget:
 
 
     # Returns None if there has been no warning, otherwise, the amount of time since in seconds.
-    def GetTimeOrNoneSinceLastWarningIntSec(self):
+    def GetTimeOrNoneSinceLastWarningIntSec(self) -> Optional[int]:
         timeSec = self.MostRecentWarningTimeSec
         if timeSec is None:
             return None
@@ -131,12 +133,12 @@ class Gadget:
 
 
     # Returns a bool if the current print is suppressed or not.
-    def IsPrintSuppressed(self):
+    def IsPrintSuppressed(self) -> bool:
         return self.IsSuppressed
 
 
     # Can only be called when the timer isn't running to prevent race conditions.
-    def _resetPerPrintState(self):
+    def _resetPerPrintState(self) -> None:
         # Reset the basic stats
         self.MostRecentIntervalSec = Gadget.c_defaultIntervalSec
         self.MostRecentGadgetScore = 0.0
@@ -151,20 +153,20 @@ class Gadget:
         self.IsSuppressed = False
 
 
-    def _stopTimerUnderLock(self):
+    def _stopTimerUnderLock(self) -> None:
         if self.Timer is not None:
             self.Logger.info("Gadget has stopped watching!")
             self.Timer.Stop()
             self.Timer = None
 
 
-    def _updateTimerInterval(self, newIntervalSec):
+    def _updateTimerInterval(self, newIntervalSec:float) -> None:
         timer = self.Timer
         if timer is not None:
             timer.SetInterval(newIntervalSec)
 
 
-    def _getTimerInterval(self):
+    def _getTimerInterval(self) -> float:
         timer = self.Timer
         if timer is not None:
             return timer.GetInterval()
@@ -188,7 +190,7 @@ class Gadget:
             # Check to ensure we should still be running. If the state is anything other than printing, we shouldn't be running
             # We will be restarted on a new print starting or when resume is called.
             if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
-                self.Logger.warn("Gadget timer is running but the print state is not printing, so the timer is topping.")
+                self.Logger.warning("Gadget timer is running but the print state is not printing, so the timer is topping.")
                 self.StopWatching()
                 return
 
@@ -213,23 +215,19 @@ class Gadget:
                 snapshotResizeParams = SnapshotResizeParams(self.ImageScaleMaxHeight, True, False, False)
 
             # Now, get the common event args, which will include the snapshot.
-            requestData = self.NotificationHandler.BuildCommonEventArgs("inspect", None, None, snapshotResizeParams)
+            (args, files) = self.NotificationHandler.BuildCommonEventArgs("inspect", None, None, snapshotResizeParams)
 
             # Handle the result indicating we don't have the proper var to send yet.
-            if requestData is None:
+            if args is None or files is None:
                 self.Logger.info("Gadget didn't send because we don't have the proper id and key yet.")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
                 return
 
-            # Break out the args
-            args = requestData[0]
-            files = requestData[1]
-
             # Add the last interval, so the server knows
-            args["LastIntervalSec"] = lastIntervalSec
+            args["LastIntervalSec"] = str(lastIntervalSec)
 
             # Also add the score history, for the server.
-            args["ScoreHistory"] = self.GetScoreHistoryFloats()
+            args["ScoreHistory"] = str(self.GetScoreHistoryFloats())
 
             # Next, check if there's a valid snapshot image.
             if len(files) == 0:
@@ -280,14 +278,14 @@ class Gadget:
             # Handle the json response. We should find an int telling us how long we should wait before sending the next
             # inspection report.
             if "Result" not in jsonResponse:
-                self.Logger.warn("Gadget inspection result had no Result object")
+                self.Logger.warning("Gadget inspection result had no Result object")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
                 # On any error, clear the HostLock hostname, so we hit the root domain again.
                 self._clearHostLockHostname()
                 return
             resultObj = jsonResponse["Result"]
             if "NextInspectIntervalSec" not in resultObj:
-                self.Logger.warn("Gadget inspection result had no NextInspectIntervalSec field")
+                self.Logger.warning("Gadget inspection result had no NextInspectIntervalSec field")
                 self._updateTimerInterval(Gadget.c_defaultIntervalSec)
                 # On any error, clear the HostLock hostname, so we hit the root domain again.
                 self._clearHostLockHostname()
@@ -323,7 +321,7 @@ class Gadget:
                         self.Logger.info("Gadget ImageScaleCenterCropSize set to: "+str(newValue))
                         self.ImageScaleCenterCropSize = newValue
                 except Exception as e:
-                    self.Logger.warn("Gadget failed to parse IS_CCSize from response. "+str(e))
+                    self.Logger.warning("Gadget failed to parse IS_CCSize from response. "+str(e))
                     self.ImageScaleCenterCropSize = 0
             if "IS_MH" in resultObj:
                 try:
@@ -332,7 +330,7 @@ class Gadget:
                         self.Logger.info("Gadget ImageScaleMaxHeight set to: "+str(newValue))
                         self.ImageScaleMaxHeight = newValue
                 except Exception as e:
-                    self.Logger.warn("Gadget failed to parse IS_MH from response."+str(e))
+                    self.Logger.warning("Gadget failed to parse IS_MH from response."+str(e))
                     self.ImageScaleMaxHeight = 0
 
             # Check if we have a log object in response. If so, the server wants us to log information into the local log file.
@@ -342,7 +340,7 @@ class Gadget:
                     logStr = json.dumps(resultObj["Log"])
                     self.Logger.info("Gadget Server Log - id:"+str(self.NotificationHandler.GetPrintId())+" int:"+str(nextIntervalSec)+" s:"+str(self.MostRecentGadgetScore)+" - "+logStr)
                 except Exception as e:
-                    self.Logger.warn("Gadget failed to parse Log from response."+str(e))
+                    self.Logger.warning("Gadget failed to parse Log from response."+str(e))
 
             # Reset the failed attempts counter
             self.FailedConnectionAttempts = 0
@@ -351,12 +349,12 @@ class Gadget:
             self.Profiler.ReportIfNeeded()
 
         except Exception as e:
-            Sentry.Exception("Exception in gadget timer", e)
+            Sentry.OnException("Exception in gadget timer", e)
             # On any error, clear the HostLock hostname, so we hit the root domain again.
             self._clearHostLockHostname()
 
 
-    def _updateGadgetScore(self, newScore):
+    def _updateGadgetScore(self, newScore:float) -> None:
         # We keep track of all scores, for stats.
         # Round the scores to 4 decimals, so 0.9583 is 95.8%
         self.ScoreHistory.insert(0, round(newScore, 3))
@@ -373,7 +371,7 @@ class Gadget:
         self.MostRecentGadgetScoreUpdateTimeSec = time.time()
 
 
-    def _getProtocolAndHostname(self):
+    def _getProtocolAndHostname(self) -> str:
         # The idea of host lock is some light load balancing, while also keeping prints stick to the same
         # host of Gadget ideally. The Gadget hosting system can support inspections on any host, but it's more efficient and ideal
         # for the client and system if the same client talks to the same host for the entire print.
@@ -388,7 +386,7 @@ class Gadget:
         return "https://"+currentHostname
 
 
-    def _clearHostLockHostname(self):
+    def _clearHostLockHostname(self) -> None:
         # Clear the hostname, but don't clear the dev force disable flag.
         # This will disable the current host lock (if there is one)
         if self.HostLockHostname is None:
@@ -397,7 +395,7 @@ class Gadget:
         self.HostLockHostname = None
 
 
-    def _setHostLockHostnameIfNeeded(self, hostname):
+    def _setHostLockHostnameIfNeeded(self, hostname:str) -> None:
         # If we are already host locked, don't set new values.
         # There will almost always be a value returned and it will always be the current server
         # with the lowest load. But the entire point of host lock is to try to stay stick on a single host.

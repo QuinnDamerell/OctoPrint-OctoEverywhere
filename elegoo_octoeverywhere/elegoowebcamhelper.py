@@ -1,20 +1,22 @@
 import logging
 import time
+from typing import List, Optional
 
 from linux_host.config import Config
 
 from octoeverywhere.Webcam.webcamsettingitem import WebcamSettingItem
 from octoeverywhere.Webcam.quickcam import QuickCam
+from octoeverywhere.interfaces import IWebcamPlatformHelper
 
 from .elegooclient import ElegooClient
 
 # This class implements the webcam platform helper interface for elegoo os.
-class ElegooWebcamHelper():
+class ElegooWebcamHelper(IWebcamPlatformHelper):
 
     def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
         self.Config = config
-        self.CachedStreamUrlBase:str = None
+        self.CachedStreamUrlBase:Optional[str] = None
         self.LastStreamUrlBaseUpdateSec:float = 0.0
 
 
@@ -23,7 +25,7 @@ class ElegooWebcamHelper():
     # Index 0 is used as the default webcam.
     # The order the webcams are returned is the order the user will see in any selection UIs.
     # Returns None on failure.
-    def GetWebcamConfig(self):
+    def GetWebcamConfig(self) -> Optional[List[WebcamSettingItem]]:
         # For Elegoo OS printers, there's only one webcam setup by default, it's a jmpeg server running on 3031.
         #
         # BUT - The server only allows for one stream at a time, so we can't have multiple webcams.

@@ -1,6 +1,6 @@
 import time
 import logging
-from typing import Union
+from typing import Any, Dict, Optional, Tuple
 
 from octoeverywhere.sentry import Sentry
 
@@ -24,27 +24,26 @@ class PrinterState:
         self.MostRecentPrintInfo = MostRecentPrintInfo()
         # We only parse out what we currently use.
         # We try to use names like the vars in the json.
-        self.CurrentStatus:int = None
-        self.PrintInfoStatus:int = None
-        self.CurrentLayer:int = None
-        self.TotalLayer:int = None
-        self.FileName:str = None
-        # The duration of the print thus far
-        self.DurationSec:int = None
-        self.TotalPrintTimeEstSec:int = None
+        self.CurrentStatus:Optional[int] = None
+        self.PrintInfoStatus:Optional[int] = None
+        self.CurrentLayer:Optional[int] = None
+        self.TotalLayer:Optional[int] = None
+        self.FileName:Optional[str] = None
+        self.DurationSec:Optional[int] = None
+        self.TotalPrintTimeEstSec:Optional[int] = None
         # Expressed 100.0 -> 0.0
-        self.Progress:float = None
-        self.TaskId:str = None
-        self.HotendActual:float = None
-        self.HotendTarget:float = None
-        self.BedActual:float = None
-        self.BedTarget:float = None
-        self.ChamberActual:float = None
-        self.ChamberTarget:float = None
+        self.Progress:Optional[float] = None
+        self.TaskId:Optional[str] = None
+        self.HotendActual:Optional[float] = None
+        self.HotendTarget:Optional[float] = None
+        self.BedActual:Optional[float] = None
+        self.BedTarget:Optional[float] = None
+        self.ChamberActual:Optional[float] = None
+        self.ChamberTarget:Optional[float] = None
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, state:dict) -> None:
+    def OnUpdate(self, state:Dict[str, Any]) -> None:
         # Each update contains all of the data, so we will either get the new value or we will clear it.
         currentStateArray = state.get("CurrentStatus", None)
         if currentStateArray is None or len(currentStateArray) == 0:
@@ -73,21 +72,21 @@ class PrinterState:
         self.MostRecentPrintInfo.Update(self)
 
 
-    def _GetIntOrNone(self, d:dict, key:str) -> int:
+    def _GetIntOrNone(self, d:Dict[str, Any], key:str) -> Optional[int]:
         v = d.get(key, None)
         if v is None:
             return None
         return int(v)
 
 
-    def _GetFloatOrNone(self, d:dict, key:str) -> int:
+    def _GetFloatOrNone(self, d:Dict[str, Any], key:str) -> Optional[float]:
         v = d.get(key, None)
         if v is None:
             return None
         return int(v)
 
 
-    def _GetStrOrNone(self, d:dict, key:str) -> str:
+    def _GetStrOrNone(self, d:Dict[str, Any], key:str) -> Optional[str]:
         v = d.get(key, None)
         if v is None or len(v) == 0:
             return None
@@ -114,7 +113,7 @@ class PrinterState:
     #   complete  - A print is done
     #   cancelled - Similar to complete, where the job is still loaded, but it stopped printed because it was canceled.
     #   error     - The printer is in an error state.
-    def GetCurrentStatus(self) -> Union[str, str]:
+    def GetCurrentStatus(self) -> Tuple[Optional[str], Optional[str]]:
         if self.CurrentStatus is None or self.PrintInfoStatus is None:
             return None, None
         # We mostly just use the print state, which is what the frontend does.
@@ -174,7 +173,7 @@ class PrinterState:
 
     # We use this common method since "is this a printing state?" is complicated and we can to keep all of the logic common in the plugin
     @staticmethod
-    def IsPrintingState(status:str, includePausedAsPrinting:bool) -> bool:
+    def IsPrintingState(status:Optional[str], includePausedAsPrinting:bool) -> bool:
         if status is None:
             return False
         if status == PrinterState.PRINT_STATUS_PRINTING or status == PrinterState.PRINT_STATUS_RESUMING:
@@ -193,7 +192,7 @@ class PrinterState:
 
     # We use this common method to keep all of the logic common in the plugin
     @staticmethod
-    def IsPrepareOrSlicingState(status:str) -> bool:
+    def IsPrepareOrSlicingState(status:Optional[str]) -> bool:
         if status is None:
             return False
         return status == PrinterState.PRINT_STATUS_WARMINGUP
@@ -207,7 +206,7 @@ class PrinterState:
 
     # This one function acts as common logic across the plugin.
     @staticmethod
-    def IsPausedState(status:str) -> bool:
+    def IsPausedState(status:Optional[str]) -> bool:
         if status is None:
             return False
         return status == PrinterState.PRINT_STATUS_PAUSED
@@ -215,12 +214,12 @@ class PrinterState:
 
     # Returns a time reaming in seconds.
     # Returns null if the time is unknown.
-    def GetTimeRemainingSec(self) -> int:
+    def GetTimeRemainingSec(self) -> Optional[int]:
         return PrinterState.GetTimeRemainingSecStatic(self.DurationSec, self.TotalPrintTimeEstSec)
 
 
     @staticmethod
-    def GetTimeRemainingSecStatic(durationSec:int, totalPrintTimeSec:int) -> int:
+    def GetTimeRemainingSecStatic(durationSec:Optional[int], totalPrintTimeSec:Optional[int]) -> Optional[int]:
         if durationSec is None or totalPrintTimeSec is None:
             return None
         # Compute the time based on when the value last updated.
@@ -228,15 +227,15 @@ class PrinterState:
 
 
     # If there is a file name, this returns it without the extension.
-    def GetFileNameWithNoExtension(self):
+    def GetFileNameWithNoExtension(self) -> Optional[str]:
         return PrinterState.GetFileNameWithNoExtensionStatic(self.FileName)
 
 
     # If there is a file name, this returns it without the extension.
     # For Elegoo, we also do more cleanup, since the Elegoo slicer has as common file name pattern.
-    s_FixedUpFileNameCache = {}
+    s_FixedUpFileNameCache:Dict[str, str] = {}
     @staticmethod
-    def GetFileNameWithNoExtensionStatic(fileName:str):
+    def GetFileNameWithNoExtensionStatic(fileName:Optional[str]) -> Optional[str]:
         if fileName is None:
             return None
         # We cache the fixed up file names, since we don't want to do this all of the time.
@@ -282,7 +281,7 @@ class PrinterState:
             # Capitalize the string to clean it up
             fileNameLower = fileNameLower.title()
         except Exception as e:
-            Sentry.Exception("Error in GetFileNameWithNoExtensionStatic", e)
+            Sentry.OnException("Error in GetFileNameWithNoExtensionStatic", e)
 
         # Set the result into the cache and return it.
         PrinterState.s_FixedUpFileNameCache[fileName] = fileNameLower
@@ -293,7 +292,7 @@ class PrinterState:
     # This string should be as unique as possible, but always the same for the same print.
     # If there is no active print, this should return None!
     # See details in NotificationHandler._RecoverOrRestForNewPrint
-    def GetPrintCookie(self) -> str:
+    def GetPrintCookie(self) -> Optional[str]:
         # If there is no task id or file name, we shouldn't make a cookie.
         if self.TaskId is None or len(self.TaskId) == 0 or self.FileName is None or len(self.FileName) == 0:
             return None
@@ -344,11 +343,11 @@ class PrinterAttributes:
         self.Logger = logger
         self.HasLoggedPrinterVersion = False
         # We only parse out what we currently use.
-        self.MainboardMac:str = None
+        self.MainboardMac:Optional[str] = None
 
 
     # Called when there's a new print message from the printer.
-    def OnUpdate(self, msg:dict) -> None:
+    def OnUpdate(self, msg:Dict[str, Any]) -> None:
         self.MainboardMac = msg.get("MainboardMAC", None)
         # if self.HasLoggedPrinterVersion is False:
         #     self.HasLoggedPrinterVersion = True
@@ -359,14 +358,14 @@ class PrinterAttributes:
 class MostRecentPrintInfo:
 
     def __init__(self) -> None:
-        self.LastUpdateTimeSec:int = None
-        self.FileName:str = None
-        self.TaskId:str = None
-        self.DurationSec:int = None
-        self.TotalPrintTimeEstSec:int = None
-        self.Progress:float = None
-        self.CurrentLayer:int = None
-        self.TotalLayer:int = None
+        self.LastUpdateTimeSec:Optional[float] = None
+        self.FileName:Optional[str] = None
+        self.TaskId:Optional[str] = None
+        self.DurationSec:Optional[int] = None
+        self.TotalPrintTimeEstSec:Optional[int] = None
+        self.Progress:Optional[float] = None
+        self.CurrentLayer:Optional[int] = None
+        self.TotalLayer:Optional[int] = None
 
 
     def Update(self, pState:"PrinterState") -> None:
@@ -391,11 +390,11 @@ class MostRecentPrintInfo:
         self.TotalLayer = pState.TotalLayer
 
 
-    def GetFileNameWithNoExtension(self):
+    def GetFileNameWithNoExtension(self) -> Optional[str]:
         return PrinterState.GetFileNameWithNoExtensionStatic(self.FileName)
 
 
     # Returns a time reaming in seconds.
-    # Returns null if the time is unknown.
-    def GetTimeRemainingSec(self) -> int:
+    # Returns None if the time is unknown.
+    def GetTimeRemainingSec(self) -> Optional[int]:
         return PrinterState.GetTimeRemainingSecStatic(self.DurationSec, self.TotalPrintTimeEstSec)

@@ -1,6 +1,7 @@
 import os
 import json
 from enum import IntEnum
+from typing import Optional
 
 from octoeverywhere.telemetry import Telemetry
 
@@ -36,21 +37,21 @@ class Context:
         #
 
         # This is the repo root of OctoEverywhere. This is common for all instances.
-        self.RepoRootFolder:str = None
+        self.RepoRootFolder:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This is the path to the PY virtual env for OctoEverywhere. This is common for all instances.
-        self.VirtualEnvPath:str = None
+        self.VirtualEnvPath:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This is the user name of the user who launched the install script.
         # Useful because this module is running as a sudo user.
-        self.UserName:str = None
+        self.UserName:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This is the user home path of the user who launched the install script.
         # Useful because this module is running as a sudo user.
-        self.UserHomePath:str = None
+        self.UserHomePath:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # A string containing all of the args the install script was launched with.
-        self.CmdLineArgs:str = None
+        self.CmdLineArgs:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # Detected in this installer as we are starting, this indicates what type of OS we are running on.
         self.OsType:OsTypes = OsTypes.Debian
@@ -88,20 +89,20 @@ class Context:
         #
 
         # This is the full file path to the moonraker config.
-        self.MoonrakerConfigFilePath:str = None
+        self.MoonrakerConfigFilePath:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This is the file name of the moonraker service we are targeting.
-        self.MoonrakerServiceFileName:str = None
+        self.MoonrakerServiceFileName:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         ### - OR - ###
         # These values will be filled out if this is a companion OR Bambu connect setup.
 
         # The root folder where the companion or Bambu plugin data lives.
-        self.CompanionDataRoot:str = None
+        self.CompanionDataRoot:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # The companion or bambu instance id, so we can support multiple instances on one device.
         # Note that a id of "1" is special, and you can use IsPrimaryCompanionBambuOrElegoo to detect it.
-        self.CompanionInstanceId:str = None
+        self.CompanionInstanceId:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
 
         #
@@ -110,31 +111,31 @@ class Context:
 
         # For local plugin configs, this is the printer data folder root.
         # For companion or bambu plugins, this is the same as self.CompanionDataRoot
-        self.RootFolder:str = None
+        self.RootFolder:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This the folder where our main plugin config is or will be.
         # For local plugin configs, this is the Moonraker config folder.
         # For companion or bambu plugins, this is the same as self.CompanionDataRoot
-        self.ConfigFolder:str = None
+        self.ConfigFolder:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This is the folder where the plugin logs will go.
-        self.LogsFolder:str = None
+        self.LogsFolder:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # The path to where the local storage will be put for this instance.
-        self.LocalFileStorageFolder:str = None
+        self.LocalFileStorageFolder:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # This is the name of this OctoEverywhere instance's service.
-        self.ServiceName:str = None
+        self.ServiceName:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         # The full file path and file name of this instance's service file.
-        self.ServiceFilePath:str = None
+        self.ServiceFilePath:str = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
         #
         # Generation 4
         #
 
         # Generation 4 - If the instance config file existed before we created the service, this will hold the printer id.
-        self.ExistingPrinterId:str = None
+        self.ExistingPrinterId:Optional[str] = None
 
 
     # Returns true if the OS is Creality OS, aka K1 or Sonic Pad
@@ -294,15 +295,15 @@ class Context:
 
     def DetectOsType(self):
         #
-        # Note! This should closely resemble the ostype.py class in the plugin and the logic in the ./install.sh script!
+        # Note! This should closely resemble the ostypeidentifier.py class in the octoeverywhere module AND the logic in the ./install.sh script!
         #
 
         # For the k1 and k1 max, we look for the "buildroot" OS.
         if os.path.exists("/etc/os-release"):
             with open("/etc/os-release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    if "ID=buildroot" in l:
+                for line in lines:
+                    if "ID=buildroot" in line:
                         # If we find it, make sure the user data path is where we expect it to be, and we are good.
                         if os.path.exists(Paths.CrealityOsUserDataPath_K1):
                             self.OsType = OsTypes.K1
@@ -313,16 +314,23 @@ class Context:
         if os.path.exists("/etc/openwrt_release"):
             with open("/etc/openwrt_release", "r", encoding="utf-8") as osInfo:
                 lines = osInfo.readlines()
-                for l in lines:
-                    l = l.lower()
-                    if "sonic" in l:
+
+                # First, scan for the "sonic" string, which indicates the Sonic Pad.
+                # Note we have to scan the entire file first, otherwise the K2 detector will find "tina" first, since it's in both.
+                for line in lines:
+                    line = line.lower()
+                    if "sonic" in line:
                         # If we find it, make sure the user data path is where we expect it to be, and we are good.
                         if os.path.exists(Paths.CrealityOsUserDataPath_SonicPad):
                             self.OsType = OsTypes.SonicPad
                             return
                         raise Exception("We detected a Sonic Pad, but can't determine the data path. Please contact support.")
+
+                # Now we scan for the "tina" string, which indicates the K2.
+                for line in lines:
+                    line = line.lower()
                     # The K2 is based on the OS release "tina" and then we look for the user data path.
-                    if "tina" in l:
+                    if "tina" in line:
                         if os.path.exists(Paths.CrealityOsUserDataPath_K2):
                             self.OsType = OsTypes.K2
                             return

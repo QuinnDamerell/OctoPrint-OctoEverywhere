@@ -1,14 +1,20 @@
-import threading
 import time
+import logging
+import threading
+from typing import Optional
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.compat import Compat
-from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.buffer import Buffer
 from octoeverywhere.octohttprequest import PathTypes
+from octoeverywhere.interfaces import ISlipstreamHandler
+from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.WebStream.octoheaderimpl import HeaderHelper
 from octoeverywhere.WebStream.octoheaderimpl import BaseProtocol
+from octoeverywhere.httpresult import HttpResult, HttpResultOrNone
 from octoeverywhere.octostreammsgbuilder import OctoStreamMsgBuilder
 from octoeverywhere.compression import Compression, CompressionContext
+from octoeverywhere.Proto.HttpInitialContext import HttpInitialContext
 
 from .localauth import LocalAuth
 
@@ -25,7 +31,7 @@ from .localauth import LocalAuth
 # We also pre-compress the response, so we can use a better compression quality and we don't have to compress it in realtime.
 #
 # This class has also been expanded to cache static resources required by the index that are large.
-class Slipstream:
+class Slipstream(ISlipstreamHandler):
     # A const that defines the common cache path for the index.
     # This is a special case for the index, since we ignore query parameters and anchors for the cache lookup logic.
     IndexCachePath = "/"
@@ -64,27 +70,27 @@ class Slipstream:
 
 
     # Logic for a static singleton
-    _Instance = None
+    _Instance: "Slipstream" = None #pyright: ignore[reportAssignmentType]
 
 
     @staticmethod
-    def Init(logger):
+    def Init(logger:logging.Logger) -> None:
         Slipstream._Instance = Slipstream(logger)
         # Since OctoPrint supports this, add it to our compat layer
         Compat.SetSlipstream(Slipstream._Instance)
 
 
     @staticmethod
-    def Get():
+    def Get() -> "Slipstream":
         return Slipstream._Instance
 
 
-    def __init__(self, logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
 
         self.Lock = threading.Lock()
         self.IsRefreshing = False
-        self.Cache = {}
+        self.Cache:dict[str, HttpResult] = {}
 
         # Kick off a thread to grab the initial index, no delay we build the cache ASAP.
         # Note on server boot this index cache call can take a long time (25-30s)
@@ -94,7 +100,7 @@ class Slipstream:
     # !!! Interface Function For Slipstream in Compat Layer !!!
     # If available for the given URL, this will returned the cached and ready to go OctoHttpResult.
     # Otherwise returns None
-    def GetCachedOctoHttpResult(self, httpInitialContext):
+    def GetCachedOctoHttpResult(self, httpInitialContext:HttpInitialContext) -> HttpResultOrNone:
         # Note that all of our URL caching logic is case sensitive! (because URLs are)
 
         # Get the path.
@@ -152,16 +158,16 @@ class Slipstream:
 
 
     # Starts a async thread to update the index cache.
-    def UpdateCache(self, delayMs):
+    def UpdateCache(self, delay:int=0) -> None:
         try:
-            th = threading.Thread(target=self._UpdateCacheThread, args=(delayMs,))
+            th = threading.Thread(target=self._UpdateCacheThread, args=(delay,))
             th.start()
         except Exception as e:
-            Sentry.Exception("Slipstream failed to start index refresh thread. ", e)
+            Sentry.OnException("Slipstream failed to start index refresh thread. ", e)
 
 
     # Does the index update cache work.
-    def _UpdateCacheThread(self, delayMs):
+    def _UpdateCacheThread(self, delayMs:int):
         try:
             # We only need one refresh running at once.
             with self.Lock:
@@ -180,7 +186,7 @@ class Slipstream:
             self._GetAndProcessIndex()
 
         except Exception as e:
-            Sentry.Exception("Slipstream failed to update cache.", e)
+            Sentry.OnException("Slipstream failed to update cache.", e)
         finally:
             with self.Lock:
                 # It's important we always clear this flag.
@@ -204,8 +210,10 @@ class Slipstream:
         if fullBodyBuffer is None:
             self.Logger.error("Slipstream index got successfully but there's no body buffer?")
             return
+
+        # Make a copy of the buffer.
         indexBodyBuffer = bytearray()
-        indexBodyBuffer[:] = fullBodyBuffer
+        indexBodyBuffer[:] = fullBodyBuffer.Get()
 
         # Add the index to the cache so it's ready now.
         with self.Lock:
@@ -215,8 +223,8 @@ class Slipstream:
         indexBodyStr = None
         with CompressionContext(self.Logger) as compressionContext:
             # For decompression, we give the pre-compressed size and the compression type. The True indicates this it the only message, so it's all here.
-            indexBodyBytes = Compression.Get().Decompress(compressionContext, indexBodyBuffer, indexResult.BodyBufferPreCompressSize, True, indexResult.BodyBufferCompressionType)
-            indexBodyStr = indexBodyBytes.decode(encoding="utf-8")
+            indexBodyBytes = Compression.Get().Decompress(compressionContext, Buffer(indexBodyBuffer), indexResult.BodyBufferPreCompressSize, True, indexResult.BodyBufferCompressionType)
+            indexBodyStr = indexBodyBytes.GetBytesLike().decode(encoding="utf-8")
 
         # Set the result to None to make sure we don't use it anymore.
         indexResult = None
@@ -246,7 +254,7 @@ class Slipstream:
 
     # On success returns the fully ready OctoHttpResult object.
     # On failure, returns None
-    def _GetCacheReadyOctoHttpResult(self, url) -> OctoHttpRequest.Result:
+    def _GetCacheReadyOctoHttpResult(self, url: str) -> HttpResultOrNone:
         success = False
         try:
             # Take the starting time.
@@ -259,7 +267,11 @@ class Slipstream:
             headers = HeaderHelper.GatherRequestHeaders(self.Logger, None, BaseProtocol.Http)
 
             # We need to use the local auth helper to add a auth header to the call so it doesn't fail due to unauthed.
-            LocalAuth.Get().AddAuthHeader(headers)
+            localAuth = LocalAuth.Get()
+            if localAuth is None:
+                self.Logger.error("Slipstream failed to get the local auth object.")
+                return None
+            localAuth.AddAuthHeader(headers)
 
             # Make the call using our helper.
             octoHttpResult = OctoHttpRequest.MakeHttpCall(self.Logger, url, PathTypes.Relative, "GET", headers)
@@ -303,6 +315,9 @@ class Slipstream:
                 self.Logger.error("Slipstream failed to read index buffer for "+url+", e:"+str(e))
                 return None
 
+            if buffer is None:
+                self.Logger.error("Slipstream read a a body of and did get a buffer. url:"+url)
+                return None
             # Since we are using the FullBodyBuffer, the content length header must exactly match the actual buffer size before compression.
             if len(buffer) != contentLength:
                 self.Logger.error("Slipstream read a a body of different size then the content length. url:"+url+" body:"+str(len(buffer))+" cl:"+str(contentLength))
@@ -339,7 +354,7 @@ class Slipstream:
         return None
 
 
-    def RemoveCacheIfExists(self, url):
+    def RemoveCacheIfExists(self, url:str) -> None:
         with self.Lock:
             if url in self.Cache:
                 del self.Cache[url]
@@ -347,7 +362,7 @@ class Slipstream:
 
     # Given the full index body and some fragment of a URL, this will try to find the entire URL and return it.
     # Returns None on failure.
-    def TryToFindFullUrl(self, indexBody, urlFragment):
+    def TryToFindFullUrl(self, indexBody: str, urlFragment: str) -> Optional[str]:
         # To start, try to find any of it.
         start = indexBody.find(urlFragment)
         if start == -1:
@@ -372,7 +387,7 @@ class Slipstream:
 
 
     # Returns True if a OctoPrint session cookie has been found, otherwise False.
-    def HasOctoPrintSessionCookie(self, httpInitialContext):
+    def HasOctoPrintSessionCookie(self, httpInitialContext:Optional[HttpInitialContext]) -> bool:
         if httpInitialContext is None:
             self.Logger.info("Slipstream looking for OctoPrint session was called with no httpInitialContext.")
             return False
@@ -384,6 +399,11 @@ class Slipstream:
             # Get the header
             header = httpInitialContext.Headers(i)
             i += 1
+
+            # Ensure we got a header.
+            if header is None:
+                self.Logger.info("Slipstream looking for OctoPrint session cookie found a null header.")
+                continue
 
             # Get the header key value.
             name = OctoStreamMsgBuilder.BytesToString(header.Key())

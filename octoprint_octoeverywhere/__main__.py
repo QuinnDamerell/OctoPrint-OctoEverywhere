@@ -3,6 +3,7 @@ import signal
 import sys
 import secrets
 import string
+from typing import Any, List, Optional, Tuple
 
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
@@ -19,6 +20,7 @@ from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
+from octoeverywhere.interfaces import IPrinterStateReporter, IPopUpInvoker, IStateChangeHandler
 #from .threaddebug import ThreadDebug
 
 from .localauth import LocalAuth
@@ -55,25 +57,25 @@ PrivateKey = "uduuitfqrsstnhhjpsxhmyqwvpxgnajqqbhxferoxunusjaybodfotkupjaecnccdx
 PluginFilePathRoot = "C:\\Users\\quinn"
 
 # A mock of the popup UI interface.
-class UiPopupInvokerStub():
-    def __init__(self, logger):
+class UiPopupInvokerStub(IPopUpInvoker):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
 
-    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:str, actionLink:str, showForSec:int, onlyShowIfLoadedViaOeBool:bool):
+    def ShowUiPopup(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
         self.Logger.info("Client Notification Received. Title:"+title+"; Text:"+text+"; Type:"+msgType+"; showForSec:"+str(showForSec))
 
 
 
 # Implements a common interface shared by OctoPrint and Moonraker.
-class MockPrinterStateObject:
+class MockPrinterStateObject(IPrinterStateReporter):
 
-    def __init__(self, logger):
+    def __init__(self, logger:logging.Logger):
         self.Logger = logger
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # This function will get the estimated time remaining for the current print.
     # Returns -1 if the estimate is unknown.
-    def GetPrintTimeRemainingEstimateInSeconds(self):
+    def GetPrintTimeRemainingEstimateInSeconds(self) -> int:
         # We failed.
         return -1
 
@@ -81,48 +83,50 @@ class MockPrinterStateObject:
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If the printer is warming up, this value would be -1. The First Layer Notification logic depends upon this!
     # Returns the current zoffset if known, otherwise -1.
-    def GetCurrentZOffset(self):
+    def GetCurrentZOffsetMm(self) -> int:
         # Failed to find it.
         return -1
 
-    # ! Interface Function ! The entire interface must change if the function is changed.
-    # If this platform DOESN'T support getting the layer info from the system, this returns (None, None)
-    # If the platform does support it...
-    #     If the current value is unknown, (0,0) is returned.
-    #     If the values are known, (currentLayer(int), totalLayers(int)) is returned.
-    #          Note that total layers will always be > 0, but current layer can be 0!
-    def GetCurrentLayerInfo(self):
+    # Returns:
+    #     (None, None) if the platform doesn't support layer info.
+    #     (0,0) if the current layer is unknown.
+    #     (currentLayer(int), totalLayers(int)) if the values are known.
+    def GetCurrentLayerInfo(self) -> Tuple[Optional[int], Optional[int]]:
         return (None, None)
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # Returns True if the printing timers (notifications and gadget) should be running, which is only the printing state. (not even paused)
     # False if the printer state is anything else, which means they should stop.
-    def ShouldPrintingTimersBeRunning(self):
+    def ShouldPrintingTimersBeRunning(self) -> bool:
         return False
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # If called while the print state is "Printing", returns True if the print is currently in the warm-up phase. Otherwise False
-    def IsPrintWarmingUp(self):
+    def IsPrintWarmingUp(self) -> bool:
         return False
 
 
     # ! Interface Function ! The entire interface must change if the function is changed.
     # Returns the current hotend temp and bed temp as a float in celsius if they are available, otherwise None.
-    def GetTemps(self):
+    def GetTemps(self) -> Tuple[Optional[float], Optional[float]]:
         return (None, None)
 
 
 # A mock of the popup UI interface.
-NotificationHandlerInstance = None
-class StatusChangeHandlerStub():
-    def __init__(self, logger, printerId):
+NotificationHandlerInstance:Optional[NotificationsHandler] = None
+class StatusChangeHandlerStub(IStateChangeHandler):
+    def __init__(self, logger:logging.Logger, printerId: str) -> None:
         self.Logger = logger
         self.PrinterId = printerId
 
-    def OnPrimaryConnectionEstablished(self, octoKey, connectedAccounts):
+    def OnPrimaryConnectionEstablished(self, octoKey:str, connectedAccounts:List[str]) -> None:
         self.Logger.info("OnPrimaryConnectionEstablished - Connected Accounts:"+str(connectedAccounts) + " - OctoKey:"+str(octoKey))
+
+        if NotificationHandlerInstance is None:
+            self.Logger.error("NotificationHandlerInstance is None!")
+            return
 
         # Setup the notification handler
         NotificationHandlerInstance.SetOctoKey(octoKey)
@@ -146,10 +150,14 @@ class StatusChangeHandlerStub():
         #handler.OnFilamentChange()
         #handler.OnPrintProgress(20)
 
-    def OnPluginUpdateRequired(self):
+    def OnPluginUpdateRequired(self) -> None:
         self.Logger.info("On plugin update required message.")
 
-def SignalHandler(sig, frame):
+    def OnRekeyRequired(self) -> None:
+        self.Logger.info("On rekey required message.")
+
+
+def SignalHandler(sig:Any, frame:Any):
     print('Ctrl+C Pressed, Exiting!')
     sys.exit(0)
 
@@ -227,20 +235,20 @@ if __name__ == '__main__':
     NotificationHandlerInstance = NotificationsHandler(logger, MockPrinterStateObject(logger))
 
     # Setup the api command handler if needed for testing.
-    CommandHandler.Init(logger, NotificationHandlerInstance, None, None)
+    CommandHandler.Init(logger, NotificationHandlerInstance, None, None) #pyright: ignore[reportArgumentType] We are bing bad
     # Note this will throw an exception because we don't have a flask context setup.
     # result = apiCommandHandler.HandleApiCommand("status", None)
     # Setup the command handler
 
     # Setup the snapshot helper
-    WebcamHelper.Init(logger, OctoPrintWebcamHelper(logger, None), PluginFilePathRoot)
+    WebcamHelper.Init(logger, OctoPrintWebcamHelper(logger, None), PluginFilePathRoot) #pyright: ignore[reportArgumentType] We are bing bad
 
     # These 3 classes are OctoPrint specific!
     # The order matters, LocalAuth needs to be init before Slipstream.
-    LocalAuth.Init(logger, None)
+    LocalAuth.Init(logger, None) #pyright: ignore[reportArgumentType] We are bing bad
     LocalAuth.Get().SetApiKeyForTesting("SuperSecureApiKey")
     Slipstream.Init(logger)
-    SmartPause.Init(logger, None, None)
+    SmartPause.Init(logger, None, None) #pyright: ignore[reportArgumentType] We are bing bad
 
     uiPopInvoker = UiPopupInvokerStub(logger)
     statusHandler = StatusChangeHandlerStub(logger, PrinterId)

@@ -1,16 +1,20 @@
 import socket
+from typing import Optional
 
 # A helper class to try to detect the local IP of the device.
 class LocalIpHelper:
 
-    s_LocalIpOverride:str = None
+
+    s_LocalIpOverride:Optional[str] = None
+
 
     @staticmethod
     def SetLocalIpOverride(ip:str):
         LocalIpHelper.s_LocalIpOverride = ip
 
+
     @staticmethod
-    def TryToGetLocalIp():
+    def TryToGetLocalIp() -> str:
         # If there is an override, use it. This happens on the companion for example, since the "local ip" we want for the device is not
         # this plugin device's IP.
         if LocalIpHelper.s_LocalIpOverride is not None:
@@ -28,4 +32,4 @@ class LocalIpHelper:
             pass
         finally:
             s.close()
-        return ip
+        return str(ip)

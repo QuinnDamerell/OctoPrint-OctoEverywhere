@@ -1,28 +1,39 @@
+from enum import Enum
 import queue
 import logging
 import threading
-import octowebsocket
+from typing import Any, Callable, List, Optional, Dict
 
-from octoeverywhere.Proto import HttpInitialContext
+from octoeverywhere.buffer import Buffer
 from octoeverywhere.Proto.PathTypes import PathTypes
+from octoeverywhere.interfaces import IWebSocketClient, WebSocketOpCode, IRelayWebSocketProvider
+from octoeverywhere.Proto.HttpInitialContext import HttpInitialContext
 
 from .elegooclient import ElegooClient
+from .interfaces import IWebsocketMux
 
-class ElegooWebsocketMux:
+class ElegooWebsocketMux(IRelayWebSocketProvider, IWebsocketMux):
 
 
     def __init__(self, logger:logging.Logger):
         self.Logger = logger
         self.Lock = threading.Lock()
         self.NextId = 0
-        self.ConnectedWebsockets = {}
+        self.ConnectedWebsockets:Dict[int, ElegooWebsocketClientProxy] = {}
 
 
     # !! Interface Function !!
     # Called when each websocket connection is opened.
     # This function can return an object and it will be used as the websocket object for the connection. It MUST match the interface of the websocket class EXACTLY.
     # If None is returned, the websocket will be opened as normally, using the address.
-    def GetWebsocketObject(self, path:str, pathType:PathTypes, context:HttpInitialContext, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers:dict = None, subProtocolList:list = None):
+    def GetWebsocketObject(self, path:str, pathType:int, context:HttpInitialContext,
+                           onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
+                           onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
+                           onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
+                           onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
+                           onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
+                           headers:Optional[Dict[str, str]]=None,
+                           subProtocolList:Optional[List[str]]=None) -> Optional[IWebSocketClient]:
         # All of the frontend WS connections are relative, so we only need to handle those.
         if pathType != PathTypes.Relative:
             return None
@@ -30,7 +41,7 @@ class ElegooWebsocketMux:
         pathLower = path.lower()
         if not pathLower.startswith("/websocket"):
             # We don't expect this, since there should only be one websocket path.
-            self.Logger.warming(f"We got a relative websocket that didn't match our mux address? We won't mux it. {path}")
+            self.Logger.warning(f"We got a relative websocket that didn't match our mux address? We won't mux it. {path}")
             return None
 
         # Create a new websocket proxy.
@@ -55,26 +66,26 @@ class ElegooWebsocketMux:
 
 
     # Called after the ElegooWebsocketClientProxy is fully open and is ready to send messages.
-    def ProxyOpened(self, ws:"ElegooWebsocketClientProxy"):
+    def ProxyOpened(self, ws:"ElegooWebsocketClientProxy") -> None:
         # When the websocket is fully opened, we can tell the ElegooClient.
         ElegooClient.Get().MuxWebsocketOpened(ws.GetId())
 
 
     # Called when a ElegooWebsocketClientProxy sends a message.
     # Return true if the message was sent, false if the message was not sent.
-    def ProxySend(self, ws:"ElegooWebsocketClientProxy", buffer:bytearray, msgStartOffsetBytes:int, msgSize:int, optCode) -> bool:
+    def ProxySend(self, ws:"ElegooWebsocketClientProxy", buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, optCode=WebSocketOpCode.BINARY) -> bool:
         # Send all messages through the ElegooClient.
         return ElegooClient.Get().MuxSendMessage(ws.GetId(), buffer, msgStartOffsetBytes, msgSize, optCode)
 
 
     # Called when a ElegooWebsocketClientProxy closes.
-    def ProxyClose(self, ws:"ElegooWebsocketClientProxy"):
+    def ProxyClose(self, ws:"ElegooWebsocketClientProxy") -> None:
         # Remove the websocket from the connected list, so it stops getting messages.
         wsId = ws.GetId()
         with self.Lock:
             # Note this will not be in the list if it never opened.
             if wsId in self.ConnectedWebsockets:
-                del self.ConnectedWebsockets[ws.GetId()]
+                del self.ConnectedWebsockets[wsId]
 
         # Tell the ElegooClient the ws is closed, so it can clear any pending contexts.
         ElegooClient.Get().MuxWebsocketClosed(ws.GetId())
@@ -83,39 +94,46 @@ class ElegooWebsocketMux:
     # Called by the ElegooClient when a message is received.
     # If wsId is set, this message is for a specific websocket.
     # If wsId is None, this message is for all websockets.
-    def OnIncomingMessage(self, wsId:int, buffer:bytearray, optCode):
+    def OnIncomingMessage(self, sendToMuxSocketId:Optional[int], buffer:Buffer, msgType:WebSocketOpCode) -> None:
         # OnIncomingMessage pushes the message to a receive queue for each websocket.
         # So its ok to call this synchronously.
         with self.Lock:
             # If wsId is None, send to all websockets.
-            if wsId is None:
+            if sendToMuxSocketId is None:
                 for ws in self.ConnectedWebsockets.values():
-                    ws.OnIncomingMessage(buffer, optCode)
+                    ws.OnIncomingMessage(buffer, msgType)
             else:
                 # Send it to the one websocket if we have it.
-                ws = self.ConnectedWebsockets.get(wsId)
+                ws = self.ConnectedWebsockets.get(sendToMuxSocketId)
                 if ws is not None:
-                    ws.OnIncomingMessage(buffer, optCode)
+                    ws.OnIncomingMessage(buffer, msgType)
 
 
 # The proxy websocket states, to prevent double opening or closing.
 # This will only be progressed through once.
-class ProxyState:
+class ProxyState(Enum):
     UnOpened = 0
     Open = 1
     Closed = 2
 
 
 # This class is a standin for the websocket client, so it must have matching public functions.
-class ElegooWebsocketClientProxy():
+class ElegooWebsocketClientProxy(IWebSocketClient):
 
-    def __init__(self, mux:ElegooWebsocketMux, wsId:int, logger:logging.Logger, onWsOpen = None, onWsMsg = None, onWsData = None, onWsClose = None, onWsError = None, headers:dict = None, subProtocolList:list = None):
+    def __init__(self, mux:ElegooWebsocketMux, wsId:int, logger:logging.Logger,
+                onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
+                onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
+                onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
+                onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
+                onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
+                headers:Optional[Dict[str, str]]=None,
+                subProtocolList:Optional[List[str]]=None):
         self.Mux = mux
         self.Id = wsId
         self.Logger = logger
         self.StateLock = threading.Lock()
         self.State:ProxyState = ProxyState.UnOpened
-        self.ReceiveQueue = queue.Queue()
+        self.ReceiveQueue:queue.Queue[ReceiveQueueContext] = queue.Queue()
 
         self.OnWsOpen = onWsOpen
         self.OnWsMsg = onWsMsg
@@ -130,13 +148,13 @@ class ElegooWebsocketClientProxy():
 
 
     # Runs the websocket blocking until it closes.
-    def RunUntilClosed(self, pingIntervalSec:int=None, pingTimeoutSec:int=None):
+    def RunUntilClosed(self, pingIntervalSec:Optional[int]=None, pingTimeoutSec:Optional[int]=None):
         # Call run async to invoke the open callback.
         self.RunAsync()
 
 
     # Runs the websocket async.
-    def RunAsync(self):
+    def RunAsync(self) -> None:
         def openThread():
             try:
                 # Check if we can open or if we need to send a close.
@@ -167,7 +185,7 @@ class ElegooWebsocketClientProxy():
 
 
     # Closes the websocket.
-    def Close(self):
+    def Close(self) -> None:
         def closeThread():
             # Check and update the state.
             with self.StateLock:
@@ -196,16 +214,16 @@ class ElegooWebsocketClientProxy():
         threading.Thread(target=closeThread, name="ElegooWebsocketClientProxy-CloseThread").start()
 
 
-    def Send(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, isData:bool = True):
+    def Send(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, isData:bool = True):
         # Use the other send function, with the correct opt code.
-        code = octowebsocket.ABNF.OPCODE_TEXT if not isData else octowebsocket.ABNF.OPCODE_BINARY
+        code = WebSocketOpCode.TEXT if not isData else WebSocketOpCode.BINARY
         self.SendWithOptCode(buffer, msgStartOffsetBytes, msgSize, code)
 
 
     # Sends a buffer, with an optional message start offset and size.
     # If the message start offset and size are not provided, it's assumed the buffer starts at 0 and the size is the full buffer.
     # Providing a bytearray with room in the front allows the system to avoid copying the buffer.
-    def SendWithOptCode(self, buffer:bytearray, msgStartOffsetBytes:int = None, msgSize:int = None, optCode = octowebsocket.ABNF.OPCODE_BINARY):
+    def SendWithOptCode(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, optCode=WebSocketOpCode.BINARY):
         # Do a unlocked state check, to ensure we are open.
         if self.State != ProxyState.Open:
             self._DebugLog("Message send, the websocket is not open.")
@@ -225,7 +243,7 @@ class ElegooWebsocketClientProxy():
 
 
     # Support using with;
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any):
         try:
             self.Close()
         except Exception:
@@ -250,7 +268,7 @@ class ElegooWebsocketClientProxy():
 
 
     # Called by the ElegooWebsocketMux when a message is received.
-    def OnIncomingMessage(self, buffer:bytearray, optCode = octowebsocket.ABNF.OPCODE_BINARY):
+    def OnIncomingMessage(self, buffer:Buffer, optCode:WebSocketOpCode):
         self.ReceiveQueue.put(ReceiveQueueContext(buffer, optCode))
 
 
@@ -271,8 +289,12 @@ class ElegooWebsocketClientProxy():
                         self._DebugLog("Message receive blocked, the websocket is not open.")
                         return
 
+                    # Ensure we have a buffer and opt code.
+                    if context.Buffer is None or context.OptCode is None:
+                        raise Exception("ReceiveQueueContext has no buffer or opt code.")
+
                     self._DebugLog("Received message.")
-                    # Just like in the WS logic, fire date first then msg
+                    # Just like in the WS logic, fire data first then msg
                     if self.OnWsData is not None:
                         self.OnWsData(self, context.Buffer, context.OptCode)
 
@@ -286,7 +308,7 @@ class ElegooWebsocketClientProxy():
 
 
     # A helper to handle all errors and make sure we are closed.
-    def _fireErrorAndCloseAsync(self, msg:str, exception:Exception = None):
+    def _fireErrorAndCloseAsync(self, msg:str, exception:Optional[Exception]=None):
         def errorThread():
             # First the error callback.
             try:
@@ -307,7 +329,7 @@ class ElegooWebsocketClientProxy():
 
 
 class ReceiveQueueContext:
-    def __init__(self, buffer:bytearray, optCode, isClose = False):
+    def __init__(self, buffer:Optional[Buffer], optCode:Optional[WebSocketOpCode], isClose:bool=False):
         self.Buffer = buffer
         self.OptCode = optCode
         self.IsClose = isClose

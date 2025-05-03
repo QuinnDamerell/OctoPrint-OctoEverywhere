@@ -5,6 +5,7 @@ import threading
 import secrets
 import string
 import logging
+from typing import Any, Dict, List, Optional, Tuple
 
 from .gadget import Gadget
 from .sentry import Sentry
@@ -12,6 +13,8 @@ from .compat import Compat
 from .finalsnap import FinalSnap
 from .repeattimer import RepeatTimer
 from .httpsessions import HttpSessions
+from .buffer import Buffer, BufferOrNone
+from .interfaces import IPrinterStateReporter, INotificationHandler
 from .Webcam.webcamhelper import WebcamHelper
 from .printinfo import PrintInfoManager, PrintInfo
 from .snapshotresizeparams import SnapshotResizeParams
@@ -28,20 +31,21 @@ except Exception as _:
     pass
 
 class ProgressCompletionReportItem:
-    def __init__(self, value, reported):
+    def __init__(self, value:float, reported:bool):
         self.value = value
         self.reported = reported
 
-    def Value(self):
+    def Value(self) -> float:
         return self.value
 
-    def Reported(self):
+    def Reported(self) -> bool:
         return self.reported
 
-    def SetReported(self, reported):
+    def SetReported(self, reported:bool):
         self.reported = reported
 
-class NotificationsHandler:
+
+class NotificationsHandler(INotificationHandler):
 
     # This is the max snapshot file size we will allow to be sent.
     MaxSnapshotFileSizeBytes = 2 * 1024 * 1024
@@ -50,7 +54,8 @@ class NotificationsHandler:
     # globally unique. This value must stay in sync with the service.
     PrintIdLength = 60
 
-    def __init__(self, logger:logging.Logger, printerStateInterface):
+
+    def __init__(self, logger:logging.Logger, printerStateInterface:IPrinterStateReporter):
         self.Logger = logger
         # On init, set the key to empty.
         self.OctoKey = None
@@ -59,14 +64,14 @@ class NotificationsHandler:
         self.PrinterStateInterface = printerStateInterface
         self.ProgressTimer = None
         self.FirstLayerTimer = None
-        self.FinalSnapObj:FinalSnap = None
+        self.FinalSnapObj:Optional[FinalSnap] = None
         self.Gadget = Gadget(logger, self, self.PrinterStateInterface)
         self.BedCooldownWatcher = BedCooldownWatcher(logger, self, self.PrinterStateInterface)
 
         # Define all the vars we use locally in the notification handler
         self.PrintCookie = ""
         self.FallbackProgressInt = 0
-        self.MoonrakerReportedProgressFloat_CanBeNone = None
+        self.MoonrakerReportedProgressFloat_CanBeNone:Optional[float] = None
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
         self.HasSendThirdLayerDoneMessage = False
@@ -79,7 +84,7 @@ class NotificationsHandler:
         self.ProgressCompletionReported = []
         self.RestorePrintProgressPercentage = False
 
-        self.SpammyEventTimeDict = {}
+        self.SpammyEventTimeDict:dict[str, SpammyEventContext] = {}
         self.SpammyEventLock = threading.Lock()
 
         # Call this to init all of the vars to their default values.
@@ -89,7 +94,7 @@ class NotificationsHandler:
 
     # Called to start a new print.
     # On class init, this can be called with printCookie=None, but after that we should always have a print cookie.
-    def _RecoverOrRestForNewPrint(self, printCookie:str):
+    def _RecoverOrRestForNewPrint(self, printCookie:Optional[str]):
         # We always reset these local notification handler values for new prints or recovered prints.
         self.FallbackProgressInt = 0
         self.MoonrakerReportedProgressFloat_CanBeNone = None
@@ -109,7 +114,7 @@ class NotificationsHandler:
         # Add an entry for each progress we want to report, not including 0 and 100%.
         # This list must be in order, from the lowest value to the highest.
         # See _getCurrentProgressFloat for usage.
-        self.ProgressCompletionReported = []
+        self.ProgressCompletionReported:List[ProgressCompletionReportItem] = []
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(10.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(20.0, False))
         self.ProgressCompletionReported.append(ProgressCompletionReportItem(30.0, False))
@@ -154,32 +159,32 @@ class NotificationsHandler:
         PrintInfoManager.Get().CreateNewPrintInfo(printCookie, printId)
 
 
-    def SetPrinterId(self, printerId):
+    def SetPrinterId(self, printerId:str):
         self.PrinterId = printerId
 
 
-    def SetOctoKey(self, octoKey):
+    def SetOctoKey(self, octoKey:str):
         self.OctoKey = octoKey
 
 
-    def SetServerProtocolAndDomain(self, protocolAndDomain):
+    def SetServerProtocolAndDomain(self, protocolAndDomain:str):
         self.Logger.info("NotificationsHandler default domain and protocol set to: "+protocolAndDomain)
         self.ProtocolAndDomain = protocolAndDomain
 
 
-    def SetGadgetServerProtocolAndDomain(self, protocolAndDomain):
+    def SetGadgetServerProtocolAndDomain(self, protocolAndDomain: str):
         self.Gadget.SetServerProtocolAndDomain(protocolAndDomain)
 
 
     # If there is an valid print cookie and we can get the info, this returns it.
     # Returns None if there's no current print info.
-    def GetPrintInfo(self) -> PrintInfo:
+    def GetPrintInfo(self) -> Optional[PrintInfo]:
         if self.PrintCookie is None or len(self.PrintCookie) == 0:
             return None
         return PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
 
 
-    def GetPrintId(self) -> str:
+    def GetPrintId(self) -> Optional[str]:
         pi = self.GetPrintInfo()
         if pi is None:
             return None
@@ -193,11 +198,11 @@ class NotificationsHandler:
         return pi.GetLocalPrintStartTimeSec()
 
 
-    def GetGadget(self):
+    def GetGadget(self) -> Gadget:
         return self.Gadget
 
 
-    def ReportPositiveExtrudeCommandSent(self):
+    def ReportPositiveExtrudeCommandSent(self) -> None:
         self.zOffsetHasSeenPositiveExtrude = True
         fsLocal = self.FinalSnapObj
         if fsLocal is not None:
@@ -210,7 +215,7 @@ class NotificationsHandler:
 
 
     # Sets the cooldown threshold temp
-    def SetBedCooldownThresholdTemp(self, tempC:float):
+    def SetBedCooldownThresholdTemp(self, tempC:float) -> None:
         self.BedCooldownWatcher.SetBedCooldownThresholdTemp(tempC)
 
 
@@ -221,7 +226,7 @@ class NotificationsHandler:
     #
     # Most importantly, we want to make sure the ping timer and thus Gadget get restored to the correct states.
     #
-    def OnRestorePrintIfNeeded(self, isPrinting:bool, isPaused:bool, printCookie_CanBeNoneIfNoPrintIsActive:str = None):
+    def OnRestorePrintIfNeeded(self, isPrinting:bool, isPaused:bool, printCookie_CanBeNoneIfNoPrintIsActive:Optional[str]=None):
 
         # First, check if there's no active print currently.
         if (isPrinting is False and isPaused is False) or printCookie_CanBeNoneIfNoPrintIsActive is None:
@@ -296,21 +301,21 @@ class NotificationsHandler:
 
 
     # Only used for testing.
-    def OnTest(self):
+    def OnTest(self) -> None:
         if self._shouldIgnoreEvent():
             return
         self._sendEvent("test")
 
 
     # Only used for testing.
-    def OnGadgetWarn(self):
+    def OnGadgetWarn(self) -> None:
         if self._shouldIgnoreEvent():
             return
         self._sendEvent("gadget-warning")
 
 
     # Only used for testing.
-    def OnGadgetPaused(self):
+    def OnGadgetPaused(self) -> None:
         if self._shouldIgnoreEvent():
             return
         self._sendEvent("gadget-paused")
@@ -321,7 +326,7 @@ class NotificationsHandler:
     # The string can be anything, but it must be a valid file name.
     # The string should also be unique between prints, but common for the same print. This allows us to pull up the print info for the same print if we crash or
     # or lose the printer connection.
-    def OnStarted(self, printCookie:str, fileName:str = None, fileSizeKBytes:int = 0, totalFilamentUsageMm:int = 0, totalFilamentWeightMg:int = 0):
+    def OnStarted(self, printCookie:Optional[str], fileName:Optional[str]=None, fileSizeKBytes:int=0, totalFilamentUsageMm:int=0, totalFilamentWeightMg:int=0):
         # Validate
         if self._shouldIgnoreEvent(fileName):
             return
@@ -354,19 +359,22 @@ class NotificationsHandler:
 
 
     # Fired when a print fails
-    def OnFailed(self, fileName:str, durationSecStr:str = None, reason:str = None):
+    def OnFailed(self, fileName:Optional[str], durationSecStr:Optional[str]=None, reason:Optional[str]=None):
         if self._shouldIgnoreEvent(fileName):
             return
         self._updateCurrentFileName(fileName)
         self._updateToKnownDuration(durationSecStr)
         self.StopTimers()
         self.BedCooldownWatcher.Start()
-        self._sendEvent("failed", { "Reason": reason})
+        args = {}
+        if reason is not None:
+            args["Reason"] = reason
+        self._sendEvent("failed", args)
 
 
     # Fired when a print done
     # For moonraker, these vars aren't known, so they are None
-    def OnDone(self, fileName:str = None, durationSecStr:str = None):
+    def OnDone(self, fileName:Optional[str]=None, durationSecStr:Optional[str]=None):
         if self._shouldIgnoreEvent(fileName):
             return
         self._updateCurrentFileName(fileName)
@@ -377,7 +385,7 @@ class NotificationsHandler:
 
 
     # Fired when a print is paused
-    def OnPaused(self, fileName:str = None):
+    def OnPaused(self, fileName:Optional[str]=None):
         if self._shouldIgnoreEvent(fileName):
             return
 
@@ -387,8 +395,9 @@ class NotificationsHandler:
         # See if there is a pause notification suppression set. If this is not null and it was recent enough
         # suppress the notification from firing.
         # If there is no suppression, or the suppression was older than 30 seconds, fire the notification.
-        if Compat.HasSmartPauseInterface():
-            lastSuppressTimeSec = Compat.GetSmartPauseInterface().GetAndResetLastPauseNotificationSuppressionTimeSec()
+        smartPauseInterface = Compat.GetSmartPauseInterface()
+        if smartPauseInterface is not None:
+            lastSuppressTimeSec = smartPauseInterface.GetAndResetLastPauseNotificationSuppressionTimeSec()
             if lastSuppressTimeSec is None or time.time() - lastSuppressTimeSec > 20.0:
                 self._sendEvent("paused")
             else:
@@ -401,7 +410,7 @@ class NotificationsHandler:
 
 
     # Fired when a print is resumed
-    def OnResume(self, fileName:str = None):
+    def OnResume(self, fileName:Optional[str]=None):
         Sentry.Breadcrumb("OnResume called.", {"filename":fileName})
         if self._shouldIgnoreEvent(fileName):
             return
@@ -416,7 +425,7 @@ class NotificationsHandler:
 
 
     # Fired when OctoPrint or the printer hits an error.
-    def OnError(self, error):
+    def OnError(self, error:str):
         if self._shouldIgnoreEvent():
             return
 
@@ -470,7 +479,7 @@ class NotificationsHandler:
 
 
     # Fired when a print is making progress.
-    def OnPrintProgress(self, octoPrintProgressInt, moonrakerProgressFloat):
+    def OnPrintProgress(self, octoPrintProgressInt:Optional[int], moonrakerProgressFloat:Optional[float]):
         if self._shouldIgnoreEvent():
             return
 
@@ -558,7 +567,7 @@ class NotificationsHandler:
 
 
     # Called by the bed cooldown watcher when the bed is done cooling down.
-    def OnBedCooldownComplete(self, bedTempCelsius:float):
+    def OnBedCooldownComplete(self, bedTempCelsius:float) -> None:
         if self._shouldIgnoreEvent():
             return
         self._sendEvent("bedcooldowncomplete", { "BedTempC": str(round(float(bedTempCelsius), 2)) })
@@ -596,8 +605,8 @@ class NotificationsHandler:
         # We have two ways of computing the layer heights.
         # 1) On some platforms (Moonraker) we can query the actual layer from the system, so we don't have to guess.
         # 2) If the platform doesn't support getting the actual layer height, we can try to figure it out with z offsets.
-        currentLayer, totalLayers = self.PrinterStateInterface.GetCurrentLayerInfo()
-        if currentLayer is not None and totalLayers is not None:
+        currentLayer, _ = self.PrinterStateInterface.GetCurrentLayerInfo()
+        if currentLayer is not None:
             # We have layer info from the system, use this to handle the events.
 
             # If we are over the first layer and haven't sent the notification, start the timer.
@@ -642,7 +651,7 @@ class NotificationsHandler:
         # We don't have a system provided layer info, use the second option with the z-offset.
 
         # Get the current zoffset value.
-        currentZOffsetMM = self.PrinterStateInterface.GetCurrentZOffset()
+        currentZOffsetMM = self.PrinterStateInterface.GetCurrentZOffsetMm()
 
         # Make sure we know it.
         # If not, return True so we keep checking.
@@ -726,11 +735,11 @@ class NotificationsHandler:
         elif self.HasSendThirdLayerDoneMessage is False:
             # Sanity check we have a valid value for self.zOffsetLowestSeenMM, from the first layer notification.
             if self.zOffsetLowestSeenMM > 50.0:
-                self.Logger.warn("First layer notification has sent but third layer hans't but the zOffsetLowestSeenMM value is really high, seems like it's unset. Value: "+str(self.zOffsetLowestSeenMM))
+                self.Logger.warning("First layer notification has sent but third layer hans't but the zOffsetLowestSeenMM value is really high, seems like it's unset. Value: "+str(self.zOffsetLowestSeenMM))
                 self.HasSendThirdLayerDoneMessage = True
                 return False
             if self.zOffsetLowestSeenMM <= 0.0001:
-                self.Logger.warn("zOffsetLowestSeenMM is too low for third layer notification. Value: "+str(self.zOffsetLowestSeenMM))
+                self.Logger.warning("zOffsetLowestSeenMM is too low for third layer notification. Value: "+str(self.zOffsetLowestSeenMM))
                 self.HasSendThirdLayerDoneMessage = True
                 return False
 
@@ -770,7 +779,7 @@ class NotificationsHandler:
     # SnapshotResizeParams can be passed BUT MIGHT BE IGNORED if the PIL lib can't be loaded.
     # SnapshotResizeParams will also be ignored if the current image is smaller than the requested size.
     # If this fails for any reason, None is returned.
-    def GetNotificationSnapshot(self, snapshotResizeParams = None):
+    def GetNotificationSnapshot(self, snapshotResizeParams:Optional[SnapshotResizeParams]=None) -> BufferOrNone:
 
         # If no snapshot resize param was specified, use the default for notifications.
         if snapshotResizeParams is None:
@@ -780,7 +789,6 @@ class NotificationsHandler:
             snapshotResizeParams = SnapshotResizeParams(1080, True, False, False)
 
         try:
-
             # Use the snapshot helper to get the snapshot. This will handle advance logic like relative and absolute URLs
             # as well as getting a snapshot directly from a mjpeg stream if there's no snapshot URL.
             octoHttpResponse = WebcamHelper.Get().GetSnapshot()
@@ -806,9 +814,9 @@ class NotificationsHandler:
             flipH = WebcamHelper.Get().GetWebcamFlipH()
             flipV = WebcamHelper.Get().GetWebcamFlipV()
             rotation = WebcamHelper.Get().GetWebcamRotation()
-            if rotation != 0 or flipH or flipV or snapshotResizeParams is not None:
+            if rotation is not None and flipH is not None and flipV is not None and rotation != 0 or flipH or flipV or snapshotResizeParams is not None:
                 try:
-                    if Image is not None:
+                    if Image is not None: #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
 
                         # We noticed that on some under powered or otherwise bad systems the image returned
                         # by mjpeg is truncated. We aren't sure why this happens, but setting this flag allows us to sill
@@ -816,7 +824,7 @@ class NotificationsHandler:
                         # buffer, which is still an incomplete image.
                         # Use a try catch incase the import of ImageFile failed
                         try:
-                            ImageFile.LOAD_TRUNCATED_IMAGES = True
+                            ImageFile.LOAD_TRUNCATED_IMAGES = True #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
                         except Exception as _:
                             pass
 
@@ -825,29 +833,29 @@ class NotificationsHandler:
                         OE_FLIP_LEFT_RIGHT = 0
                         OE_FLIP_TOP_BOTTOM = 0
                         try:
-                            OE_FLIP_LEFT_RIGHT = Image.FLIP_LEFT_RIGHT
-                            OE_FLIP_TOP_BOTTOM = Image.FLIP_TOP_BOTTOM
+                            OE_FLIP_LEFT_RIGHT = Image.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue, reportUnknownMemberType] this is imported in the try catch at the top of the file.
+                            OE_FLIP_TOP_BOTTOM = Image.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue, reportUnknownMemberType] this is imported in the try catch at the top of the file.
                         except Exception:
-                            OE_FLIP_LEFT_RIGHT = Image.Transpose.FLIP_LEFT_RIGHT
-                            OE_FLIP_TOP_BOTTOM = Image.Transpose.FLIP_TOP_BOTTOM
+                            OE_FLIP_LEFT_RIGHT = Image.Transpose.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
+                            OE_FLIP_TOP_BOTTOM = Image.Transpose.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
                         # pylint: enable=no-member
 
                         # Update the image
                         # Note the order of the flips and the rotates are important!
                         # If they are reordered, when multiple are applied the result will not be correct.
                         didWork = False
-                        pilImage = Image.open(io.BytesIO(snapshot))
+                        pilImage = Image.open(io.BytesIO(snapshot.Get())) #pyright: ignore[reportPossiblyUnboundVariable, reportArgumentType, reportUnknownMemberType] this is imported in the try catch at the top of the file.
                         if flipH:
-                            pilImage = pilImage.transpose(OE_FLIP_LEFT_RIGHT)
+                            pilImage = pilImage.transpose(OE_FLIP_LEFT_RIGHT) #pyright: ignore[reportUnknownMemberType]
                             didWork = True
                         if flipV:
-                            pilImage = pilImage.transpose(OE_FLIP_TOP_BOTTOM)
+                            pilImage = pilImage.transpose(OE_FLIP_TOP_BOTTOM) #pyright: ignore[reportUnknownMemberType]
                             didWork = True
-                        if rotation != 0:
+                        if rotation is not None and rotation != 0:
                             # Our rotation is clockwise while PIL is counter clockwise.
                             # Subtract from 360 to get the opposite rotation.
                             rotation = 360 - rotation
-                            pilImage = pilImage.rotate(rotation)
+                            pilImage = pilImage.rotate(rotation) #pyright: ignore[reportUnknownMemberType]
                             didWork = True
 
                         #
@@ -858,8 +866,8 @@ class NotificationsHandler:
                             # scale (preserving the aspect ratio). We will use the smallest side to scale to the desired outcome.
                             if snapshotResizeParams.CropSquareCenterNoPadding:
                                 # We will only do the crop resize if the source image is smaller than or equal to the desired size.
-                                if pilImage.height >= snapshotResizeParams.Size and pilImage.width >= snapshotResizeParams.Size:
-                                    if pilImage.height < pilImage.width:
+                                if pilImage.height >= snapshotResizeParams.Size and pilImage.width >= snapshotResizeParams.Size: #pyright: ignore[reportUnknownMemberType]
+                                    if pilImage.height < pilImage.width: #pyright: ignore[reportUnknownMemberType]
                                         snapshotResizeParams.ResizeToHeight = True
                                         snapshotResizeParams.ResizeToWidth = False
                                     else:
@@ -870,16 +878,16 @@ class NotificationsHandler:
                             resizeHeight = None
                             resizeWidth = None
                             if snapshotResizeParams.ResizeToHeight:
-                                if pilImage.height > snapshotResizeParams.Size:
+                                if pilImage.height > snapshotResizeParams.Size: #pyright: ignore[reportUnknownMemberType]
                                     resizeHeight = snapshotResizeParams.Size
-                                    resizeWidth = int((float(snapshotResizeParams.Size) / float(pilImage.height)) * float(pilImage.width))
+                                    resizeWidth = int((float(snapshotResizeParams.Size) / float(pilImage.height)) * float(pilImage.width)) #pyright: ignore[reportUnknownMemberType]
                             if snapshotResizeParams.ResizeToWidth:
-                                if pilImage.width > snapshotResizeParams.Size:
-                                    resizeHeight = int((float(snapshotResizeParams.Size) / float(pilImage.width)) * float(pilImage.height))
+                                if pilImage.width > snapshotResizeParams.Size: #pyright: ignore[reportUnknownMemberType]
+                                    resizeHeight = int((float(snapshotResizeParams.Size) / float(pilImage.width)) * float(pilImage.height)) #pyright: ignore[reportUnknownMemberType]
                                     resizeWidth = snapshotResizeParams.Size
                             # If we have things to resize, do it.
                             if resizeHeight is not None and resizeWidth is not None:
-                                pilImage = pilImage.resize((resizeWidth, resizeHeight))
+                                pilImage = pilImage.resize((resizeWidth, resizeHeight)) #pyright: ignore[reportUnknownMemberType]
                                 didWork = True
 
                             # Now if we want to crop square, use the resized image to crop the remaining side.
@@ -890,7 +898,7 @@ class NotificationsHandler:
                                 lower = 0
                                 if snapshotResizeParams.ResizeToHeight:
                                     # Crop the width - use floor to ensure if there's a remainder we float left.
-                                    centerX = math.floor(float(pilImage.width) / 2.0)
+                                    centerX = math.floor(float(pilImage.width) / 2.0) #pyright: ignore[reportUnknownMemberType]
                                     halfWidth = math.floor(float(snapshotResizeParams.Size) / 2.0)
                                     upper = 0
                                     lower = snapshotResizeParams.Size
@@ -898,7 +906,7 @@ class NotificationsHandler:
                                     right = (snapshotResizeParams.Size - halfWidth) + centerX
                                 else:
                                     # Crop the height - use floor to ensure if there's a remainder we float left.
-                                    centerY = math.floor(float(pilImage.height) / 2.0)
+                                    centerY = math.floor(float(pilImage.height) / 2.0) #pyright: ignore[reportUnknownMemberType]
                                     halfHeight = math.floor(float(snapshotResizeParams.Size) / 2.0)
                                     upper = centerY - halfHeight
                                     lower = (snapshotResizeParams.Size - halfHeight) + centerY
@@ -906,10 +914,10 @@ class NotificationsHandler:
                                     right = snapshotResizeParams.Size
 
                                 # Sanity check bounds
-                                if left < 0 or left > right or right > pilImage.width or upper > 0 or upper > lower or lower > pilImage.height:
-                                    self.Logger.error("Failed to crop image. height: "+str(pilImage.height)+", width: "+str(pilImage.width)+", size: "+str(snapshotResizeParams.Size))
+                                if left < 0 or left > right or right > pilImage.width or upper > 0 or upper > lower or lower > pilImage.height: #pyright: ignore[reportUnknownMemberType]
+                                    self.Logger.error("Failed to crop image. height: "+str(pilImage.height)+", width: "+str(pilImage.width)+", size: "+str(snapshotResizeParams.Size)) #pyright: ignore[reportUnknownMemberType]
                                 else:
-                                    pilImage = pilImage.crop((left, upper, right, lower))
+                                    pilImage = pilImage.crop((left, upper, right, lower)) #pyright: ignore[reportUnknownMemberType]
                                     didWork = True
 
                         #
@@ -918,11 +926,11 @@ class NotificationsHandler:
                         #
                         if didWork:
                             buffer = io.BytesIO()
-                            pilImage.save(buffer, format="JPEG", quality=95)
-                            snapshot = buffer.getvalue()
+                            pilImage.save(buffer, format="JPEG", quality=95) #pyright: ignore[reportUnknownMemberType]
+                            snapshot = Buffer(buffer.getvalue())
                             buffer.close()
                     else:
-                        self.Logger.warn("Can't manipulate image because the Image rotation lib failed to import.")
+                        self.Logger.warning("Can't manipulate image because the Image rotation lib failed to import.")
                 except Exception as e:
                     # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
                     if "name 'Image' is not defined" in str(e):
@@ -930,11 +938,11 @@ class NotificationsHandler:
                     if "cannot identify image file" in str(e):
                         self.Logger.info("Can't manipulate image because the Image lib can't figure out the image type.")
                     else:
-                        Sentry.Exception("Failed to manipulate image for notifications", e)
+                        Sentry.OnException("Failed to manipulate image for notifications", e)
 
             # Ensure in the end, the snapshot is a reasonable size.
             if len(snapshot) > NotificationsHandler.MaxSnapshotFileSizeBytes:
-                self.Logger.error("Snapshot size if too large to send. Size: "+len(snapshot))
+                self.Logger.error(f"Snapshot size if too large to send. Size: {len(snapshot)}")
                 return None
 
             # Return the image
@@ -952,7 +960,7 @@ class NotificationsHandler:
 
     # Assuming the current time is set at the start of the printer correctly.
     # This is also a live duration, if this is called once the print is over it will keep incrementing.
-    def GetCurrentDurationSecFloat(self):
+    def GetCurrentDurationSecFloat(self) -> float:
         pi = self.GetPrintInfo()
         if pi is None:
             return 0.0
@@ -960,7 +968,7 @@ class NotificationsHandler:
 
 
     # If we get a known duration from the platform, be sure to update it.
-    def _updateToKnownDuration(self, durationSecStr):
+    def _updateToKnownDuration(self, durationSecStr:Optional[str]) -> None:
         # If the string is empty or None, return.
         # This is important for Moonraker
         if durationSecStr is None or len(durationSecStr) == 0:
@@ -973,11 +981,11 @@ class NotificationsHandler:
                 return
             pi.SetLocalPrintStartTimeSec(time.time() - float(durationSecStr))
         except Exception as e:
-            Sentry.ExceptionNoSend("_updateToKnownDuration exception", e)
+            Sentry.OnExceptionNoSend("_updateToKnownDuration exception", e)
 
 
     # Updates the current file name, if there is a new name to set.
-    def _updateCurrentFileName(self, fileName:str):
+    def _updateCurrentFileName(self, fileName:Optional[str]) -> None:
         # The None check is important for Moonraker
         if fileName is None or len(fileName) == 0:
             return
@@ -989,7 +997,7 @@ class NotificationsHandler:
 
     # Stops the final snap object if it's running and returns
     # the final image if possible.
-    def _getFinalSnapSnapshotAndStop(self):
+    def _getFinalSnapSnapshotAndStop(self) -> BufferOrNone:
         # Capture the class member locally.
         localFs = self.FinalSnapObj
         self.FinalSnapObj = None
@@ -1001,7 +1009,7 @@ class NotificationsHandler:
 
 
     # Returns the current print progress as a float.
-    def _getCurrentProgressFloat(self):
+    def _getCurrentProgressFloat(self) -> float:
         # Special platform logic here!
         # Since this function is used to get the progress for all platforms, we need to do things a bit differently.
 
@@ -1042,7 +1050,7 @@ class NotificationsHandler:
             return printProgressFloat
 
         except Exception as e:
-            Sentry.ExceptionNoSend("_getCurrentProgressFloat failed to compute progress.", e)
+            Sentry.OnExceptionNoSend("_getCurrentProgressFloat failed to compute progress.", e)
 
         # On failure, default to what OctoPrint has reported.
         return float(self.FallbackProgressInt)
@@ -1050,7 +1058,7 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEvent(self, event:str, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
+    def _sendEvent(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
         thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ), name="NotificationsHandler._sendEvent")
         thread.start()
@@ -1059,21 +1067,17 @@ class NotificationsHandler:
 
     # Sends the event
     # Returns True on success, otherwise False
-    def _sendEventThreadWorker(self, event:str, args = None, progressOverwriteFloat = None, useFinalSnapSnapshot = False):
+    def _sendEventThreadWorker(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
         # The profiler will do nothing if it's not enabled.
         with DebugProfiler(self.Logger, DebugProfilerFeatures.NotificationHandlerEvent):
             try:
                 # Build the common even args.
-                requestArgs = self.BuildCommonEventArgs(event, args, progressOverwriteFloat=progressOverwriteFloat, useFinalSnapSnapshot=useFinalSnapSnapshot)
+                (args, files) = self.BuildCommonEventArgs(event, args, progressOverwriteFloat=progressOverwriteFloat, useFinalSnapSnapshot=useFinalSnapSnapshot)
 
                 # Handle the result indicating we don't have the proper var to send yet.
-                if requestArgs is None:
+                if args is None or  files is None:
                     self.Logger.info("NotificationsHandler didn't send the "+str(event)+" event because we don't have the proper id and key yet.")
                     return False
-
-                # Break out the response
-                args = requestArgs[0]
-                files = requestArgs[1]
 
                 # Setup the url
                 eventApiUrl = self.ProtocolAndDomain + "/api/printernotifications/printerevent"
@@ -1099,10 +1103,10 @@ class NotificationsHandler:
 
                     except Exception as e:
                         # We must try catch the connection because sometimes it will throw for some connection issues, like DNS errors, server not connectable, etc.
-                        self.Logger.warn("Failed to send notification due to a connection error. "+str(e))
+                        self.Logger.warning("Failed to send notification due to a connection error. "+str(e))
 
                     # On failure, log the issue.
-                    self.Logger.warn(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
+                    self.Logger.warning(f"NotificationsHandler failed to send event {str(event)}. Code:{str(statusCode)}. Waiting and then trying again.")
 
                     # If the error is in the 400 class, don't retry since these are all indications there's something
                     # wrong with the request, which won't change. But we don't want to include anything above or below that.
@@ -1122,7 +1126,7 @@ class NotificationsHandler:
                 self.Logger.error("NotificationsHandler failed to send event "+str(event)+" due to a network issues after many retries.")
 
             except Exception as e:
-                Sentry.Exception("NotificationsHandler failed to send event code "+str(event), e)
+                Sentry.OnException("NotificationsHandler failed to send event code "+str(event), e)
 
         return False
 
@@ -1131,11 +1135,11 @@ class NotificationsHandler:
     # Returns an array of [args, files] which are ready to be used in the request.
     # The args and files will always contain any information that can be gathered at the time of the call.
     # Returns None if we don't have the printer id or octokey yet.
-    def BuildCommonEventArgs(self, event:str, args=None, progressOverwriteFloat=None, snapshotResizeParams = None, useFinalSnapSnapshot = False):
+    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str,Any]]]:
 
         # Ensure we have the required var set already. If not, get out of here.
         if self.PrinterId is None or self.OctoKey is None:
-            return None
+            return (None, None)
 
         # Default args
         if args is None:
@@ -1201,11 +1205,11 @@ class NotificationsHandler:
         if snapshot is not None:
             files['attachment'] = ("snapshot.jpg", snapshot)
 
-        return [args, files]
+        return (args, files)
 
 
     # Stops any running timer, be it the progress timer, the Gadget timer, or something else.
-    def StopTimers(self):
+    def StopTimers(self) -> None:
         # Capture locally & Stop
         progressTimer = self.ProgressTimer
         self.ProgressTimer = None
@@ -1219,7 +1223,7 @@ class NotificationsHandler:
         self.Gadget.StopWatching()
 
 
-    def StopFirstLayerTimer(self):
+    def StopFirstLayerTimer(self) -> None:
         # Capture locally & Stop
         firstLayerTimer = self.FirstLayerTimer
         self.FirstLayerTimer = None
@@ -1228,7 +1232,7 @@ class NotificationsHandler:
 
 
     # Starts all print timers, including the progress time, Gadget, and the first layer watcher.
-    def StartPrintTimers(self, resetHoursReported:bool, restoreActionSetHoursReported:int = None):
+    def StartPrintTimers(self, resetHoursReported:bool, restoreActionSetHoursReported:Optional[int]=None) -> None:
         # First, stop any timer that's currently running.
         self.StopTimers()
 
@@ -1257,12 +1261,12 @@ class NotificationsHandler:
 
 
     # Let's the caller know if the ping timer is running, and thus we are tracking a print.
-    def _IsPingTimerRunning(self):
+    def _IsPingTimerRunning(self) -> bool:
         return self.ProgressTimer is not None
 
 
     # Fired when the ping timer fires.
-    def ProgressTimerCallback(self):
+    def ProgressTimerCallback(self) -> None:
 
         # Double check the state is still printing before we send the notification.
         # Even if the state is paused, we want to stop, since the resume command will restart the timers
@@ -1276,7 +1280,7 @@ class NotificationsHandler:
 
 
     # Fired when the ping timer fires.
-    def FirstLayerTimerCallback(self):
+    def FirstLayerTimerCallback(self) -> None:
 
         # Don't check the printer state, we will allow the function to handle all of that
         # If the function returns True, the timer should continue. If it returns false, the time should be stopped.
@@ -1290,9 +1294,8 @@ class NotificationsHandler:
 
     # Only allows possibly spammy events to be sent every x minutes.
     # Returns true if the event can be sent, otherwise false.
-    def _shouldSendSpammyEvent(self, eventName, minTimeBetweenMinutesFloat):
+    def _shouldSendSpammyEvent(self, eventName:str, minTimeBetweenMinutesFloat:float) -> bool:
         with self.SpammyEventLock:
-
             # Check if the event has been added to the dict yet.
             if eventName not in self.SpammyEventTimeDict:
                 # No event added yet, so add it now.
@@ -1309,14 +1312,14 @@ class NotificationsHandler:
             return True
 
 
-    def _clearSpammyEventContexts(self):
+    def _clearSpammyEventContexts(self) -> None:
         with self.SpammyEventLock:
             self.SpammyEventTimeDict = {}
 
 
     # Very rarely, we want to ignore some notifications based on different metrics.
     # A filename can be passed to check, if not, the current file name will be used.
-    def _shouldIgnoreEvent(self, fileName:str = None) -> bool:
+    def _shouldIgnoreEvent(self, fileName:Optional[str]=None) -> bool:
         # Check if there was a file name passed, if so use it.
         # If not, fall back to the current file name.
         # If there is neither, dont ignore.
@@ -1351,7 +1354,7 @@ class SpammyEventContext:
         self.LastSentTimeSec = time.time()
 
 
-    def ShouldSendEvent(self, baseTimeIntervalMinutesFloat):
+    def ShouldSendEvent(self, baseTimeIntervalMinutesFloat:float) -> bool:
         # Figure out what the delay multiplier should be.
         delayMultiplier = 1
 
