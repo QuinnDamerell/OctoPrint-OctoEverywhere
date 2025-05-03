@@ -170,7 +170,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                 # Ignore this bind all string, don't worry about it.
                 if host != "::":
                     # In this case the default value of OctoPrintLocalHost will be used.
-                    self.Logger.warning("The host string from OctoPrint was too short, so it was ignored. Value: "+str(host))
+                    self.Logger.warning("The host string from OctoPrint was too short, so it was ignored. Value: %s", str(host))
             else:
                 self.OctoPrintLocalHost = host
         else:
@@ -181,7 +181,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.OctoPrintLocalPort = port
 
         # Report the current setup.
-        self.Logger.info("OctoPrint host:" +str(self.OctoPrintLocalHost) + " port:" + str(self.OctoPrintLocalPort))
+        self.Logger.info("OctoPrint host: %s port: %s", str(self.OctoPrintLocalHost), str(self.OctoPrintLocalPort))
 
         # Setup the HttpSession cache early, so it can be used whenever
         HttpSessions.Init(self.Logger)
@@ -313,7 +313,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                     isHttps = data["isHttps"]
 
                 # Report
-                self.Logger.info("SetFrontendLocalPort API called. Port:"+str(port)+" IsHttps:"+str(isHttps)+" URL:"+url)
+                self.Logger.info("SetFrontendLocalPort API called. Port: %s, IsHttps: %s URL: %s", str(port), str(isHttps), url)
 
                 # Save into settings only if the value has changed.
                 self.SaveToSettingsIfUpdated("HttpFrontendPort", port)
@@ -355,13 +355,13 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
             # This m600 usually comes from when the printer sensor has detected a filament run out.
             if "m600" in lineLower or "fsensor_update" in lineLower:
-                self.Logger.info("Firing On Filament Change Notification From GcodeReceived: "+str(line))
+                self.Logger.info("Firing On Filament Change Notification From GcodeReceived: %s", str(line))
                 # No need to use a thread since all events are handled on a new thread.
                 self.NotificationHandler.OnFilamentChange()
             else:
                 # Look for a line indicating user interaction is needed.
                 if "paused for user" in lineLower or "// action:paused" in lineLower:
-                    self.Logger.info("Firing On User Interaction Required From GcodeReceived: "+str(line))
+                    self.Logger.info("Firing On User Interaction Required From GcodeReceived: %s", str(line))
                     # No need to use a thread since all events are handled on a new thread.
                     self.NotificationHandler.OnUserInteractionNeeded()
 
@@ -378,7 +378,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # We check for this both in sent and received, to make sure we cover all use cases. The OnFilamentChange will only allow one notification to fire every so often.
         # This M600 usually comes from filament change required commands embedded in the gcode, for color changes and such.
         if self.NotificationHandler is not None and gcode and gcode == "M600":
-            self.Logger.info("Firing On Filament Change Notification From GcodeSent: "+str(gcode))
+            self.Logger.info("Firing On Filament Change Notification From GcodeSent: %s", str(gcode))
             # No need to use a thread since all events are handled on a new thread.
             self.NotificationHandler.OnFilamentChange()
 
@@ -596,7 +596,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
             # Check the time since the last message.
             lastInformTime = self.GetNoAccountConnectedLastInform()
-            self.Logger.info(f"GetNoAccountConnectedLastInform: {lastInformTime}")
+            self.Logger.info("GetNoAccountConnectedLastInform: %s", str(lastInformTime))
             now = time.time()
             if lastInformTime is None or (now - lastInformTime) > minTimeBetweenInformsSec:
                 # Update the last show time.
@@ -625,7 +625,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Parse
             jsonData = response.json()
             hasOwners = jsonData["Result"]["HasOwners"]
-            self.Logger.info("Printer has owner: "+str(hasOwners))
+            self.Logger.info("Printer has owner: %s", str(hasOwners))
 
             # If we are owned, update our settings and return!
             if hasOwners is True:
@@ -662,11 +662,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             if currentId is None:
                 self.Logger.info("No printer id found, regenerating.")
             else:
-                self.Logger.info("Old printer id of length " + str(len(currentId)) + " is invalid, regenerating.")
+                self.Logger.info("Old printer id of length %s is invalid, regenerating.", str(len(currentId)))
 
             # Create and save the new value
             currentId = HostCommon.GeneratePrinterId()
-            self.Logger.info("New printer id is: "+currentId)
+            self.Logger.info("New printer id is: %s", currentId)
 
             # Update the printer URL whenever the id changes to ensure they always stay in sync.
             self.SetAddPrinterUrl(LinkHelper.GetAddPrinterUrl(currentId))
@@ -692,8 +692,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             if currentKey is None:
                 self.Logger.info("No private key found, regenerating.")
             else:
-                self.Logger.info("Old private key of length " + str(len(currentKey)) + " is invalid, regenerating.")
-
+                self.Logger.info("Old private key of length %s is invalid, regenerating.", str(len(currentKey)))
             # Create and save the new value
             currentKey = HostCommon.GeneratePrivateKey()
 
@@ -807,7 +806,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             # Normally this is port 80, but some users might configure it differently.
             frontendHttpPort = self.GetFrontendHttpPort()
             frontendIsHttps = self.GetFrontendIsHttps()
-            self.Logger.info("Frontend http port detected as " + str(frontendHttpPort) + ", is https? "+str(frontendIsHttps))
+            self.Logger.info("Frontend http port detected as %s, is https? %s", str(frontendHttpPort), str(frontendIsHttps))
 
             # Set the ports this instance is running on
             OctoHttpRequest.SetLocalHttpProxyPort(frontendHttpPort)
@@ -829,15 +828,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             try:
                 starportIp = socket.getaddrinfo('starport-v1.octoeverywhere.com', None, socket.AF_INET)[0][4][0]
                 mainSiteIp = socket.getaddrinfo('octoeverywhere.com', None, socket.AF_INET)[0][4][0]
-                self.Logger.info("IPV4 - starport:"+str(starportIp)+" main:"+str(mainSiteIp))
+                self.Logger.info("IPV4 - starport:%s main:%s", str(starportIp), str(mainSiteIp))
             except Exception as e:
-                self.Logger.info("Failed to resolve host ipv4 name "+str(e))
+                self.Logger.info("Failed to resolve host ipv4 name %s", str(e))
             try:
                 starportIp = socket.getaddrinfo('starport-v1.octoeverywhere.com', None, socket.AF_INET6)[0][4][0]
                 mainSiteIp = socket.getaddrinfo('octoeverywhere.com', None, socket.AF_INET6)[0][4][0]
-                self.Logger.info("IPV6 - starport:"+str(starportIp)+" main:"+str(mainSiteIp))
+                self.Logger.info("IPV6 - starport:%s main:%s", str(starportIp), str(mainSiteIp))
             except Exception as e:
-                self.Logger.info("Failed to resolve host ipv6 name "+str(e))
+                self.Logger.info("Failed to resolve host ipv6 name %s", str(e))
         except Exception as _:
             pass
 
@@ -930,7 +929,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         #
         curValue = self.GetFromSettings(name, None)
         if curValue is None or curValue != value:
-            self.Logger.info("Value "+str(name)+" has changed so we are updating the value in settings and saving.")
+            self.Logger.info("Value %s has changed so we are updating the value in settings and saving.", str(name))
             settings:PluginSettings = self._settings #pyright: ignore[reportAssignmentType]
             settings.set([name], value, force=True) #pyright: ignore[reportUnknownMemberType] octoprint has no typing
             settings.save(force=True) #pyright: ignore[reportUnknownMemberType] octoprint has no typing
