@@ -68,7 +68,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Indicates if there's a pending smart print notification that should be shown when the user sees the dashboard next.
         self.HasPendingSmartPauseMessage = False
         # Since the OctoPrint types don't define the logger type, we redefine it here so it has a type.
-        self.Logger:logging.Logger = self._logger #pyright: ignore[reportAttributeAccessIssue]
+        # Get get the logger like this, because the plugin class doesn't have access to it in the constructor.
+        self.Logger:logging.Logger = logging.getLogger('octoprint.plugins.octoeverywhere')
         # Let the compat system know this is an OctoPrint host.
         Compat.SetIsOctoPrint(True)
 
