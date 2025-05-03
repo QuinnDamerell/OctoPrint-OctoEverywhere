@@ -13,7 +13,8 @@ jobs:
       fail-fast: false
       matrix:
         # The sonic pad and other common printers runs 3.7, so it's important to keep it here to make sure all of our required dependencies work
-        python-version: ["3.7", "3.8", "3.9", "3.10", "3.11", "3.12"]
+        # We use 3.7.13 because it's the oldest version available on ubuntu-22.04. https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json
+        python-version: ["3.7.13", "3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
     - uses: actions/checkout@v4
     - name: 🐍 Set up Python ${{ matrix.python-version }}

@@ -1,3 +1,4 @@
+from __future__ import annotations # Needed for PY 3.7.3 on the Elegoo Neptune 4 Plus, otherwise customBodyStreamClosedCallback:Optional[Callable[[],None]]=None breaks.
 import logging
 from typing import Any, Callable, Dict, Optional, Union
 
