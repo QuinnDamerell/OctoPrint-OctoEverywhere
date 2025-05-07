@@ -335,19 +335,26 @@ class NetworkSearch:
             # Try to connect, this will throw if it fails to find any server to connect to.
             failedToConnect = True
             url = f"ws://{ipOrHostname}:{port}/websocket"
+            client:Client = None # pyright: ignore[reportAssignmentType]
             try:
                 logger.debug(f"Connecting to Elegoo on {url}...")
-                with Client(url, onWsOpen=onWsOpen, onWsMsg=onWsMessage, onWsClose=onWsClose, onWsError=onWsError) as client:
-                    # We must run async, so we don't block this testing thread.
-                    client.RunAsync()
-                    failedToConnect = False
+                client = Client(url, onWsOpen=onWsOpen, onWsMsg=onWsMessage, onWsClose=onWsClose, onWsError=onWsError)
+                # We must run async, so we don't block this testing thread.
+                client.RunAsync()
+                failedToConnect = False
             except Exception as e:
                 logger.debug(f"Elegoo {url} - connection failure {e}")
-            logger.debug(f"Connection exit for Elegoo on {url}")
 
             # Wait for the timeout.
             if not failedToConnect:
                 result["Event"].wait(timeoutSec)
+
+            # Ensure the websocket is closed.
+            try:
+                client.Close()
+            except Exception as e:
+                logger.debug(f"Elegoo {url} - close exception {e}")
+            logger.debug(f"Connection exit for Elegoo on {url}")
 
             # Walk though the connection and see how far we got.
             wsConnected = False
