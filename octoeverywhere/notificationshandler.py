@@ -5,7 +5,7 @@ import threading
 import secrets
 import string
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .gadget import Gadget
 from .sentry import Sentry
@@ -13,7 +13,7 @@ from .compat import Compat
 from .finalsnap import FinalSnap
 from .repeattimer import RepeatTimer
 from .httpsessions import HttpSessions
-from .buffer import Buffer, BufferOrNone
+from .buffer import Buffer, BufferOrNone, ByteLikeOrMemoryView
 from .interfaces import IPrinterStateReporter, INotificationHandler
 from .Webcam.webcamhelper import WebcamHelper
 from .printinfo import PrintInfoManager, PrintInfo
@@ -1091,7 +1091,9 @@ class NotificationsHandler(INotificationHandler):
                     try:
                         # Since we are sending the snapshot, we must send a multipart form.
                         # Thus we must use the data and files fields, the json field will not work.
-                        r = HttpSessions.GetSession(eventApiUrl).post(eventApiUrl, data=args, files=files, timeout=5*60)
+                        r = HttpSessions.GetSession(eventApiUrl).post(eventApiUrl, data=args,
+                                                                      files=files, #pyright: ignore[reportArgumentType] we have tested and this accepts bytes, bytearray, and memoryview.
+                                                                      timeout=5*60)
 
                         # Capture the status code.
                         statusCode = r.status_code
@@ -1135,7 +1137,7 @@ class NotificationsHandler(INotificationHandler):
     # Returns an array of [args, files] which are ready to be used in the request.
     # The args and files will always contain any information that can be gathered at the time of the call.
     # Returns None if we don't have the printer id or octokey yet.
-    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str,Any]]]:
+    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str, Tuple[str, ByteLikeOrMemoryView]]]]:
 
         # Ensure we have the required var set already. If not, get out of here.
         if self.PrinterId is None or self.OctoKey is None:
@@ -1146,7 +1148,7 @@ class NotificationsHandler(INotificationHandler):
             args = {}
 
         # Define files so we can return an empty dict on any failures.
-        files = {}
+        files:Dict[str, Tuple[str, ByteLikeOrMemoryView]] = {}
 
         # Get the print info if there is a current print.
         # Remember that some notifications will fire when there's no print running, like if OctoPrint loses it's connection to the printer while idle.
@@ -1203,7 +1205,7 @@ class NotificationsHandler(INotificationHandler):
 
         # If we got one, save it to the request.
         if snapshot is not None:
-            files['attachment'] = ("snapshot.jpg", snapshot)
+            files['attachment'] = ("snapshot.jpg", snapshot.Get())
 
         return (args, files)
 

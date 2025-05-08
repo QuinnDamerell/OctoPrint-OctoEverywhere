@@ -2,7 +2,7 @@ from enum import Enum
 from abc import ABC, abstractmethod
 from typing import Any, Callable, List, Optional, Tuple, Union, Dict
 
-from .buffer import Buffer, BufferOrNone
+from .buffer import Buffer, BufferOrNone, ByteLikeOrMemoryView
 from .httpresult import HttpResult, HttpResultOrNone
 from .snapshotresizeparams import SnapshotResizeParams
 from .Webcam.webcamsettingitem import WebcamSettingItem
@@ -383,7 +383,7 @@ class INotificationHandler(ABC):
     # Note that the args must be a string, string dict, because the HTTP post form requires string values.
     # We also use any for the file type because otherwise the type is too complex.
     @abstractmethod
-    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str,Any]]]:
+    def BuildCommonEventArgs(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, snapshotResizeParams:Optional[SnapshotResizeParams]=None, useFinalSnapSnapshot=False) -> Tuple[Optional[Dict[str,str]], Optional[Dict[str, Tuple[str, ByteLikeOrMemoryView]]]]:
         pass
 
     @abstractmethod

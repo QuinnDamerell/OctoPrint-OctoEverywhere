@@ -64,7 +64,7 @@ class WebcamStreamInstance:
 
                 # Build the buffer to send
                 header = f"--{WebcamStreamInstance.c_OeStreamBoundaryString}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(capturedImage)}\r\n\r\n"
-                imageChunkBuffer = b''.join((header.encode('utf-8'), capturedImage.GetBytesLike(), b"\r\n"))
+                imageChunkBuffer = b''.join((header.encode('utf-8'), capturedImage.Get(), b"\r\n"))
 
                 # TODO - I don't know why, but chrome seems to delay the rendering of the image until it gets two?
                 # This could be something in the pipeline not flushing correctly, or other things. But for now, on the first send we double the image to make it render instantly.

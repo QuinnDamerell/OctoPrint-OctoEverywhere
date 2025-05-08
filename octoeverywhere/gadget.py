@@ -244,7 +244,9 @@ class Gadget:
                 # Since we are sending the snapshot, we must send a multipart form.
                 # Thus we must use the data and files fields, the json field will not work.
                 # Set a timeout, but make it long, so the server has time to process.
-                r = HttpSessions.GetSession(gadgetApiUrl).post(gadgetApiUrl, data=args, files=files, timeout=10*60)
+                r = HttpSessions.GetSession(gadgetApiUrl).post(gadgetApiUrl, data=args,
+                                                               files=files, #pyright: ignore[reportArgumentType] we have tested and this accepts bytes, bytearray, and memoryview.
+                                                               timeout=10*60)
 
                 # Check for success. Anything but a 200 we will consider a connection failure.
                 if r.status_code != 200:
