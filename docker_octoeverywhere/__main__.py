@@ -78,7 +78,23 @@ if __name__ == '__main__':
         # First, read the required env vars that are set in the dockerfile.
         virtualEnvPath = EnsureIsPath(os.environ.get("VENV_DIR", None))
         repoRootPath = EnsureIsPath(os.environ.get("REPO_DIR", None))
-        dataPath = EnsureIsPath(os.environ.get("DATA_DIR", None))
+
+        # Handle this path differently, since the user has to set it up correctly, we will give a better error if it doesn't exist.
+        dataPath = os.environ.get("DATA_DIR", None)
+        if dataPath is None:
+            raise Exception("DATA_DIR environment variable is not set.")
+        if not os.path.exists(dataPath):
+            logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            logger.error(" The required /data/ directory doesn't exist which means there's no docker volume mounted for it.")
+            logger.error(" Add this:Use -v ./local/path:/data .")
+            logger.error("   Docker Command Line: -v ./local/path:/data")
+            logger.error("   Docker Compose: volumes: - ./local/path:/data")
+            logger.error(" See this guide for more details:")
+            logger.error(" https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/blob/master/docker-readme.md")
+            logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            # Sleep for a bit, so if we are restarted we don't do it instantly.
+            time.sleep(3)
+            sys.exit(1)
 
         # For Bambu Connect, the config sits int the data dir.
         configPath = dataPath
