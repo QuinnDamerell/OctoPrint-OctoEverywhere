@@ -278,9 +278,12 @@ class MoonrakerClient(IMoonrakerClient):
                 return JsonRpcResponse.FromError(errorCode, errorStr)
 
             # If there's a result, return the entire response
-            resultObj = result.get("result", None)
-            if resultObj is not None and isinstance(resultObj, dict):
-                return JsonRpcResponse.FromSuccess(resultObj)
+            resultValue = result.get("result", None)
+            if resultValue is not None
+                if isinstance(resultValue, dict):
+                    return JsonRpcResponse.FromSuccess(resultValue)
+                if isinstance(resultValue, str):
+                    return JsonRpcResponse.FromSuccess(resultValue)
 
             # Finally, both are missing?
             self.Logger.error("Moonraker client json rpc got a response that didn't have an error or result object? "+json.dumps(result))
