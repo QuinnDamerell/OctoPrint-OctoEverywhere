@@ -252,7 +252,7 @@ class MqttWebsocketProxy(IWebSocketClient):
             attempt += 1
             if attempt > 10:
                 self.Logger.error(f"{self._GetLogMsgStart()} Timed out waiting for a mid.")
-                return
+                return None
             # Check if we are clear.
             with self.MidAckLock:
                 if self.IsMakingMidAckRequest is False:
