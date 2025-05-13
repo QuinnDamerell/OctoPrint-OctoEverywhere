@@ -1,6 +1,6 @@
 from typing import Optional
 
-from .interfaces import IApiRouteHandler, ISmartPauseHandler, IRelayWebSocketProvider, ILocalAuth, IRelayWebcamStreamDetector, ISlipstreamHandler, IWebRequestHandler
+from .interfaces import IApiRouteHandler, ISmartPauseHandler, IRelayWebSocketProvider, ILocalAuth, IRelayWebcamStreamDetector, ISlipstreamHandler, IWebRequestHandler, ICommandWebsocketProviderBuilder
 
 # Some of the features we need to integrate into the octoeverywhere package only exist on
 # some platforms. This is basically an interface that allows us to dynamically control
@@ -99,3 +99,12 @@ class Compat:
     @staticmethod
     def SetRelayWebsocketProvider(obj:IRelayWebSocketProvider):
         Compat._RelayWebsocketProvider = obj
+
+
+    _MqttWebsocketProxyProviderBuilder:Optional[ICommandWebsocketProviderBuilder] = None
+    @staticmethod
+    def GetMqttWebsocketProxyProviderBuilder() -> Optional[ICommandWebsocketProviderBuilder]:
+        return Compat._MqttWebsocketProxyProviderBuilder
+    @staticmethod
+    def SetMqttWebsocketProxyProviderBuilder(obj:ICommandWebsocketProviderBuilder):
+        Compat._MqttWebsocketProxyProviderBuilder = obj

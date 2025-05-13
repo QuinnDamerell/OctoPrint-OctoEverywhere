@@ -13,7 +13,7 @@ import paho.mqtt.client as mqtt
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.websocketimpl import Client
-from octoeverywhere.interfaces import IWebSocketClient
+from octoeverywhere.interfaces import IWebSocketClient, WebSocketOpCode
 
 # A helper class that's the result of a network search.
 class ElegooNetworkSearchResult:
@@ -296,7 +296,7 @@ class NetworkSearch:
                     }
                 }).encode("utf-8")))
 
-            def onWsMessage(ws:IWebSocketClient, message:Buffer):
+            def onWsData(ws:IWebSocketClient, message:Buffer, opCode:WebSocketOpCode):
                 # We got a message back! We expect this to be the response to what we asked for.
                 try:
                     msgStr = message.GetBytesLike().decode("utf-8")
@@ -338,7 +338,7 @@ class NetworkSearch:
             client:Client = None # pyright: ignore[reportAssignmentType]
             try:
                 logger.debug(f"Connecting to Elegoo on {url}...")
-                client = Client(url, onWsOpen=onWsOpen, onWsMsg=onWsMessage, onWsClose=onWsClose, onWsError=onWsError)
+                client = Client(url, onWsOpen=onWsOpen, onWsData=onWsData, onWsClose=onWsClose, onWsError=onWsError)
                 # We must run async, so we don't block this testing thread.
                 client.RunAsync()
                 failedToConnect = False

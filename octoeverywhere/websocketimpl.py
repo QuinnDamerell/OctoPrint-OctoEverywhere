@@ -18,7 +18,6 @@ class Client(IWebSocketClient):
                 self,
                 url:str,
                 onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
-                onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
                 onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                 onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                 onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
@@ -62,10 +61,6 @@ class Client(IWebSocketClient):
             if onWsOpen:
                 onWsOpen(self)
 
-        def OnMsg(ws:WebSocket, msg:bytearray):
-            if onWsMsg:
-                onWsMsg(self, Buffer(msg))
-
         # Note that the API says this only takes one arg, but after looking into the code
         # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
         # sometimes it tried to send 3 when we only accepted 1.
@@ -79,8 +74,11 @@ class Client(IWebSocketClient):
                     return
             self._FireCloseCallback()
 
-        def OnData(ws:WebSocket, buffer:bytearray, msgType:int, continueFlag:bool):
-            if onWsData:
+        def OnData(ws:WebSocket, buffer:bytearray, msgType:int, msgFin:bool):
+            # Note, we only fire on data when the msgFin is True!
+            # OnData is called each time a chunk arrives and then when the full buffer is received.
+            # To make things more simple, we only worry about the full buffer.
+            if msgFin and onWsData:
                 onWsData(self, Buffer(buffer), WebSocketOpCode.FromWsLibInt(msgType))
 
         def OnError(ws:WebSocket, exception:Exception):
@@ -90,7 +88,6 @@ class Client(IWebSocketClient):
         # Create the websocket. Once created, this is never destroyed while this class exists.
         self.Ws = WebSocketApp(url,
                                   on_open = OnOpen,
-                                  on_message = OnMsg,
                                   on_close = OnClosed,
                                   on_error = OnError,
                                   on_data = OnData,

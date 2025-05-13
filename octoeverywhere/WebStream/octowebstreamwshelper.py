@@ -5,6 +5,8 @@ import time
 import threading
 from typing import Optional
 
+from octoeverywhere.commandhandler import CommandHandler
+
 from ..mdns import MDns
 from ..buffer import Buffer
 from ..sentry import Sentry
@@ -105,109 +107,11 @@ class OctoWebStreamWsHelper:
             except Exception as _:
                 pass
 
-        # Get the path
-        path = OctoStreamMsgBuilder.BytesToString(self.HttpInitialContext.Path())
-        if path is None:
-            raise Exception("Web stream ws helper got a open message with no path")
-
-        # Depending on the connection attempt, build the URI
-        uri = None
-        pathType = self.HttpInitialContext.PathType()
-        if pathType is PathTypes.PathTypes.Relative:
-            # If the path is relative, we will make a few attempts to connect.
-            # Note these attempts are very closely related to the logic in the OctoHttpRequest class and should stay in sync.
-            if self.ConnectionAttempt == 0:
-                # If we have an API handler, see if it wants to overwrite the URL.
-                # We have to do this first, because the generated URL might work, but not be the right one.
-                # Right now this is only used for moonraker. MapRelativePathToAbsolutePathIfNeeded will return None if there's nothing to do.
-                apiRouterHandler = Compat.GetApiRouterHandler()
-                if apiRouterHandler is not None:
-                    uri = apiRouterHandler.MapRelativePathToAbsolutePathIfNeeded(path, "ws://")
-                if uri is None:
-                    # Try to connect using the main URL, this is what we expect to work.
-                    uri = "ws://" + str(OctoHttpRequest.GetLocalhostAddress()) + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
-            elif self.ConnectionAttempt == 1:
-                # Attempt 2 is to where we think the http proxy port is.
-                # For this address, we need set the protocol correctly depending if the client detected https or not.
-                protocol = "ws://"
-                if OctoHttpRequest.GetLocalHttpProxyIsHttps():
-                    protocol = "wss://"
-                uri = protocol + str(OctoHttpRequest.GetLocalhostAddress()) + ":" +str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
-            elif self.ConnectionAttempt == 2:
-                # Attempt 3 will be to try to connect with the device IP.
-                # This is needed if the server isn't bound to localhost, but only the public IP. Try the http proxy port.
-                # Since we are using the public IP, it's more likely that the http proxy port will be bound and not firewalled, since the OctoPrint port is usually internal only.
-                protocol = "ws://"
-                if OctoHttpRequest.GetLocalHttpProxyIsHttps():
-                    protocol = "wss://"
-                uri = protocol + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
-            elif self.ConnectionAttempt == 3:
-                # Attempt 4 will be to try to connect with the device IP.
-                # This is needed if the server isn't bound to localhost, but only the public IP. Try the OctoPrint local port as a last attempt.
-                uri = "ws://" + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
-            else:
-                # Report the issue and return False to indicate we aren't trying to connect.
-                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to relative path and has nothing else to try.")
-                return False
-        elif pathType is PathTypes.PathTypes.Absolute:
-            # If this is an absolute path, there are two options:
-            #   1) If the path is a local hostname, we will try to manually resolve the hostname and then try that connection directly.
-            #      This is to mitigate mDNS problems, which are described in octohttprequest, in the PathTypes.Absolute handling logic.
-            #      Basically, mDNS is flakey and it's not supported on some OSes, so doing it ourselves fixes some of that.
-            #        - If this is the case, we will try our manually resolved url first, and the OG second.
-            #   2) If the url isn't a local hostname or it fails to resolve manually, we just use the absolute URL directly.
-
-            # Try to see if this is a local hostname, if we don't already have a result.
-            if self.ResolvedLocalHostnameUrl is None:
-                # This returns None if the URL doesn't contain a local hostname or it fails to resolve.
-                self.ResolvedLocalHostnameUrl = MDns.Get().TryToResolveIfLocalHostnameFound(path)
-
-            if self.ResolvedLocalHostnameUrl is None:
-                # If self.ResolvedLocalHostnameUrl is None, there's no local hostname or it failed to resolve.
-                # Thus we will just try the absolute URL and nothing else.
-                if self.ConnectionAttempt != 0:
-                    # Report the issue and return False to indicate we aren't trying to connect.
-                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect to absolute path and has nothing else to try.")
-                    return False
-
-                # Use the raw absolute path.
-                uri = path
-            else:
-                # We have a local hostname url resolved in our string.
-                if self.ConnectionAttempt == 0:
-                    # For the first attempt, try using our manually resolved URL. Since it's already resolved and might be from a cache, it's going to be faster.
-                    uri = self.ResolvedLocalHostnameUrl
-                elif self.ConnectionAttempt == 1:
-                    # For the second attempt, it means the manually resolved URL failed, so we just try the original path with no modification.
-                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect with the locally resoled hostname ("+self.ResolvedLocalHostnameUrl+"), trying the raw URL. " + path)
-                    uri = path
-                else:
-                    # We tired both, neither worked. Give up.
-                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect to manually resolved local hostname and the absolute path.")
-                    return False
-        else:
-            raise Exception("Web stream ws helper got a open message with an unknown path type "+str(pathType))
-
-        # Validate a URI was set
-        if uri is None:
-            raise Exception(self.getLogMsgPrefix()+" AttemptConnection failed to create a URI")
-
-        # Increment the connection attempt.
-        self.ConnectionAttempt += 1
-
-        # Make the websocket object and start it running.
-        self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
-
-        # On some platforms, we might have a websocket object that was provided by the platform.
-        # If a websocket is provided, it must be a websocketimpl.Client or mock it's APIs exactly!
-        ws = None
-        relayWebsocketProvider = Compat.GetRelayWebsocketProvider()
-        if relayWebsocketProvider is not None:
-            ws = relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
-                    self.onWsOpened, None, self.onWsData, self.onWsClosed, self.onWsError, subProtocolList=self.SubProtocolList)
-
+        # Get the websocket object. If it returns None, it's an indication that there was an error
+        # and we should close the incoming websocket.
+        ws = self._GetWebsocketObject()
         if ws is None:
-            ws = Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+            return False
 
         # To ensure we never leak a websocket, we need to use this lock.
         # We need to check the is closed flag and then only set the ws if it's not closed.
@@ -227,6 +131,132 @@ class OctoWebStreamWsHelper:
 
         # Return true to indicate we are trying to connect again.
         return True
+
+
+    # Called every time we try to connect. If we fail to connect, we will keep calling this until None is returned.
+    def _GetWebsocketObject(self) -> Optional[IWebSocketClient]:
+
+        # Always increment the connection attempt.
+        self.ConnectionAttempt += 1
+
+        # Get the path
+        path = OctoStreamMsgBuilder.BytesToString(self.HttpInitialContext.Path())
+        pathType = self.HttpInitialContext.PathType()
+        if path is None:
+            raise Exception("Web stream ws helper got a open message with no path")
+
+        # On some platforms, we might have a websocket object that was provided by the platform.
+        relayWebsocketProvider = Compat.GetRelayWebsocketProvider()
+        if relayWebsocketProvider is not None:
+            # Check if we failed once, if so, return None so the incoming WS will close.
+            if self.ConnectionAttempt > 1:
+                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to the relay provider and has nothing else to try.")
+                return None
+            self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to using the relay provider, attempt "+ str(self.ConnectionAttempt))
+            return relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
+                    onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+
+        # We also need to check if this is a command websocket, and if so, allow the command system to handle it.
+        if CommandHandler.Get().IsCommandRequest(self.HttpInitialContext):
+            # Check if we failed once, if so, return None so the incoming WS will close.
+            if self.ConnectionAttempt > 1:
+                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to the command provider and has nothing else to try.")
+                return None
+            # This will return a provider or None if it fails.
+            wsProvider = CommandHandler.Get().HandleWebsocketCommand(self.HttpInitialContext)
+            if wsProvider is None:
+                # Return none to indicate a failure and to close the websocket.
+                self.Logger.info(self.getLogMsgPrefix()+" failed to get a websocket provider from the command handler.")
+                return None
+            self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to using the command provider, attempt "+ str(self.ConnectionAttempt))
+            return wsProvider.GetWebsocketObject(self.Id, path, pathType, self.HttpInitialContext,
+                    onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+
+        # This is a normal websocket creation.
+        # Depending on the connection attempt, build the URI
+        uri = None
+        if pathType is PathTypes.PathTypes.Relative:
+            # If the path is relative, we will make a few attempts to connect.
+            # Note these attempts are very closely related to the logic in the OctoHttpRequest class and should stay in sync.
+            if self.ConnectionAttempt == 1:
+                # If we have an API handler, see if it wants to overwrite the URL.
+                # We have to do this first, because the generated URL might work, but not be the right one.
+                # Right now this is only used for moonraker. MapRelativePathToAbsolutePathIfNeeded will return None if there's nothing to do.
+                apiRouterHandler = Compat.GetApiRouterHandler()
+                if apiRouterHandler is not None:
+                    uri = apiRouterHandler.MapRelativePathToAbsolutePathIfNeeded(path, "ws://")
+                if uri is None:
+                    # Try to connect using the main URL, this is what we expect to work.
+                    uri = "ws://" + str(OctoHttpRequest.GetLocalhostAddress()) + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
+            elif self.ConnectionAttempt == 2:
+                # Attempt 2 is to where we think the http proxy port is.
+                # For this address, we need set the protocol correctly depending if the client detected https or not.
+                protocol = "ws://"
+                if OctoHttpRequest.GetLocalHttpProxyIsHttps():
+                    protocol = "wss://"
+                uri = protocol + str(OctoHttpRequest.GetLocalhostAddress()) + ":" +str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
+            elif self.ConnectionAttempt == 3:
+                # Attempt 3 will be to try to connect with the device IP.
+                # This is needed if the server isn't bound to localhost, but only the public IP. Try the http proxy port.
+                # Since we are using the public IP, it's more likely that the http proxy port will be bound and not firewalled, since the OctoPrint port is usually internal only.
+                protocol = "ws://"
+                if OctoHttpRequest.GetLocalHttpProxyIsHttps():
+                    protocol = "wss://"
+                uri = protocol + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
+            elif self.ConnectionAttempt == 4:
+                # Attempt 4 will be to try to connect with the device IP.
+                # This is needed if the server isn't bound to localhost, but only the public IP. Try the OctoPrint local port as a last attempt.
+                uri = "ws://" + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
+            else:
+                # Report the issue and return False to indicate we aren't trying to connect.
+                self.Logger.info(self.getLogMsgPrefix()+" failed to connect to relative path and has nothing else to try.")
+                return None
+        elif pathType is PathTypes.PathTypes.Absolute:
+            # If this is an absolute path, there are two options:
+            #   1) If the path is a local hostname, we will try to manually resolve the hostname and then try that connection directly.
+            #      This is to mitigate mDNS problems, which are described in octohttprequest, in the PathTypes.Absolute handling logic.
+            #      Basically, mDNS is flakey and it's not supported on some OSes, so doing it ourselves fixes some of that.
+            #        - If this is the case, we will try our manually resolved url first, and the OG second.
+            #   2) If the url isn't a local hostname or it fails to resolve manually, we just use the absolute URL directly.
+
+            # Try to see if this is a local hostname, if we don't already have a result.
+            if self.ResolvedLocalHostnameUrl is None:
+                # This returns None if the URL doesn't contain a local hostname or it fails to resolve.
+                self.ResolvedLocalHostnameUrl = MDns.Get().TryToResolveIfLocalHostnameFound(path)
+
+            if self.ResolvedLocalHostnameUrl is None:
+                # If self.ResolvedLocalHostnameUrl is None, there's no local hostname or it failed to resolve.
+                # Thus we will just try the absolute URL and nothing else.
+                if self.ConnectionAttempt > 1:
+                    # Report the issue and return None to indicate we aren't trying to connect.
+                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect to absolute path and has nothing else to try.")
+                    return None
+
+                # Use the raw absolute path.
+                uri = path
+            else:
+                # We have a local hostname url resolved in our string.
+                if self.ConnectionAttempt == 1:
+                    # For the first attempt, try using our manually resolved URL. Since it's already resolved and might be from a cache, it's going to be faster.
+                    uri = self.ResolvedLocalHostnameUrl
+                elif self.ConnectionAttempt == 2:
+                    # For the second attempt, it means the manually resolved URL failed, so we just try the original path with no modification.
+                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect with the locally resoled hostname ("+self.ResolvedLocalHostnameUrl+"), trying the raw URL. " + path)
+                    uri = path
+                else:
+                    # We tired both, neither worked. Give up.
+                    self.Logger.info(self.getLogMsgPrefix()+" failed to connect to manually resolved local hostname and the absolute path.")
+                    return None
+        else:
+            raise Exception("Web stream ws helper got a open message with an unknown path type "+str(pathType))
+
+        # Validate a URI was set
+        if uri is None:
+            raise Exception(self.getLogMsgPrefix()+" AttemptConnection failed to create a URI")
+
+        # Make the websocket object and start it running.
+        self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
+        return  Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
 
 
     # When close is called, all http operations should be shutdown.

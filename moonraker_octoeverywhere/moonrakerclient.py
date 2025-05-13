@@ -17,7 +17,7 @@ from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.exceptions import NoSentryReportException
 from octoeverywhere.debugprofiler import DebugProfiler, DebugProfilerFeatures
 from octoeverywhere.buffer import Buffer
-from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter
+from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter, WebSocketOpCode
 
 from linux_host.config import Config
 
@@ -489,7 +489,7 @@ class MoonrakerClient(IMoonrakerClient):
                 with self.WebSocketLock:
                     self.WebSocket = Client(url,
                                     onWsOpen=self._OnWsOpened,
-                                    onWsMsg=self._onWsMsg,
+                                    onWsData=self._onWsData,
                                     onWsClose=self._onWsClose,
                                     onWsError=self._onWsError
                                     )
@@ -671,7 +671,7 @@ class MoonrakerClient(IMoonrakerClient):
         t.start()
 
 
-    def _onWsMsg(self, ws:IWebSocketClient, msgBytes:Buffer) -> None:
+    def _onWsData(self, ws:IWebSocketClient, msgBytes:Buffer, opCode:WebSocketOpCode) -> None:
         try:
             # Parse the incoming message.
             msgObj:dict[str, Any] = json.loads(msgBytes.GetBytesLike())

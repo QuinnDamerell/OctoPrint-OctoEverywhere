@@ -272,6 +272,20 @@ class IHostCommandHandler(ABC):
         pass
 
 
+# Important! There are patterns these classes must follow in terms of how the use the callbacks.
+# All callbacks should be fired from the async run thread, except error and close.
+# The flow must be the following:
+#
+#    Create
+#    RunAsync
+#       -> Async Thread Starts
+#             Wait for open
+#             onWsOpen
+#             Loop for messages
+#                onWsData
+#
+#    onWsClosed can be called at anytime, even before onWsOpen is called!
+#    If there is an error, onWsError will be called then onWsClosed.
 class IWebSocketClient(ABC):
 
     @abstractmethod
@@ -297,7 +311,6 @@ class IRelayWebSocketProvider(ABC):
     @abstractmethod
     def GetWebsocketObject(self, path:str, pathType:int, context:HttpInitialContext,
                            onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
-                           onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
                            onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                            onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                            onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
@@ -306,6 +319,28 @@ class IRelayWebSocketProvider(ABC):
         pass
 
 
+# Returned from the command provider to allow for a websocket creation.
+class ICommandWebsocketProvider(ABC):
+
+    # This must return a IWebsocketClient or return None on failure.
+    @abstractmethod
+    def GetWebsocketObject(self, streamId:int, path:str, pathType:int, context:HttpInitialContext,
+                           onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
+                           onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
+                           onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
+                           onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
+                           headers:Optional[Dict[str, str]]=None,
+                           subProtocolList:Optional[List[str]]=None) -> Optional[IWebSocketClient]:
+        pass
+
+
+# Allows us to wrap a provider with the included command args to return before the websocket object creation.
+class ICommandWebsocketProviderBuilder(ABC):
+
+    # This must return a provider or None on failure.
+    @abstractmethod
+    def GetCommandWebsocketProvider(self, args:Optional[Dict[str, Any]]) -> Optional[ICommandWebsocketProvider]:
+        pass
 
 
 #

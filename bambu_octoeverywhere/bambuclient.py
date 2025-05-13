@@ -19,11 +19,12 @@ from .interfaces import IBambuStateTranslator
 
 
 class ConnectionContext:
-    def __init__(self, isCloud:bool, ipOrHostname:str, userName:str, accessToken:str):
+    def __init__(self, isCloud:bool, ipOrHostname:str, port:str, userName:str, accessToken:str):
         self.IsCloud = isCloud
         self.IpOrHostname = ipOrHostname
         self.UserName = userName
         self.AccessToken = accessToken
+        self.Port = port
 
 
 # Responsible for connecting to and maintaining a connection to the Bambu Printer.
@@ -76,6 +77,7 @@ class BambuClient:
         self.ConsecutivelyFailedConnectionAttempts = 0
 
         # Start a thread to setup and maintain the connection.
+        self.CurrentConnectionContext:Optional[ConnectionContext] = None
         self.Client:Optional[mqtt.Client] = None
         t = threading.Thread(target=self._ClientWorker)
         t.start()
@@ -112,11 +114,37 @@ class BambuClient:
         return self._Publish({"print": {"sequence_id": "0", "command": "stop"}})
 
 
+    # If there's a successful connection, this will return the context used.
+    # This will always be set after the first connection and will be updated if the connection is re-established.
+    def GetCurrentConnectionContext(self) -> Optional[ConnectionContext]:
+        return self.CurrentConnectionContext
+
+
+    # A helper to setup and connect the mqtt client.
+    # This will throw if the connection fails, returns the ip or hostname connected to.
+    @staticmethod
+    def SetupAndConnectMqtt(client:mqtt.Client, context:ConnectionContext):
+        if context.IsCloud:
+            # We are connecting to Bambu Cloud, setup MQTT for it.
+            client.tls_set(tls_version=ssl.PROTOCOL_TLS) #pyright: ignore[reportUnknownMemberType]
+        else:
+            # We are trying to connect to the printer locally, so configure mqtt for a local connection.
+            client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE) #pyright: ignore[reportUnknownMemberType]
+            client.tls_insecure_set(True)
+
+        # Set the username and access token.
+        client.username_pw_set(context.UserName, context.AccessToken)
+
+        # Connect to the server
+        # This will throw if it fails, but after that, the loop_forever will handle reconnecting.
+        client.connect(context.IpOrHostname, int(context.Port), keepalive=5)
+
+
     # Sets up, runs, and maintains the MQTT connection.
     def _ClientWorker(self):
         localBackoffCounter = 0
         while True:
-            ipOrHostname = None
+            ipOrHostname:str = "None"
             isConnectAttemptFromEventBump = False
             try:
                 # Before we try to connect, ensure we tell the state translator that we are starting a new connection.
@@ -139,27 +167,23 @@ class BambuClient:
 
                 # Get the IP to try on this connect
                 connectionContext = self._GetConnectionContextToTry(isConnectAttemptFromEventBump)
+                ipOrHostname = connectionContext.IpOrHostname
                 if connectionContext.IsCloud:
-                    self.Logger.info("Trying to connect to printer via Bambu Cloud...")
-                    # We are connecting to Bambu Cloud, setup MQTT for it.
-                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS) #pyright: ignore[reportUnknownMemberType]
+                    self.Logger.info(f"Trying to connect to printer via Bambu Cloud at {ipOrHostname}...")
                 else:
                     # We are trying to connect to the printer locally, so configure mqtt for a local connection.
-                    self.Logger.info("Trying to connect to printer via local connection...")
-                    self.Client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE) #pyright: ignore[reportUnknownMemberType]
-                    self.Client.tls_insecure_set(True)
+                    self.Logger.info(f"Trying to connect to printer via local connection at {ipOrHostname}...")
 
-                # Set the username and access token.
-                self.Client.username_pw_set(connectionContext.UserName, connectionContext.AccessToken)
-
-                # Connect to the server
-                # This will throw if it fails, but after that, the loop_forever will handle reconnecting.
+                # Try to connect the client, this will throw if it fails.
                 localBackoffCounter += 1
-                self.Client.connect(connectionContext.IpOrHostname, int(self.PortStr), keepalive=5)
+                BambuClient.SetupAndConnectMqtt(self.Client, connectionContext)
 
                 # Note that self.Client.connect will not throw if there's no MQTT server, but not if auth is wrong.
                 # So if it didn't throw, we know there's a server there, but it might not be the right server
                 localBackoffCounter = 0
+
+                # Once we are connected, set the connection context.
+                self.CurrentConnectionContext = connectionContext
 
                 # This will run forever, including handling reconnects and such.
                 self.Client.loop_forever()
@@ -373,7 +397,7 @@ class BambuClient:
                 Sentry.OnException("Exception calling StateTranslator.OnMqttMessage", e)
 
         except Exception as e:
-            Sentry.OnException(f"Failed to handle incoming mqtt message. {mqttMsg.payload}", e)
+            Sentry.OnException(f"Failed to handle incoming mqtt message. `{mqttMsg.payload}`", e)
 
 
     # Publishes a message and blocks until it knows if the message send was successful or not.
@@ -470,7 +494,7 @@ class BambuClient:
             accessCode = self.LanAccessCode
         else:
             self.Logger.error("Missing access code in _GetLocalConnectionContext, can't connect to the printer.")
-        return ConnectionContext(False, ipOrHostname, "bblp", accessCode)
+        return ConnectionContext(False, ipOrHostname, self.PortStr, "bblp", accessCode)
 
 
     # Returns a Bambu Cloud based connection context if it can be made, otherwise None
@@ -507,7 +531,7 @@ class BambuClient:
         if parsedToken is None:
             self.Logger.error("Failed to parse the access token, can't connect to the printer.")
             return None
-        return ConnectionContext(True, bCloud.GetMqttHostname(), parsedToken, accessToken)
+        return ConnectionContext(True, bCloud.GetMqttHostname(), self.PortStr, parsedToken, accessToken)
 
 
 # A class returned as the result of all commands.
