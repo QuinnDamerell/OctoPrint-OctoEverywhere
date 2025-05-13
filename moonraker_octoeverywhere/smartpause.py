@@ -49,8 +49,13 @@ class SmartPause(ISmartPauseHandler):
             self.Logger.error("SmartPause failed to request pause. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(400, "Failed to request pause")
 
+        # Ensure the response is a simple result.
+        if result.IsSimpleResult() is False:
+            self.Logger.error("ExecuteSmartPause didn't return a simple result. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Bad result type")
+
         # Check the response
-        if result.GetResult() != "ok":
+        if result.GetSimpleResult() != "ok":
             self.Logger.error("SmartPause got an invalid request response. "+json.dumps(result.GetResult()))
             return CommandResponse.Error(400, "Invalid request response.")
 

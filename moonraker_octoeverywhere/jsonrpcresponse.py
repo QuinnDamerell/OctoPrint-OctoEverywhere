@@ -5,7 +5,8 @@ from typing import Any, Dict, Optional
 #
 # General usage is check if HasError is true. If it is, then use
 # GetErrorCode and GetErrorStr to get the error code and string.
-# If there is no error, then use GetResult to get the result object.
+# If there is no error, use IsSimpleResult to check if it's a simple result
+# a dict object result. Simple results are usually just for commands like pause, resume, ect.
 class JsonRpcResponse:
 
     # Our specific errors
@@ -60,18 +61,18 @@ class JsonRpcResponse:
         return self.SimpleResult is not None
 
 
-    # This can only be called after HasError is false.
+    # This can only be called after HasError is false and IsSimpleResult is false.
     def GetResult(self) -> Dict[str, Any]:
         if self.Result is None:
             raise Exception("JsonRpcResponse GetResult was called when the result was None. HasError needs to be called first.")
         return self.Result
 
 
-    # This can only be called after HasError is false.
-    def IsSimpleResultOk(self) -> bool:
-        if self.IsSimpleResult() is False:
-            raise Exception("JsonRpcResponse IsSimpleResultOk was called when the result was None. HasError needs to be called first.")
-        return self.SimpleResult == "ok"
+    # This can only be called after HasError is false and IsSimpleResult is true.
+    def GetSimpleResult(self) -> str:
+        if self.SimpleResult is None:
+            raise Exception("JsonRpcResponse GetSimpleResult was called when the result was None. HasError needs to be called first.")
+        return self.SimpleResult
 
 
     def GetErrorCode(self) -> int:

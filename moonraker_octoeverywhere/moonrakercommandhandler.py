@@ -183,9 +183,9 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         # Check the state and that we have a connection to the host.
-        # result = self._CheckIfConnectedAndForExpectedStates(["printing"])
-        # if result is not None:
-        #     return result
+        result = self._CheckIfConnectedAndForExpectedStates(["printing"])
+        if result is not None:
+            return result
 
         # The smart pause logic handles all pause commands.
         return SmartPause.Get().ExecuteSmartPause(suppressNotificationBool)
@@ -207,13 +207,14 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self.Logger.error("ExecuteResume failed to request resume. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(400, "Failed to request resume")
 
-        if result.IsSimpleResultOk() is False:
-              self.Logger.error("ExecuteResume didn't return a simple result. "+result.GetLoggingErrorStr())
-            return CommandResponse.Error(400, "Bad result type.")
+        # Ensure the response is a simple result.
+        if result.IsSimpleResult() is False:
+            self.Logger.error("ExecuteResume didn't return a simple result. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Bad result type")
 
         # Check the response, we expect a simple response.
-        if result.Get() != "ok":
-            self.Logger.error("ExecuteResume got an invalid request response. "+json.dumps(result.GetResult()))
+        if result.GetSimpleResult() != "ok":
+            self.Logger.error("ExecuteResume got an invalid request response. "+json.dumps(result.GetSimpleResult()))
             return CommandResponse.Error(400, "Invalid request response.")
 
         return CommandResponse.Success(None)
@@ -235,8 +236,13 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self.Logger.error("ExecuteCancel failed to request cancel. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(400, "Failed to request cancel")
 
+        # Ensure the response is a simple result.
+        if result.IsSimpleResult() is False:
+            self.Logger.error("ExecuteCancel didn't return a simple result. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Bad result type")
+
         # Check the response
-        if result.GetResult() != "ok":
+        if result.GetSimpleResult() != "ok":
             self.Logger.error("ExecuteCancel got an invalid request response. "+json.dumps(result.GetResult()))
             return CommandResponse.Error(400, "Invalid request response.")
 
