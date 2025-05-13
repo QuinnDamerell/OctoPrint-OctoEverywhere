@@ -436,7 +436,7 @@ class CommandHandler:
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ArgParseFailure, str(e))
 
         # If the args parse was successful, try to handle the command.
-        if responseObj is not None:
+        if responseObj is None:
             # For some commands, they will create their own HttpResult and return it like snapshot or webcam streams.
             # But these are only special commands, most commands should use the command response.
             try:

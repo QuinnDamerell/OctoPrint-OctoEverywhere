@@ -39,8 +39,8 @@ class JsonRpcResponse:
         self.SimpleResult = simpleResult
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
-        if self.Result is None and self.ErrorCode == 0:
-            raise Exception("JsonRpcResponse was created with no result and no error code.")
+        if self.Result is None and self.SimpleResult is None and self.ErrorCode == 0:
+            raise Exception("JsonRpcResponse was created with no result, simple result, and no error code.")
         if self.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
             self.ErrorStr = "Timeout waiting for RPC response."
         if self.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
@@ -52,7 +52,9 @@ class JsonRpcResponse:
 
     # This must be checked first, if it returns True then GetResult can be called.
     def HasError(self) -> bool:
-        return self.ErrorCode != 0 or self.Result is None
+        if self.ErrorCode != 0 or (self.Result is None and self.SimpleResult is None):
+            return True
+        return False
 
 
     # Returns if this is a simple result (IsSimpleResultOk) or a dict result GetResult.
