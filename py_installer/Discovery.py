@@ -184,7 +184,7 @@ class Discovery:
         # The service file should be something like this "/etc/init.d/S56moonraker_service" or "/etc/init.d/moonraker" on the K2
         for fileOrDirName in os.listdir(Paths.CrealityOsServiceFilePath):
             fullFileOrDirPath = os.path.join(Paths.CrealityOsServiceFilePath, fileOrDirName)
-            if os.path.isfile(fullFileOrDirPath) and os.path.islink(fullFileOrDirPath) is False:
+            if os.path.isfile(fullFileOrDirPath):
                 if "moonraker" in fileOrDirName.lower():
                     Logger.Debug(f"Found service file: {fullFileOrDirPath}")
                     moonrakerServiceFileName = fileOrDirName
