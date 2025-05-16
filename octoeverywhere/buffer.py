@@ -119,6 +119,23 @@ class Buffer():
             raise ValueError("Buffer is empty")
 
 
+    # This doesn't free the memory, but if there's a memory view it releases it, allowing the buffer it was wrapping the ability to be resized.
+    def Release(self) -> None:
+        # If we have a bytes object, we need to convert it to a bytearray.
+        if self._bytes is not None:
+            self._bytes = None
+            return
+        elif self._bytearray is not None:
+            self._bytearray = None
+            return
+        elif self._memoryview is not None:
+            self._memoryview.release()
+            self._memoryview = None
+            return
+        else:
+            raise ValueError("Buffer is empty")
+
+
     # Allow the len function to work.
     def __len__(self) -> int:
         if self._bytes is not None:
