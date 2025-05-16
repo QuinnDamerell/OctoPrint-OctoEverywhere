@@ -12,7 +12,7 @@ from .repeattimer import RepeatTimer
 from .octopingpong import OctoPingPong
 from .threaddebug import ThreadDebug
 from .dnstest import DnsTest
-from .interfaces import IOctoStream, IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler, IWebSocketClient
+from .interfaces import IOctoStream, IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler, IWebSocketClient, WebSocketOpCode
 
 #
 # This class is responsible for connecting and maintaining a connection to a server.
@@ -183,7 +183,7 @@ class OctoServerCon(IOctoStream):
             dnsTest.RunTestSync()
 
 
-    def OnMsg(self, ws:IWebSocketClient, msg:Buffer):
+    def OnData(self, ws:IWebSocketClient, msg:Buffer, opCode:WebSocketOpCode):
         # When we get any message, consider it user activity.
         self.LastUserActivityTime = datetime.now()
 
@@ -354,7 +354,7 @@ class OctoServerCon(IOctoStream):
 
                     # Connect to the service.
                     # When this returns, make sure it's fully closed.
-                    self.Ws = Client(url=endpoint, onWsOpen=self.OnOpened, onWsMsg=self.OnMsg, onWsClose=self.OnClosed, onWsError=self.OnError)
+                    self.Ws = Client(url=endpoint, onWsOpen=self.OnOpened, onWsData=self.OnData, onWsClose=self.OnClosed, onWsError=self.OnError)
                     with self.Ws:
                         self.Logger.info("Attempting to talk to OctoEverywhere, server con "+self.GetConnectionString() + " wsId:"+self.GetWsId(self.Ws))
                         self.Ws.RunUntilClosed()

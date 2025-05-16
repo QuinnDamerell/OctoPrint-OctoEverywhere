@@ -17,7 +17,7 @@ from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.exceptions import NoSentryReportException
 from octoeverywhere.debugprofiler import DebugProfiler, DebugProfilerFeatures
 from octoeverywhere.buffer import Buffer
-from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter
+from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter, WebSocketOpCode
 
 from linux_host.config import Config
 
@@ -278,9 +278,13 @@ class MoonrakerClient(IMoonrakerClient):
                 return JsonRpcResponse.FromError(errorCode, errorStr)
 
             # If there's a result, return the entire response
-            resultObj = result.get("result", None)
-            if resultObj is not None and isinstance(resultObj, dict):
-                return JsonRpcResponse.FromSuccess(resultObj)
+            resultValue = result.get("result", None)
+            if resultValue is not None:
+                # Depending on the type, set it as a dict or simple result.
+                if isinstance(resultValue, dict):
+                    return JsonRpcResponse.FromSuccess(resultValue)
+                if isinstance(resultValue, str):
+                    return JsonRpcResponse.FromSimpleSuccess(resultValue)
 
             # Finally, both are missing?
             self.Logger.error("Moonraker client json rpc got a response that didn't have an error or result object? "+json.dumps(result))
@@ -489,7 +493,7 @@ class MoonrakerClient(IMoonrakerClient):
                 with self.WebSocketLock:
                     self.WebSocket = Client(url,
                                     onWsOpen=self._OnWsOpened,
-                                    onWsMsg=self._onWsMsg,
+                                    onWsData=self._onWsData,
                                     onWsClose=self._onWsClose,
                                     onWsError=self._onWsError
                                     )
@@ -671,7 +675,7 @@ class MoonrakerClient(IMoonrakerClient):
         t.start()
 
 
-    def _onWsMsg(self, ws:IWebSocketClient, msgBytes:Buffer) -> None:
+    def _onWsData(self, ws:IWebSocketClient, msgBytes:Buffer, opCode:WebSocketOpCode) -> None:
         try:
             # Parse the incoming message.
             msgObj:dict[str, Any] = json.loads(msgBytes.GetBytesLike())

@@ -100,8 +100,13 @@ class WebcamHelper:
 
     # If the header is set to specify a camera name, this returns it. Otherwise None
     def GetOracleRequestCameraIndex(self, requestHeadersDict:Dict[str, str]) -> Optional[int]:
-        if WebcamHelper.c_OracleWebcamIndexHeaderKey in requestHeadersDict:
-            return int(requestHeadersDict[WebcamHelper.c_OracleWebcamIndexHeaderKey])
+        value = requestHeadersDict.get(WebcamHelper.c_OracleWebcamIndexHeaderKey, None)
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except Exception as e:
+            Sentry.OnException("WebcamHelper GetOracleRequestCameraIndex failed to convert the camera index to an int.", e)
         return None
 
 

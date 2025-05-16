@@ -5,7 +5,7 @@ import ipaddress
 from typing import Any, Optional, Tuple, List
 
 from octoeverywhere.websocketimpl import Client
-from octoeverywhere.interfaces import IWebSocketClient
+from octoeverywhere.interfaces import IWebSocketClient, WebSocketOpCode
 from octoeverywhere.buffer import Buffer
 
 from py_installer.Util import Util
@@ -237,7 +237,7 @@ class MoonrakerConnector:
             jsonBytes = jsonStr.encode("utf-8")
             ws.Send(Buffer(jsonBytes), 0, len(jsonBytes), False)
 
-        def OnMsg(ws:IWebSocketClient, msg:Buffer):
+        def OnData(ws:IWebSocketClient, msg:Buffer, opcode:WebSocketOpCode):
             with lock:
                 if "success" in result:
                     return
@@ -275,7 +275,7 @@ class MoonrakerConnector:
         capturedException = None
         Logger.Debug(f"Checking for moonraker using the address: `{url}`")
         try:
-            with Client(url, onWsOpen=OnOpened, onWsMsg=OnMsg, onWsError=OnError, onWsClose=OnClosed) as ws:
+            with Client(url, onWsOpen=OnOpened, onWsData=OnData, onWsError=OnError, onWsClose=OnClosed) as ws:
                 ws.RunAsync()
 
                 # Wait for the event or a timeout.

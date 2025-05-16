@@ -818,8 +818,8 @@ class OctoWebStreamHttpHelper:
             defaultBodyReadSizeBytes = contentLength
 
         # Some requests like snapshot requests will already have a fully read body. In this case we use the existing body buffer instead of reading from the body.
+        # Important! This buffer must have Release() called on it because it can be holding a memory view!
         finalDataBuffer:BufferOrNone = None
-        finalDataBufferMv:Optional[memoryview] = None
         try:
             bodyReadStartSec = time.time()
             if self.IsUsingFullBodyBuffer:
@@ -841,13 +841,15 @@ class OctoWebStreamHttpHelper:
                     readLength = self.readStreamChunk(octoHttpResult, boundaryStr)
                     # If we get a length, we have a buffer to use.
                     if readLength != 0:
-                        # We create a memory view from the buffer, which is a zero copy operation and zero copy slicing.
-                        # This allows us to pass the buffer around without copying it, but we do have to be sure to release the
-                        # memory views when we are done.
                         if self.BodyReadTempBuffer is None:
                             raise Exception("The body read temp buffer is None, but we are trying to read the body.")
-                        finalDataBufferMv = memoryview(self.BodyReadTempBuffer.Get())
-                        finalDataBuffer = Buffer(finalDataBufferMv[0:readLength])
+                        # We create a memory view from the buffer, which is a zero copy operation and zero copy slicing.
+                        # This allows us to pass the buffer around without copying it, but we do have to be sure to release the memory views when we are done.
+                        # This first memoryview is created and destroyed here using the with block.
+                        with memoryview(self.BodyReadTempBuffer.Get()) as mv:
+                            # NOTE this slice ALSO CREATES A MEMORY VIEW, which is then owned by the buffer, so it needs to be released.
+                            mvSlice = mv[0:readLength]
+                            finalDataBuffer = Buffer(mvSlice)
                 else:
                     if self.UnknownBodyChunkReadContext is not None or (responseHandlerContext is None and self.shouldDoUnknownBodyChunkRead(contentTypeLower, contentLength)):
                         # According to the HTTP 1.1 spec, if there's no content length and no boundary string, then the body is chunk based transfer encoding.
@@ -933,10 +935,12 @@ class OctoWebStreamHttpHelper:
                 raise Exception("The builder is None, but we are trying to create a flatbuffer message.")
             return (originalBufferSize, len(finalDataBuffer), builder.CreateByteVector(finalDataBuffer)) #pyright: ignore[reportArgumentType, reportUnknownMemberType]
         finally:
-            # If we used a memory view, release it.
-            # This also means that the finalDataBuffer is a memory view.
-            if finalDataBufferMv is not None:
-                finalDataBufferMv.release()
+            # If we have a data buffer, we need to make sure to call Release.
+            # This will do nothing if it's holding bytes or a bytearray, but if it's holding a memoryview it's important that we release it
+            # so the class body buffer can be used again.
+            if finalDataBuffer is not None:
+                finalDataBuffer.Release()
+
 
 
     # Reads a single chunk from the http response.
@@ -1066,7 +1070,7 @@ class OctoWebStreamHttpHelper:
 
             # Copy this data into the temp buffer
             ba = self.BodyReadTempBuffer.ForceAsByteArray()
-            ba[tempBufferFilledSize:tempBufferFilledSize+len(data)] = data
+            ba[tempBufferFilledSize:tempBufferFilledSize+len(data)] = data.Get()
             tempBufferFilledSize += len(data)
 
         # Update our read rate. This is a metric we send along in the stream if the it's a multipart stream, to know how fast we are reading it.

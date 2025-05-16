@@ -22,6 +22,8 @@ class LoggerInit:
             "ERROR",
         ]
         logLevel = config.GetStrIfInAcceptableList(Config.LoggingSection, Config.LogLevelKey, "INFO", possibleValueList)
+        # GetStrIfInAcceptableList does a case insensitive check, so we need to make sure the logging case is correct.
+        logLevel = logLevel.upper()
 
         # Check the environment variable for the log level.
         if os.getenv("DEBUG") is not None or os.getenv("-DEBUG") or os.getenv("debug") or os.getenv("-debug"):

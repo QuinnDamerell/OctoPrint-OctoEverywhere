@@ -31,6 +31,7 @@ from .bambuclient import BambuClient
 from .bambuwebcamhelper import BambuWebcamHelper
 from .bambucommandhandler import BambuCommandHandler
 from .bambustatetranslater import BambuStateTranslator
+from .mqttwebsocketproxy import MqttWebsocketProxyProviderBuilder
 
 # This file is the main host for the bambu service.
 class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
@@ -120,8 +121,6 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             # Setup the print info manager.
             PrintInfoManager.Init(self.Logger, localStorageDir)
 
-            # For bambu, there's no frontend to connect to, so we disable the http relay system.
-            OctoHttpRequest.SetDisableHttpRelay(True)
             # But we still want to set the "local OctoPrint port" to 80, because that's the default port it will try for relative URLs.
             # Relative URLs for Bambu only come from the alternative webcam streaming system, which the user might be trying to access a webcam stream from this device.
             # If they don't specify a IP (or localhost) and port, then we will default all relative URLs to the "local OctoPrint port" value.
@@ -153,6 +152,9 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             # Setup and start the Bambu Client
             BambuClient.Init(self.Logger, self.Config, stateTranslator)
+
+            # Create our MQTT websocket proxy provider.
+            Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))
 
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri

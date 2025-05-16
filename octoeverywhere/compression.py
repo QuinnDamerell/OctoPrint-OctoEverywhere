@@ -230,6 +230,8 @@ class CompressionContext:
                 self.StreamReader = self.Decompressor.stream_reader(self) #pyright: ignore[reportArgumentType]
 
         # Set the buffer for the decompressor to be read by the read() function
+        # It also really important we reset the read position to 0, since we are setting a new buffer.
+        self.DecompressionByteBufferReadPosition = 0
         self.DecompressionByteBuffer = data
 
         # NOTE! It's important to read exactly the amount we are expecting and nothing more.

@@ -28,7 +28,6 @@ class ElegooWebsocketMux(IRelayWebSocketProvider, IWebsocketMux):
     # If None is returned, the websocket will be opened as normally, using the address.
     def GetWebsocketObject(self, path:str, pathType:int, context:HttpInitialContext,
                            onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
-                           onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
                            onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                            onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                            onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
@@ -49,7 +48,7 @@ class ElegooWebsocketMux(IRelayWebSocketProvider, IWebsocketMux):
         with self.Lock:
             self.NextId += 1
             wsId = self.NextId
-        return ElegooWebsocketClientProxy(self, wsId, self.Logger, onWsOpen, onWsMsg, onWsData, onWsClose, onWsError, headers, subProtocolList)
+        return ElegooWebsocketClientProxy(self, wsId, self.Logger, onWsOpen, onWsData, onWsClose, onWsError, headers, subProtocolList)
 
 
     # Called before a ElegooWebsocketClientProxy fires the open event.
@@ -122,7 +121,6 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
 
     def __init__(self, mux:ElegooWebsocketMux, wsId:int, logger:logging.Logger,
                 onWsOpen:Optional[Callable[[IWebSocketClient], None]]=None,
-                onWsMsg:Optional[Callable[[IWebSocketClient, Buffer], None]]=None,
                 onWsData:Optional[Callable[[IWebSocketClient, Buffer, WebSocketOpCode], None]]=None,
                 onWsClose:Optional[Callable[[IWebSocketClient], None]]=None,
                 onWsError:Optional[Callable[[IWebSocketClient, Exception], None]]=None,
@@ -136,7 +134,6 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
         self.ReceiveQueue:queue.Queue[ReceiveQueueContext] = queue.Queue()
 
         self.OnWsOpen = onWsOpen
-        self.OnWsMsg = onWsMsg
         self.OnWsData = onWsData
         self.OnWsClose = onWsClose
         self.OnWsError = onWsError
@@ -294,13 +291,8 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
                         raise Exception("ReceiveQueueContext has no buffer or opt code.")
 
                     self._DebugLog("Received message.")
-                    # Just like in the WS logic, fire data first then msg
                     if self.OnWsData is not None:
                         self.OnWsData(self, context.Buffer, context.OptCode)
-
-                    # First message first, with just the buffer.
-                    if self.OnWsMsg is not None:
-                        self.OnWsMsg(self, context.Buffer)
 
             except Exception as e:
                 self._fireErrorAndCloseAsync("Exception in ReceiveThread.", e)

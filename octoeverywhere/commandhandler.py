@@ -1,16 +1,18 @@
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from urllib.parse import unquote
+from typing import Any, Dict, List, Optional, Tuple
 
 from .buffer import Buffer
 from .gadget import Gadget
 from .sentry import Sentry
+from .compat import Compat
 from .httpresult import HttpResult
 from .octohttprequest import PathTypes
 from .Webcam.webcamhelper import WebcamHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .Webcam.webcamsettingitem import WebcamSettingItem
-from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse
+from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse, ICommandWebsocketProvider
 
 from .Proto.HttpInitialContext import HttpInitialContext
 
@@ -37,6 +39,14 @@ class CommandHandler:
     # This must be lowercase, to match the lower() we call on the incoming path.
     # This must end with a /, so it's the correct length when we remove the prefix.
     c_CommandHandlerPathPrefix = "/octoeverywhere-command-api/"
+
+    # This is a special command that allows the a websocket to be created to proxy MQTT messages.
+    c_MqttWebsocketProxyCommand = "proxy/mqtt"
+
+    # For webcam calls, this is an optional GET arg that will be an int of the webcam index.
+    # The webcam index is the index of the webcam in the list-webcam response.
+    c_WebcamIndexGetKey = "index"
+
 
     #
     # Common Errors
@@ -77,6 +87,63 @@ class CommandHandler:
         self.NotificationHandler = notificationHandler
         self.PlatformCommandHandler = platCommandHandler
         self.HostCommandHandler = hostCommandHandler
+
+
+    # Processes special commands that return a raw HttpResult instead of a command result.
+    def ProcessRawCommand(self, commandPathLower:str, jsonObj:Optional[Dict[str, Any]]) -> Optional[HttpResult]:
+        if commandPathLower.startswith("webcam/"):
+            if commandPathLower.startswith("webcam/snapshot"):
+                return WebcamHelper.Get().GetSnapshot(self._GetWebcamCamIndex(jsonObj))
+            elif commandPathLower.startswith("webcam/stream"):
+                return WebcamHelper.Get().GetWebcamStream(self._GetWebcamCamIndex(jsonObj))
+        # If we didn't match, return None, so the ProcessCommand handler is called.
+        return None
+
+
+    # The goal here is to keep as much of the common logic as common as possible.
+    def ProcessCommand(self, commandPathLower:str, jsonObj_CanBeNone:Optional[Dict[str, Any]]) -> CommandResponse:
+        if commandPathLower.startswith("ping"):
+            return CommandResponse.Success({"Message":"Pong"})
+        elif commandPathLower.startswith("status"):
+            return self.GetStatus()
+        # This works for both, in the docks we moved it to the webcam path so it's more clear.
+        elif commandPathLower.startswith("list-webcam") or commandPathLower.startswith("webcam/list"):
+            return self.ListWebcams()
+        elif commandPathLower.startswith("set-default-webcam"):
+            return self.SetDefaultCameraName(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("get-local-plugin-webcam-items"):
+            return self.GetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("set-local-plugin-webcam-items"):
+            return self.SetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("pause"):
+            return self.Pause(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("resume"):
+            return self.Resume()
+        elif commandPathLower.startswith("cancel"):
+            return self.Cancel()
+        elif commandPathLower.startswith("rekey"):
+            return self.Rekey()
+        elif commandPathLower.startswith(CommandHandler.c_MqttWebsocketProxyCommand):
+            # This is a special command that only works with websocket connections, but if we are here it's http.
+            # So return an error so the user will know to use a websocket.
+            return CommandResponse.Error(400, "MQTT proxy requires a websocket connection.")
+        return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
+
+
+    # Processes websocket commands, return None on failure to close the incoming WS.
+    def ProcessWebsocketCommand(self, commandPathLower:str, jsonObj:Optional[Dict[str, Any]]) -> Optional[ICommandWebsocketProvider]:
+        # If the command path is the mqtt proxy, we need to return a provider.
+        if commandPathLower.startswith(CommandHandler.c_MqttWebsocketProxyCommand):
+            # This builder will take the optional json args and will return a provider.
+            mqttWsProxyProvider = Compat.GetMqttWebsocketProxyProviderBuilder()
+            if mqttWsProxyProvider is None:
+                self.Logger.error("CommandHandler got a websocket mqtt proxy request but we don't have a mqtt websocket provider in compat.")
+                return None
+            return mqttWsProxyProvider.GetCommandWebsocketProvider(jsonObj)
+
+        # If we are here, this is an invalid command for a websocket command.
+        self.Logger.error(f"CommandHandler got a websocket request but the command path didn't match any known commands. Path: {commandPathLower}")
+        return None
 
 
     #
@@ -356,30 +423,39 @@ class CommandHandler:
     # it must have the FullBodyBuffer (similar to the snapshot helper) and a valid response object JUST LIKE the requests lib would return.
     #
     def HandleCommand(self, httpInitialContext:HttpInitialContext, postBody:Optional[Buffer]) -> HttpResult:
-        # Get the command path.
-        path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
-        if path is None:
-            raise Exception("IsCommandHttpRequest Http request has no path field in HandleCommand.")
-
-        # Everything after our prefix is part of the command path
-        commandPath = path[len(CommandHandler.c_CommandHandlerPathPrefix):]
-
-        # Parse the args. Args are optional, it depends on the command.
+        # Parse the command path and the optional json args.
+        commandPath:str = ""
+        commandPathLower:str = ""
         jsonObj:Optional[Dict[str, Any]] = None
+        responseObj:Optional[CommandResponse] = None
         try:
-            if postBody is not None:
-                jsonObj = json.loads(postBody.GetBytesLike())
+            # Get the command path and json args, the json object can be null if there are no args.
+            commandPath, commandPathLower, jsonObj = self._GetPathAndJsonArgs(httpInitialContext, postBody)
         except Exception as e:
             Sentry.OnException("CommandHandler error while parsing command args.", e)
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ArgParseFailure, str(e))
 
-        # Handle the command
-        responseObj = None
-        try:
-            responseObj = self.ProcessCommand(commandPath, jsonObj)
-        except Exception as e:
-            Sentry.OnException("CommandHandler error while handling command.", e)
-            responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str(e))
+        # If the args parse was successful, try to handle the command.
+        if responseObj is None:
+            # For some commands, they will create their own HttpResult and return it like snapshot or webcam streams.
+            # But these are only special commands, most commands should use the command response.
+            try:
+                # If a result was returned, it was handled.
+                result = self.ProcessRawCommand(commandPathLower, jsonObj)
+                if result is not None:
+                    return result
+            except Exception as e:
+                Sentry.OnException("CommandHandler error while handling raw command.", e)
+
+            # Otherwise, handle our wrapped API commands
+            try:
+                responseObj = self.ProcessCommand(commandPath, jsonObj)
+            except Exception as e:
+                Sentry.OnException("CommandHandler error while handling command.", e)
+                responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str(e))
+
+        if responseObj is None:
+            responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str("No response object returned."))
 
         # Build the result
         resultBytes = None
@@ -416,28 +492,87 @@ class CommandHandler:
         return HttpResult(200, headers, url, False, fullBodyBuffer=Buffer(resultBytes))
 
 
-    # The goal here is to keep as much of the common logic as common as possible.
-    def ProcessCommand(self, commandPath:str, jsonObj_CanBeNone:Optional[Dict[str, Any]]) -> CommandResponse:
-        # To lower, to match any case.
+    # Called after IsCommandRequest, so we know this is a command request.
+    # If we fail, we return None, which will then close the incoming ws.
+    def HandleWebsocketCommand(self, context:HttpInitialContext) -> Optional[ICommandWebsocketProvider]:
+        try:
+            # Get the command path and json args, the json object can be null if there are no args.
+            _, commandPathLower, jsonObj = self._GetPathAndJsonArgs(context, None)
+
+            # Returns None on failure.
+            return self.ProcessWebsocketCommand(commandPathLower, jsonObj)
+        except Exception as e:
+            Sentry.OnException("CommandHandler error while handling websocket command.", e)
+            return None
+
+
+    # A helper to parse the context and json args. Throws if it fails!
+    def _GetPathAndJsonArgs(self, httpInitialContext:HttpInitialContext, postBody:Optional[Buffer]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        # Get the command path.
+        path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+        if path is None:
+            raise Exception("IsCommandHttpRequest Http request has no path field in HandleCommand.")
+
+        # Everything after our prefix is part of the command path
+        commandPath = path[len(CommandHandler.c_CommandHandlerPathPrefix):]
         commandPathLower = commandPath.lower()
-        if commandPathLower.startswith("ping"):
-            return CommandResponse.Success({"Message":"Pong"})
-        elif commandPathLower.startswith("status"):
-            return self.GetStatus()
-        elif commandPathLower.startswith("list-webcam"):
-            return self.ListWebcams()
-        elif commandPathLower.startswith("set-default-webcam"):
-            return self.SetDefaultCameraName(jsonObj_CanBeNone)
-        elif commandPathLower.startswith("get-local-plugin-webcam-items"):
-            return self.GetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
-        elif commandPathLower.startswith("set-local-plugin-webcam-items"):
-            return self.SetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
-        elif commandPathLower.startswith("pause"):
-            return self.Pause(jsonObj_CanBeNone)
-        elif commandPathLower.startswith("resume"):
-            return self.Resume()
-        elif commandPathLower.startswith("cancel"):
-            return self.Cancel()
-        elif commandPathLower.startswith("rekey"):
-            return self.Rekey()
-        return CommandResponse.Error(CommandHandler.c_CommandError_UnknownCommand, "The command path didn't match any known commands.")
+
+        # Parse the args. Args are optional, it depends on the command.
+        # Note some of these commands can also be GET requests, so we need to handle that.
+        jsonObj:Optional[Dict[str, Any]] = None
+
+        # Parse the POST body if there is one.
+        if postBody is not None:
+            jsonObj = json.loads(postBody.GetBytesLike())
+
+        # If there is no json object, try for get args.
+        if jsonObj is None:
+            # This will return None if there are no args.
+            # Use the cased version of the string, so get args keep the correct case.
+            jsonObj = self._ParseGetArgsAsJson(commandPath)
+        return (commandPath, commandPathLower,  jsonObj)
+
+
+    # If there are GET args, this will parse them into a json object where all values as strings
+    # If there are no args, this will return None.
+    def _ParseGetArgsAsJson(self, commandPath:str) -> Optional[Dict[str, str]]:
+        # We need to remove the ? and split on & to get the args.
+        if "?" not in commandPath:
+            return None
+        try:
+            args = commandPath.split("?")[1]
+            # Split on & to get the args.
+            args = args.split("&")
+            # Parse each arg and add it to the jsonObj.
+            jsonObj:Dict[str, str] = {}
+            for i in args:
+                # Split on = to get the key and value.
+                keyValue = i.split("=")
+                if len(keyValue) != 2:
+                    self.Logger.warning("CommandHandler failed to parse args, invalid key value pair: " + i)
+                    continue
+                else:
+                    # Ensure the key is always lower case, but don't mess with the value, things like passwords might need to be case sensitive.
+                    key = (str(keyValue[0])).lower()
+                    # The value needs to be URL escaped, so we need to decode it.
+                    value = unquote(str(keyValue[1]))
+                    jsonObj[key] = value
+            return jsonObj
+        except Exception as e:
+            Sentry.OnException("CommandHandler error while parsing GET command args.", e)
+        return None
+
+
+    # This is a helper function to get the webcam index from the json object.
+    def _GetWebcamCamIndex(self, jsonObj:Optional[Dict[str, Any]]) -> Optional[int]:
+        # This command can take an optional GET param that specifies the camera index, which can be gotten from list-webcam.
+        # Remember the json object will have all values as strings!
+        webcamIndex:Optional[int] = None
+        if jsonObj is not None:
+            try:
+                webcamIndexStr = jsonObj.get(CommandHandler.c_WebcamIndexGetKey, None)
+                if webcamIndexStr is not None:
+                    webcamIndex = int(webcamIndexStr)
+            except Exception as e:
+                Sentry.OnException("CommandHandler error while parsing webcam index.", e)
+        return webcamIndex

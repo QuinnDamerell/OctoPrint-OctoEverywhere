@@ -207,9 +207,14 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self.Logger.error("ExecuteResume failed to request resume. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(400, "Failed to request resume")
 
-        # Check the response
-        if result.GetResult() != "ok":
-            self.Logger.error("ExecuteResume got an invalid request response. "+json.dumps(result.GetResult()))
+        # Ensure the response is a simple result.
+        if result.IsSimpleResult() is False:
+            self.Logger.error("ExecuteResume didn't return a simple result. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Bad result type")
+
+        # Check the response, we expect a simple response.
+        if result.GetSimpleResult() != "ok":
+            self.Logger.error("ExecuteResume got an invalid request response. "+json.dumps(result.GetSimpleResult()))
             return CommandResponse.Error(400, "Invalid request response.")
 
         return CommandResponse.Success(None)
@@ -231,8 +236,13 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self.Logger.error("ExecuteCancel failed to request cancel. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(400, "Failed to request cancel")
 
+        # Ensure the response is a simple result.
+        if result.IsSimpleResult() is False:
+            self.Logger.error("ExecuteCancel didn't return a simple result. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, "Bad result type")
+
         # Check the response
-        if result.GetResult() != "ok":
+        if result.GetSimpleResult() != "ok":
             self.Logger.error("ExecuteCancel got an invalid request response. "+json.dumps(result.GetResult()))
             return CommandResponse.Error(400, "Invalid request response.")
 
