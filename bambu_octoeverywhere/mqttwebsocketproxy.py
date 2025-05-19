@@ -404,7 +404,8 @@ class MqttWebsocketProxy(IWebSocketClient):
 
                 # Send back the ack
                 if proxyMsgNoAck is False:
-                    self._SendOutgoingMessage("subscribe_ack", ackResult=result, mqttMessageId=mid, proxyMessageId=proxyMsgId)
+                    typeStr = "subscribe_ack" if isSub else "unsubscribe_ack"
+                    self._SendOutgoingMessage(typeStr, ackResult=result, mqttMessageId=mid, proxyMessageId=proxyMsgId)
 
             finally:
                 # Indicate we are no longer making the request and if we got a mid add it to the map.
