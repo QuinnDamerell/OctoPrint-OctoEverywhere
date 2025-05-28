@@ -818,7 +818,9 @@ class OctoWebStreamHttpHelper:
             defaultBodyReadSizeBytes = contentLength
 
         # Some requests like snapshot requests will already have a fully read body. In this case we use the existing body buffer instead of reading from the body.
-        # Important! This buffer must have Release() called on it because it can be holding a memory view!
+        # Important! If the NeedsRelease flag is set we must release the buffer after we are done so the underlying buffer can be used on the next pass.
+        # BUT not all buffers are owned by us, for example quick cam buffers, so we can't release everything.
+        finalDataBufferNeedsReleased = False
         finalDataBuffer:BufferOrNone = None
         try:
             bodyReadStartSec = time.time()
@@ -850,6 +852,7 @@ class OctoWebStreamHttpHelper:
                             # NOTE this slice ALSO CREATES A MEMORY VIEW, which is then owned by the buffer, so it needs to be released.
                             mvSlice = mv[0:readLength]
                             finalDataBuffer = Buffer(mvSlice)
+                            finalDataBufferNeedsReleased = True
                 else:
                     if self.UnknownBodyChunkReadContext is not None or (responseHandlerContext is None and self.shouldDoUnknownBodyChunkRead(contentTypeLower, contentLength)):
                         # According to the HTTP 1.1 spec, if there's no content length and no boundary string, then the body is chunk based transfer encoding.
@@ -935,10 +938,12 @@ class OctoWebStreamHttpHelper:
                 raise Exception("The builder is None, but we are trying to create a flatbuffer message.")
             return (originalBufferSize, len(finalDataBuffer), builder.CreateByteVector(finalDataBuffer)) #pyright: ignore[reportArgumentType, reportUnknownMemberType]
         finally:
-            # If we have a data buffer, we need to make sure to call Release.
-            # This will do nothing if it's holding bytes or a bytearray, but if it's holding a memoryview it's important that we release it
-            # so the class body buffer can be used again.
-            if finalDataBuffer is not None:
+            # If we own the final data buffer, we must call release.
+            # This is because sometimes it's a memory view, and the view needs to be released before
+            # The underlying buffer is used in the next data read.
+            # BUT some buffers (like those from Quick Cam or Slipstream) are shared and we CANT release them or they will break
+            # other threaded clients using them.
+            if finalDataBufferNeedsReleased and finalDataBuffer is not None:
                 finalDataBuffer.Release()
 
 
