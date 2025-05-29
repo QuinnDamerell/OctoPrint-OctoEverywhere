@@ -52,7 +52,7 @@ class OctoSession(IOctoSession):
         self.OctoStream = octoStream
         self.PrinterId = printerId
         self.PrivateKey = privateKey
-        self.isPrimarySession = isPrimarySession
+        self.IsPrimarySession = isPrimarySession
         self.UiPopupInvoker = uiPopupInvoker
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
@@ -297,7 +297,7 @@ class OctoSession(IOctoSession):
             deviceId = DeviceId.Get().GetId()
 
             # Build the message
-            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.isPrimarySession, self.PluginVersion,
+            buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.IsPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
                 rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId)
 
