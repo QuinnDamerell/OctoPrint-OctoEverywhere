@@ -13,11 +13,11 @@ from .telemetry import Telemetry
 
 # A helper class for the ping result.
 class PingResult:
-    def __init__(self, timeMs:float, servers:List[str], thisServer:str, enablePluginAutoLowestLatency:bool) -> None:
+    def __init__(self, timeMs:float, servers:List[str], thisServer:str, autoLowestLatencyThresholdRttMs:int) -> None:
         self.TimeMs = timeMs
         self.ServersSubdomains = servers
         self.ThisServerSubdomain = thisServer
-        self.EnablePluginAutoLowestLatency = enablePluginAutoLowestLatency
+        self.AutoLowestLatencyThresholdRttMs = autoLowestLatencyThresholdRttMs
 
 
 #
@@ -196,12 +196,12 @@ class OctoPingPong:
         for sub in toRemove:
             del self.Stats[OctoPingPong.ServerStatsKey][sub]
 
-        c_largeInt = 99999
-        computedStats = {}
+        c_largeInt = 999999
+        computedStats:Dict[str, int] = {}
         lowestLatencyValueMs = c_largeInt
-        lowestLatencySubName = None
-        defaultServerComputedAvgMs = None
-        selectedLatencyMs = None
+        lowestLatencySubName:Optional[str] = None
+        defaultServerComputedAvgMs:Optional[int] = None
+        selectedLatencyMs:Optional[int] = None
         smallestBucketStatCount = c_largeInt
         for sub in self.Stats[OctoPingPong.ServerStatsKey]:
 
@@ -211,8 +211,8 @@ class OctoPingPong:
                 self.Stats[OctoPingPong.ServerStatsKey][sub].pop(0)
 
             # Compute the average
-            s = 0
-            c = 0
+            s:float = 0
+            c:int = 0
             for v in self.Stats[OctoPingPong.ServerStatsKey][sub]:
                 # If the value is None it means the query failed.
                 # We keep track of that so that failed servers values fall off.
@@ -228,7 +228,7 @@ class OctoPingPong:
             if c == 0:
                 continue
 
-            avg = s/c
+            avg:int = int(float(s)/float(c))
             computedStats[sub] = avg
             if avg < lowestLatencyValueMs:
                 lowestLatencyValueMs = avg
@@ -236,29 +236,27 @@ class OctoPingPong:
             if defaultServerResult.ThisServerSubdomain == sub:
                 defaultServerComputedAvgMs = avg
 
-        # We need to set the lowest latency server into settings if we have the right data.
-        # defaultServerResult[3] is the server flag indicating if the plugins should try to connect to the lowest latency servers.
         # This needs to be done before we return if smallestBucketStatCount is too low, because we still want to set the lowest latency server even with few data points.
-        #
-        # Even if this is the default server we will set it, just so we stay pinned to the lowest latency server
-        # The notion of the default server can change over time, as traffic manager changes it's mind.
-        #
-        # Note, we should be mindful that if the printer is not connected to the default server, there's a higher chance that an app connection
-        # will need to make a secondary connection. But since that system is reliable, we won't account for it now.
-        #
-        # Note that if there isn't enough data to compute stats, lowestLatencySubName can be None.
-        if defaultServerResult.EnablePluginAutoLowestLatency is True and lowestLatencySubName is not None:
-            self.Stats[OctoPingPong.LowestLatencyServerSubKey] = lowestLatencySubName
-            selectedLatencyMs = lowestLatencyValueMs
-        else:
-            self.Stats[OctoPingPong.LowestLatencyServerSubKey] = None
-            selectedLatencyMs = defaultServerComputedAvgMs
+        # If we don't have enough data points, we don't want to pick a default lowest server.
+        if defaultServerComputedAvgMs is not None and lowestLatencyValueMs is not None:
+            # Compute the latency delta from the lowest latency possible to the default, where higher means the lowest latency server is lower latency.
+            deltaRttMs = defaultServerComputedAvgMs - lowestLatencyValueMs
+
+            # Only if the latency delta is more than what the server is asking for do we override the default server for the lowest latency server.
+            # See the server side code for AutoLowestLatencyThresholdRttMs to understand where the value comes from.
+            if deltaRttMs > defaultServerResult.AutoLowestLatencyThresholdRttMs:
+                self.Stats[OctoPingPong.LowestLatencyServerSubKey] = lowestLatencySubName
+                selectedLatencyMs = lowestLatencyValueMs
+            else:
+                # Else, no override, we will use the default server.
+                self.Stats[OctoPingPong.LowestLatencyServerSubKey] = None
+                selectedLatencyMs = defaultServerComputedAvgMs
 
         # Save the new stats to disk.
         self._SaveStatsToFile()
 
         # Report info
-        self.Logger.info("Ping Pong Stats: Default:["+str(defaultServerResult.ThisServerSubdomain)+","+str(defaultServerComputedAvgMs)+"], Lowest:["+str(lowestLatencySubName)+","+str(lowestLatencyValueMs)+"] Use Low Latency Enabled: "+str(defaultServerResult.EnablePluginAutoLowestLatency))
+        self.Logger.info("Ping Pong Stats: Default:["+str(defaultServerResult.ThisServerSubdomain)+","+str(defaultServerComputedAvgMs)+"], Lowest:["+str(lowestLatencySubName)+","+str(lowestLatencyValueMs)+"] Latency Threshold: "+str(defaultServerResult.AutoLowestLatencyThresholdRttMs))
 
         # If any of the stats buckers are too low of readings, don't report stats yet.
         # Note this does mean that when a new server is added, we won't report status until 2 readings have been taken.
@@ -329,9 +327,11 @@ class OctoPingPong:
                     if thisServer is None:
                         self.Logger.warning("OctoPingPong server response had no ThisServer obj.")
                         return None
-                    enablePluginAutoLowestLatency:Optional[bool] = result.get("EnablePluginAutoLowestLatency", None)
-                    if enablePluginAutoLowestLatency is None:
-                        self.Logger.warning("OctoPingPong server response had no EnablePluginAutoLowestLatency obj.")
+                    # Note we no longer look at this, we only use AutoLowestLatencyThresholdRttMs
+                    #enablePluginAutoLowestLatency:Optional[bool] = result.get("EnablePluginAutoLowestLatency", None)
+                    autoLowestLatencyThresholdRttMs:Optional[int] = result.get("AutoLowestLatencyThresholdRttMs", None)
+                    if autoLowestLatencyThresholdRttMs is None:
+                        self.Logger.warning("OctoPingPong server response had no AutoLowestLatencyThresholdRttMs obj.")
                         return None
                     if len(servers) == 0:
                         return None
@@ -367,7 +367,7 @@ class OctoPingPong:
                             minElapsedTimeMs = result
 
                     # Success.
-                    return PingResult(minElapsedTimeMs, servers, thisServer, enablePluginAutoLowestLatency)
+                    return PingResult(minElapsedTimeMs, servers, thisServer, autoLowestLatencyThresholdRttMs)
 
         except Exception as e:
             self.Logger.info("Failed to call _DoPing "+str(e))
