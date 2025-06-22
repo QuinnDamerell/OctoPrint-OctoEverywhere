@@ -232,13 +232,11 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
     # Ensures all required values are setup and valid before starting.
     def DoFirstTimeSetupIfNeeded(self, klipperConfigDir:str, serviceName:str) -> None:
         # Try to get the printer id from the config.
-        isFirstRun = False
         printerId = self.GetPrinterId()
         if HostCommon.IsPrinterIdValid(printerId) is False:
             if printerId is None:
                 self.Logger.info("No printer id was found, generating one now!")
                 # If there is no printer id, we consider this the first run.
-                isFirstRun = True
             else:
                 self.Logger.info("An invalid printer id was found [%s], regenerating!", str(printerId))
 
@@ -263,9 +261,8 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             self.Secrets.SetPrivateKey(privateKey)
             self.Logger.info("New private key created.")
 
-        # If this is the first run, do other stuff as well.
-        if isFirstRun:
-            SystemConfigManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
+        # We always run this now, to ensure if the service name is removed it gets added back again.
+        SystemConfigManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
 
 
     # Returns None if no printer id has been set.
