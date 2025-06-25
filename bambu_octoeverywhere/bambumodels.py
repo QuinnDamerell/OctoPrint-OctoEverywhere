@@ -211,6 +211,7 @@ class BambuVersion:
 
     # Called when there's a new print message from the printer.
     def OnUpdate(self, msg:Dict[str, Any]) -> None:
+        #self.Logger.info(f"message {msg}")
         module = msg.get("module", None)
         if module is None:
             return

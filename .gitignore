@@ -9,3 +9,4 @@ dist
 *.zip
 py2venv/*
 py3venv/*
+data/*

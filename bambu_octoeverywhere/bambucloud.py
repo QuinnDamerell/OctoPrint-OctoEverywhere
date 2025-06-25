@@ -63,19 +63,22 @@ class BambuCloud:
             # We also don't gain anything by storing the access token, since we need to hit an API anyways to make sure it's still valid and working.
             self.Logger.info("Logging into Bambu Cloud...")
 
-            # Get the correct URL.
-            url = self._GetBambuCloudApi("/v1/user-service/user/login")
-
-            # Get the context.
-            email, password = self.GetContext()
+            # Get the context. Do you want to?
+            email, password, verification_code = self.GetContext()
             if email is None or password is None:
                 self.Logger.error("Login Bambu Cloud failed to get context from the config.")
                 return LoginStatus.BadUserNameOrPassword
 
+			# Handle the verification code here "type": "codeLogin"
+            data = {'account': email, 'code': verification_code}
+            if verification_code is None:
+                data = {'account': email, 'password': password}
+
             # Make the request.
-            response = requests.post(url, json={'account': email, 'password': password}, timeout=30)
+            response = requests.post(self._GetBambuCloudApi("/v1/user-service/user/login"), headers={"User-Agent": "PostmanRuntime/7.43.3"}, json=data, timeout=30)
 
             # Check the response.
+            # TODO:- do we need to handle expired verification codes here
             if response.status_code != 200:
                 body = ""
                 try:
@@ -90,6 +93,15 @@ class BambuCloud:
 
             # If the user has two factor auth enabled, this will still return 200, but there will be a tfaKey field with a string.
             j = response.json()
+
+            #self.Logger.info(f"response {json.dumps(j)}")
+
+            loginType = j.get('loginType', None)
+            if loginType is not None and len(loginType) > 0 and loginType == "verifyCode":
+                requests.post(self._GetBambuCloudApi("/v1/user-service/user/sendemail/code"), headers={"User-Agent": "PostmanRuntime/7.43.3"}, json={'email': email, 'type': 'codeLogin'}, timeout=30)
+                self.Logger.info("Requesting login verify code")
+                return LoginStatus.EmailCodeRequired
+
             tfaKey = j.get('tfaKey', None)
             if tfaKey is not None and len(tfaKey) > 0:
                 self.Logger.error("Login Bambu Cloud failed because two factor auth is enabled. Bambu Lab's APIs don't allow us to support two factor at this time.")
@@ -101,6 +113,8 @@ class BambuCloud:
                 self.Logger.error("Login Bambu Cloud failed because access token was not found in the response.")
                 return LoginStatus.UnknownError
             self.AccessToken = accessToken
+
+            #self.Logger.info(f"access token {self.AccessToken}")
 
             # The token expiration is usually 1 year, we just check it for now.
             expiresIn = int(j.get('expiresIn', 0))
@@ -141,13 +155,33 @@ class BambuCloud:
     def GetUserNameFromAccessToken(self, accessToken:str) -> Optional[str]:
         try:
             # The Access Token is a JWT, we need the second part to decode.
-            accountInfoBase64 = accessToken.split(".")[1]
-            # The string len must be a multiple of 4, padded with "="
-            while (len(accountInfoBase64)) % 4 != 0:
-                accountInfoBase64 += "="
-            # Decode and parse as json.
-            jsonAuthToken = json.loads(base64.b64decode(accountInfoBase64))
-            return jsonAuthToken["username"]
+            tokens = accessToken.split(".")
+            if len(tokens) != 3:
+                # Make the request.
+                headers = {'Authorization': 'Bearer ' + accessToken}
+                response = (requests.get(self._GetBambuCloudApi("/v1/iot-service/api/user/project"), headers=headers, timeout=10)).json()
+
+                if response is not None:
+                    projectsnode = response.get('projects', None)
+                    if projectsnode is None:
+                        self.Logger.debug("Failed to find projects node")
+                    else:
+                        if len(projectsnode) == 0:
+                            self.Logger.debug("No projects node in response")
+                        else:
+                            project=projectsnode[0]
+                            if project.get('user_id', None) is None:
+                                self.Logger.debug("No user_id entry")
+                            else:
+                                return f"u_{project['user_id']}"
+            else:
+                accountInfoBase64 = accessToken.split(".")[1]
+				# The string len must be a multiple of 4, padded with "="
+                while (len(accountInfoBase64)) % 4 != 0:
+                    accountInfoBase64 += "="
+				# Decode and parse as json.
+                jsonAuthToken = json.loads(base64.b64decode(accountInfoBase64))
+                return jsonAuthToken["username"]
         except Exception as e:
             Sentry.OnException("Bambu Cloud GetUserNameFromAccessToken exception", e)
         return None
@@ -251,11 +285,11 @@ class BambuCloud:
 
 
     # Sets the user's context into the config file.
-    def SetContext(self, email:str, p:str) -> bool:
+    def SetContext(self, email:str, p:str, v:str | None) -> bool:
         try:
             # This isn't ideal, but there's nothing we can do better locally on the device.
             # So at least it's not just plain text.
-            data = {"email":email, "p":p}
+            data = {"email":email, "p":p, "v":v}
             j = json.dumps(data)
             # In the past we used the crypo lib to actually do crypto with a static key here in the code.
             # But the crypo lib had a lot of native lib requirements and it caused install issues.
@@ -271,7 +305,7 @@ class BambuCloud:
     # Returns if there's a user context in the config file.
     # This doesn't check if the user context is valid, just that it's there.
     def HasContext(self) -> bool:
-        (e, p) = self.GetContext()
+        (e, p, _) = self.GetContext()
         return e is not None and p is not None
 
 
@@ -282,18 +316,19 @@ class BambuCloud:
             if token is None:
                 if expectContextToExist:
                     self.Logger.error("No Bambu Cloud context found in the config file.")
-                return (None, None)
+                return (None, None, None)
             jsonStr = self._UnobfuscateString(token)
             data = json.loads(jsonStr)
             e = data.get("email", None)
             p = data.get("p", None)
+            v = data.get("v", None)
             if e is None or p is None:
                 self.Logger.error("No Bambu Cloud context was missing required data.")
-                return (None, None)
-            return (e, p)
+                return (None, None, None)
+            return (e, p, v)
         except Exception as e:
             Sentry.OnException("Bambu Cloud login exception", e)
-        return (None, None)
+        return (None, None, None)
 
 
     # The goal here is just to obfuscate the string with a unique algo, so the email and password aren't just plain text in the config file.

@@ -1,64 +1,65 @@
-version: '2'
+version: "2"
 services:
   octoeverywhere-connect:
-    image: octoeverywhere/octoeverywhere:latest
+    image: octoeverywhere.local
     environment:
-        # Required: The mode of OctoEverywhere Companion you want use.
-        #   - bambu:   Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
-        #   - elegoo:  Elegoo Connect - for Elegoo OS 3D printers such as the Elegoo Centauri & Elegoo Centauri Carbon.
-        #   - klipper: Use this for Klipper / Moonraker based printers.
-        #
-        # Set this to the mode you want to use, and then uncomment the required settings for the mode bellow.
-        - COMPANION_MODE=bambu
+      # Required: The mode of OctoEverywhere Companion you want use.
+      #   - bambu:   Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
+      #   - elegoo:  Elegoo Connect - for Elegoo OS 3D printers such as the Elegoo Centauri & Elegoo Centauri Carbon.
+      #   - klipper: Use this for Klipper / Moonraker based printers.
+      #
+      # Set this to the mode you want to use, and then uncomment the required settings for the mode bellow.
+      - COMPANION_MODE=bambu
 
-        #
-        # Required for Bambu Connect
-        #
-        #  https://octoeverywhere.com/s/access-code
-        #- ACCESS_CODE=5285c831
-        #
-        #  https://octoeverywhere.com/s/bambu-sn
-        #- SERIAL_NUMBER=00M09C411200608
-        #
-        #  Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
-        #- PRINTER_IP=10.0.0.23
+      #
+      # Required for Bambu Connect
+      #
+      #  https://octoeverywhere.com/s/access-code
+      - ACCESS_CODE=xxxx
+      #
+      #  https://octoeverywhere.com/s/bambu-sn
+      - SERIAL_NUMBER=xxxx
+      #
+      #  Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
+      - PRINTER_IP=xxxx
 
+      - CONNECTION_MODE=cloud
 
-        #
-        # Required for Elegoo Connect
-        #
-        #  Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
-        #- PRINTER_IP=XXX.XXX.XXX.XXX
+      - BAMBU_CLOUD_ACCOUNT_EMAIL=xxxx
+      - BAMBU_CLOUD_ACCOUNT_PASSWORD=xxxx
+      - BAMBU_CLOUD_ACCOUNT_VERIFICATION_CODE=xxxx
 
+      #
+      # Required for Elegoo Connect
+      #
+      #  Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
+      #- PRINTER_IP=XXX.XXX.XXX.XXX
 
-        #
-        # Required For Klipper / Moonraker
-        #
-        #  Required - The IP address of the Klipper/Moonraker/Webserver/Printer
-        #- PRINTER_IP=XXX.XXX.XXX.XXX
-        #
-        #  Optional - The port of Moonraker. This defaults to 7125 if not set.
-        #- MOONRAKER_PORT=7125
-        #
-        #  Optional - If your Moonraker needs API key auth, you can generate it in Mainsail or Fluidd and set it here.
-        #- MOONRAKER_API_KEY=someApiKey
-        #
-        #  Optional - The port of frontend webserver. This defaults to 80 if not set.
-        #- WEBSERVER_PORT=80
+      #
+      # Required For Klipper / Moonraker
+      #
+      #  Required - The IP address of the Klipper/Moonraker/Webserver/Printer
+      #- PRINTER_IP=XXX.XXX.XXX.XXX
+      #
+      #  Optional - The port of Moonraker. This defaults to 7125 if not set.
+      #- MOONRAKER_PORT=7125
+      #
+      #  Optional - If your Moonraker needs API key auth, you can generate it in Mainsail or Fluidd and set it here.
+      #- MOONRAKER_API_KEY=someApiKey
+      #
+      #  Optional - The port of frontend webserver. This defaults to 80 if not set.
+      #- WEBSERVER_PORT=80
 
-        #
-        # Optional Settings For All Modes
-        #
-        # Set timezone to proper timezone for logs using standard timezones:
-        # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
-        - TZ=America/New_York
+      #
+      # Optional Settings For All Modes
+      #
+      # Set timezone to proper timezone for logs using standard timezones:
+      # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
+      - TZ=Europe/London
 
     volumes:
       # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
       - ./data:/data
-
-
-
 
   #
   # Add as many printers and printer types as you want!
@@ -86,13 +87,11 @@ services:
   #       #  Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
   #       #- PRINTER_IP=10.0.0.23
 
-
   #       #
   #       # Required for Elegoo Connect
   #       #
   #       #  Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
   #       #- PRINTER_IP=XXX.XXX.XXX.XXX
-
 
   #       #
   #       # Required For Klipper / Moonraker

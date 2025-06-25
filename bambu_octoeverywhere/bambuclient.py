@@ -516,7 +516,7 @@ class BambuClient:
             elif accessTokenResult.Status == LoginStatus.TwoFactorAuthEnabled:
                 self.Logger.error("Two factor auth is enabled on this account. Bambu Lab doesn't allow us to support two factor auth, so it must be disabled on your account or the local connection mode.")
             elif accessTokenResult.Status == LoginStatus.EmailCodeRequired:
-                self.Logger.error("This account requires an email code to login. Bambu Lab doesn't allow us to support this, so you must use the local connection mode.")
+                self.Logger.error("This account requires an email code to login. Please restart populating the correct environment variable the the correct code")
             else:
                 self.Logger.error("Unknown error, we will try again later.")
             self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
