@@ -75,7 +75,7 @@ class BambuCloud:
                 data = {'account': email, 'password': password}
 
             # Make the request.
-            response = requests.post(self._GetBambuCloudApi("/v1/user-service/user/login"), headers={"User-Agent": "PostmanRuntime/7.43.3"}, json=data, timeout=30)
+            response = requests.post(self._GetBambuCloudApi("/v1/user-service/user/login"), json=data, timeout=30)
 
             # Check the response.
             # TODO:- do we need to handle expired verification codes here
@@ -94,11 +94,9 @@ class BambuCloud:
             # If the user has two factor auth enabled, this will still return 200, but there will be a tfaKey field with a string.
             j = response.json()
 
-            #self.Logger.info(f"response {json.dumps(j)}")
-
             loginType = j.get('loginType', None)
             if loginType is not None and len(loginType) > 0 and loginType == "verifyCode":
-                requests.post(self._GetBambuCloudApi("/v1/user-service/user/sendemail/code"), headers={"User-Agent": "PostmanRuntime/7.43.3"}, json={'email': email, 'type': 'codeLogin'}, timeout=30)
+                requests.post(self._GetBambuCloudApi("/v1/user-service/user/sendemail/code"), json={'email': email, 'type': 'codeLogin'}, timeout=30)
                 self.Logger.info("Requesting login verify code")
                 return LoginStatus.EmailCodeRequired
 
@@ -113,8 +111,6 @@ class BambuCloud:
                 self.Logger.error("Login Bambu Cloud failed because access token was not found in the response.")
                 return LoginStatus.UnknownError
             self.AccessToken = accessToken
-
-            #self.Logger.info(f"access token {self.AccessToken}")
 
             # The token expiration is usually 1 year, we just check it for now.
             expiresIn = int(j.get('expiresIn', 0))
