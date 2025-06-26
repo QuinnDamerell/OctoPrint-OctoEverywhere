@@ -1,7 +1,7 @@
 version: "2"
 services:
   octoeverywhere-connect:
-    image: octoeverywhere.local
+    image: octoeverywhere/octoeverywhere:latest
     environment:
       # Required: The mode of OctoEverywhere Companion you want use.
       #   - bambu:   Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
@@ -15,19 +15,23 @@ services:
       # Required for Bambu Connect
       #
       #  https://octoeverywhere.com/s/access-code
-      - ACCESS_CODE=xxxx
+      #- ACCESS_CODE=xxxx
       #
       #  https://octoeverywhere.com/s/bambu-sn
-      - SERIAL_NUMBER=xxxx
+      #- SERIAL_NUMBER=xxxx
       #
       #  Find using the printer's display or use https://octoeverywhere.com/s/bambu-ip
-      - PRINTER_IP=xxxx
+      #- PRINTER_IP=xxxx
 
-      - CONNECTION_MODE=cloud
+      # cloud for local
+      #- CONNECTION_MODE=cloud
 
-      - BAMBU_CLOUD_ACCOUNT_EMAIL=xxxx
-      - BAMBU_CLOUD_ACCOUNT_PASSWORD=xxxx
-      - BAMBU_CLOUD_ACCOUNT_VERIFICATION_CODE=xxxx
+      # email account details and verification code, normally start up with verification code commented out,
+      # once this is emailed add and restart the container, need to discover a nicer way to do this for works
+      # for now
+      #- BAMBU_CLOUD_ACCOUNT_EMAIL=xxxx
+      #- BAMBU_CLOUD_ACCOUNT_PASSWORD=xxxx
+      #- BAMBU_CLOUD_ACCOUNT_VERIFICATION_CODE=xxxx
 
       #
       # Required for Elegoo Connect
