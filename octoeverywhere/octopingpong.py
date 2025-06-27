@@ -280,7 +280,7 @@ class OctoPingPong:
     def _ReportTelemetry(self, defaultServerName:str, defaultServerLatencyMs:float, lowestLatencyName:str, lowestLatencyMs:float, selectedLatencyMs:Optional[float]) -> None:
         isDefaultLowest = defaultServerName == lowestLatencyName
         lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
-        Telemetry.Write("PluginLatencyV4", int(defaultServerLatencyMs),
+        Telemetry.Write("PluginLatencyV5", int(defaultServerLatencyMs),
         {
             "IsDefaultLowest": isDefaultLowest,
             "DefaultSub" : defaultServerName,

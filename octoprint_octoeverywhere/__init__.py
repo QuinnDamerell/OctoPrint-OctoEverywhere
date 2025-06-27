@@ -286,6 +286,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions for the Simple API Mixin
     #
+
+    def is_api_protected(self) -> bool:
+        # If False is returned, we must do auth ourselves. If True is returned, OctoPrint will only allow authed
+        # API callers to invoke the APIs.
+        # We keep this to False, since our APIs are sensitive so it doesn't matter if the caller is authed or not.
+        # Keeping no auth allows local apps / plugins to call the APIs without needing to pass an API key.
+        return False
+
+
     def get_api_commands(self) -> Dict[str, Any]: #pyright: ignore[reportIncompatibleMethodOverride] OctoPrint's type def doesn't match what needs to be returned?
         return dict(
             # Our frontend js logic calls this API when it detects a local LAN connection and reports the port used.
