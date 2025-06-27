@@ -236,7 +236,7 @@ class ElegooClient:
             jsonStr = json.dumps(obj, default=str)
             if ElegooClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
                 self.Logger.debug("Elegoo WS Msg Request - %s : %s : %s", str(requestId), str(cmdId), jsonStr)
-            if self._WebSocketSend(jsonStr) is False:
+            if self._WebSocketSend(Buffer(jsonStr.encode("utf-8"))) is False:
                 self.Logger.info("Elegoo client failed to send request msg.")
                 return ResponseMsg(None, ResponseMsg.OE_ERROR_WS_NOT_CONNECTED)
 
@@ -282,7 +282,7 @@ class ElegooClient:
 
     # Sends a string to the connected websocket.
     # forceSend is used to send the initial messages before the system is ready.
-    def _WebSocketSend(self, jsonStr:str) -> bool:
+    def _WebSocketSend(self, buffer:Buffer) -> bool:
         # Ensure the websocket is connected and ready.
         if self.WebSocketConnected is False:
             self.Logger.info("Elegoo client - tired to send a websocket message when the socket wasn't open.")
@@ -296,12 +296,12 @@ class ElegooClient:
 
         # Print for debugging.
         if ElegooClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
-            self.Logger.debug("Ws ->: %s", jsonStr)
+            self.Logger.debug("Ws ->: %s", buffer.GetBytesLike().decode("utf-8"))
 
         try:
             # Since we must encode the data, which will create a copy, we might as well just send the buffer as normal,
             # without adding the extra space for the header. We can add the header here or in the WS lib, it's the same amount of work.
-            localWs.Send(Buffer(jsonStr.encode("utf-8")), isData=False)
+            localWs.Send(buffer, isData=False)
         except Exception as e:
             Sentry.OnException("Elegoo client exception in websocket send.", e)
             return False
@@ -715,25 +715,28 @@ class ElegooClient:
                 buffer = Buffer(buffer.Get()[startTrim:endTrim])
 
             # For us to be able to map messages back, we need to be able to read the request id if there is one.
-            # So if this fails, we can't handle the message.
+            # IMPORTANT! - Some messages are sent (like a "ping") that aren't json, so we can't parse them.
             msgStr = buffer.GetBytesLike().decode("utf-8")
-            msg = json.loads(msgStr)
-
-            # Try to get the data object and the request id.
-            # If it doesn't, we will just send it.
-            data = msg.get("Data", None)
-            if data is not None:
-                requestId = data.get("RequestID", None)
-                if requestId is not None:
-                    # We have a request id, validate it.
-                    if len(requestId) < 20:
-                        raise Exception(f"Invalid request id length: {len(requestId)}")
-                    # Add it to the pending list.
-                    with self.RequestLock:
-                        self.RequestPendingContexts[requestId] = MsgWaitingContext(requestId, wsId)
+            try:
+                # Try to get the data object and the request id.
+                # If it doesn't, we will just send it.
+                msg = json.loads(msgStr)
+                data = msg.get("Data", None)
+                if data is not None:
+                    requestId = data.get("RequestID", None)
+                    if requestId is not None:
+                        # We have a request id, validate it.
+                        if len(requestId) < 20:
+                            raise Exception(f"Invalid request id length: {len(requestId)}")
+                        # Add it to the pending list.
+                        with self.RequestLock:
+                            self.RequestPendingContexts[requestId] = MsgWaitingContext(requestId, wsId)
+            except Exception as e:
+                if msgStr != "ping":
+                    Sentry.OnException("Elegoo client exception in MuxSendMessage while parsing request id.", e)
 
             # Send the message.
-            return self._WebSocketSend(msgStr)
+            return self._WebSocketSend(buffer)
 
         except Exception as e:
             Sentry.OnException("Elegoo client exception in MuxSendMessage.", e)

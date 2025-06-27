@@ -87,6 +87,7 @@ class Config:
     #
     SectionElegoo = "elegoo"
     ElegooMainboardMac = "mainboard_mac"
+    AutoActivateChamberLightForWebcam = "auto_activate_chamber_light_for_webcam"
 
 
     # This allows us to add comments into our config.
@@ -110,6 +111,7 @@ class Config:
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
         { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification."},
         { "Target": ElegooMainboardMac,  "Comment": "This is the MAC address of the mainboard for the linked printer."},
+        { "Target": AutoActivateChamberLightForWebcam,  "Comment": "If enabled, the chamber light will be automatically truned on when the webcam is in use."},
         { "Target": MoonrakerApiKey,  "Comment": "Leave blank unless your Moonraker requires an API key to connect. Moonraker API keys can be generated from the Mainsail or Fluidd."},
     ]
 
