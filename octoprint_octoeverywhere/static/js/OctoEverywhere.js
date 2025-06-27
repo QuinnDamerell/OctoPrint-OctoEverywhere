@@ -215,21 +215,14 @@ $(function() {
         function ReportLocalFrontendPort(port, isHttps, fullUrl)
         {
             Log("Local frontend port found [port:"+port+" isHttps:"+isHttps+" url:"+fullUrl+"] reporting to backend.")
-            const xhr = new XMLHttpRequest();
-            xhr.onload = () => {
-                if (xhr.status > 299) {
-                    LogError("Failed to report frontend port to OctoEverywhere API. " + port)
-                }
-            };
-            const payload = {
-                "command":"setFrontendLocalPort",
-                "port": port,
-                "isHttps": isHttps,
-                "url": fullUrl
-            };
-            xhr.open('POST', '/api/plugin/octoeverywhere');
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.send(JSON.stringify(payload));
+            OctoPrint.simpleApiCommand(
+                    "octoeverywhere",
+                    "setFrontendLocalPort",
+                    { "port": port, "isHttps": isHttps, "url": fullUrl }
+                ).done(function(response)
+            {
+                Log("Successfully reported local frontend port to OctoEverywhere API.");
+            });
         }
 
         function DetermineHostnameIsLocalAndReport(hostname, port, isHttps, fullUrl)
