@@ -8,6 +8,10 @@ from typing import Any, Dict, Optional
 # If there is no error, use IsSimpleResult to check if it's a simple result
 # a dict object result. Simple results are usually just for commands like pause, resume, ect.
 class JsonRpcResponse:
+    # Moonraker error codes.
+    # https://github.com/Arksine/moonraker/blob/ccbfd6498941cb4d8b49d192c8dd34feacfbe84a/moonraker/common.py#L851
+    MR_404_NOT_FOUND = -32601
+    MR_401_UNAUTHORIZED = -32602
 
     # Our specific errors
     OE_ERROR_WS_NOT_CONNECTED = 99990001
