@@ -157,7 +157,7 @@ class HttpResult():
         # Ensure we have a stream to read.
         if self._requestLibResponseObj is None:
             raise Exception("ReadAllContentFromStreamResponse was called on a result with no request lib Response object.")
-        buffer:Optional[ByteLike] = None
+        buffer = bytearray()
 
         # In the past, we used iter_content, but it has a lot of overhead and also doesn't read all available data, it will only read a chunk if the transfer encoding is chunked.
         # This isn't great because it's slow and also we don't need to reach each chunk, process it, just to dump it in a buffer and read another.
@@ -182,27 +182,17 @@ class HttpResult():
                     # This is weird, but there can be lingering data in response.content, so add that if there is any.
                     # See doBodyRead for more details.
                     if len(self._requestLibResponseObj.content) > 0:
-                        if buffer is None:
-                            buffer = self._requestLibResponseObj.content
-                        else:
-                            buffer += self._requestLibResponseObj.content
+                        buffer.extend(self._requestLibResponseObj.content)
                     # Break out when we are done.
                     break
 
                 # If we aren't done, append the buffer.
-                if buffer is None:
-                    buffer = data
-                else:
-                    buffer += data
+                buffer.extend(data)
         except Exception as e:
             lengthStr =  "[buffer is None]" if buffer is None else str(len(buffer))
             logger.warning(f"ReadAllContentFromStreamResponse got an exception. We will return the current buffer length of {lengthStr}, exception: {e}")
 
         # Ensure we got something, as after this callers will expect an object to be there.
-        if buffer is None:
-            # If the buffer is None, we need to set it to a bytearray, since that's what we expect.
-            # This will be a empty buffer.
-            buffer = bytearray()
         self.SetFullBodyBuffer(Buffer(buffer))
 
 

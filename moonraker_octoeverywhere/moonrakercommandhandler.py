@@ -243,7 +243,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         # Check the response
         if result.GetSimpleResult() != "ok":
-            self.Logger.error("ExecuteCancel got an invalid request response. "+json.dumps(result.GetResult()))
+            self.Logger.error("ExecuteCancel got an invalid request response. "+json.dumps(result.GetSimpleResult()))
             return CommandResponse.Error(400, "Invalid request response.")
 
         return CommandResponse.Success(None)

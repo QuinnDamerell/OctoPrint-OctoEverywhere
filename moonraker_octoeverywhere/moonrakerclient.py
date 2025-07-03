@@ -266,7 +266,7 @@ class MoonrakerClient(IMoonrakerClient):
             # Check if we got a result.
             result = waitContext.GetResult()
             if result is None:
-                self.Logger.info("Moonraker client timeout while waiting for request. "+str(id)+" "+method)
+                self.Logger.info("Moonraker client timeout while waiting for request. "+str(msgId)+" "+method)
                 return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_TIMEOUT)
 
             # Check for an error if found, return the error state.
