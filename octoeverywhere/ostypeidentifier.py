@@ -14,7 +14,7 @@ class OsTypeIdentifier:
     def DetectOsType() -> int:
         # Do a quick check for windows first.
         # This is only possible on OctoPrint right now.
-        if platform.system().lower == "windows":
+        if platform.system().lower() == "windows":
             return OsType.Windows
 
         # For the k1 and k1 max, we look for the "buildroot" OS.
