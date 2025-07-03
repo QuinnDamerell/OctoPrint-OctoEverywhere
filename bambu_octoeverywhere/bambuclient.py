@@ -405,7 +405,7 @@ class BambuClient:
         try:
             # Print for debugging if desired.
             if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Incoming Bambu Message:\r\n"+json.dumps(msg, indent=3))
+                self.Logger.debug("Outgoing Bambu Message:\r\n" + json.dumps(msg, indent=3))
 
             # Ensure we are connected.
             if self.Client is None or not self.Client.is_connected():
