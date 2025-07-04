@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, Optional, Union
 import requests
 from requests.structures import CaseInsensitiveDict
 
-from .buffer import Buffer, ByteLike
+from .buffer import Buffer
 from .Proto.DataCompression import DataCompression
 
 # Easy to use types.
