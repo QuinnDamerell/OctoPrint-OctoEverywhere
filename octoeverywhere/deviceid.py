@@ -27,7 +27,7 @@ class DeviceId:
         self.Logger = logger
 
 
-    # Get's a unique ID for the platform. The ID should be unique per platform and ideally not change even when the OS is re-installed.
+    # Gets a unique ID for the platform. The ID should be unique per platform and ideally not change even when the OS is re-installed.
     # This ID can't not be written to disk it must come from the system level some how.
     # If nothing can be found, None is return.
     def GetId(self) -> Optional[str]:

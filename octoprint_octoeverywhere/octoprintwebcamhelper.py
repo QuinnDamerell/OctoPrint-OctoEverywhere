@@ -168,7 +168,7 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
             # We default to the relative paths, since our http request class can better manipulate these if needed.
             if snapshotUrl is None or len(snapshotUrl) == 0:
                 snapshotUrl = "/webcam/?action=snapshot"
-            if streamUrl is None or len(snapshotUrl) == 0:
+            if streamUrl is None or len(streamUrl) == 0:
                 streamUrl = "/webcam/?action=stream"
             if flipH is None:
                 flipH = False

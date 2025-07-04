@@ -1236,7 +1236,7 @@ class OctoWebStreamHttpHelper:
 
         # Even though we read complete chunks as they come in, we might want to buffer smaller chunks up
         # before sending them so the compression and stream is more efficient.
-        # This does need to be small, because we wan't reading this min time period back to back,
+        # This does need to be small, because we want reading this min time period back to back,
         # we are reading a chunk, doing all of the send logic, and then spinning back to here.
         # So if we set this at exactly 16.6 for a 60fps stream, for example, we will fall behind.
         minBufferBuildTimeSec = 0.010 # 10ms
