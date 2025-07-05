@@ -26,7 +26,7 @@ class LoggerInit:
         logLevel = logLevel.upper()
 
         # Check the environment variable for the log level.
-        if os.getenv("DEBUG") is not None or os.getenv("-DEBUG") or os.getenv("debug") or os.getenv("-debug"):
+        if any(os.getenv(name) is not None for name in ("DEBUG", "-DEBUG", "debug", "-debug")):
             print("Environment variable DEBUG set, setting log level to DEBUG")
             logLevel = "DEBUG"
 
