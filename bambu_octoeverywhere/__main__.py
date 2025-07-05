@@ -1,4 +1,5 @@
 import sys
+import base64
 
 from linux_host.startup import Startup
 from linux_host.startup import ConfigDataTypes
@@ -15,6 +16,7 @@ if __name__ == '__main__':
     try:
         # Get the json from the process args.
         jsonConfig = s.GetJsonFromArgs(sys.argv)
+        jsonConfigStr = base64.urlsafe_b64decode(sys.argv[1].encode("utf-8")).decode("utf-8")
 
         #
         # Parse the common, required args.
