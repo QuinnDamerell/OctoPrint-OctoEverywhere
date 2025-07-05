@@ -1,4 +1,5 @@
 import sys
+from typing import Optional
 
 from linux_host.startup import Startup
 from linux_host.startup import ConfigDataTypes
@@ -11,10 +12,10 @@ if __name__ == '__main__':
     s = Startup()
 
     # Try to parse the config
-    jsonConfigStr = None
+    jsonConfigStr:Optional[str] = None
     try:
         # Get the json from the process args.
-        jsonConfig = s.GetJsonFromArgs(sys.argv)
+        (jsonConfigStr, jsonConfig) = s.GetJsonFromArgs(sys.argv)
 
         #
         # Parse the common, required args.
