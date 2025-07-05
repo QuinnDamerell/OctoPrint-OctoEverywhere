@@ -143,6 +143,23 @@ class Sentry:
         pass
 
 
+    # Sends an info log to sentry.
+    # This is useful for debugging things that shouldn't be happening.
+    @staticmethod
+    def LogInfo(msg:str, extras:Optional[Dict[Any, Any]]=None) -> None:
+        if Sentry._Logger is None:
+            return
+        Sentry._Logger.info(f"Sentry Info: {msg}")
+        # Never send in dev mode, as Sentry will not be setup.
+        # if Sentry.IsSentrySetup and Sentry.IsDevMode is False:
+        #     with sentry_sdk.push_scope() as scope:
+        #         scope.set_level("error")
+        #         if extras is not None:
+        #             for key, value in extras.items():
+        #                 scope.set_extra(key, value)
+        #         sentry_sdk.capture_message(msg)
+
+
     # Sends an error log to sentry.
     # This is useful for debugging things that shouldn't be happening.
     @staticmethod
