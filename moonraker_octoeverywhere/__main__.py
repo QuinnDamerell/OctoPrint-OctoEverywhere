@@ -1,5 +1,5 @@
 import sys
-import json
+from typing import Optional
 
 from linux_host.startup import Startup
 from linux_host.startup import ConfigDataTypes
@@ -12,10 +12,10 @@ if __name__ == '__main__':
     s = Startup()
 
     # Try to parse the config
-    jsonConfig = None
+    jsonConfigStr:Optional[str] = None
     try:
         # Get the json from the process args.
-        jsonConfig = s.GetJsonFromArgs(sys.argv)
+        (jsonConfigStr, jsonConfig) = s.GetJsonFromArgs(sys.argv)
 
         #
         # 1) Parse the common, required args.
@@ -51,7 +51,7 @@ if __name__ == '__main__':
             MoonrakerConfigFile = s.GetConfigVarAndValidate(jsonConfig, "MoonrakerConfigFile", ConfigDataTypes.Path)
 
     except Exception as e:
-        s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)} Config:{json.dumps(jsonConfig)}")
+        s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)} Config: {jsonConfigStr}")
 
     # For debugging, we also allow an optional dev object to be passed.
     devConfig_CanBeNone = s.GetDevConfigIfAvailable(sys.argv)
