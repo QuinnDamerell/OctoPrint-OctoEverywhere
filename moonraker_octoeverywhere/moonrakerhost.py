@@ -35,7 +35,7 @@ from .moonrakerwebcamhelper import MoonrakerWebcamHelper
 from .moonrakerdatabase import MoonrakerDatabase
 from .webrequestresponsehandler import MoonrakerWebRequestResponseHandler
 from .moonrakerapirouter import MoonrakerApiRouter
-from .moonrakercredentailmanager import MoonrakerCredentialManager
+from .moonrakercredentialmanager import MoonrakerCredentialManager
 from .filemetadatacache import FileMetadataCache
 from .uiinjector import UiInjector
 from .interfaces import IMoonrakerConnectionStatusHandler
