@@ -343,9 +343,9 @@ class ElegooClient:
             # Since we now have the sleep event, we can sleep longer, because when something attempts to use the socket, the event will wake us up
             # to try a connection again. So, for example, when the user goes to the OE dashboard, the status check will wake us up.
             #
-            # So right now, the max sleep time is 5 minutes.
+            # So right now, the max sleep time is 30 seconds.
             sleepDelay = self.ConsecutivelyFailedConnectionAttempts
-            sleepDelay = min(sleepDelay, 60)
+            sleepDelay = min(sleepDelay, 6)
             sleepDelaySec = 5.0 * sleepDelay
             self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Elegoo printer.")
             # Sleep for the time or until the event is set.
@@ -642,7 +642,7 @@ class ElegooClient:
         # It's important that we pass the config ip as a hint if we have it, so that instances in docker can scan based on it.
         self.Logger.info(f"Searching for your Elegoo printer {self.MainboardMac}")
         self.HasDoneNetScanSincePluginStart = True
-        results = NetworkSearch.ScanForInstances_Elegoo(self.Logger, mainboardMac=self.MainboardMac, ipHint=configIpOrHostname, threadCount=25, delaySec=0.2)
+        results = NetworkSearch.ScanForInstances_Elegoo(self.Logger, mainboardMac=self.MainboardMac, ipHint=configIpOrHostname, threadCount=5, delaySec=0.2)
 
         # Handle the results.
         if results is None or len(results) == 0:
