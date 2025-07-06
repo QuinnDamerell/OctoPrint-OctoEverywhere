@@ -98,6 +98,7 @@ class NetworkSearch:
                 delaySec:float=0.0
             ) -> List[ElegooNetworkSearchResult]:
 
+        # First, define our result list and our test function callback.
         foundPrinters:dict[str, NetworkValidationResult] = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
@@ -111,11 +112,18 @@ class NetworkSearch:
         returnAfterNumberFound = 0
         if mainboardMac is not None:
             returnAfterNumberFound = 1
-        NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=returnAfterNumberFound, threadCount=threadCount, perThreadDelaySec=delaySec, ipHint=ipHint)
+
+        # First we use the special Elegoo OS search that uses a UDP broadcast.
+        NetworkSearch._ScanForElegooOsIps(logger, callback, returnAfterNumberFound=returnAfterNumberFound, threadCount=threadCount, perThreadDelaySec=delaySec, ipHint=ipHint)
 
         # See if we found anything.
         if len(foundPrinters) == 0:
-            return []
+            # If we didn't find anything, try the older network search.
+            NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=returnAfterNumberFound, threadCount=threadCount, perThreadDelaySec=delaySec, ipHint=ipHint)
+
+            # If we still didnt' find anything, give up.
+            if len(foundPrinters) == 0:
+                return []
 
         # If we are looking for a specific mainboard id, we need to check the results.
         if mainboardMac is not None:
@@ -550,3 +558,82 @@ class NetworkSearch:
         except Exception:
             pass
         return False
+
+
+    # This does Elegoo specific logic to scan for IPs on a network.
+    # It needs to behave the same way that _ScanForInstances works.
+    @staticmethod
+    def _ScanForElegooOsIps(
+            logger:logging.Logger,
+            testConFunction:Callable[[str], NetworkValidationResult],
+            returnAfterNumberFound:int=0,
+            threadCount:Optional[int]=None,
+            perThreadDelaySec:float=0.0,
+            ipHint:Optional[str]=None
+        ) -> List[str]:
+
+        foundIps:List[str] = []
+        try:
+            # This function uses the UDP broadcast system to find any Elegoo printer on the network.
+            # Doc https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0/blob/main/SDCP(Smart%20Device%20Control%20Protocol)_V3.0.0_EN.md#device-discovery-description
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+
+                # We want to send the message a few times, to ensure we hear all printers.
+                # So we set the timeout to 1s, and broadcast 3 times.
+                s.settimeout(1.0)
+                attempt = 0
+                while attempt < 3:
+                    attempt += 1
+                    # Send the discovery message
+                    s.sendto(b"M99999", ("255.255.255.255", 3000))
+
+                    # Wait for responses until the timeout.
+                    try:
+                        while True:
+                            data, _ = s.recvfrom(1000)
+
+                            # Try to process the response.
+                            responseStr = data.decode("utf-8")
+                            logger.debug(f"We got the following as a result of the elegoo udp discovery broadcast. {responseStr}")
+                            response = json.loads(responseStr, strict=False)
+                            data = response.get("Data", None)
+                            if data is None:
+                                logger.info(f"We got a response back from the elegoo broadcast, but it had no data object. {responseStr}")
+                                continue
+                            ip:Optional[str] = data.get("MainboardIP", None)
+                            mainboardId:Optional[str] = data.get("MainboardID", None)
+                            if ip is None or mainboardId is None:
+                                logger.info(f"We got a response back from the elegoo broadcast, but it had no MainboardIP or MainboardID. {responseStr}")
+                                continue
+
+                            # Ensure we didn't discover this IP already successfully.
+                            # Since we loop the broadcast, we will hear from each printer a few times.
+                            alreadyFound = False
+                            for foundIp in foundIps:
+                                if ip == foundIp:
+                                    alreadyFound = True
+                                    break
+                            if alreadyFound:
+                                continue
+
+                            # Since we are testing against the mainboard MAC, we need to use the Websocket connection function.
+                            # This also ensures that our normal websocket will be able to connect, just like this one.
+                            # ALSO - More than just CC 3D printers will response, some resin printers will as well. So we need to use the WS to ensure it's a CC.
+                            # TODO - In the past we used the mainboard ID, but it looks like it changed. Maybe we can use it in the future?
+                            result = testConFunction(ip)
+                            if result.Success():
+                                # Add the IP to the list.
+                                foundIps.append(ip)
+                                logger.debug(f"Found Elegoo OS printer at {ip} with mainboard id {mainboardId}")
+
+                                # If we are looking for a specific mainboard id, check if it matches.
+                                if returnAfterNumberFound != 0 and len(foundIps) >= returnAfterNumberFound:
+                                    return foundIps
+
+                            # Continue the search until we hit the read timeout.
+                    except socket.timeout:
+                        pass
+        except Exception as e:
+            logger.error(f"Failed to scan for Elegoo OS IPs: {e}")
+        return foundIps
