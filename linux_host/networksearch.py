@@ -491,7 +491,7 @@ class NetworkSearch:
                             with threadLock:
                                 # If successful, add the IP to the found list.
                                 if result.Success():
-                                    # Enure we haven't already found the requested number of IPs,
+                                    # Ensure we haven't already found the requested number of IPs,
                                     # because then the result list might have already been returned
                                     # and we don't want to mess with it.
                                     if hasFoundRequestedNumberOfIps[0] is True:

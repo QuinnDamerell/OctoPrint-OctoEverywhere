@@ -126,8 +126,7 @@ class UiInjector():
                 if not data:
                     break
                 sha1.update(data)
-        #pylint: disable=consider-using-f-string
-        self.StaticFileHash = "{0}".format(sha1.hexdigest())
+        self.StaticFileHash = f"{sha1.hexdigest()}"
         self.StaticFileHash = self.StaticFileHash[:10]
         self.Logger.debug("Static UI Files Hash: "+self.StaticFileHash)
 

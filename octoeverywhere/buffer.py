@@ -160,29 +160,26 @@ class Buffer():
             return iter([])
 
 
-    # Allow the buffer to be sliced.
-    # TODO - Once we move past PY 3.7, we can use SupportsIndex for the start and end.
-    def __getslice__(self, start:int, end:int) -> ByteLikeOrMemoryView:
-        if self._bytes is not None:
-            return self._bytes[start:end]
-        elif self._bytearray is not None:
-            return self._bytearray[start:end]
-        elif self._memoryview is not None:
-            return self._memoryview[start:end]
+    # Allow the buffer to be indexed or sliced.
+    def __getitem__(self, key:Union[int, slice]) -> Union[int, ByteLikeOrMemoryView]:
+        if isinstance(key, slice):
+            if self._bytes is not None:
+                return self._bytes[key]
+            elif self._bytearray is not None:
+                return self._bytearray[key]
+            elif self._memoryview is not None:
+                return self._memoryview[key]
+            else:
+                raise ValueError("Buffer is empty")
         else:
-            raise ValueError("Buffer is empty")
-
-
-    # Allow the buffer to be indexed.
-    def __getitem__(self, key:int) -> int:
-        if self._bytes is not None:
-            return self._bytes[key]
-        elif self._bytearray is not None:
-            return self._bytearray[key]
-        elif self._memoryview is not None:
-            return self._memoryview[key]
-        else:
-            raise ValueError("Buffer is empty")
+            if self._bytes is not None:
+                return self._bytes[key]
+            elif self._bytearray is not None:
+                return self._bytearray[key]
+            elif self._memoryview is not None:
+                return self._memoryview[key]
+            else:
+                raise ValueError("Buffer is empty")
 
 
     # Allow the buffer to be set.
