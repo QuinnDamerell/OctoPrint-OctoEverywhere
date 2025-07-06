@@ -75,6 +75,8 @@ class BambuClient:
 
         # We use this var to keep track of consecutively failed connections
         self.ConsecutivelyFailedConnectionAttempts = 0
+        # This flag indicates if we have tried a network scan since the plugin started. If not, we should do it again.
+        self.HasDoneNetScanSincePluginStart = False
 
         # Start a thread to setup and maintain the connection.
         self.CurrentConnectionContext:Optional[ConnectionContext] = None
@@ -436,7 +438,8 @@ class BambuClient:
         if isConnectAttemptFromEventBump is False:
             self.ConsecutivelyFailedConnectionAttempts += 1
         doPrinterSearch = False
-        if self.ConsecutivelyFailedConnectionAttempts > 6:
+        # We only search every now and then, unless this is one of the first connect attempts after the plugin started.
+        if (self.HasDoneNetScanSincePluginStart is False and self.ConsecutivelyFailedConnectionAttempts > 1) or self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
             doPrinterSearch = True
 
@@ -471,7 +474,8 @@ class BambuClient:
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
         if self.LanAccessCode is None:
             return self._GetLocalConnectionContext(configIpOrHostname)
-        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=25, delaySec=0.2)
+        self.HasDoneNetScanSincePluginStart = True
+        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, ipHint=configIpOrHostname, threadCount=25, delaySec=0.2)
 
         # If we get an IP back, it is the printer.
         # The scan above will only return an IP if the printer was successfully connected to, logged into, and fully authorized with the Access Token and Printer SN.

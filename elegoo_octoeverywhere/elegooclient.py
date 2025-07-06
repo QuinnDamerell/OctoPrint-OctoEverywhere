@@ -117,6 +117,8 @@ class ElegooClient:
         self.WebSocketConnectionIp:Optional[str] = None
         # This is the event we will sleep on between connection attempts, which allows us to be poked to connect now.
         self.SleepEvent:threading.Event = threading.Event()
+        # This flag indicates if we have tried a network scan since the plugin started. If not, we should do it again.
+        self.HasDoneNetScanSincePluginStart = False
 
         # We keep track of the states locally so we know the delta between states and
         # So we don't have to ping the printer for every state change.
@@ -620,8 +622,9 @@ class ElegooClient:
 
         # If we have a mainboard ID, we can scan for the printer on the local network.
         # But we only want to do this every now an then due to the CPU load.
+        # But we do want to do it soon after the plugin starts, so if the user restarted the plugin to fix it, we will try a scan.
         doPrinterSearch = False
-        if self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 15:
+        if (self.HasDoneNetScanSincePluginStart is False and self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 1) or self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 15:
             self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
             doPrinterSearch = True
 
@@ -636,8 +639,10 @@ class ElegooClient:
         # Note we don't want to do this too often since it's CPU intensive and the printer might just be off.
         # We use a lower thread count and delay before each action to reduce the required load.
         # Using this config, it takes about 30 seconds to scan for the printer.
+        # It's important that we pass the config ip as a hint if we have it, so that instances in docker can scan based on it.
         self.Logger.info(f"Searching for your Elegoo printer {self.MainboardMac}")
-        results = NetworkSearch.ScanForInstances_Elegoo(self.Logger, mainboardMac=self.MainboardMac, threadCount=25, delaySec=0.2)
+        self.HasDoneNetScanSincePluginStart = True
+        results = NetworkSearch.ScanForInstances_Elegoo(self.Logger, mainboardMac=self.MainboardMac, ipHint=configIpOrHostname, threadCount=25, delaySec=0.2)
 
         # Handle the results.
         if results is None or len(results) == 0:

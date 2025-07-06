@@ -70,18 +70,34 @@ class NetworkSearch:
     # Scans the local IP LAN subset for Bambu servers that successfully authorize given the access code and printer sn.
     # Thread count and delay can be used to control how aggressive the scan is.
     @staticmethod
-    def ScanForInstances_Bambu(logger:logging.Logger, accessCode:str, printerSn:str, portStr:Optional[str]=None, threadCount:Optional[int]=None, delaySec:float=0.0) -> List[str]:
+    def ScanForInstances_Bambu(
+                logger:logging.Logger,
+                accessCode:str,
+                printerSn:str,
+                portStr:Optional[str]=None,
+                ipHint:Optional[str]=None,
+                threadCount:Optional[int]=None,
+                delaySec:float=0.0
+            ) -> List[str]:
         def callback(ip:str):
             return NetworkSearch.ValidateConnection_Bambu(logger, ip, accessCode, printerSn, portStr, timeoutSec=5)
         # We want to return if any one IP is found, since there can only be one printer that will match the printer 100% correct.
-        return NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=1, threadCount=threadCount, perThreadDelaySec=delaySec)
+        return NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=1, threadCount=threadCount, perThreadDelaySec=delaySec, ipHint=ipHint)
 
 
     # Scans the local IP LAN subset for Elegoo 3D printers.
     # Thread count and delay can be used to control how aggressive the scan is.
     # If a mainboardMac is specified, only printers with that mainboardMac will be considered.
     @staticmethod
-    def ScanForInstances_Elegoo(logger:logging.Logger, mainboardMac:Optional[str]=None, portStr:Optional[str]=None, threadCount:Optional[int]=None, delaySec:float=0.0) -> List[ElegooNetworkSearchResult]:
+    def ScanForInstances_Elegoo(
+                logger:logging.Logger,
+                mainboardMac:Optional[str]=None,
+                portStr:Optional[str]=None,
+                ipHint:Optional[str]=None,
+                threadCount:Optional[int]=None,
+                delaySec:float=0.0
+            ) -> List[ElegooNetworkSearchResult]:
+
         foundPrinters:dict[str, NetworkValidationResult] = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
@@ -95,7 +111,7 @@ class NetworkSearch:
         returnAfterNumberFound = 0
         if mainboardMac is not None:
             returnAfterNumberFound = 1
-        NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=returnAfterNumberFound, threadCount=threadCount, perThreadDelaySec=delaySec)
+        NetworkSearch._ScanForInstances(logger, callback, returnAfterNumberFound=returnAfterNumberFound, threadCount=threadCount, perThreadDelaySec=delaySec, ipHint=ipHint)
 
         # See if we found anything.
         if len(foundPrinters) == 0:
@@ -378,13 +394,27 @@ class NetworkSearch:
     # testConFunction must be a function func(ip:str) -> NetworkValidationResult
     # Returns a list of IPs that reported Success() == True
     @staticmethod
-    def _ScanForInstances(logger:logging.Logger, testConFunction:Callable[[str], NetworkValidationResult], returnAfterNumberFound:int=0, threadCount:Optional[int]=None, perThreadDelaySec:float=0.0) -> List[str]: # type: ignore
+    def _ScanForInstances(
+            logger:logging.Logger,
+            testConFunction:Callable[[str], NetworkValidationResult],
+            returnAfterNumberFound:int=0,
+            threadCount:Optional[int]=None,
+            perThreadDelaySec:float=0.0,
+            ipHint:Optional[str]=None
+            ) -> List[str]: # type: ignore
         foundIps:List[str] = []
         try:
+            # Try to get the local IP of this device. Note this will fail in docker.
             localIp = NetworkSearch._TryToGetLocalIp()
             if localIp is None or len(localIp) == 0:
-                logger.debug("Failed to get local IP")
-                return foundIps
+                # If we failed to get it, check if we have an ip hint. If so, use it.
+                if ipHint is not None and len(ipHint) > 0:
+                    # If we have a hint, use it as the local IP.
+                    logger.debug(f"Using IP hint as local IP: {ipHint}")
+                    localIp = ipHint
+                else:
+                    logger.debug("Failed to get local IP")
+                    return foundIps
             logger.debug(f"Local IP found as: {localIp}")
             if ":" in localIp:
                 logger.info("IPv6 addresses aren't supported for local discovery.")
