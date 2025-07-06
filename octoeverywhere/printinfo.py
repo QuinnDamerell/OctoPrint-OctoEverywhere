@@ -111,7 +111,7 @@ class PrintInfo:
     def GetEstFilamentWeightUsageMg(self) -> int:
         return self.Data.get(PrintInfo.c_EstFilamentWeightMg, 0)
     def SetEstFilamentWeightUsageMg(self, estG:int) -> None:
-        if self.GetEstFilamentUsageMm() != estG:
+        if self.GetEstFilamentWeightUsageMg() != estG:
             self.Data[PrintInfo.c_EstFilamentWeightMg] = estG
             self.Save()
 
@@ -142,7 +142,7 @@ class PrintInfo:
                 json.dump(self.Data, f)
             return True
         except Exception as e:
-            self.Logger.error(f"Failed to write print context from file. {e}")
+            self.Logger.error(f"Failed to write print context to file. {e}")
         return False
 
 

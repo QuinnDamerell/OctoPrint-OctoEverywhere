@@ -235,6 +235,8 @@ class MoonrakerCredentialManager:
 
             # Read one, add it to the buffer, and see if we are done.
             data = sock.recv(1)
+            if not data:
+                return None
             if data[0] == 3: # This is EXT aka End of text. It separates the json messages.
                 return message.decode(encoding="utf-8")
             message += data

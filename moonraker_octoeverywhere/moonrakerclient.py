@@ -22,7 +22,7 @@ from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter, W
 from linux_host.config import Config
 
 from .filemetadatacache import FileMetadataCache
-from .moonrakercredentailmanager import MoonrakerCredentialManager
+from .moonrakercredentialmanager import MoonrakerCredentialManager
 from .interfaces import IMoonrakerConnectionStatusHandler
 from .jsonrpcresponse import JsonRpcResponse
 from .interfaces import IMoonrakerClient
