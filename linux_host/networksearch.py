@@ -414,6 +414,12 @@ class NetworkSearch:
         try:
             # Try to get the local IP of this device. Note this will fail in docker.
             localIp = NetworkSearch._TryToGetLocalIp()
+
+            # If we got a 172..x.x.x IP, we are in a docker container, so we can't use this IP.
+            if localIp is not None and localIp.startswith("172."):
+                logger.debug("Local IP is 172.x.x.x, assuming we are in a docker container.")
+                localIp = None
+
             if localIp is None or len(localIp) == 0:
                 # If we failed to get it, check if we have an ip hint. If so, use it.
                 if ipHint is not None and len(ipHint) > 0:
@@ -576,6 +582,7 @@ class NetworkSearch:
         try:
             # This function uses the UDP broadcast system to find any Elegoo printer on the network.
             # Doc https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0/blob/main/SDCP(Smart%20Device%20Control%20Protocol)_V3.0.0_EN.md#device-discovery-description
+            logger.debug("Starting Elegoo OS IP discovery scan...")
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
