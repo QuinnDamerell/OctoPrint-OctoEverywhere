@@ -318,6 +318,7 @@ install_or_update_system_dependencies()
         log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
         sudo apt install --yes zlib1g-dev 2>/dev/null || true
         sudo apt install --yes zlib-devel 2>/dev/null || true
+        sudo apt install --yes libjpeg-dev 2>/dev/null || true
         sudo apt install --yes python-imaging 2>/dev/null || true
         sudo apt install --yes python3-pil 2>/dev/null || true
         sudo apt install --yes python3-pillow 2>/dev/null || true
