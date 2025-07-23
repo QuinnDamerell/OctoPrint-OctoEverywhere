@@ -171,9 +171,10 @@ class BambuBootstrap:
             # In Bambu Cloud mode, we need the user's email and password.
             bambuCloud = BambuCloud(logger, config)
             # Get any existing values.
-            (bambuCloudEmail, bambuCloudPassword) = bambuCloud.GetContext(expectContextToExist=False)
+            (bambuCloudEmail, bambuCloudPassword, _) = bambuCloud.GetContext(expectContextToExist=False)
             bambuCloudEmail = os.environ.get("BAMBU_CLOUD_ACCOUNT_EMAIL", bambuCloudEmail)
             bambuCloudPassword = os.environ.get("BAMBU_CLOUD_ACCOUNT_PASSWORD", bambuCloudPassword)
+            bambuCloudVerificationCode = os.environ.get("BAMBU_CLOUD_ACCOUNT_VERIFICATION_CODE", None)
 
             # Ensure the context is already set or the user passed the email and password.
             if bambuCloudEmail is None:
@@ -213,7 +214,7 @@ class BambuBootstrap:
 
             # Update the context now, since it might have changed.
             logger.info(f"Setting Bambu Cloud Context: {bambuCloudEmail}")
-            if bambuCloud.SetContext(bambuCloudEmail, bambuCloudPassword) is False:
+            if bambuCloud.SetContext(bambuCloudEmail, bambuCloudPassword, bambuCloudVerificationCode) is False:
                 # This should never happen. If it does allow the setup to continue, but log the error.
                 logger.error("Failed to set the Bambu Cloud context.")
 
