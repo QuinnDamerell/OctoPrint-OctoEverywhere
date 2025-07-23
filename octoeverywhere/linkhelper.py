@@ -147,6 +147,11 @@ class LinkHelper:
     # Used by the plugins if they connect to the service and there's no account setup.
     @staticmethod
     def _RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:Optional[str]=None):
+
+        # This is used by the docker manager to detect printers that are not linked and get the printer id so it can be linked.
+        # This line should not change or the docker manager will not be able to detect the printer.
+        logger.info(f"plugin-not-linked:<{printerId}>")
+
         # This is kicked off when the plugin first connects to the service.
         # In most cases, the user has just installed the plugin and is setting it up, so we want to make the process as easy as possible.
         # So for a bit we will use the short code setup method, and then fallback to the full plugin id URL.
