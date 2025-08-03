@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "memray-flamegraph",
+      "type": "shell",
+      "command": "python -m memray flamegraph ~/.memray/moonraker_klipper.bin -o ~/.memray/moonraker_klipper.html",
+      "problemMatcher": []
+    }
+  ]
+}
