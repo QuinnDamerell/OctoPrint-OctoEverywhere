@@ -25,6 +25,7 @@ from linux_host.config import Config
 from linux_host.secrets import Secrets
 from linux_host.version import Version
 from linux_host.logger import LoggerInit
+from linux_host.localwebapi import LocalWebApi
 
 from .smartpause import SmartPause
 from .uipopupinvoker import UiPopupInvoker
@@ -138,6 +139,9 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
 
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
+
+            # Init the local web api. This will only start a thread if it's setup to run in the config.
+            LocalWebApi.Init(self.Logger, printerId, self.Config)
 
             # Init device id
             DeviceId.Init(self.Logger)
@@ -303,6 +307,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
     #
     def OnPrimaryConnectionEstablished(self, octoKey:str, connectedAccounts:List[str]) -> None:
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
+        LocalWebApi.Get().OnPrimaryConnectionEstablished(len(connectedAccounts) > 0)
 
         # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
         # This would be if the skipped the printer link or missed it in the setup script.

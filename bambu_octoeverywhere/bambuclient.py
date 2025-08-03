@@ -12,6 +12,7 @@ from octoeverywhere.sentry import Sentry
 
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
+from linux_host.localwebapi import LocalWebApi
 
 from .bambucloud import BambuCloud, LoginStatus
 from .bambumodels import BambuState, BambuVersion
@@ -207,6 +208,7 @@ class BambuClient:
                     # Random other errors.
                     Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
+            LocalWebApi.Get().SetPrinterConnectionState(False)
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
             # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
@@ -332,6 +334,7 @@ class BambuClient:
 
             # At this point, we know the connection was successful, the access code is correct, and the SN is correct.
             self.ConsecutivelyFailedConnectionAttempts = 0
+            LocalWebApi.Get().SetPrinterConnectionState(True)
 
             # Sub success! Force a full state sync.
             self._ForceStateSyncAsync()

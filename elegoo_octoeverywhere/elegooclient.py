@@ -15,6 +15,7 @@ from octoeverywhere.interfaces import WebSocketOpCode, IWebSocketClient
 
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
+from linux_host.localwebapi import LocalWebApi
 
 from .elegoomodels import PrinterState, PrinterAttributes
 from .interfaces import IStateTranslator, IFileManager, IWebsocketMux
@@ -336,6 +337,8 @@ class ElegooClient:
             except Exception as e:
                 Sentry.OnException("Elegoo client exception in main WS loop.", e)
 
+            LocalWebApi.Get().SetPrinterConnectionState(False)
+
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
             # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
@@ -365,6 +368,7 @@ class ElegooClient:
     # Fired when the websocket is connected.
     def _OnWsConnect(self, ws:IWebSocketClient):
         self.Logger.info("Connection to the Elegoo printer established!")
+        LocalWebApi.Get().SetPrinterConnectionState(True)
 
         # Set the connected flag now, so we can send messages.
         self.WebSocketConnected = True

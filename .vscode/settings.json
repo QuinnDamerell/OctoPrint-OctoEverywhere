@@ -131,6 +131,7 @@
         "localauth",
         "localfs",
         "localip",
+        "localwebapi",
         "Mailsail",
         "mainbaord",
         "Mainboard",

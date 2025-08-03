@@ -20,6 +20,7 @@ from octoeverywhere.buffer import Buffer
 from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter, WebSocketOpCode
 
 from linux_host.config import Config
+from linux_host.localwebapi import LocalWebApi
 
 from .filemetadatacache import FileMetadataCache
 from .moonrakercredentialmanager import MoonrakerCredentialManager
@@ -335,6 +336,7 @@ class MoonrakerClient(IMoonrakerClient):
     # This is called on a background thread, so we can block this.
     def _OnWsOpenAndKlippyReady(self) -> None:
         self.Logger.info("Moonraker client setting up default notification hooks")
+        LocalWebApi.Get().SetPrinterConnectionState(True)
         # First, we need to setup our notification subs
         # https://moonraker.readthedocs.io/en/latest/web_api/#subscribe-to-printer-object-status
         # https://moonraker.readthedocs.io/en/latest/printer_objects/
@@ -508,6 +510,7 @@ class MoonrakerClient(IMoonrakerClient):
 
             # Inform that we lost the connection.
             self.Logger.info("Moonraker client websocket connection lost. We will try to restart it soon.")
+            LocalWebApi.Get().SetPrinterConnectionState(False)
 
             # Set that the websocket is disconnected.
             with self.WebSocketLock:
