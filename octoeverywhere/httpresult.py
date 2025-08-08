@@ -195,7 +195,13 @@ class HttpResult():
             logger.warning(f"ReadAllContentFromStreamResponse got an exception. We will return the current buffer length of {lengthStr}, exception: {e}")
 
         # Ensure we got something, as after this callers will expect an object to be there.
-        buffer:Buffer = Buffer(b''.join(buffers)) if len(buffers) > 0 else Buffer(bytearray())
+        buffer:Optional[Buffer] = None
+        if len(buffers) == 1:
+            buffer = Buffer(buffers[0])
+        elif len(buffers) > 0:
+            buffer = Buffer(b''.join(buffers))
+        else:
+            buffer = Buffer(bytearray())
         self.SetFullBodyBuffer(buffer)
 
 
