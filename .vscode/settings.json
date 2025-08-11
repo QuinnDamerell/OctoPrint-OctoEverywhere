@@ -51,6 +51,7 @@
         "debugprofiler",
         "decompressor",
         "decompressors",
+        "delayedcallback",
         "deps",
         "devel",
         "deviceid",

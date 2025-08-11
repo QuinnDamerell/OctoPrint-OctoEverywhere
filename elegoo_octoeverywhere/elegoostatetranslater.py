@@ -1,8 +1,10 @@
 import logging
+import threading
 from typing import Optional, Tuple
 
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.interfaces import IPrinterStateReporter
+from octoeverywhere.util.delayedcallback import DelayedCallback
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
@@ -14,11 +16,17 @@ from .interfaces import IStateTranslator
 # and to act as the printer state interface for Bambu printers.
 class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
 
+    # The amount of time we will wait for a reconnect before we fire the disconnected notification.
+    c_ConnectionLostNotificationDelaySec = 10.0
+
+
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
         self.NotificationsHandler:NotificationsHandler = None #pyright: ignore[reportAttributeAccessIssue]
         self.LastStatus:Optional[str] = None
         self.IsWaitingOnPrintInfoToFirePrintStart = False
+        self.DelayedConnectionLostCallback:Optional[DelayedCallback] = None
+        self.DelayedConnectionLostCallbackLock = threading.Lock()
 
 
     def SetNotificationHandler(self, notificationHandler:NotificationsHandler):
@@ -32,17 +40,33 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
         # If we were fully connected and were printing or warming up, then report  the connection loss.
         # Otherwise, don't bother, since it might just be the user turning off the printer.
         if wasFullyConnected and (PrinterState.IsPrepareOrSlicingState(self.LastStatus) or PrinterState.IsPrintingState(self.LastStatus, False)):
-            self.NotificationsHandler.OnError("Connection to printer lost during a print.")
+            # There seems to be a bug while printing where we will get disconnected from the printer's server but then reconnected with no effect on the print.
+            # To combat a spammy notifications, we use a delayed callback to only fire after we know we have been disconnected for some time.
+            with self.DelayedConnectionLostCallbackLock:
+                if self.DelayedConnectionLostCallback is not None:
+                    self.DelayedConnectionLostCallback.Cancel()
+                self.DelayedConnectionLostCallback = DelayedCallback.Create(self.Logger, "ElegooDelayedConnectionLostCallback", self.c_ConnectionLostNotificationDelaySec, self._DelayedConnectionLostCallback)
 
         # Always reset our state.
         self.LastStatus = None
         self.IsWaitingOnPrintInfoToFirePrintStart = False
 
 
+    def _DelayedConnectionLostCallback(self):
+        # If this fired, the amount of time passed before a reconnect where we should fire the notification.
+        self.NotificationsHandler.OnError("Connection to printer lost during a print.")
+
+
     # Fired when any mqtt message comes in.
     # State will always be NOT NONE, since it's going to be created before this call.
     # The isFirstFullSyncResponse flag indicates if this is the first full state sync of a new connection.
     def OnStatusUpdate(self, pState:PrinterState, isFirstFullSyncResponse:bool) -> None:
+
+        # Ensure if we have a connection lost delay in progress, to cancel it.
+        with self.DelayedConnectionLostCallbackLock:
+            if self.DelayedConnectionLostCallback is not None:
+                self.DelayedConnectionLostCallback.Cancel()
+                self.DelayedConnectionLostCallback = None
 
         # First, if we have a new connection and we just synced, make sure the notification handler is in sync.
         if isFirstFullSyncResponse:

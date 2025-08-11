@@ -33,7 +33,7 @@ class HttpResult():
                     didFallback:bool,
                     fullBodyBuffer:Optional[Buffer]=None,
                     requestLibResponseObj:Optional[requests.Response]=None,
-                    customBodyStreamCallback:Optional[Callable[[], Buffer]]=None,
+                    customBodyStreamCallback:Optional[Callable[[], Optional[Buffer]]]=None,
                     customBodyStreamClosedCallback:Optional[Callable[[],None]]=None
                     ):
         # Status code isn't a property because some things need to set it externally to the class. (Result.StatusCode = 302)
@@ -121,7 +121,8 @@ class HttpResult():
 
 
     @property
-    def GetCustomBodyStreamCallback(self) -> Optional[Callable[[], Buffer]]:
+    def GetCustomBodyStreamCallback(self) -> Optional[Callable[[], Optional[Buffer]]]:
+        # This callback can return None, which indicates the stream is done or there was an error.
         return self._customBodyStreamCallback
 
 
