@@ -145,6 +145,16 @@ if __name__ == '__main__':
         logDirPath = os.path.join(dataPath, "logs")
         CreateDirIfNotExists(logDirPath)
 
+        # If there's a local web api port, set it in the config.
+        localApiPort = os.environ.get("LOCAL_API_PORT", None)
+        if localApiPort is not None:
+            try:
+                config.SetInt(Config.GeneralSection, Config.GeneralLocalWebApiPort, int(localApiPort), False)
+            except Exception as e:
+                logger.error(f"Failed to set local API port to value `{localApiPort}`, error: {e}")
+                logger.error("Make sure the value is a valid integer, or omit it.")
+                sys.exit(1)
+
         # Build the launch string
         launchConfig = {
             "ServiceName" : "octoeverywhere", # Since there's only once service, use the default name.
