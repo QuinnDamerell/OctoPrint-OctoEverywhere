@@ -176,8 +176,15 @@ class HandshakeSyn(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
+    # HandshakeSyn
+    def IsDockerContainer(self):
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(40))
+        if o != 0:
+            return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
+        return False
+
 def HandshakeSynStart(builder: octoflatbuffers.Builder):
-    builder.StartObject(18)
+    builder.StartObject(19)
 
 def Start(builder: octoflatbuffers.Builder):
     HandshakeSynStart(builder)
@@ -295,6 +302,12 @@ def HandshakeSynAddDeviceId(builder: octoflatbuffers.Builder, deviceId: int):
 
 def AddDeviceId(builder: octoflatbuffers.Builder, deviceId: int):
     HandshakeSynAddDeviceId(builder, deviceId)
+
+def HandshakeSynAddIsDockerContainer(builder: octoflatbuffers.Builder, isDockerContainer: bool):
+    builder.PrependBoolSlot(18, isDockerContainer, 0)
+
+def AddIsDockerContainer(builder: octoflatbuffers.Builder, isDockerContainer: bool):
+    HandshakeSynAddIsDockerContainer(builder, isDockerContainer)
 
 def HandshakeSynEnd(builder: octoflatbuffers.Builder) -> int:
     return builder.EndObject()
