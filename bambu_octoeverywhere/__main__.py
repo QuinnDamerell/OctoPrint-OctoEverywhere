@@ -27,6 +27,7 @@ if __name__ == '__main__':
         LogFolder = s.GetConfigVarAndValidate(jsonConfig, "LogFolder", ConfigDataTypes.Path)
         ConfigFolder = s.GetConfigVarAndValidate(jsonConfig, "ConfigFolder", ConfigDataTypes.Path)
         InstanceStr   = s.GetConfigVarAndValidate(jsonConfig, "CompanionInstanceIdStr",  ConfigDataTypes.String)
+        IsDockerContainer = s.GetConfigVarAndValidate(jsonConfig, "IsDockerContainer", ConfigDataTypes.Bool, defaultValue=False)
 
     except Exception as e:
         s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)}, Config: {jsonConfigStr}")
@@ -38,7 +39,7 @@ if __name__ == '__main__':
     try:
         # Create and run the main host!
         host = BambuHost(ConfigFolder, LogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
-        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, IsDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main bambu host class. Error:{str(e)}")
 

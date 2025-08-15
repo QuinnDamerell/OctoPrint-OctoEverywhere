@@ -67,7 +67,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             raise
 
 
-    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[Dict[str, Any]]) -> None:
+    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, isDockerContainer:bool, devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("####################################################")
@@ -163,7 +163,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo, False)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo, True, isDockerContainer)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("!! Exception thrown out of main host run function.", e)

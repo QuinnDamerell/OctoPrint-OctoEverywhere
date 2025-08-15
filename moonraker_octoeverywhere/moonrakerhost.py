@@ -75,20 +75,21 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             raise
 
 
-    def RunBlocking(self, klipperConfigDir:str, isCompanionMode:bool, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
+    def RunBlocking(self, klipperConfigDir:str, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
                     moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode
+                    isCompanion:bool, isDockerContainer:bool,
                     devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("################################################")
-            if isCompanionMode:
+            if isCompanion:
                 self.Logger.info("## OctoEverywhere Klipper Companion Starting  ##")
             else:
                 self.Logger.info("##### OctoEverywhere For Klipper Starting ######")
             self.Logger.info("################################################")
 
             # Set companion mode flag as soon as we know it.
-            Compat.SetIsCompanionMode(isCompanionMode)
+            Compat.SetIsCompanionMode(isCompanion)
 
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
@@ -102,7 +103,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             Sentry.Setup(pluginVersionStr, "klipper", devConfig is not None, enableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # This logic only works if running locally.
-            if not isCompanionMode:
+            if not isCompanion:
                 # Before we do this first time setup, make sure our config files are in place. This is important
                 # because if this fails it will throw. We don't want to let the user complete the install setup if things
                 # with the update aren't working.
@@ -218,7 +219,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker, isCompanionMode)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker, isCompanion, isDockerContainer)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("!! Exception thrown out of main host run function.", e)

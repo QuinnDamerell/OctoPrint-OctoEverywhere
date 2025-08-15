@@ -36,7 +36,8 @@ class OctoEverywhere(IOctoEverywhereHost):
                 statusChangeHandler:IStateChangeHandler,
                 pluginVersion:str,
                 serverHostType:int,
-                isCompanion:bool
+                isCompanion:bool,
+                isDockerContainer:bool
                 ) -> None:
         self.Endpoint = endpoint
         self.PrinterId = printerId
@@ -47,6 +48,7 @@ class OctoEverywhere(IOctoEverywhereHost):
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
+        self.IsDockerContainer = isDockerContainer
         self.SecondaryServerCons:dict[str, threading.Thread] = {}
         self.SecondaryServerConsLock = threading.Lock()
 
@@ -116,4 +118,4 @@ class OctoEverywhere(IOctoEverywhereHost):
 
 
     def createOctoServerCon(self, endpoint:str, isPrimary:bool, shouldUseLowestLatencyServer:bool, statusChangeHandler:Optional[IStateChangeHandler], runTime:int, summonMethod:int):
-        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType, self.IsCompanion)
+        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType, self.IsCompanion, self.IsDockerContainer)

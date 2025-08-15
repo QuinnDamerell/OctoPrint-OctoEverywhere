@@ -72,7 +72,8 @@ class OctoServerCon(IOctoStream):
                 runForSeconds:int,
                 summonMethod:int,
                 serverHostType:int,
-                isCompanion:bool
+                isCompanion:bool,
+                isDockerContainer:bool,
                 ):
         self.ProtocolVersion = 1
         self.OctoSession = None
@@ -93,6 +94,7 @@ class OctoServerCon(IOctoStream):
         self.SummonMethod = summonMethod
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
+        self.IsDockerContainer = isDockerContainer
 
         self.DefaultEndpoint = endpoint
         self.CurrentEndpoint = self.DefaultEndpoint
@@ -160,7 +162,7 @@ class OctoServerCon(IOctoStream):
         self.IsDisconnecting = False
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion, self.IsDockerContainer)
         self.OctoSession.StartHandshake(self.SummonMethod)
 
 

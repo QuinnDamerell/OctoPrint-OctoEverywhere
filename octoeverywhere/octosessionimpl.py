@@ -41,7 +41,8 @@ class OctoSession(IOctoSession):
                     uiPopupInvoker:IPopUpInvoker,
                     pluginVersion:str,
                     serverHostType:int,
-                    isCompanion:bool
+                    isCompanion:bool,
+                    isDockerContainer:bool
                 ):
         self.ActiveWebStreams:Dict[int,OctoWebStream] = {}
         self.ActiveWebStreamsLock = threading.Lock()
@@ -57,6 +58,7 @@ class OctoSession(IOctoSession):
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
+        self.IsDockerContainer = isDockerContainer
 
         # Create our server auth helper.
         self.ServerAuth = ServerAuthHelper(self.Logger)
@@ -299,7 +301,7 @@ class OctoSession(IOctoSession):
             # Build the message
             buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.IsPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId, self.IsCompanion, self.IsDockerContainer)
 
             # Send!
             self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSizeBytes)

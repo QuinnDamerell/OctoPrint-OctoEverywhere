@@ -63,14 +63,24 @@ class Startup:
 
     # A helper to get a specific value from the json config.
     # oldVarName allows us to stay compat with older installs.
-    def GetConfigVarAndValidate(self, jsonConfig:Dict[str, Any], varName:str, dataType:ConfigDataTypes, oldVarName:Optional[str]=None) -> Union[bool, str]:
+    def GetConfigVarAndValidate(self,
+                                jsonConfig:Dict[str, Any],
+                                varName:str,
+                                dataType:ConfigDataTypes,
+                                oldVarName:Optional[str]=None,
+                                defaultValue:Union[bool, str, None]=None, # If set to not None, if the var isn't found, it will be returned. (aka the config var is optional)
+                                ) -> Union[bool, str]:
         var = None
         if varName in jsonConfig:
             var = jsonConfig[varName]
         elif oldVarName in jsonConfig:
             var = jsonConfig[oldVarName]
         else:
-            raise Exception(f"{varName} isn't found in the json jsonConfig.")
+            if defaultValue is None:
+                raise Exception(f"{varName} isn't found in the json jsonConfig, and it's required.")
+            else:
+                # If it's not required, we can just return None.
+                return defaultValue
 
         if var is None:
             raise Exception(f"{varName} returned None when parsing json jsonConfig.")
