@@ -157,7 +157,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId, pluginVersionStr)
 
             # Setup the credential manager.
-            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath, isCompanionMode)
+            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath, isCompanion)
 
             # Setup the http requester. We default to port 80 and assume the frontend can be found there.
             # TODO - parse nginx to see what front ends exist and make them switchable
@@ -171,7 +171,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             OctoHttpRequest.SetLocalOctoPrintPort(frontendPort)
 
             # If we are in companion mode, we need to update the local address to be the other local remote.
-            if isCompanionMode:
+            if isCompanion:
                 ipOrHostnameStr = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
                 portStr = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
                 if ipOrHostnameStr is None or portStr is None:
