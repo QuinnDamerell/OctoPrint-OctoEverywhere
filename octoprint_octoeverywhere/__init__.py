@@ -825,7 +825,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
             # Run!
             pluginVersion:str = self._plugin_version #pyright: ignore[reportAssignmentType]
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, self, self, pluginVersion, ServerHost.OctoPrint, False)
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, self, self, pluginVersion, ServerHost.OctoPrint, False, False)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("Exception thrown out of main runner.", e)
