@@ -420,8 +420,8 @@ class Slipstream(ISlipstreamHandler):
 
                 # Now that we have found the cookie header, check if the session_p443 value exists.
                 # The session_P443 value is the session cookie that the toradio server used in OctoPrint sets.
-                valueLower = value.lower()
-                if "session_p443" in valueLower:
+                # Check for both possible cases more efficiently
+                if "session_p443" in value or "session_P443" in value:
                     return True
                 return False
 

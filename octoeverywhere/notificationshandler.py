@@ -1336,8 +1336,8 @@ class NotificationsHandler(INotificationHandler):
         # These files are used between prints to hold the printer before a new print starts.
         # The events are listed here, and the file name will be 'continuousprint_finish.gcode' for example.
         # https://github.com/smartin015/continuousprint/blob/bfb2c13da2ebbe0bfbfaa90f62a91db332c43b1b/continuousprint/data/__init__.py#L62
-        fileNameLower = fileName.lower()
-        if fileNameLower.startswith("continuousprint_"):
+        # Check for both cases efficiently - avoid lowercasing unless necessary
+        if fileName.startswith("continuousprint_") or fileName.lower().startswith("continuousprint_"):
             self.Logger.info("Ignoring notification because it's a continuous print place holder file. "+str(fileName))
             return True
         return False
