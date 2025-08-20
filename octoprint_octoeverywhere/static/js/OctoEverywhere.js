@@ -277,11 +277,11 @@ $(function() {
         function FindAndReportLocalFrontendPort(url)
         {
             // Start with a to lower case to remove complexity.
-            var url = url.toLowerCase();
+            var urlLower = url.toLowerCase();
 
             // Look for the protocol end
             const protocolEndStr = "://"
-            var protocolEnd = url.indexOf(protocolEndStr)
+            var protocolEnd = urlLower.indexOf(protocolEndStr)
             if(protocolEnd == -1)
             {
                 LogError("No protocol could be found in url "+ url)
@@ -292,11 +292,11 @@ $(function() {
             protocolEnd += protocolEndStr.length
 
             // Find the end of the hostname and optionally port.
-            var hostnameEnd = url.indexOf("/", protocolEnd);
+            var hostnameEnd = urlLower.indexOf("/", protocolEnd);
             if(hostnameEnd == -1)
             {
                 // If there is no / use the full URL length.
-                hostnameEnd = url.length;
+                hostnameEnd = urlLower.length;
             }
 
             // Validate
@@ -307,10 +307,10 @@ $(function() {
             }
 
             // Get the hostname
-            var hostname = url.substring(protocolEnd, hostnameEnd)
+            var hostname = urlLower.substring(protocolEnd, hostnameEnd)
 
             // Determine if the protocol is http or https.
-            var isHttps = url.startsWith("https://")
+            var isHttps = urlLower.startsWith("https://")
 
             // IPV6 address will be in the following format
             // http://[add:res:tes:blah]:port/stuff
