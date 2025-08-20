@@ -115,8 +115,9 @@ class Client(IWebSocketClient):
         if pingTimeoutSec is None or pingTimeoutSec <= 0 or pingTimeoutSec > 60:
             pingTimeoutSec = 20
         # Ensure that the ping timeout is set, otherwise the websocket will hang forever if the connection is lost.
+        # This is also important to ensure that NAT routers and load balancers keep the connection alive.
         if pingIntervalSec is None or pingIntervalSec <= 0:
-            pingIntervalSec = 600
+            pingIntervalSec = 30
 
         try:
             # Start the send queue thread if it hasn't been started.
