@@ -15,6 +15,7 @@
         "bambuclient",
         "bambucloud",
         "bambucommandhandler",
+        "bambuerrors",
         "bambuhost",
         "bambulab",
         "bambumodels",

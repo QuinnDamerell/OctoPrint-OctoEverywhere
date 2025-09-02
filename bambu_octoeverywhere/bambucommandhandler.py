@@ -86,13 +86,20 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
         # Before checking the state, see if the print is in an error state.
         # This error state can be common among other states, like "IDLE" or "PAUSE"
-        printError = bambuState.GetPrinterError()
+        printError = bambuState.GetPrinterErrorType()
         if printError is not None:
             # Always set the state to error.
             # If we can match a known state, return a good string that can be shown for the user.
             state = "error"
             if printError == BambuPrintErrors.FilamentRunOut:
                 errorStr_CanBeNone = "Filament Run Out"
+            elif printError == BambuPrintErrors.PrintFailureDetected:
+                errorStr_CanBeNone = "Print Failure Detected"
+            else:
+                # This results in a long string which isn't great for the UI, but it gives the user more detail.
+                detailedError = bambuState.GetDetailedPrinterErrorStr()
+                if detailedError is not None:
+                    errorStr_CanBeNone = "Error: " + detailedError
         # If we aren't in error, use the state
         elif bambuState.gcode_state is not None:
             gcodeState = bambuState.gcode_state

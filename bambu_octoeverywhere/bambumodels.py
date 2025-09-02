@@ -3,6 +3,8 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from .bambuerrors import BAMBU_PRINT_ERROR_STRINGS
+
 from octoeverywhere.sentry import Sentry
 
 # Known printer error types.
@@ -10,7 +12,8 @@ from octoeverywhere.sentry import Sentry
 # Here's the full list https://e.bambulab.com/query.php?lang=en
 class BambuPrintErrors(Enum):
     Unknown = 1             # This will be most errors, since most of them aren't mapped
-    FilamentRunOut = 2
+    FilamentRunOut = 2,
+    PrintFailureDetected = 3, # The Bambu AI detected a failure.
 
 
 # Since MQTT syncs a full state and then sends partial updates, we keep track of the full state
@@ -144,7 +147,7 @@ class BambuState:
 
     # If the printer is in an error state, this tries to return the type, if known.
     # If the printer is not in an error state, None is returned.
-    def GetPrinterError(self) -> Optional[BambuPrintErrors]:
+    def GetPrinterErrorType(self) -> Optional[BambuPrintErrors]:
         # If there is a printer error, this is not 0
         if self.print_error is None or self.print_error == 0:
             return None
@@ -173,8 +176,18 @@ class BambuState:
             "07028011": BambuPrintErrors.FilamentRunOut,
             "07038011": BambuPrintErrors.FilamentRunOut,
             "07FF8011": BambuPrintErrors.FilamentRunOut,
+            "03008003": BambuPrintErrors.PrintFailureDetected
         }
         return errorMap.get(h, BambuPrintErrors.Unknown)
+
+
+    # If the printer is in an error state, returns the detailed error string.
+    def GetDetailedPrinterErrorStr(self) -> Optional[str]:
+        # If there is a printer error, this is not 0
+        if self.print_error is None or self.print_error == 0:
+            return None
+        h = hex(self.print_error)[2:].rjust(8, '0')
+        return BAMBU_PRINT_ERROR_STRINGS.get(h, "Error")
 
 
 # Different types of hardware.
