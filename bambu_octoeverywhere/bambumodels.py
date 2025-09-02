@@ -3,9 +3,10 @@ import logging
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from octoeverywhere.sentry import Sentry
+
 from .bambuerrors import BAMBU_PRINT_ERROR_STRINGS
 
-from octoeverywhere.sentry import Sentry
 
 # Known printer error types.
 # Note that the print state doesn't have to be ERROR to have an error, during a print it's "PAUSED" but the print_error value is not 0.
@@ -13,7 +14,7 @@ from octoeverywhere.sentry import Sentry
 class BambuPrintErrors(Enum):
     Unknown = 1             # This will be most errors, since most of them aren't mapped
     FilamentRunOut = 2,
-    PrintFailureDetected = 3, # The Bambu AI detected a failure.
+    PrintFailureDetected = 3 # The Bambu AI detected a failure.
 
 
 # Since MQTT syncs a full state and then sends partial updates, we keep track of the full state
