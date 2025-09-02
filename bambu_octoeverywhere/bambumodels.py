@@ -13,7 +13,7 @@ from .bambuerrors import BAMBU_PRINT_ERROR_STRINGS
 # Here's the full list https://e.bambulab.com/query.php?lang=en
 class BambuPrintErrors(Enum):
     Unknown = 1             # This will be most errors, since most of them aren't mapped
-    FilamentRunOut = 2,
+    FilamentRunOut = 2
     PrintFailureDetected = 3 # The Bambu AI detected a failure.
 
 
