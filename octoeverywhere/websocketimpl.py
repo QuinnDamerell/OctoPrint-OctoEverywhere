@@ -1,4 +1,5 @@
 import queue
+import ssl
 import threading
 from typing import Any, Dict, List, Callable, Optional
 
@@ -39,6 +40,7 @@ class Client(IWebSocketClient):
         self.hasFiredWsErrorCallback = False
         self.hasPendingErrorCallbackFire = False
         self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
+        self.disableCertCheck = False
 
         # We use a send queue thread because it allows us to process downloads about 2x faster.
         # This is because the downstream work of the WS can be made faster if it's done in parallel
@@ -96,6 +98,12 @@ class Client(IWebSocketClient):
         )
 
 
+    # This has it's own function so the caller very explicitly has to call it, rather than it being an init overload.
+    # If set to true, this websocket connection will not validate the cert it's connecting to. This should only be done locally!
+    def SetDisableCertCheck(self, disable:bool):
+        self.disableCertCheck = disable
+
+
     # Runs the websocket blocking until it closes.
     def RunUntilClosed(self, pingIntervalSec:Optional[int]=None, pingTimeoutSec:Optional[int]=None):
         #
@@ -133,12 +141,17 @@ class Client(IWebSocketClient):
             if pingIntervalSec > 0 and pingTimeoutSec <= 0:
                 raise Exception("The ping timeout must be greater than 0.")
 
+            # Only if the client explicated called the function to disable this will we turn off cert verification.
+            sslopt={"ca_certs":certifi.where()}
+            if self.disableCertCheck:
+                sslopt = {"cert_reqs":  ssl.CERT_NONE, "check_hostname": False}
+
             # Since some clients use RunAsync, check that we didn't close before the async action started.
             with self.isClosedLock:
                 if self.isClosed:
                     return
 
-            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt={"ca_certs":certifi.where()})  #pyright: ignore[reportUnknownMemberType]
+            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt=sslopt)  #pyright: ignore[reportUnknownMemberType]
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,

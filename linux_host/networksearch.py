@@ -363,6 +363,7 @@ class NetworkSearch:
             try:
                 logger.debug(f"Connecting to Elegoo on {url}...")
                 client = Client(url, onWsOpen=onWsOpen, onWsData=onWsData, onWsClose=onWsClose, onWsError=onWsError)
+                client.SetDisableCertCheck(True)
                 # We must run async, so we don't block this testing thread.
                 client.RunAsync()
                 failedToConnect = False

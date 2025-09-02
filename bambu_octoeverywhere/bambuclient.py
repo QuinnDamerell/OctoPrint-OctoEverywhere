@@ -292,8 +292,16 @@ class BambuClient:
         # If the serial number is wrong in the subscribe call, instead of returning an error the Bambu Lab printers just disconnect.
         # So if we were pending a subscribe call, give the user a better error message so they know the likely cause.
         if self.IsPendingSubscribe:
+            self.Logger.error("")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             self.Logger.error("Bambu printer mqtt connection lost when trying to sub for events.")
-            self.Logger.error(f"THIS USUALLY MEANS THE PRINTER SERIAL NUMBER IS WRONG. We tried to use the serial number '{self.PrinterSn}'. Double check the SN is correct.")
+            self.Logger.error("This might indicate the printer ACCESS CODE - OR - SERIAL NUMBER IS WRONG.")
+            self.Logger.error(f"     Current Serial Number: '{self.PrinterSn}'")
+            self.Logger.error(f"     Current Access Code:   '{self.LanAccessCode}'")
+            self.Logger.error("")
+            self.Logger.error("Check these values match your printer. If they changed, run the OctoEverywhere installer again to update them or update your Docker configuration.")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.error("")
         else:
             self.Logger.warning("Bambu printer connection lost. We will try to reconnect in a few seconds.")
         # Clear the state since we lost the connection and won't stay synced.

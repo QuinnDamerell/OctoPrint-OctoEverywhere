@@ -499,6 +499,7 @@ class MoonrakerClient(IMoonrakerClient):
                                     onWsClose=self._onWsClose,
                                     onWsError=self._onWsError
                                     )
+                    self.WebSocket.SetDisableCertCheck(True)
 
                 # Run until the socket closes
                 # When it returns, ensure it's closed.

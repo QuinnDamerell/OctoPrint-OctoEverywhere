@@ -328,6 +328,7 @@ class ElegooClient:
 
                 # Setup the websocket client for this connection.
                 self.WebSocket = Client(url, onWsOpen=self._OnWsConnect, onWsClose=self._OnWsClose, onWsError=self._OnWsError, onWsData=self._OnWsData)
+                self.WebSocket.SetDisableCertCheck(True)
 
                 # Connect to the server
                 with self.WebSocket:

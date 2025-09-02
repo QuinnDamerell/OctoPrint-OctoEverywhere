@@ -305,6 +305,10 @@ class IWebSocketClient(ABC):
     def SendWithOptCode(self, buffer:Buffer, msgStartOffsetBytes:Optional[int]=None, msgSize:Optional[int]=None, optCode=WebSocketOpCode.BINARY) -> None:
         pass
 
+    @abstractmethod
+    def SetDisableCertCheck(self, disable:bool) -> None:
+        pass
+
 
 class IRelayWebSocketProvider(ABC):
 
