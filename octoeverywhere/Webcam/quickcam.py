@@ -663,6 +663,9 @@ class QuickCam_RTSP:
         # For auth, if there's a username and password it will already be in the URL in the http:// basic auth style,
         # So there's nothing else we need to do.
 
+        # Use a default value of 0, so both TCP and UDP can be used.
+        rtspTransport = os.environ.get("OCTO_QUICKCAM_RTSP_TRANSPORT", "0")
+
         # Notes
         #   We use the default jpeg image quality, for the same FPS reasons above.
         # pylint: disable=consider-using-with # We handle this on our own.
@@ -670,7 +673,7 @@ class QuickCam_RTSP:
                     "-hide_banner",
                     "-y",
                     "-loglevel", logLevel,
-                    "-rtsp_transport", "0", # Use a value of 0, so both TCP and UDP can be used.
+                    "-rtsp_transport", rtspTransport,
                     "-use_wallclock_as_timestamps", "1",
                     "-i", url,
                     "-filter:v", f"fps={fps}",
