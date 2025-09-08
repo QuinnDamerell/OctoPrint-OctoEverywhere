@@ -2,12 +2,15 @@ import os
 import logging
 import time
 import traceback
+import threading
 from typing import Any, Dict, Optional
 
-# import sentry_sdk
-# from sentry_sdk import Hub
-# from sentry_sdk.integrations.logging import LoggingIntegration
-# from sentry_sdk.integrations.threading import ThreadingIntegration
+import requests
+
+import sentry_sdk
+from sentry_sdk import Hub
+from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.threading import ThreadingIntegration
 
 from .exceptions import NoSentryReportException
 from .threaddebug import ThreadDebug
@@ -19,7 +22,7 @@ class Sentry:
     _Logger:logging.Logger = None #pyright: ignore[reportAssignmentType]
 
     # Flags to help Sentry get setup.
-    IsSentrySetup:bool = False
+    IsSentrySetup:bool = False # This is important since the sentry setup is async and is disabled for some plugin modes.
     IsDevMode:bool = False
     FilterExceptionsByPackage:bool = False
     LastErrorReport:float = time.time()
@@ -36,53 +39,112 @@ class Sentry:
     # This actually setups sentry.
     # It's only called after the plugin version is known, and thus it might be a little into the process lifetime.
     @staticmethod
-    def Setup(versionString:str, distType:str, isDevMode:bool=False, enableProfiling:bool=False, filterExceptionsByPackage:bool=False, restartOnCantCreateThreadBug:bool=False):
+    def Setup(versionString:str, distType:str, isDevMode:bool=False, canEnableProfiling:bool=False, filterExceptionsByPackage:bool=False, restartOnCantCreateThreadBug:bool=False):
         # Set the dev mode flag.
         Sentry.IsDevMode = isDevMode
         Sentry.FilterExceptionsByPackage = filterExceptionsByPackage
         Sentry.RestartProcessOnCantCreateThreadBug = restartOnCantCreateThreadBug
 
         # Only setup sentry if we aren't in dev mode.
-        # Disable sentry for now since it seems to be causing a lot of spawned threads and we don't use it right now.
-        # if Sentry.IsDevMode is False:
-        #     try:
-        #         # We don't want sentry to capture error logs, which is it's default.
-        #         # We do want the logging for breadcrumbs, so we will leave it enabled.
-        #         sentry_logging = LoggingIntegration(
-        #             level=logging.INFO,        # Capture info and above as breadcrumbs
-        #             event_level=logging.FATAL  # Only send FATAL errors and above.
-        #         )
-        #         # Setup and init
-        #         sentry_sdk.init(
-        #             dsn= "https://883879bfa2402df86c098f6527f96bfa@oe-sentry.octoeverywhere.com/4",
-        #             integrations= [
-        #                 sentry_logging,
-        #                 ThreadingIntegration(propagate_hub=True),
-        #             ],
-        #             # This is the recommended format
-        #             release= f"oe-plugin@{versionString}",
-        #             dist= distType,
-        #             environment= "dev" if isDevMode else "production",
-        #             before_send= Sentry._beforeSendFilter,
-        #             # This means we will send 100% of errors, maybe we want to reduce this in the future?
-        #             enable_tracing= enableProfiling,
-        #             sample_rate= 1.0,
-        #             # Only enable these if we enable profiling. We can't do it in OctoPrint, because it picks up a lot of OctoPrint functions.
-        #             traces_sample_rate= 0.01 if enableProfiling else 0.0,
-        #             profiles_sample_rate= 0.01 if enableProfiling else 0.0,
-        #         )
-        #     except Exception as e:
-        #         if Sentry._Logger is not None:
-        #             Sentry._Logger.error("Failed to init Sentry: "+str(e))
+        if Sentry.IsDevMode:
+            return
 
-        #     # Set that sentry is ready to use.
-        #     Sentry.IsSentrySetup = True
+        # Spin off a thread to make the sentry config api request and then init the sdk.
+        def setupSentryThread():
+            # Give it a few attempts, in case the network isn't ready yet.
+            attempt = 0
+            while attempt < 3:
+                try:
+                    attempt += 1
+                    Sentry._setupSentryInternal(versionString, distType, isDevMode, canEnableProfiling)
+                    return
+                except Exception as e:
+                    if Sentry._Logger is not None:
+                        Sentry._Logger.error("Failed to setup sentry, retrying: "+str(e))
+                    time.sleep(10)
+        thread = threading.Thread(target=setupSentryThread, daemon=True)
+        thread.start()
+
+
+    # Throws on failure.
+    @staticmethod
+    def _setupSentryInternal(versionString:str, distType:str, isDevMode:bool, canEnableProfiling:bool) -> None:
+
+        # Make the API call to get the Sentry config.
+        response = requests.post("https://octoeverywhere.com/api/plugin/sentryconfig", json={'PluginVersion': versionString, 'DistType': distType}, timeout=20)
+        if response.status_code != 200:
+            raise Exception(f"Failed to get sentry config, status code {response.status_code}")
+
+        # Parse the response.
+        responseJson = response.json()
+        result = responseJson.get("Result", None)
+        if result is None:
+            raise Exception(f"Failed to get sentry config, result {result}")
+
+        # First, check if we are enabled at all.
+        enabled = result.get("Enabled", None)
+        if enabled is None or enabled is False:
+            # Sentry is not enabled, just return.
+            if Sentry._Logger is not None:
+                Sentry._Logger.info("Sentry is disabled by server config.")
+            return
+
+        # Get the rates, default to off.
+        tracingSampleRate = result.get("TracingSampleRate", None)
+        if tracingSampleRate is None or tracingSampleRate > 1.0 or tracingSampleRate < 0.0:
+            if Sentry._Logger is not None:
+                Sentry._Logger.warning(f"Sentry got an invalid tracing sample rate. {tracingSampleRate}, setting to 0.0")
+            tracingSampleRate = 0.0
+
+        profilingSampleRate = result.get("ProfilingSampleRate", None)
+        if profilingSampleRate is None or profilingSampleRate > 1.0 or profilingSampleRate < 0.0:
+            if Sentry._Logger is not None:
+                Sentry._Logger.warning(f"Sentry got an invalid profiling sample rate. {profilingSampleRate}, setting to 0.0")
+            profilingSampleRate = 0.0
+
+        errorSampleRate = result.get("ErrorSampleRate", None)
+        if errorSampleRate is None or errorSampleRate > 1.0 or errorSampleRate < 0.0:
+            if Sentry._Logger is not None:
+                Sentry._Logger.warning(f"Sentry got an invalid error sample rate. {errorSampleRate}, setting to 0.0")
+            errorSampleRate = 0.0
+
+        # If we can't enable profiling, disable them.
+        if canEnableProfiling is False:
+            tracingSampleRate = 0.0
+            profilingSampleRate = 0.0
+
+        # We don't want sentry to capture error logs, which is it's default.
+        # We do want the logging for breadcrumbs, so we will leave it enabled.
+        sentryLogging = LoggingIntegration(
+            level=logging.INFO,        # Capture info and above as breadcrumbs
+            event_level=logging.FATAL  # Only send FATAL errors and above.
+        )
+        # Setup and init
+        sentry_sdk.init(
+            dsn= "https://782efc0e5d44c8239aedf79215e3690d@oe-reports.octoeverywhere.com/4",
+            integrations= [
+                sentryLogging,
+                ThreadingIntegration(propagate_hub=True),
+            ],
+            # This is the recommended format
+            release= f"oe-plugin@{versionString}",
+            dist= distType,
+            environment= "dev" if isDevMode else "production",
+            before_send= Sentry._beforeSendFilter,
+            sample_rate= errorSampleRate,
+            # Only enable these if we enable profiling. We can't do it in OctoPrint, because it picks up a lot of OctoPrint functions.
+            enable_tracing= True if tracingSampleRate > 0.0 else False,
+            traces_sample_rate= tracingSampleRate,
+            profiles_sample_rate= profilingSampleRate,
+        )
+
+        # Set that sentry is ready to use.
+        Sentry.IsSentrySetup = True
 
 
     @staticmethod
     def SetPrinterId(printerId:str):
-        #sentry_sdk.set_context("octoeverywhere", { "printer-id": printerId })
-        pass
+        sentry_sdk.set_context("octoeverywhere", { "printer-id": printerId })
 
 
     @staticmethod
@@ -139,8 +201,8 @@ class Sentry:
     # Adds a breadcrumb to the sentry log, which is helpful to figure out what happened before an exception.
     @staticmethod
     def Breadcrumb(msg:str, data:Optional[Dict[Any, Any]]=None, level:str="info", category:str="breadcrumb"):
-        #sentry_sdk.add_breadcrumb(message=msg, data=data, level=level, category=category)
-        pass
+        if Sentry.IsSentrySetup:
+            sentry_sdk.add_breadcrumb(message=msg, data=data, level=level, category=category)
 
 
     # Sends an info log to sentry.
@@ -150,14 +212,13 @@ class Sentry:
         if Sentry._Logger is None:
             return
         Sentry._Logger.info(f"Sentry Info: {msg}")
-        # Never send in dev mode, as Sentry will not be setup.
-        # if Sentry.IsSentrySetup and Sentry.IsDevMode is False:
-        #     with sentry_sdk.push_scope() as scope:
-        #         scope.set_level("error")
-        #         if extras is not None:
-        #             for key, value in extras.items():
-        #                 scope.set_extra(key, value)
-        #         sentry_sdk.capture_message(msg)
+        if Sentry.IsSentrySetup:
+            with sentry_sdk.push_scope() as scope:
+                scope.set_level("error")
+                if extras is not None:
+                    for key, value in extras.items():
+                        scope.set_extra(key, value)
+                sentry_sdk.capture_message(msg)
 
 
     # Sends an error log to sentry.
@@ -167,14 +228,13 @@ class Sentry:
         if Sentry._Logger is None:
             return
         Sentry._Logger.error(f"Sentry Error: {msg}")
-        # Never send in dev mode, as Sentry will not be setup.
-        # if Sentry.IsSentrySetup and Sentry.IsDevMode is False:
-        #     with sentry_sdk.push_scope() as scope:
-        #         scope.set_level("error")
-        #         if extras is not None:
-        #             for key, value in extras.items():
-        #                 scope.set_extra(key, value)
-        #         sentry_sdk.capture_message(msg)
+        if Sentry.IsSentrySetup:
+            with sentry_sdk.push_scope() as scope:
+                scope.set_level("error")
+                if extras is not None:
+                    for key, value in extras.items():
+                        scope.set_extra(key, value)
+                sentry_sdk.capture_message(msg)
 
 
     # Logs and reports an exception.
@@ -215,13 +275,13 @@ class Sentry:
             return
 
         # Never send in dev mode, as Sentry will not be setup.
-        # if Sentry.IsSentrySetup and sendException and Sentry.IsDevMode is False:
-        #     with sentry_sdk.push_scope() as scope:
-        #         scope.set_extra("Exception Message", msg)
-        #         if extras is not None:
-        #             for key, value in extras.items():
-        #                 scope.set_extra(key, value)
-        #         sentry_sdk.capture_exception(exception)
+        if Sentry.IsSentrySetup and sendException:
+            with sentry_sdk.push_scope() as scope:
+                scope.set_extra("Exception Message", msg)
+                if extras is not None:
+                    for key, value in extras.items():
+                        scope.set_extra(key, value)
+                sentry_sdk.capture_exception(exception)
 
 
     # If the exception is that we can't start new thread, this logs it, and then restarts if needed.
@@ -251,12 +311,12 @@ class Sentry:
 
         # Flush Sentry
         # Once this is called, Sentry is shutdown, so we must restart.
-        # try:
-        #     client = Hub.current.client
-        #     if client is not None:
-        #         client.close(timeout=5.0)
-        # except Exception:
-        #     pass
+        try:
+            client = Hub.current.client
+            if client is not None:
+                client.close(timeout=5.0)
+        except Exception:
+            pass
 
         # Restart the process - We must use this function to actually force the process to exit
         # The systemd handler will restart us.

@@ -191,7 +191,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         Sentry.SetLogger(self.Logger)
         Sentry.Setup(
             self._plugin_version, #pyright: ignore[reportArgumentType]
-            "octoprint", isDevMode=False, enableProfiling=False, filterExceptionsByPackage=True)
+            "octoprint", isDevMode=False, canEnableProfiling=False, filterExceptionsByPackage=True)
 
         # Setup our telemetry class.
         Telemetry.Init(self.Logger)
