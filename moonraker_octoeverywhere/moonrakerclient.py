@@ -760,7 +760,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Called if the websocket hits an error and is closing.
     def _onWsError(self, ws:IWebSocketClient, exception:Exception) -> None:
-        if Client.IsCommonConnectionException(exception):
+        if Sentry.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
             pass
         elif isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):

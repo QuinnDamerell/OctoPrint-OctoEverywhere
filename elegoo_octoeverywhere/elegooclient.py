@@ -419,7 +419,10 @@ class ElegooClient:
             self.Logger.warning("Elegoo printer connection failed due to too many already connected clients.")
         else:
             self.LastConnectionFailedDueToTooManyClients = False
-            Sentry.OnException("Elegoo printer websocket error.", e)
+            if Sentry.IsCommonConnectionException(e):
+                self.Logger.warning("Elegoo printer websocket connection error: %s", str(e))
+            else:
+                Sentry.OnException("Elegoo printer websocket error.", e)
 
 
     # Fired when the websocket is closed.

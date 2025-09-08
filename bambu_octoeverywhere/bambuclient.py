@@ -206,7 +206,10 @@ class BambuClient:
                     self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
-                    Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
+                    if Sentry.IsCommonConnectionException(e):
+                        self.Logger.warning("Bambu printer connection error: %s", str(e))
+                    else:
+                        Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
             LocalWebApi.Get().SetPrinterConnectionState(False)
             # Sleep for a bit between tries.

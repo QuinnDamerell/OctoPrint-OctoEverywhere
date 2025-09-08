@@ -326,39 +326,6 @@ class Client(IWebSocketClient):
             pass
 
 
-    # A helper for dealing with common websocket connection exceptions.
-    @staticmethod
-    def IsCommonConnectionException(e:Exception) -> bool:
-        try:
-            # This means a device was at the IP, but the port isn't open.
-            if isinstance(e, ConnectionRefusedError):
-                return True
-            if isinstance(e, ConnectionResetError):
-                return True
-            # This means the IP doesn't route to a device.
-            if isinstance(e, OSError) and ("No route to host" in str(e) or "Network is unreachable" in str(e)):
-                return True
-            # This means the other side never responded.
-            if isinstance(e, TimeoutError) and "Connection timed out" in str(e):
-                return True
-            if isinstance(e, octowebsocket.WebSocketTimeoutException):
-                return True
-            # This just means the server closed the socket,
-            #   or the socket connection was lost after a long delay
-            #   or there was a DNS name resolve failure.
-            if isinstance(e, octowebsocket.WebSocketConnectionClosedException) and ("Connection to remote host was lost." in str(e) or "ping/pong timed out" in str(e) or "Name or service not known" in str(e)):
-                return True
-            # Invalid host name.
-            if isinstance(e, octowebsocket.WebSocketAddressException) and "Name or service not known" in str(e):
-                return True
-            # We don't care.
-            if isinstance(e, octowebsocket.WebSocketConnectionClosedException):
-                return True
-        except Exception:
-            pass
-        return False
-
-
 class SendQueueContext():
     def __init__(self, buffer:BufferOrNone, msgStartOffsetBytes:Optional[int] = None, msgSize:Optional[int] = None, optCode=WebSocketOpCode.BINARY) -> None:
         self.Buffer = buffer
