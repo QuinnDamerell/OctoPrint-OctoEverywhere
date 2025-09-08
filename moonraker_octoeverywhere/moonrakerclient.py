@@ -111,7 +111,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Actually starts the client running, trying to connect the websocket and such.
     # This is done after the first connection to OctoEverywhere has been established, to ensure
-    # the connection is setup before this, incase something needs to use it.
+    # the connection is setup before this, in case something needs to use it.
     def StartRunningIfNotAlready(self, octoKey:str) -> None:
         # Always update the octokey, to make sure we are current.
         self.MoonrakerCompat.SetOctoKey(octoKey)
@@ -641,7 +641,7 @@ class MoonrakerClient(IMoonrakerClient):
             return True
 
         # If we didn't get an new API key, try to get a oneshot token.
-        # Note that we might already have an existing Moonraker API key, so we will include it incase.
+        # Note that we might already have an existing Moonraker API key, so we will include it in case.
         #
         # For some systems we need auth for the websocket, but no auth for the oneshot token API, which makes no sense.
         # But if that's the case, we try to get a one_shot token.

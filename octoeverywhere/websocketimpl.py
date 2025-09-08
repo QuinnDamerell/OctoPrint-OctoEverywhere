@@ -300,7 +300,7 @@ class Client(IWebSocketClient):
             self.handleWsError(e)
         finally:
             # When the send queue closes, make sure the websocket is closed.
-            # This is a safety, incase for some reason the websocket was open and we were told to close.
+            # This is a safety, in case for some reason the websocket was open and we were told to close.
             self._Close()
 
 

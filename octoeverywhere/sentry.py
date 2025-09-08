@@ -133,8 +133,7 @@ class Sentry:
             environment= "dev" if isDevMode else "production",
             before_send= Sentry._beforeSendFilter,
             sample_rate= errorSampleRate,
-            # Only enable these if we enable profiling. We can't do it in OctoPrint, because it picks up a lot of OctoPrint functions.
-            enable_tracing= True if tracingSampleRate > 0.0 else False,
+            enable_tracing= tracingSampleRate > 0.0,
             traces_sample_rate= tracingSampleRate,
             profiles_sample_rate= profilingSampleRate,
         )

@@ -320,7 +320,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
                 LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "moonraker_host")
 
         # Now that we are connected, start the moonraker client.
-        # We do this after the connection incase it needs to send any notifications or messages when starting.
+        # We do this after the connection in case it needs to send any notifications or messages when starting.
         MoonrakerClient.Get().StartRunningIfNotAlready(octoKey)
 
 
