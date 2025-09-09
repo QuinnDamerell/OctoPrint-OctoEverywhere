@@ -483,14 +483,17 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
         if self.Logger.isEnabledFor(logging.DEBUG):
             self.Logger.debug("Returned FLUIDD webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
 
-        value = res["value"]
-        if len(value) == 0:
+        # In older versions, value is a list with the camera objects.
+        # In newer versions, value is an object with a "cameras" list that holds the camera objects.
+        cameras = res["value"]
+        cameras = cameras.get("cameras", cameras)
+        if len(cameras) == 0:
             return False
 
         # Parse everything we got back.
         webcamSettingItems:List[WebcamSettingItem] = []
-        for guid in value:
-            webcamSettingsObj = value[guid]
+        for guid in cameras:
+            webcamSettingsObj = cameras[guid]
             webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
             if webcamSettings is not None:
                 webcamSettingItems.append(webcamSettings)
