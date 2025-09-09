@@ -483,20 +483,28 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
         if self.Logger.isEnabledFor(logging.DEBUG):
             self.Logger.debug("Returned FLUIDD webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
 
-        # In older versions, value is a list with the camera objects.
-        # In newer versions, value is an object with a "cameras" list that holds the camera objects.
-        cameras = res["value"]
-        cameras = cameras.get("cameras", cameras)
-        if len(cameras) == 0:
-            return False
-
-        # Parse everything we got back.
+        # Try to parse the results.
         webcamSettingItems:List[WebcamSettingItem] = []
-        for guid in cameras:
-            webcamSettingsObj = cameras[guid]
-            webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
-            if webcamSettings is not None:
-                webcamSettingItems.append(webcamSettings)
+        value:Optional[Dict[str, Any]] = res["value"]
+        if value is None:
+            self.Logger.debug("Returned FLUIDD webcam with the value key not found.")
+            return False
+        cameras:Optional[list[Dict[str, Any]]] = value.get("cameras", None)
+        # In newer versions, value is a object with a property 'cameras' that holds an array of camera objects.
+        if cameras is not None and isinstance(cameras, list) and len(cameras) > 0:
+            self.Logger.debug(f"Found {len(cameras)} cameras list in the FLUIDD custom namespace.")
+            for webcamSettingsObj in cameras:
+                webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
+                if webcamSettings is not None:
+                    webcamSettingItems.append(webcamSettings)
+        else:
+            # For older versions, 'value' was a dict with a 'cameras' objects and keys.
+            if isinstance(value, dict):
+                for guid in value:
+                    webcamSettingsObj = value[guid]
+                    webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
+                    if webcamSettings is not None:
+                        webcamSettingItems.append(webcamSettings)
 
         # If we found anything, set them!
         if len(webcamSettingItems) == 0:
