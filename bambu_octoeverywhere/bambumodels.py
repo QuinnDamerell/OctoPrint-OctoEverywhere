@@ -247,7 +247,7 @@ class BambuVersion:
                 self.HardwareVersion = m.get("hw_ver", self.HardwareVersion)
                 self.ProjectName = m.get("project_name", self.ProjectName)
                 self.Cpu = BambuCPUs.ESP32
-            elif name == "rv1126":
+            elif name == "rv1126" or name == "ap":
                 self.HardwareVersion = m.get("hw_ver", self.HardwareVersion)
                 self.ProjectName = m.get("project_name", self.ProjectName)
                 self.Cpu = BambuCPUs.RV1126

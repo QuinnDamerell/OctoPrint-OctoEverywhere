@@ -1,8 +1,6 @@
 import logging
 from typing import Optional
 
-import urllib3
-
 from ..sentry import Sentry
 from ..httpresult import HttpResult
 from ..buffer import Buffer
