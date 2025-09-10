@@ -181,6 +181,7 @@ class PrintInfoManager:
         try:
             # If there's no cookie, return None.
             if printCookie is None:
+                self.Logger.debug("GetPrintInfo called with no cookie.")
                 return None
 
             # First, see if the current context matches.
@@ -199,6 +200,7 @@ class PrintInfoManager:
                     if name == printCookieFileName:
                         context = PrintInfo.LoadFromFile(self.Logger, fullPath)
                         if context is None:
+                            self.Logger.debug(f"Failed to load print context from {fullPath}.")
                             self._DeleteFile(fullPath)
                     else:
                         self._DeleteFile(fullPath)

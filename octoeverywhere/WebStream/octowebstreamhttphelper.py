@@ -1192,6 +1192,11 @@ class OctoWebStreamHttpHelper:
 
             # When the loop exits, the body read is complete and the stream is closed.
 
+        except urllib3.exceptions.HTTPError as e:
+            # These happen for a variety of reasons, including the stream being closed.
+            # Don't send it to Sentry.
+            self.Logger.info(f"{self.getLogMsgPrefix()} HTTPError exception thrown in doUnknownBodyChunkReadThread, ending read. {str(e)}")
+
         except Exception as e:
             # If the web stream is already closed, don't bother logging the exception.
             # These exceptions happen for use cases as above, where stream() doesn't close in time and such.

@@ -390,8 +390,12 @@ class MoonrakerClient(IMoonrakerClient):
                     if jobContainerObj is not None:
                         jobObj = jobContainerObj["job"]
                         filename = jobObj.get("filename", None)
+                        # Note sometimes the filename can just be ""
                         if filename is not None:
-                            self.MoonrakerCompat.OnPrintStart(filename)
+                            if len(filename) == 0:
+                                self.Logger.info("Moonraker client detected print start with no file name, so we aren't firing the print started event.")
+                            else:
+                                self.MoonrakerCompat.OnPrintStart(filename)
                             return
                 elif action == "finished":
                     # This can be a finish canceled or failed.
@@ -738,19 +742,23 @@ class MoonrakerClient(IMoonrakerClient):
 
 
     def _NonResponseMsgQueueWorker(self) -> None:
-        try:
-            # The profiler will do nothing if it's not enabled.
-            with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsMsgThread) as profiler:
-                while True:
-                    # Wait for a message to process.
-                    msg:dict = self.NonResponseMsgQueue.get()
-                    # Process and then wait again.
-                    self._OnWsNonResponseMessage(msg)
-                    # Let the profiler report if needed
-                    profiler.ReportIfNeeded()
-        except Exception as e:
-            Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
-        self._RestartWebsocket()
+        # Note this thread must never die, because it spans across websocket connections.
+        # So if it dies, we will stop processing WS messages.
+        while True:
+            try:
+                # The profiler will do nothing if it's not enabled.
+                with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsMsgThread) as profiler:
+                    while True:
+                        # Wait for a message to process.
+                        msg:dict = self.NonResponseMsgQueue.get()
+                        # Process and then wait again.
+                        self._OnWsNonResponseMessage(msg)
+                        # Let the profiler report if needed
+                        profiler.ReportIfNeeded()
+            except Exception as e:
+                Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
+            finally:
+                self._RestartWebsocket()
 
 
     # Called when the websocket is closed for any reason, connection loss or exception

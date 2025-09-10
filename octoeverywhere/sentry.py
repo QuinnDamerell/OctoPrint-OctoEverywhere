@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 import octowebsocket
 import requests
+import urllib3
 
 import sentry_sdk
 from sentry_sdk import Hub
@@ -351,6 +352,27 @@ class Sentry:
                 return True
             # We don't care.
             if isinstance(e, octowebsocket.WebSocketConnectionClosedException):
+                return True
+        except Exception:
+            pass
+        return False
+
+
+    # A helper for dealing with common http exceptions, so we don't send them to sentry.
+    @staticmethod
+    def IsCommonHttpError(e:Exception) -> bool:
+        try:
+            if isinstance(e, requests.exceptions.ConnectionError):
+                return True
+            if isinstance(e, requests.exceptions.Timeout):
+                return True
+            if isinstance(e, requests.exceptions.TooManyRedirects):
+                return True
+            if isinstance(e, requests.exceptions.URLRequired):
+                return True
+            if isinstance(e, requests.exceptions.RequestException):
+                return True
+            if isinstance(e, urllib3.exceptions.ReadTimeoutError):
                 return True
         except Exception:
             pass
