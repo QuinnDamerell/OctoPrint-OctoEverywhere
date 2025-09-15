@@ -91,6 +91,7 @@
         "fsensor",
         "fstring",
         "FULLDICT",
+        "gaierror",
         "gcode",
         "geteuid",
         "getpwnam",

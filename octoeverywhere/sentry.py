@@ -1,9 +1,10 @@
 import os
 import logging
+import socket
 import time
 import traceback
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import octowebsocket
 import requests
@@ -328,30 +329,42 @@ class Sentry:
     # We don't want to report these to sentry, as they are common and not actionable.
     @staticmethod
     def IsCommonConnectionException(e:Exception) -> bool:
+        def matchesException(exception:Exception, exceptionClass:Any, msgs:Optional[List[str]]=None) -> bool:
+            if not isinstance(exception, exceptionClass):
+                return False
+            exceptionStr = str(exception).lower().strip()
+            if msgs is not None:
+                for t in msgs:
+                    if t.lower() in exceptionStr:
+                        return True
+            return False
+
         try:
             # This means a device was at the IP, but the port isn't open.
-            if isinstance(e, ConnectionRefusedError):
+            if matchesException(e, ConnectionRefusedError):
                 return True
-            if isinstance(e, ConnectionResetError):
+            if matchesException(e, ConnectionResetError):
                 return True
             # This means the IP doesn't route to a device.
-            if isinstance(e, OSError) and ("No route to host" in str(e) or "Network is unreachable" in str(e)):
+            if matchesException(e, OSError, ["No route to host", "Network is unreachable", "Network unreachable", "Host is unreachable"]):
+                return True
+            if matchesException(e, socket.gaierror, ["Name does not resolve"]):
                 return True
             # This means the other side never responded.
-            if isinstance(e, TimeoutError) and "Connection timed out" in str(e):
+            if matchesException(e, TimeoutError, ["Connection timed out", "Operation timed out"]):
                 return True
-            if isinstance(e, octowebsocket.WebSocketTimeoutException):
+            if matchesException(e, octowebsocket.WebSocketTimeoutException):
                 return True
             # This just means the server closed the socket,
             #   or the socket connection was lost after a long delay
             #   or there was a DNS name resolve failure.
-            if isinstance(e, octowebsocket.WebSocketConnectionClosedException) and ("Connection to remote host was lost." in str(e) or "ping/pong timed out" in str(e) or "Name or service not known" in str(e)):
+            if matchesException(e, octowebsocket.WebSocketConnectionClosedException, ["Connection to remote host was lost.", "ping/pong timed out", "Name or service not known"]):
                 return True
             # Invalid host name.
-            if isinstance(e, octowebsocket.WebSocketAddressException) and "Name or service not known" in str(e):
+            if matchesException(e, octowebsocket.WebSocketAddressException, ["Name or service not known"]):
                 return True
             # We don't care.
-            if isinstance(e, octowebsocket.WebSocketConnectionClosedException):
+            if matchesException(e, octowebsocket.WebSocketConnectionClosedException):
                 return True
         except Exception:
             pass

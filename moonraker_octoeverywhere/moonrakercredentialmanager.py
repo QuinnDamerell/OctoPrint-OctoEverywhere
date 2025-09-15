@@ -63,6 +63,9 @@ class MoonrakerCredentialManager:
             if result is None:
                 raise Exception("Failed to get the oneshot token from moonraker.")
             if result.StatusCode != 200:
+                if result.StatusCode == 401:
+                    self.Logger.info("Failed to get the oneshot token from moonraker. Unauthorized. The API key is likely invalid.")
+                    return None
                 raise Exception("Failed to get the oneshot token from moonraker. "+str(result.StatusCode))
 
             # Read the response.

@@ -93,6 +93,9 @@ class WebcamUtil:
                     if value.find('--') != -1:
                         value = value.split('--')[0].strip()
                     if len(p) == 2:
+                        # We have seen weird cases where there's a content-length header, but it's empty, and then there's another that has a length.
+                        if len(value) == 0:
+                            continue
                         frameSizeInt = int(value)
 
                 # Break when done.

@@ -610,6 +610,11 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             if webcamSettings.SnapshotUrl is None or len(webcamSettings.SnapshotUrl) == 0:
                 webcamSettings.SnapshotUrl = self._TryToFigureOutSnapshotUrl(webcamSettings.StreamUrl)
 
+            # We have seen the rotation be a string in some cases, so ensure it's an int.
+            if webcamSettings.Rotation is None or isinstance(webcamSettings.Rotation, str):
+                self.Logger.warning("Webcam helper found an invalid rotation, resetting to 0. Value: '"+str(webcamSettings.Rotation)+"'")
+                webcamSettings.Rotation = 0
+
             # Ensure these are the correct types.
             webcamSettings.FlipH = bool(webcamSettings.FlipH)
             webcamSettings.FlipV = bool(webcamSettings.FlipV)
