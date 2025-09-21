@@ -76,7 +76,7 @@ class ElegooWebcamHelper(IWebcamPlatformHelper):
             ElegooClient.Get().SendEnableWebcamCommand(False)
             # We also try to enable the light, to make sure Gadget can see the print.
             # We send the command formatted the same as the frontend.
-            if self.Config.GetBool(Config.SectionElegoo, Config.AutoActivateChamberLightForWebcam, True):
+            if self.Config.GetBool(Config.SectionElegoo, Config.AutoActivateChamberLightForWebcam, False):
                 ElegooClient.Get().SendRequest(403, {"LightStatus":{"SecondLight":True,"RgbLight": [0,0,0]}}, waitForResponse=False)
 
 
