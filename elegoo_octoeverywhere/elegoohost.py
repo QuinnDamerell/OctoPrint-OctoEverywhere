@@ -10,7 +10,7 @@ from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.compression import Compression
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
@@ -126,9 +126,9 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             PrintInfoManager.Init(self.Logger, localStorageDir)
 
             # Init the ping pong helper.
-            OctoPingPong.Init(self.Logger, localStorageDir, printerId)
+            PingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
-                OctoPingPong.Get().DisablePrimaryOverride()
+                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the webcam helper
             webcamHelper = ElegooWebcamHelper(self.Logger, self.Config)

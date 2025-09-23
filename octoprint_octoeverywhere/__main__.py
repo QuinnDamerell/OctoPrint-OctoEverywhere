@@ -9,7 +9,7 @@ from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.commandhandler import CommandHandler
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
@@ -223,10 +223,10 @@ if __name__ == '__main__':
         OctoEverywhereWsUri = "ws://"+LocalServerAddress+"/octoclientws"
 
     # Init the ping pong helper.
-    OctoPingPong.Init(logger, PluginFilePathRoot, PrinterId)
+    PingPong.Init(logger, PluginFilePathRoot, PrinterId)
     # If we are using a local dev connection, disable this or it will overwrite.
     if LocalServerAddress is not None:
-        OctoPingPong.Get().DisablePrimaryOverride()
+        PingPong.Get().DisablePrimaryOverride()
 
     # Setup the print info manager before the notification manager
     PrintInfoManager.Init(logger, PluginFilePathRoot)

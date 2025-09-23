@@ -10,7 +10,7 @@ from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
@@ -133,9 +133,9 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
 
             # Init the ping pong helper.
-            OctoPingPong.Init(self.Logger, localStorageDir, printerId)
+            PingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
-                OctoPingPong.Get().DisablePrimaryOverride()
+                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the webcam helper
             webcamHelper = BambuWebcamHelper(self.Logger, self.Config)

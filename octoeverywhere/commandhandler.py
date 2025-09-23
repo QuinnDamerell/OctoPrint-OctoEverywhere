@@ -458,7 +458,7 @@ class CommandHandler:
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str("No response object returned."))
 
         # Build the result
-        resultBytes = None
+        resultBytes:Optional[bytes] = None
         try:
             # Build the common response.
             jsonResponse:Dict[str,Any] = {

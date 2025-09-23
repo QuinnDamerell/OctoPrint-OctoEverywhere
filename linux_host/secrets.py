@@ -11,6 +11,9 @@ from .config import Config
 # This is also used for the companion and the bambu host.
 class Secrets:
 
+    # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
+    FileName = "octoeverywhere.secrets"
+
     # These must stay the same because our installer script requires on the format being as is!
     _SecretsSection = "secrets"
     _PrinterIdKey = "printer_id"
@@ -30,7 +33,7 @@ class Secrets:
         self.Logger = logger
 
         # Note this path and name MUST STAY THE SAME because the installer PY script looks for this file.
-        self.SecretFilePath = os.path.join(octoeverywhereStoragePath, "octoeverywhere.secrets")
+        self.SecretFilePath = os.path.join(octoeverywhereStoragePath, Secrets.FileName)
 
         # A lock to keep file access super safe
         self.ConfigLock = threading.Lock()

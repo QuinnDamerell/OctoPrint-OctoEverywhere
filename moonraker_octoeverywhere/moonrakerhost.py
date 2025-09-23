@@ -9,7 +9,7 @@ from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.printinfo import PrintInfoManager
@@ -182,9 +182,9 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
                 LocalIpHelper.SetLocalIpOverride(ipOrHostnameStr)
 
             # Init the ping pong helper.
-            OctoPingPong.Init(self.Logger, localStorageDir, printerId)
+            PingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
-                OctoPingPong.Get().DisablePrimaryOverride()
+                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the snapshot helper
             self.MoonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)

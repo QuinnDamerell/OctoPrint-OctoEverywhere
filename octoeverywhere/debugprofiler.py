@@ -1,6 +1,7 @@
 import time
 import logging
 from enum import Enum
+from typing import Any
 
 
 # A list of possible features that can be profiled.
@@ -95,9 +96,9 @@ class DebugProfiler:
         self.StartProfile()
         return self
 
-    # Support using for easy integration.
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    # Support using for easy integration.
+    def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any) -> None:
         self.StopProfile()
 
 

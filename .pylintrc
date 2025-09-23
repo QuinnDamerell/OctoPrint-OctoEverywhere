@@ -3,10 +3,10 @@
 # Custom disables
 disable=
     C0114, # missing-module-docstring
-    C0103, # Disable bad attritube names
-    W0511, # Ingore TODOs
-    W0231, # Disable warns about init funciton calls
-    W0601, # OctoPrint global funciton issues
+    C0103, # Disable bad attribute names
+    W0511, # Ignore TODOs
+    W0231, # Disable warns about init function calls
+    W0601, # OctoPrint global function issues
     R0901, # Too many ancestors
     R0904, # too-many-public-methods
     R0903, # too-few-public-methods

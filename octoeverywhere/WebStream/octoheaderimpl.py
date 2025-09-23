@@ -5,7 +5,10 @@ from typing import Dict, Optional, List
 from ..sentry import Sentry
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..octohttprequest import OctoHttpRequest
+
+from ..Proto.PathTypes import PathTypes
 from ..Proto.HttpInitialContext import HttpInitialContext
+
 
 # Indicates the base protocol, not if it's secure or not.
 class BaseProtocol(Enum):
@@ -22,10 +25,11 @@ class HeaderHelper:
     @staticmethod
     def GatherRequestHeaders(logger:logging.Logger, httpInitialContext:Optional[HttpInitialContext], protocol:BaseProtocol) -> Dict[str, str]:
 
-        hostAddress = OctoHttpRequest.GetLocalhostAddress()
+        # Get the correct host address for this request type.
+        hostAddress = HeaderHelper._HostHostAddress(logger, httpInitialContext)
 
         # Get the count of headers in the message.
-        sendHeaders = {}
+        sendHeaders:Dict[str,str] = {}
         if httpInitialContext is not None:
             headersLen = httpInitialContext.HeadersLength()
             # Convert each header and fix them up.
@@ -97,7 +101,10 @@ class HeaderHelper:
             octoHostBytes = httpInitialContext.OctoHost()
             if octoHostBytes is None:
                 raise Exception("Http headers found no OctoHost in http initial context.")
-            sendHeaders[HeaderHelper.c_xForwardedForHostHeaderName] = OctoStreamMsgBuilder.BytesToString(octoHostBytes)
+            hostStr = OctoStreamMsgBuilder.BytesToString(octoHostBytes)
+            if hostStr is None or len(hostStr) == 0:
+                raise Exception("Http headers found an empty Host in http initial context.")
+            sendHeaders[HeaderHelper.c_xForwardedForHostHeaderName] = hostStr
 
         # This tells the OctoPrint web server the client is connected to the proxy via the proper protocol.
         # Since this is our service, it will always be secure (https or wss)
@@ -120,6 +127,58 @@ class HeaderHelper:
         return sendHeaders
 
 
+    # Determine the host address.
+    # If this is an absolute URL, we need to use the host from the URL.
+    @staticmethod
+    def _HostHostAddress(logger:logging.Logger, httpInitialContext:Optional[HttpInitialContext]) -> str:
+
+        # Start with the default host address for this device.
+        # If we can't get the path type, we use it.
+        hostAddress = OctoHttpRequest.GetLocalhostAddress()
+        if httpInitialContext is None:
+            return hostAddress
+
+        pathType = httpInitialContext.PathType()
+        if pathType != PathTypes.Absolute:
+            return hostAddress
+
+        # If we have an absolute path, we need to parse the host out of it,
+        # because we don't want to use this device's host name as the host.
+        try:
+            # Get the URL
+            absoluteUrl = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+            if absoluteUrl is None or len(absoluteUrl) == 0:
+                raise Exception("GatherRequestHeaders found an absolute path type, but the path was empty.")
+
+            # Find the protocol
+            protocolEnd = absoluteUrl.find("://")
+            if protocolEnd == -1:
+                raise Exception("GatherRequestHeaders failed to find protocol in host address.")
+
+            # Move past the ://
+            protocolEnd += 3
+
+            # Find the end, if not found, assume the end of the string.
+            hostEnd = absoluteUrl.find("/", protocolEnd+3)
+            if hostEnd == -1:
+                hostEnd = len(absoluteUrl)
+
+            host = absoluteUrl[protocolEnd:hostEnd]
+
+            # According to the spec, if the port is 80 or 443, it should be omitted.
+            # Otherwise, if there is a port, then it should be included.
+            if host.find(":") != -1:
+                knownPortIndex = host.find(":80")
+                if knownPortIndex == -1:
+                    knownPortIndex = host.find(":443")
+                if knownPortIndex != -1:
+                    host = host[:knownPortIndex]
+            return host
+        except Exception as e:
+            Sentry.OnException("GatherRequestHeaders failed to parse absolute path.", e)
+        return hostAddress
+
+
     # Called only for websockets to get headers.
     @staticmethod
     def GatherWebsocketRequestHeaders(logger:logging.Logger, httpInitialContext:HttpInitialContext) -> Dict[str, str]:
@@ -127,7 +186,7 @@ class HeaderHelper:
         headersLen = httpInitialContext.HeadersLength()
 
         i = 0
-        sendHeaders = {}
+        sendHeaders:Dict[str,str] = {}
         while i < headersLen:
             # Get the header
             header = httpInitialContext.Headers(i)

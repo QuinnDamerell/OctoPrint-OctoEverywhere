@@ -18,7 +18,7 @@ from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
@@ -225,7 +225,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                         , self.get_plugin_data_folder())
 
         # Init the ping helper
-        OctoPingPong.Init(self.Logger, self.get_plugin_data_folder(), printerId)
+        PingPong.Init(self.Logger, self.get_plugin_data_folder(), printerId)
 
         # Init the mdns helper
         MDns.Init(self.Logger, self.get_plugin_data_folder())

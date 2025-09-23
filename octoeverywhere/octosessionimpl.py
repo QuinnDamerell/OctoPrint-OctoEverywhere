@@ -1,7 +1,7 @@
 import sys
 import threading
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
@@ -69,7 +69,7 @@ class OctoSession(IOctoSession):
         self.OctoStream.OnSessionError(self.SessionId, backoffModifierSec)
 
 
-    def Send(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int):
+    def Send(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int) -> None:
         # The message is already encoded, pass it along to the socket.
         self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSize)
 
@@ -211,7 +211,7 @@ class OctoSession(IOctoSession):
             raise Exception("We got a web stream message for an invalid stream id of 0")
 
         # Grab the lock before messing with the map.
-        localStream = None
+        localStream:Optional[OctoWebStream] = None
         with self.ActiveWebStreamsLock:
             localStream = self.ActiveWebStreams.get(streamId, None)
             if localStream is None:
@@ -316,7 +316,7 @@ class OctoSession(IOctoSession):
     # long processing in the function, since it will delay all incoming messages.
     def HandleMessage(self, msgBytes:Buffer) -> None:
         # Decode the message.
-        msg = None
+        msg:Optional[OctoStreamMessage] = None
         try:
             msg = self.DecodeOctoStreamMessage(msgBytes)
         except Exception as e:
