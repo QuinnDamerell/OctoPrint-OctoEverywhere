@@ -26,7 +26,7 @@ class RepeatTimer(threading.Thread):
                 self.callback()
             except Exception as e:
                 Sentry.OnException("Exception in RepeatTimer thread.", e)
-        self.logger.info("RepeatTimer thread exit")
+        self.logger.debug("RepeatTimer thread exit")
 
 
     # Used to update the repeat interval. This can be called while the timer is running

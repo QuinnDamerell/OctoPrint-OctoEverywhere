@@ -1,6 +1,7 @@
 import queue
 import ssl
 import threading
+import logging
 from typing import Any, Dict, List, Callable, Optional
 
 import certifi
@@ -14,6 +15,20 @@ from .sentry import Sentry
 
 # This class gives a bit of an abstraction over the normal ws
 class Client(IWebSocketClient):
+
+
+    # Allows us to still enable the websocket debug logs if we want.
+    @staticmethod
+    def SetWebsocketDebuggingLevel(debug:bool) -> None:
+        # The websocket lib logs quite a lot of stuff, even to info. It will also always logs errors,
+        # even after our handler had handled them. So we will disable it by default.
+        wsLibLogger = logging.getLogger("websocket")
+        if debug is False:
+            wsLibLogger.disabled = True
+            return
+        wsLibLogger.disabled = False
+        wsLibLogger.setLevel(logging.DEBUG)
+
 
     def __init__(
                 self,
@@ -46,9 +61,6 @@ class Client(IWebSocketClient):
         # This is because the downstream work of the WS can be made faster if it's done in parallel
         self.SendQueue:queue.Queue[SendQueueContext] = queue.Queue()
         self.SendThread:threading.Thread = None #pyright: ignore[reportAttributeAccessIssue]
-
-        # Used to log more details about what's going on with the websocket.
-        # websocket.enableTrace(True)
 
         # Used to indicate if the client has started to close this WS. If so, we won't fire
         # any errors.
@@ -105,7 +117,7 @@ class Client(IWebSocketClient):
 
 
     # Runs the websocket blocking until it closes.
-    def RunUntilClosed(self, pingIntervalSec:Optional[int]=None, pingTimeoutSec:Optional[int]=None):
+    def RunUntilClosed(self, pingIntervalSec:Optional[int]=None, pingTimeoutSec:Optional[int]=None, pingPayload:str="") -> None:
         #
         # The client is responsible for sending keep alive pings the server will then pong respond to.
         # If that's not done, the connection will timeout. We will send a ping every 10 minutes.
@@ -151,7 +163,7 @@ class Client(IWebSocketClient):
                 if self.isClosed:
                     return
 
-            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt=sslopt)  #pyright: ignore[reportUnknownMemberType]
+            self.Ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt=sslopt, ping_payload=pingPayload)  #pyright: ignore[reportUnknownMemberType]
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,

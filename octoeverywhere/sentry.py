@@ -330,13 +330,18 @@ class Sentry:
     @staticmethod
     def IsCommonConnectionException(e:Exception) -> bool:
         def matchesException(exception:Exception, exceptionClass:Any, msgs:Optional[List[str]]=None) -> bool:
+            # First, ensure that the exception matches the one we are filtering for.
             if not isinstance(exception, exceptionClass):
                 return False
+            # If no messages are provided, then any exception of this type matches.
+            if msgs is None:
+                return True
+            # Check the exception string for any of the provided messages.
             exceptionStr = str(exception).lower().strip()
-            if msgs is not None:
-                for t in msgs:
-                    if t.lower() in exceptionStr:
-                        return True
+            for t in msgs:
+                if t.lower() in exceptionStr:
+                    return True
+            # If no messages matched, then we matched the exception type, but not the message, so return false.
             return False
 
         try:
@@ -365,6 +370,9 @@ class Sentry:
                 return True
             # We don't care.
             if matchesException(e, octowebsocket.WebSocketConnectionClosedException):
+                return True
+            # If the ping pong tim
+            if matchesException(e, octowebsocket.WebSocketTimeoutException, ["ping/pong timed out"]):
                 return True
         except Exception:
             pass

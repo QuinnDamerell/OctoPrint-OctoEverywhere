@@ -770,12 +770,12 @@ class MoonrakerClient(IMoonrakerClient):
     def _onWsError(self, ws:IWebSocketClient, exception:Exception) -> None:
         if Sentry.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
-            pass
-        elif isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
+            return
+        if isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
             # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
             self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
-        else:
-            Sentry.OnException("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
+            return
+        Sentry.OnException("Exception raised from moonraker client websocket connection. The connection will be closed.", exception)
 
 
 # A helper class used for waiting rpc requests

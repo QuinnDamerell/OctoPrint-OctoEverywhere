@@ -236,7 +236,7 @@ class NotificationsHandler(INotificationHandler):
                 self.StopTimers()
                 return
             else:
-                self.Logger.info("Restore client sync state: There's no print and none of the timers are running.")
+                self.Logger.debug("Restore client sync state: There's no print and none of the timers are running.")
                 return
 
 

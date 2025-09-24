@@ -7,6 +7,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from octoeverywhere.compat import Compat
+from octoeverywhere.repeattimer import RepeatTimer
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -184,7 +185,7 @@ class ElegooClient:
 
     # Sends a command to the printer to enable the webcam.
     def SendEnableWebcamCommand(self, waitForResponse:bool=True) -> ResponseMsg:
-        return ElegooClient.Get().SendRequest(386, {"Enable":1}, waitForResponse=waitForResponse)
+        return self.SendRequest(386, {"Enable":1}, waitForResponse=waitForResponse)
 
 
     # Sends a command to all connected frontends to show a popup message.
@@ -205,6 +206,8 @@ class ElegooClient:
 
     # Sends a request to the printer and waits for a response.
     # Always returns a ResponseMsg, with various error codes.
+    # Full protocol:
+    # https://github.com/cbd-tech/SDCP-Smart-Device-Control-Protocol-V3.0.0/blob/main/SDCP(Smart%20Device%20Control%20Protocol)_V3.0.0_EN.md
     def SendRequest(self, cmdId:int, data:Optional[Dict[str, Any]]=None, waitForResponse:bool=True, timeoutSec:Optional[float]=None) -> ResponseMsg:
         # Generate a request id, which is a 32 char lowercase letter and number string
         requestId = ''.join(random.choices(string.ascii_lowercase + string.digits, k=32))
@@ -330,11 +333,15 @@ class ElegooClient:
                 self.WebSocket = Client(url, onWsOpen=self._OnWsConnect, onWsClose=self._OnWsClose, onWsError=self._OnWsError, onWsData=self._OnWsData)
                 self.WebSocket.SetDisableCertCheck(True)
 
-                # Connect to the server
-                with self.WebSocket:
-                    # Use a more aggressive ping timeout because if the printer power cycles, we don't get the TCP close message.
-                    # Time ping timeout must be less than the ping interval.
-                    self.WebSocket.RunUntilClosed(pingIntervalSec=30)
+                # Important! The connection to the print will close after 1 minute if we don't send any messages.
+                # Even if the websocket sends the ws ping message, it doesn't seem to reset the idle timer.
+                # So, we will use a repeat timer to send the SDCP protocol ping message every 50 seconds.
+                with RepeatTimer(self.Logger, "ElegooClientWsMsgKeepalive", 50.0, self._RepeatTimerKeepaliveTick) as t:
+                    t.start()
+                    # Connect to the server
+                    with self.WebSocket:
+                        # We use a ping payload of "ping" because it's what the web portal uses.
+                        self.WebSocket.RunUntilClosed(pingPayload="ping")
             except Exception as e:
                 Sentry.OnException("Elegoo client exception in main WS loop.", e)
 
@@ -357,6 +364,16 @@ class ElegooClient:
             self.SleepEvent.clear()
 
 
+    def _RepeatTimerKeepaliveTick(self):
+        # Any message works, but this is the lightest weight.
+        # We don't care about the result
+        if self._WebSocketSend(Buffer("ping".encode("utf-8"))) is False:
+            localWs = self.WebSocket
+            if localWs is not None and self.WebSocketConnected is True:
+                self.Logger.info("Elegoo client - keepalive tick failed to send ping message, closing the websocket.")
+                localWs.Close()
+
+
     # Fired whenever the client is disconnected, we need to clean up the state since it's now unknown.
     def _CleanupStateOnDisconnect(self):
         self.State = None
@@ -368,7 +385,7 @@ class ElegooClient:
 
     # Fired when the websocket is connected.
     def _OnWsConnect(self, ws:IWebSocketClient):
-        self.Logger.info("Connection to the Elegoo printer established!")
+        self.Logger.debug("Elegoo websocket established")
         LocalWebApi.Get().SetPrinterConnectionState(True)
 
         # Set the connected flag now, so we can send messages.
@@ -519,7 +536,7 @@ class ElegooClient:
                 s = PrinterAttributes(self.Logger)
                 s.OnUpdate(attributes)
                 self.Attributes = s
-                self.Logger.info("Elegoo printer attributes object created.")
+                self.Logger.debug("Elegoo printer attributes object created.")
             else:
                 self.Attributes.OnUpdate(attributes)
         except Exception as e:
@@ -573,7 +590,7 @@ class ElegooClient:
 
         # We have a match, so we are good.
         self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, wsConIp)
-        self.Logger.info("Elegoo client connection finalized.")
+        self.Logger.info("Elegoo client connection fully connected.")
 
 
     def _HandleStatusUpdate(self, status:Dict[str, Any]):
@@ -585,7 +602,7 @@ class ElegooClient:
                 s = PrinterState(self.Logger)
                 s.OnUpdate(status)
                 self.State = s
-                self.Logger.info("Elegoo printer state object created.")
+                self.Logger.debug("Elegoo printer state object created.")
             else:
                 self.State.OnUpdate(status)
         except Exception as e:

@@ -4,6 +4,8 @@ import logging
 import logging.handlers
 from typing import Optional
 
+from octoeverywhere.websocketimpl import Client
+
 from .config import Config
 
 class LoggerInit:
@@ -38,6 +40,9 @@ class LoggerInit:
 
         # Set the final log level.
         logger.setLevel(logLevel)
+
+        # Set the websocket lib debug level if needed.
+        Client.SetWebsocketDebuggingLevel(logLevel == "DEBUG")
 
         # Define our format
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
