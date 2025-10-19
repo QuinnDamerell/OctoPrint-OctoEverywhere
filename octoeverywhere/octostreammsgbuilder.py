@@ -21,10 +21,11 @@ class OctoStreamMsgBuilder:
                             rasKeyVersionInt:int,
                             summonMethod:int,
                             serverHostType:int,
-                            isCompanion:bool,
                             osType:int,
                             receiveCompressionType:int,
-                            deviceId:Optional[str]
+                            deviceId:Optional[str],
+                            isCompanion:bool,
+                            isDockerContainer:bool
                         ) -> Tuple[Buffer, int, int]:
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
@@ -52,6 +53,7 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddSummonMethod(builder, summonMethod)
         HandshakeSyn.AddServerHost(builder, serverHostType)
         HandshakeSyn.AddIsCompanion(builder, isCompanion)
+        HandshakeSyn.AddIsDockerContainer(builder, isDockerContainer)
         if localIpOffset is not None:
             HandshakeSyn.AddLocalDeviceIp(builder, localIpOffset)
         HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)

@@ -1,7 +1,7 @@
 import sys
 import threading
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
@@ -41,7 +41,8 @@ class OctoSession(IOctoSession):
                     uiPopupInvoker:IPopUpInvoker,
                     pluginVersion:str,
                     serverHostType:int,
-                    isCompanion:bool
+                    isCompanion:bool,
+                    isDockerContainer:bool
                 ):
         self.ActiveWebStreams:Dict[int,OctoWebStream] = {}
         self.ActiveWebStreamsLock = threading.Lock()
@@ -57,6 +58,7 @@ class OctoSession(IOctoSession):
         self.PluginVersion = pluginVersion
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
+        self.IsDockerContainer = isDockerContainer
 
         # Create our server auth helper.
         self.ServerAuth = ServerAuthHelper(self.Logger)
@@ -67,7 +69,7 @@ class OctoSession(IOctoSession):
         self.OctoStream.OnSessionError(self.SessionId, backoffModifierSec)
 
 
-    def Send(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int):
+    def Send(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int) -> None:
         # The message is already encoded, pass it along to the socket.
         self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSize)
 
@@ -209,7 +211,7 @@ class OctoSession(IOctoSession):
             raise Exception("We got a web stream message for an invalid stream id of 0")
 
         # Grab the lock before messing with the map.
-        localStream = None
+        localStream:Optional[OctoWebStream] = None
         with self.ActiveWebStreamsLock:
             localStream = self.ActiveWebStreams.get(streamId, None)
             if localStream is None:
@@ -299,7 +301,7 @@ class OctoSession(IOctoSession):
             # Build the message
             buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.IsPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, self.IsCompanion, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId, self.IsCompanion, self.IsDockerContainer)
 
             # Send!
             self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSizeBytes)
@@ -314,7 +316,7 @@ class OctoSession(IOctoSession):
     # long processing in the function, since it will delay all incoming messages.
     def HandleMessage(self, msgBytes:Buffer) -> None:
         # Decode the message.
-        msg = None
+        msg:Optional[OctoStreamMessage] = None
         try:
             msg = self.DecodeOctoStreamMessage(msgBytes)
         except Exception as e:

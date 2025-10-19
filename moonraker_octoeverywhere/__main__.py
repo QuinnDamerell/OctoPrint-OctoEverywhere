@@ -1,5 +1,5 @@
 import sys
-import json
+from typing import Optional
 
 from linux_host.startup import Startup
 from linux_host.startup import ConfigDataTypes
@@ -12,10 +12,10 @@ if __name__ == '__main__':
     s = Startup()
 
     # Try to parse the config
-    jsonConfig = None
+    jsonConfigStr:Optional[str] = None
     try:
         # Get the json from the process args.
-        jsonConfig = s.GetJsonFromArgs(sys.argv)
+        (jsonConfigStr, jsonConfig) = s.GetJsonFromArgs(sys.argv)
 
         #
         # 1) Parse the common, required args.
@@ -32,10 +32,8 @@ if __name__ == '__main__':
         # 2) Parse the IsCompanion flag, this will determine which other vars are required.
         #    Note that for older plugin installs, the IsCompanion flag won't exist, implying False.
         #
-        IsCompanion = False
-        if "IsCompanion" in jsonConfig:
-            IsCompanion = jsonConfig["IsCompanion"]
-        IsCompanion = bool(IsCompanion)
+        isCompanion = s.GetConfigVarAndValidate(jsonConfig, "IsCompanion", ConfigDataTypes.Bool, defaultValue=False)
+        isDockerContainer = s.GetConfigVarAndValidate(jsonConfig, "IsDockerContainer", ConfigDataTypes.Bool, defaultValue=False)
 
         #
         # 3) Now parse the required vars based on the IsCompanion flag state.
@@ -43,7 +41,7 @@ if __name__ == '__main__':
         MoonrakerConfigFile = None
         #CompanionInstanceIdStr = None
 
-        if IsCompanion:
+        if isCompanion:
             # We don't use this right now, but we have it if we need it.
             #CompanionInstanceIdStr = s.GetConfigVarAndValidate(jsonConfig, "CompanionInstanceIdStr", ConfigDataTypes.String)
             pass
@@ -51,7 +49,7 @@ if __name__ == '__main__':
             MoonrakerConfigFile = s.GetConfigVarAndValidate(jsonConfig, "MoonrakerConfigFile", ConfigDataTypes.Path)
 
     except Exception as e:
-        s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)} Config:{json.dumps(jsonConfig)}")
+        s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)} Config: {jsonConfigStr}")
 
     # For debugging, we also allow an optional dev object to be passed.
     devConfig_CanBeNone = s.GetDevConfigIfAvailable(sys.argv)
@@ -60,8 +58,8 @@ if __name__ == '__main__':
     try:
         # Create and run the main host!
         host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
-        host.RunBlocking(KlipperConfigFolder, IsCompanion, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
-                        MoonrakerConfigFile, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+        host.RunBlocking(KlipperConfigFolder, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+                        MoonrakerConfigFile, isCompanion, isDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main moonraker host class. Error:{str(e)}")
 

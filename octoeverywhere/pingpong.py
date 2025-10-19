@@ -24,22 +24,22 @@ class PingResult:
 # The point of this class is to simply ping the available OctoEverywhere server regions occasionally to track which region is has the best
 # latency to. This information is used by the plugin to ensure it's connected to the best possible server.
 #
-class OctoPingPong:
+class PingPong:
 
     LastWorkTimeKey = "LastWorkTime"
     ServerStatsKey = "ServerStats"
     LowestLatencyServerSubKey = "LowestLatencyServerSub"
-    _Instance:"OctoPingPong" = None #pyright: ignore[reportAssignmentType]
+    _Instance:"PingPong" = None #pyright: ignore[reportAssignmentType]
 
 
     @staticmethod
     def Init(logger:logging.Logger, pluginDataFolderPath:str, printerId:str) -> None:
-        OctoPingPong._Instance = OctoPingPong(logger, pluginDataFolderPath, printerId)
+        PingPong._Instance = PingPong(logger, pluginDataFolderPath, printerId)
 
 
     @staticmethod
-    def Get() -> "OctoPingPong":
-        return OctoPingPong._Instance
+    def Get() -> "PingPong":
+        return PingPong._Instance
 
 
     def __init__(self, logger:logging.Logger, pluginDataFolderPath:str, printerId:str) -> None:
@@ -62,12 +62,12 @@ class OctoPingPong:
             th = threading.Thread(target=self._WorkerThread)
             th.start()
         except Exception as e:
-            Sentry.OnException("Failed to start OctoPingPong Thread.", e)
+            Sentry.OnException("Failed to start PingPong Thread.", e)
 
 
     # Used for local debugging.
     def DisablePrimaryOverride(self) -> None:
-        self.Logger.info("OctoPingPong disabled")
+        self.Logger.info("PingPong disabled")
         self.IsDisablePrimaryOverride = True
 
 
@@ -78,18 +78,18 @@ class OctoPingPong:
             stats = self.Stats
             if stats is None:
                 return None
-            lowestLatencyServerSub = stats.get(OctoPingPong.LowestLatencyServerSubKey, None)
+            lowestLatencyServerSub = stats.get(PingPong.LowestLatencyServerSubKey, None)
             if lowestLatencyServerSub is None:
                 return None
             if self.IsDisablePrimaryOverride:
-                self.Logger.info("OctoPingPong IsDisablePrimaryOverride - not returning lowest latency server sub: "+lowestLatencyServerSub)
+                self.Logger.info("PingPong IsDisablePrimaryOverride - not returning lowest latency server sub: "+lowestLatencyServerSub)
                 return None
             if isinstance(lowestLatencyServerSub, str) is False:
-                self.Logger.info("OctoPingPong lowest latency server sub is not a string: "+str(lowestLatencyServerSub))
+                self.Logger.info("PingPong lowest latency server sub is not a string: "+str(lowestLatencyServerSub))
                 return None
             return str(lowestLatencyServerSub)
         except Exception as e:
-            Sentry.OnException("Exception in OctoPingPong GetLowestLatencyServerSub.", e)
+            Sentry.OnException("Exception in PingPong GetLowestLatencyServerSub.", e)
         return None
 
 
@@ -108,7 +108,7 @@ class OctoPingPong:
             try:
                 # Compute how long it's been since the last update.
                 # Since this is written to disk, it's stays across boots / restarts.
-                lastWorkTime = self.Stats.get(OctoPingPong.LastWorkTimeKey, 0)
+                lastWorkTime = self.Stats.get(PingPong.LastWorkTimeKey, 0)
                 secondsSinceLastWork = time.time() - lastWorkTime
 
                 # Compute how long until we should do work, this will be negative if the time has passed.
@@ -130,7 +130,7 @@ class OctoPingPong:
 
                 # It's time to work, first update the time we are working is now.
                 # Also write to disk to ensure it's known and we don't get in a tight loop of working.
-                self.Stats[OctoPingPong.LastWorkTimeKey] = time.time()
+                self.Stats[PingPong.LastWorkTimeKey] = time.time()
                 self._SaveStatsToFile()
 
                 # Update now
@@ -145,7 +145,7 @@ class OctoPingPong:
                         callback()
 
             except Exception as e:
-                Sentry.OnException("Exception in OctoPingPong thread.", e)
+                Sentry.OnException("Exception in PingPong thread.", e)
 
 
     def _UpdateStats(self) -> None:
@@ -166,8 +166,8 @@ class OctoPingPong:
             serverResults[sub] = result
 
         # Make sure the stats root exists.
-        if OctoPingPong.ServerStatsKey not in self.Stats:
-            self.Stats[OctoPingPong.ServerStatsKey] = {}
+        if PingPong.ServerStatsKey not in self.Stats:
+            self.Stats[PingPong.ServerStatsKey] = {}
 
         # Update our stats
         # pylint: disable=consider-using-dict-items
@@ -176,9 +176,9 @@ class OctoPingPong:
             result = serverResults[sub]
             if result is not None:
                 timeMsOrNone = result.TimeMs
-            if sub not in self.Stats[OctoPingPong.ServerStatsKey]:
-                self.Stats[OctoPingPong.ServerStatsKey][sub] = []
-            self.Stats[OctoPingPong.ServerStatsKey][sub].append(timeMsOrNone)
+            if sub not in self.Stats[PingPong.ServerStatsKey]:
+                self.Stats[PingPong.ServerStatsKey][sub] = []
+            self.Stats[PingPong.ServerStatsKey][sub].append(timeMsOrNone)
 
         # Compute the stats now.
         self._ComputeStats(defaultServerResult)
@@ -190,11 +190,11 @@ class OctoPingPong:
         # Before we compute stats, remove any servers from our on disk stats that are no longer in the default response.
         # This is important to ensure the lowest latency server doesn't get stuck to a hostname that doesn't exist.
         toRemove:List[str] = []
-        for sub in self.Stats[OctoPingPong.ServerStatsKey]:
+        for sub in self.Stats[PingPong.ServerStatsKey]:
             if sub not in defaultServerResult.ServersSubdomains:
                 toRemove.append(sub)
         for sub in toRemove:
-            del self.Stats[OctoPingPong.ServerStatsKey][sub]
+            del self.Stats[PingPong.ServerStatsKey][sub]
 
         c_largeInt = 999999
         computedStats:Dict[str, int] = {}
@@ -203,17 +203,17 @@ class OctoPingPong:
         defaultServerComputedAvgMs:Optional[int] = None
         selectedLatencyMs:Optional[int] = None
         smallestBucketStatCount = c_largeInt
-        for sub in self.Stats[OctoPingPong.ServerStatsKey]:
+        for sub in self.Stats[PingPong.ServerStatsKey]:
 
             # Trim the list to never be longer than a count of data points.
             # Since we append to the end, we will pop the oldest values in the front.
-            while len(self.Stats[OctoPingPong.ServerStatsKey][sub]) > 10:
-                self.Stats[OctoPingPong.ServerStatsKey][sub].pop(0)
+            while len(self.Stats[PingPong.ServerStatsKey][sub]) > 10:
+                self.Stats[PingPong.ServerStatsKey][sub].pop(0)
 
             # Compute the average
             s:float = 0
             c:int = 0
-            for v in self.Stats[OctoPingPong.ServerStatsKey][sub]:
+            for v in self.Stats[PingPong.ServerStatsKey][sub]:
                 # If the value is None it means the query failed.
                 # We keep track of that so that failed servers values fall off.
                 if v is None:
@@ -245,11 +245,11 @@ class OctoPingPong:
             # Only if the latency delta is more than what the server is asking for do we override the default server for the lowest latency server.
             # See the server side code for AutoLowestLatencyThresholdRttMs to understand where the value comes from.
             if deltaRttMs > defaultServerResult.AutoLowestLatencyThresholdRttMs:
-                self.Stats[OctoPingPong.LowestLatencyServerSubKey] = lowestLatencySubName
+                self.Stats[PingPong.LowestLatencyServerSubKey] = lowestLatencySubName
                 selectedLatencyMs = lowestLatencyValueMs
             else:
                 # Else, no override, we will use the default server.
-                self.Stats[OctoPingPong.LowestLatencyServerSubKey] = None
+                self.Stats[PingPong.LowestLatencyServerSubKey] = None
                 selectedLatencyMs = defaultServerComputedAvgMs
 
         # Save the new stats to disk.
@@ -280,7 +280,7 @@ class OctoPingPong:
     def _ReportTelemetry(self, defaultServerName:str, defaultServerLatencyMs:float, lowestLatencyName:str, lowestLatencyMs:float, selectedLatencyMs:Optional[float]) -> None:
         isDefaultLowest = defaultServerName == lowestLatencyName
         lowestLatencyDelta = lowestLatencyMs - defaultServerLatencyMs
-        Telemetry.Write("PluginLatencyV4", int(defaultServerLatencyMs),
+        Telemetry.Write("PluginLatencyV5", int(defaultServerLatencyMs),
         {
             "IsDefaultLowest": isDefaultLowest,
             "DefaultSub" : defaultServerName,
@@ -317,21 +317,21 @@ class OctoPingPong:
                     obj = response.json()
                     result = obj.get("Result", None)
                     if result is None:
-                        self.Logger.warning("OctoPingPong server response had no result obj.")
+                        self.Logger.warning("PingPong server response had no result obj.")
                         return None
                     servers:Optional[List[str]] = result.get("Servers", None)
                     if servers is None:
-                        self.Logger.warning("OctoPingPong server response had no servers obj.")
+                        self.Logger.warning("PingPong server response had no servers obj.")
                         return None
                     thisServer:Optional[str] = result.get("ThisServer", None)
                     if thisServer is None:
-                        self.Logger.warning("OctoPingPong server response had no ThisServer obj.")
+                        self.Logger.warning("PingPong server response had no ThisServer obj.")
                         return None
                     # Note we no longer look at this, we only use AutoLowestLatencyThresholdRttMs
                     #enablePluginAutoLowestLatency:Optional[bool] = result.get("EnablePluginAutoLowestLatency", None)
                     autoLowestLatencyThresholdRttMs:Optional[int] = result.get("AutoLowestLatencyThresholdRttMs", None)
                     if autoLowestLatencyThresholdRttMs is None:
-                        self.Logger.warning("OctoPingPong server response had no AutoLowestLatencyThresholdRttMs obj.")
+                        self.Logger.warning("PingPong server response had no AutoLowestLatencyThresholdRttMs obj.")
                         return None
                     if len(servers) == 0:
                         return None
@@ -376,11 +376,11 @@ class OctoPingPong:
 
     # Resets the stats object to it's default state.
     def _ResetStats(self) -> None:
-        self.Logger.info("OctoPingPong stats reset")
+        self.Logger.info("PingPong stats reset")
         self.Stats = {}
-        self.Stats[OctoPingPong.LastWorkTimeKey] = 0
-        self.Stats[OctoPingPong.ServerStatsKey] = {}
-        self.Stats[OctoPingPong.LowestLatencyServerSubKey] = None
+        self.Stats[PingPong.LastWorkTimeKey] = 0
+        self.Stats[PingPong.ServerStatsKey] = {}
+        self.Stats[PingPong.LowestLatencyServerSubKey] = None
 
 
     # Blocks to write the current stats to a file.
@@ -416,7 +416,7 @@ class OctoPingPong:
                 data = json.load(f)
             self.Stats = data["Stats"]
 
-            self.Logger.info("OctoPingPong stats loaded from file.")
+            self.Logger.info("PingPong stats loaded from file.")
 
         except Exception as e:
             self._ResetStats()

@@ -9,7 +9,7 @@ from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.printinfo import PrintInfoManager
@@ -25,6 +25,7 @@ from linux_host.config import Config
 from linux_host.secrets import Secrets
 from linux_host.version import Version
 from linux_host.logger import LoggerInit
+from linux_host.localwebapi import LocalWebApi
 
 from .smartpause import SmartPause
 from .uipopupinvoker import UiPopupInvoker
@@ -35,7 +36,7 @@ from .moonrakerwebcamhelper import MoonrakerWebcamHelper
 from .moonrakerdatabase import MoonrakerDatabase
 from .webrequestresponsehandler import MoonrakerWebRequestResponseHandler
 from .moonrakerapirouter import MoonrakerApiRouter
-from .moonrakercredentailmanager import MoonrakerCredentialManager
+from .moonrakercredentialmanager import MoonrakerCredentialManager
 from .filemetadatacache import FileMetadataCache
 from .uiinjector import UiInjector
 from .interfaces import IMoonrakerConnectionStatusHandler
@@ -74,20 +75,21 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             raise
 
 
-    def RunBlocking(self, klipperConfigDir:str, isCompanionMode:bool, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
+    def RunBlocking(self, klipperConfigDir:str, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
                     moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode
+                    isCompanion:bool, isDockerContainer:bool,
                     devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("################################################")
-            if isCompanionMode:
+            if isCompanion:
                 self.Logger.info("## OctoEverywhere Klipper Companion Starting  ##")
             else:
                 self.Logger.info("##### OctoEverywhere For Klipper Starting ######")
             self.Logger.info("################################################")
 
             # Set companion mode flag as soon as we know it.
-            Compat.SetIsCompanionMode(isCompanionMode)
+            Compat.SetIsCompanionMode(isCompanion)
 
             # Find the version of the plugin, this is required and it will throw if it fails.
             pluginVersionStr = Version.GetPluginVersion(repoRoot)
@@ -98,10 +100,10 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
 
             # As soon as we have the plugin version, setup Sentry
             # Enabling profiling and no filtering, since we are the only PY in this process.
-            Sentry.Setup(pluginVersionStr, "klipper", devConfig is not None, enableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
+            Sentry.Setup(pluginVersionStr, "klipper", devConfig is not None, canEnableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # This logic only works if running locally.
-            if not isCompanionMode:
+            if not isCompanion:
                 # Before we do this first time setup, make sure our config files are in place. This is important
                 # because if this fails it will throw. We don't want to let the user complete the install setup if things
                 # with the update aren't working.
@@ -139,6 +141,9 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
 
+            # Init the local web api. This will only start a thread if it's setup to run in the config.
+            LocalWebApi.Init(self.Logger, printerId, self.Config)
+
             # Init device id
             DeviceId.Init(self.Logger)
 
@@ -152,7 +157,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId, pluginVersionStr)
 
             # Setup the credential manager.
-            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath, isCompanionMode)
+            MoonrakerCredentialManager.Init(self.Logger, moonrakerConfigFilePath, isCompanion)
 
             # Setup the http requester. We default to port 80 and assume the frontend can be found there.
             # TODO - parse nginx to see what front ends exist and make them switchable
@@ -166,7 +171,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             OctoHttpRequest.SetLocalOctoPrintPort(frontendPort)
 
             # If we are in companion mode, we need to update the local address to be the other local remote.
-            if isCompanionMode:
+            if isCompanion:
                 ipOrHostnameStr = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
                 portStr = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
                 if ipOrHostnameStr is None or portStr is None:
@@ -177,9 +182,9 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
                 LocalIpHelper.SetLocalIpOverride(ipOrHostnameStr)
 
             # Init the ping pong helper.
-            OctoPingPong.Init(self.Logger, localStorageDir, printerId)
+            PingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
-                OctoPingPong.Get().DisablePrimaryOverride()
+                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the snapshot helper
             self.MoonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)
@@ -214,7 +219,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker, isCompanionMode)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, UiPopupInvoker(self.Logger), self, pluginVersionStr, ServerHost.Moonraker, isCompanion, isDockerContainer)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("!! Exception thrown out of main host run function.", e)
@@ -232,13 +237,11 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
     # Ensures all required values are setup and valid before starting.
     def DoFirstTimeSetupIfNeeded(self, klipperConfigDir:str, serviceName:str) -> None:
         # Try to get the printer id from the config.
-        isFirstRun = False
         printerId = self.GetPrinterId()
         if HostCommon.IsPrinterIdValid(printerId) is False:
             if printerId is None:
                 self.Logger.info("No printer id was found, generating one now!")
                 # If there is no printer id, we consider this the first run.
-                isFirstRun = True
             else:
                 self.Logger.info("An invalid printer id was found [%s], regenerating!", str(printerId))
 
@@ -263,9 +266,8 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             self.Secrets.SetPrivateKey(privateKey)
             self.Logger.info("New private key created.")
 
-        # If this is the first run, do other stuff as well.
-        if isFirstRun:
-            SystemConfigManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
+        # We always run this now, to ensure if the service name is removed it gets added back again.
+        SystemConfigManager.EnsureAllowedServicesFile(self.Logger, klipperConfigDir, serviceName)
 
 
     # Returns None if no printer id has been set.
@@ -306,6 +308,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
     #
     def OnPrimaryConnectionEstablished(self, octoKey:str, connectedAccounts:List[str]) -> None:
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
+        LocalWebApi.Get().OnPrimaryConnectionEstablished(len(connectedAccounts) > 0)
 
         # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
         # This would be if the skipped the printer link or missed it in the setup script.
@@ -317,7 +320,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
                 LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "moonraker_host")
 
         # Now that we are connected, start the moonraker client.
-        # We do this after the connection incase it needs to send any notifications or messages when starting.
+        # We do this after the connection in case it needs to send any notifications or messages when starting.
         MoonrakerClient.Get().StartRunningIfNotAlready(octoKey)
 
 

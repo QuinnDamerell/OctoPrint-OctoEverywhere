@@ -12,6 +12,7 @@ from octoeverywhere.sentry import Sentry
 
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
+from linux_host.localwebapi import LocalWebApi
 
 from .bambucloud import BambuCloud, LoginStatus
 from .bambumodels import BambuState, BambuVersion
@@ -75,6 +76,8 @@ class BambuClient:
 
         # We use this var to keep track of consecutively failed connections
         self.ConsecutivelyFailedConnectionAttempts = 0
+        # This flag indicates if we have tried a network scan since the plugin started. If not, we should do it again.
+        self.HasDoneNetScanSincePluginStart = False
 
         # Start a thread to setup and maintain the connection.
         self.CurrentConnectionContext:Optional[ConnectionContext] = None
@@ -203,8 +206,12 @@ class BambuClient:
                     self.Logger.warning(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. "+str(e))
                 else:
                     # Random other errors.
-                    Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
+                    if Sentry.IsCommonConnectionException(e):
+                        self.Logger.warning("Bambu printer connection error: %s", str(e))
+                    else:
+                        Sentry.OnException(f"Failed to connect to the Bambu printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
 
+            LocalWebApi.Get().SetPrinterConnectionState(False)
             # Sleep for a bit between tries.
             # The main consideration here is to not log too much when the printer is off. But we do still want to connect quickly, when it's back on.
             # Note that the system might also do a printer scan after many failed attempts, which can be CPU intensive.
@@ -288,8 +295,16 @@ class BambuClient:
         # If the serial number is wrong in the subscribe call, instead of returning an error the Bambu Lab printers just disconnect.
         # So if we were pending a subscribe call, give the user a better error message so they know the likely cause.
         if self.IsPendingSubscribe:
+            self.Logger.error("")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
             self.Logger.error("Bambu printer mqtt connection lost when trying to sub for events.")
-            self.Logger.error(f"THIS USUALLY MEANS THE PRINTER SERIAL NUMBER IS WRONG. We tried to use the serial number '{self.PrinterSn}'. Double check the SN is correct.")
+            self.Logger.error("This might indicate the printer ACCESS CODE - OR - SERIAL NUMBER IS WRONG.")
+            self.Logger.error(f"     Current Serial Number: '{self.PrinterSn}'")
+            self.Logger.error(f"     Current Access Code:   '{self.LanAccessCode}'")
+            self.Logger.error("")
+            self.Logger.error("Check these values match your printer. If they changed, run the OctoEverywhere installer again to update them or update your Docker configuration.")
+            self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+            self.Logger.error("")
         else:
             self.Logger.warning("Bambu printer connection lost. We will try to reconnect in a few seconds.")
         # Clear the state since we lost the connection and won't stay synced.
@@ -330,6 +345,7 @@ class BambuClient:
 
             # At this point, we know the connection was successful, the access code is correct, and the SN is correct.
             self.ConsecutivelyFailedConnectionAttempts = 0
+            LocalWebApi.Get().SetPrinterConnectionState(True)
 
             # Sub success! Force a full state sync.
             self._ForceStateSyncAsync()
@@ -405,7 +421,7 @@ class BambuClient:
         try:
             # Print for debugging if desired.
             if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Incoming Bambu Message:\r\n"+json.dumps(msg, indent=3))
+                self.Logger.debug("Outgoing Bambu Message:\r\n" + json.dumps(msg, indent=3))
 
             # Ensure we are connected.
             if self.Client is None or not self.Client.is_connected():
@@ -436,7 +452,8 @@ class BambuClient:
         if isConnectAttemptFromEventBump is False:
             self.ConsecutivelyFailedConnectionAttempts += 1
         doPrinterSearch = False
-        if self.ConsecutivelyFailedConnectionAttempts > 6:
+        # We only search every now and then, unless this is one of the first connect attempts after the plugin started.
+        if (self.HasDoneNetScanSincePluginStart is False and self.ConsecutivelyFailedConnectionAttempts > 1) or self.ConsecutivelyFailedConnectionAttempts > 6:
             self.ConsecutivelyFailedConnectionAttempts = 0
             doPrinterSearch = True
 
@@ -471,7 +488,8 @@ class BambuClient:
         self.Logger.info(f"Searching for your Bambu Lab printer {self.PrinterSn}")
         if self.LanAccessCode is None:
             return self._GetLocalConnectionContext(configIpOrHostname)
-        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, threadCount=25, delaySec=0.2)
+        self.HasDoneNetScanSincePluginStart = True
+        ips = NetworkSearch.ScanForInstances_Bambu(self.Logger, self.LanAccessCode, self.PrinterSn, ipHint=configIpOrHostname, threadCount=25, delaySec=0.2)
 
         # If we get an IP back, it is the printer.
         # The scan above will only return an IP if the printer was successfully connected to, logged into, and fully authorized with the Access Token and Printer SN.

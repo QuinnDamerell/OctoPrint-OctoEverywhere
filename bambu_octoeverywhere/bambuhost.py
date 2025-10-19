@@ -10,7 +10,7 @@ from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
@@ -25,6 +25,7 @@ from linux_host.config import Config
 from linux_host.secrets import Secrets
 from linux_host.version import Version
 from linux_host.logger import LoggerInit
+from linux_host.localwebapi import LocalWebApi
 
 from .bambucloud import BambuCloud
 from .bambuclient import BambuClient
@@ -65,7 +66,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             raise
 
 
-    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, devConfig:Optional[Dict[str,str]]) -> None:
+    def RunBlocking(self, configPath:str, localStorageDir:str, repoRoot:str, isDockerContainer:bool, devConfig:Optional[Dict[str,str]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
         try:
             self.Logger.info("################################################")
@@ -81,7 +82,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             # As soon as we have the plugin version, setup Sentry
             # Enabling profiling and no filtering, since we are the only PY in this process.
-            Sentry.Setup(pluginVersionStr, "bambu", devConfig is not None, enableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
+            Sentry.Setup(pluginVersionStr, "bambu", devConfig is not None, canEnableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
             self.Secrets = Secrets(self.Logger, localStorageDir)
@@ -115,6 +116,9 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             # Init the mdns client
             MDns.Init(self.Logger, localStorageDir)
 
+            # Init the local web api. This will only start a thread if it's setup to run in the config.
+            LocalWebApi.Init(self.Logger, printerId, self.Config)
+
             # Init device id
             DeviceId.Init(self.Logger)
 
@@ -129,9 +133,9 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
 
             # Init the ping pong helper.
-            OctoPingPong.Init(self.Logger, localStorageDir, printerId)
+            PingPong.Init(self.Logger, localStorageDir, printerId)
             if DevLocalServerAddress_CanBeNone is not None:
-                OctoPingPong.Get().DisablePrimaryOverride()
+                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the webcam helper
             webcamHelper = BambuWebcamHelper(self.Logger, self.Config)
@@ -160,7 +164,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Bambu, False)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Bambu, True, isDockerContainer)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("!! Exception thrown out of main host run function.", e)
@@ -258,6 +262,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
     #
     def OnPrimaryConnectionEstablished(self, octoKey:str, connectedAccounts:List[str]) -> None:
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
+        LocalWebApi.Get().OnPrimaryConnectionEstablished(len(connectedAccounts) > 0)
 
         # Give the octoKey to who needs it.
         if self.NotificationHandler is not None:

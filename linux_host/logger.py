@@ -4,6 +4,8 @@ import logging
 import logging.handlers
 from typing import Optional
 
+from octoeverywhere.websocketimpl import Client
+
 from .config import Config
 
 class LoggerInit:
@@ -26,7 +28,7 @@ class LoggerInit:
         logLevel = logLevel.upper()
 
         # Check the environment variable for the log level.
-        if os.getenv("DEBUG") is not None or os.getenv("-DEBUG") or os.getenv("debug") or os.getenv("-debug"):
+        if any(os.getenv(name) is not None for name in ("DEBUG", "-DEBUG", "debug", "-debug")):
             print("Environment variable DEBUG set, setting log level to DEBUG")
             logLevel = "DEBUG"
 
@@ -38,6 +40,9 @@ class LoggerInit:
 
         # Set the final log level.
         logger.setLevel(logLevel)
+
+        # Set the websocket lib debug level if needed.
+        Client.SetWebsocketDebuggingLevel(logLevel == "DEBUG")
 
         # Define our format
         formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')

@@ -113,6 +113,9 @@ class OctoWebStreamWsHelper:
         if ws is None:
             return False
 
+        # Disable SSLs checks to support locally signed certs.
+        ws.SetDisableCertCheck(True)
+
         # To ensure we never leak a websocket, we need to use this lock.
         # We need to check the is closed flag and then only set the ws if it's not closed.
         with self.StateLock:
@@ -256,7 +259,7 @@ class OctoWebStreamWsHelper:
 
         # Make the websocket object and start it running.
         self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
-        return  Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+        return Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
 
 
     # When close is called, all http operations should be shutdown.

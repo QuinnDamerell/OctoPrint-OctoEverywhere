@@ -18,7 +18,7 @@ from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler
-from octoeverywhere.octopingpong import OctoPingPong
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.compression import Compression
 from octoeverywhere.telemetry import Telemetry
@@ -191,7 +191,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         Sentry.SetLogger(self.Logger)
         Sentry.Setup(
             self._plugin_version, #pyright: ignore[reportArgumentType]
-            "octoprint", isDevMode=False, enableProfiling=False, filterExceptionsByPackage=True)
+            "octoprint", isDevMode=False, canEnableProfiling=False, filterExceptionsByPackage=True)
 
         # Setup our telemetry class.
         Telemetry.Init(self.Logger)
@@ -225,7 +225,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                         , self.get_plugin_data_folder())
 
         # Init the ping helper
-        OctoPingPong.Init(self.Logger, self.get_plugin_data_folder(), printerId)
+        PingPong.Init(self.Logger, self.get_plugin_data_folder(), printerId)
 
         # Init the mdns helper
         MDns.Init(self.Logger, self.get_plugin_data_folder())
@@ -286,6 +286,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions for the Simple API Mixin
     #
+
+    def is_api_protected(self) -> bool:
+        # If False is returned, we must do auth ourselves. If True is returned, OctoPrint will only allow authed
+        # API callers to invoke the APIs.
+        # We keep this to False, since our APIs are sensitive so it doesn't matter if the caller is authed or not.
+        # Keeping no auth allows local apps / plugins to call the APIs without needing to pass an API key.
+        return False
+
+
     def get_api_commands(self) -> Dict[str, Any]: #pyright: ignore[reportIncompatibleMethodOverride] OctoPrint's type def doesn't match what needs to be returned?
         return dict(
             # Our frontend js logic calls this API when it detects a local LAN connection and reports the port used.
@@ -816,7 +825,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
             # Run!
             pluginVersion:str = self._plugin_version #pyright: ignore[reportAssignmentType]
-            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, self, self, pluginVersion, ServerHost.OctoPrint, False)
+            oe = OctoEverywhere(HostCommon.c_OctoEverywhereOctoClientWsUri, printerId, privateKey, self.Logger, self, self, pluginVersion, ServerHost.OctoPrint, False, False)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("Exception thrown out of main runner.", e)

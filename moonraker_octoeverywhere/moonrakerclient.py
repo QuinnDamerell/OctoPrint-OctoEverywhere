@@ -20,9 +20,10 @@ from octoeverywhere.buffer import Buffer
 from octoeverywhere.interfaces import IWebSocketClient, IPrinterStateReporter, WebSocketOpCode
 
 from linux_host.config import Config
+from linux_host.localwebapi import LocalWebApi
 
 from .filemetadatacache import FileMetadataCache
-from .moonrakercredentailmanager import MoonrakerCredentialManager
+from .moonrakercredentialmanager import MoonrakerCredentialManager
 from .interfaces import IMoonrakerConnectionStatusHandler
 from .jsonrpcresponse import JsonRpcResponse
 from .interfaces import IMoonrakerClient
@@ -110,7 +111,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Actually starts the client running, trying to connect the websocket and such.
     # This is done after the first connection to OctoEverywhere has been established, to ensure
-    # the connection is setup before this, incase something needs to use it.
+    # the connection is setup before this, in case something needs to use it.
     def StartRunningIfNotAlready(self, octoKey:str) -> None:
         # Always update the octokey, to make sure we are current.
         self.MoonrakerCompat.SetOctoKey(octoKey)
@@ -266,7 +267,7 @@ class MoonrakerClient(IMoonrakerClient):
             # Check if we got a result.
             result = waitContext.GetResult()
             if result is None:
-                self.Logger.info("Moonraker client timeout while waiting for request. "+str(id)+" "+method)
+                self.Logger.info("Moonraker client timeout while waiting for request. "+str(msgId)+" "+method)
                 return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_TIMEOUT)
 
             # Check for an error if found, return the error state.
@@ -335,6 +336,7 @@ class MoonrakerClient(IMoonrakerClient):
     # This is called on a background thread, so we can block this.
     def _OnWsOpenAndKlippyReady(self) -> None:
         self.Logger.info("Moonraker client setting up default notification hooks")
+        LocalWebApi.Get().SetPrinterConnectionState(True)
         # First, we need to setup our notification subs
         # https://moonraker.readthedocs.io/en/latest/web_api/#subscribe-to-printer-object-status
         # https://moonraker.readthedocs.io/en/latest/printer_objects/
@@ -388,8 +390,12 @@ class MoonrakerClient(IMoonrakerClient):
                     if jobContainerObj is not None:
                         jobObj = jobContainerObj["job"]
                         filename = jobObj.get("filename", None)
+                        # Note sometimes the filename can just be ""
                         if filename is not None:
-                            self.MoonrakerCompat.OnPrintStart(filename)
+                            if len(filename) == 0:
+                                self.Logger.info("Moonraker client detected print start with no file name, so we aren't firing the print started event.")
+                            else:
+                                self.MoonrakerCompat.OnPrintStart(filename)
                             return
                 elif action == "finished":
                     # This can be a finish canceled or failed.
@@ -497,6 +503,7 @@ class MoonrakerClient(IMoonrakerClient):
                                     onWsClose=self._onWsClose,
                                     onWsError=self._onWsError
                                     )
+                    self.WebSocket.SetDisableCertCheck(True)
 
                 # Run until the socket closes
                 # When it returns, ensure it's closed.
@@ -508,6 +515,7 @@ class MoonrakerClient(IMoonrakerClient):
 
             # Inform that we lost the connection.
             self.Logger.info("Moonraker client websocket connection lost. We will try to restart it soon.")
+            LocalWebApi.Get().SetPrinterConnectionState(False)
 
             # Set that the websocket is disconnected.
             with self.WebSocketLock:
@@ -637,7 +645,7 @@ class MoonrakerClient(IMoonrakerClient):
             return True
 
         # If we didn't get an new API key, try to get a oneshot token.
-        # Note that we might already have an existing Moonraker API key, so we will include it incase.
+        # Note that we might already have an existing Moonraker API key, so we will include it in case.
         #
         # For some systems we need auth for the websocket, but no auth for the oneshot token API, which makes no sense.
         # But if that's the case, we try to get a one_shot token.
@@ -734,19 +742,23 @@ class MoonrakerClient(IMoonrakerClient):
 
 
     def _NonResponseMsgQueueWorker(self) -> None:
-        try:
-            # The profiler will do nothing if it's not enabled.
-            with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsMsgThread) as profiler:
-                while True:
-                    # Wait for a message to process.
-                    msg:dict = self.NonResponseMsgQueue.get()
-                    # Process and then wait again.
-                    self._OnWsNonResponseMessage(msg)
-                    # Let the profiler report if needed
-                    profiler.ReportIfNeeded()
-        except Exception as e:
-            Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
-        self._RestartWebsocket()
+        # Note this thread must never die, because it spans across websocket connections.
+        # So if it dies, we will stop processing WS messages.
+        while True:
+            try:
+                # The profiler will do nothing if it's not enabled.
+                with DebugProfiler(self.Logger, DebugProfilerFeatures.MoonrakerWsMsgThread) as profiler:
+                    while True:
+                        # Wait for a message to process.
+                        msg:dict = self.NonResponseMsgQueue.get()
+                        # Process and then wait again.
+                        self._OnWsNonResponseMessage(msg)
+                        # Let the profiler report if needed
+                        profiler.ReportIfNeeded()
+            except Exception as e:
+                Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
+            finally:
+                self._RestartWebsocket()
 
 
     # Called when the websocket is closed for any reason, connection loss or exception
@@ -756,14 +768,14 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Called if the websocket hits an error and is closing.
     def _onWsError(self, ws:IWebSocketClient, exception:Exception) -> None:
-        if Client.IsCommonConnectionException(exception):
+        if Sentry.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
-            pass
-        elif isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
+            return
+        if isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
             # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
             self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
-        else:
-            Sentry.OnException("Exception rased from moonraker client websocket connection. The connection will be closed.", exception)
+            return
+        Sentry.OnException("Exception raised from moonraker client websocket connection. The connection will be closed.", exception)
 
 
 # A helper class used for waiting rpc requests

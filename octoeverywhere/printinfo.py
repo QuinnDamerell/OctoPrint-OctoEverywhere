@@ -111,7 +111,7 @@ class PrintInfo:
     def GetEstFilamentWeightUsageMg(self) -> int:
         return self.Data.get(PrintInfo.c_EstFilamentWeightMg, 0)
     def SetEstFilamentWeightUsageMg(self, estG:int) -> None:
-        if self.GetEstFilamentUsageMm() != estG:
+        if self.GetEstFilamentWeightUsageMg() != estG:
             self.Data[PrintInfo.c_EstFilamentWeightMg] = estG
             self.Save()
 
@@ -142,7 +142,7 @@ class PrintInfo:
                 json.dump(self.Data, f)
             return True
         except Exception as e:
-            self.Logger.error(f"Failed to write print context from file. {e}")
+            self.Logger.error(f"Failed to write print context to file. {e}")
         return False
 
 
@@ -181,6 +181,7 @@ class PrintInfoManager:
         try:
             # If there's no cookie, return None.
             if printCookie is None:
+                self.Logger.debug("GetPrintInfo called with no cookie.")
                 return None
 
             # First, see if the current context matches.
@@ -199,6 +200,7 @@ class PrintInfoManager:
                     if name == printCookieFileName:
                         context = PrintInfo.LoadFromFile(self.Logger, fullPath)
                         if context is None:
+                            self.Logger.debug(f"Failed to load print context from {fullPath}.")
                             self._DeleteFile(fullPath)
                     else:
                         self._DeleteFile(fullPath)

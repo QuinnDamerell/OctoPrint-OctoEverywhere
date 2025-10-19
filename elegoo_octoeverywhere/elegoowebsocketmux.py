@@ -144,6 +144,11 @@ class ElegooWebsocketClientProxy(IWebSocketClient):
     #
 
 
+    # Not needed, but required by the interface.
+    def SetDisableCertCheck(self, disable:bool) -> None:
+        pass
+
+
     # Runs the websocket blocking until it closes.
     def RunUntilClosed(self, pingIntervalSec:Optional[int]=None, pingTimeoutSec:Optional[int]=None):
         # Call run async to invoke the open callback.

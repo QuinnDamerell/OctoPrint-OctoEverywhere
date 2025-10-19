@@ -1,6 +1,7 @@
 import time
 import logging
 import threading
+from typing import Optional
 
 from ..interfaces import IQuickCam
 from ..buffer import Buffer, BufferOrNone
@@ -53,31 +54,37 @@ class WebcamStreamInstance:
 
 
     # Define a callback for our http body reading system to call when it needs data.
-    def _CustomBodyStreamRead(self) -> Buffer:
-        while True:
-            # See if we can capture an image. There might already be a new image we don't even have to wait for.
-            capturedImage = self.AwaitingImage
-            if capturedImage is not None:
-                # If so, clear the awaiting image and reset the event.
-                self.AwaitingImage = None
-                self.ImageReadyEvent.clear()
+    def _CustomBodyStreamRead(self) -> Optional[Buffer]:
+        try:
+            while True:
+                # See if we can capture an image. There might already be a new image we don't even have to wait for.
+                capturedImage = self.AwaitingImage
+                if capturedImage is not None:
+                    # If so, clear the awaiting image and reset the event.
+                    self.AwaitingImage = None
+                    self.ImageReadyEvent.clear()
 
-                # Build the buffer to send
-                header = f"--{WebcamStreamInstance.c_OeStreamBoundaryString}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(capturedImage)}\r\n\r\n"
-                imageChunkBuffer = b''.join((header.encode('utf-8'), capturedImage.Get(), b"\r\n"))
+                    # Build the buffer to send
+                    header = f"--{WebcamStreamInstance.c_OeStreamBoundaryString}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(capturedImage)}\r\n\r\n"
+                    imageChunkBuffer = b''.join((header.encode('utf-8'), capturedImage.Get(), b"\r\n"))
 
-                # TODO - I don't know why, but chrome seems to delay the rendering of the image until it gets two?
-                # This could be something in the pipeline not flushing correctly, or other things. But for now, on the first send we double the image to make it render instantly.
-                if self.IsFirstSend:
-                    imageChunkBuffer = imageChunkBuffer + imageChunkBuffer
-                    self.IsFirstSend = False
-                    if self.Logger.isEnabledFor(logging.DEBUG):
-                        self.Logger.debug(f"QuickCam took {round(time.time()-self.StreamOpenTimeSec, 3)} seconds from octostream stream open to first image sent.")
-                return Buffer(imageChunkBuffer)
+                    # TODO - I don't know why, but chrome seems to delay the rendering of the image until it gets two?
+                    # This could be something in the pipeline not flushing correctly, or other things. But for now, on the first send we double the image to make it render instantly.
+                    if self.IsFirstSend:
+                        imageChunkBuffer = imageChunkBuffer + imageChunkBuffer
+                        self.IsFirstSend = False
+                        if self.Logger.isEnabledFor(logging.DEBUG):
+                            self.Logger.debug(f"QuickCam took {round(time.time()-self.StreamOpenTimeSec, 3)} seconds from octostream stream open to first image sent.")
+                    return Buffer(imageChunkBuffer)
 
-            # If we didn't get an image, wait on the event for a new one.
-            if self.ImageReadyEvent.wait(timeout=60.0) is False:
-                raise Exception("Timed out waiting for new image from QuickCam.")
+                # If we didn't get an image, wait on the event for a new one.
+                if self.ImageReadyEvent.wait(timeout=60.0) is False:
+                    self.Logger.info("Timed out waiting for new image from QuickCam.")
+                    return None
+        except Exception as e:
+            # If we had an error, log it and return an empty buffer.
+            self.Logger.error("Error in WebcamStreamInstance._CustomBodyStreamRead: " + str(e))
+            return None
 
 
     # Define a callback for when the http stream is closed.

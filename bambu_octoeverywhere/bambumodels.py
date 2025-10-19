@@ -1,9 +1,12 @@
 import time
 import logging
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from octoeverywhere.sentry import Sentry
+
+from .bambuerrors import BAMBU_PRINT_ERROR_STRINGS
+
 
 # Known printer error types.
 # Note that the print state doesn't have to be ERROR to have an error, during a print it's "PAUSED" but the print_error value is not 0.
@@ -11,6 +14,7 @@ from octoeverywhere.sentry import Sentry
 class BambuPrintErrors(Enum):
     Unknown = 1             # This will be most errors, since most of them aren't mapped
     FilamentRunOut = 2
+    PrintFailureDetected = 3 # The Bambu AI detected a failure.
 
 
 # Since MQTT syncs a full state and then sends partial updates, we keep track of the full state
@@ -144,7 +148,7 @@ class BambuState:
 
     # If the printer is in an error state, this tries to return the type, if known.
     # If the printer is not in an error state, None is returned.
-    def GetPrinterError(self) -> Optional[BambuPrintErrors]:
+    def GetPrinterErrorType(self) -> Optional[BambuPrintErrors]:
         # If there is a printer error, this is not 0
         if self.print_error is None or self.print_error == 0:
             return None
@@ -173,8 +177,18 @@ class BambuState:
             "07028011": BambuPrintErrors.FilamentRunOut,
             "07038011": BambuPrintErrors.FilamentRunOut,
             "07FF8011": BambuPrintErrors.FilamentRunOut,
+            "03008003": BambuPrintErrors.PrintFailureDetected
         }
         return errorMap.get(h, BambuPrintErrors.Unknown)
+
+
+    # If the printer is in an error state, returns the detailed error string.
+    def GetDetailedPrinterErrorStr(self) -> Optional[str]:
+        # If there is a printer error, this is not 0
+        if self.print_error is None or self.print_error == 0:
+            return None
+        h = hex(self.print_error)[2:].rjust(8, '0')
+        return BAMBU_PRINT_ERROR_STRINGS.get(h, "Error")
 
 
 # Different types of hardware.
@@ -186,6 +200,7 @@ class BambuPrinters(Enum):
     P1S = 11
     A1  = 20
     A1Mini = 21
+    H2D = 30
 
 
 class BambuCPUs(Enum):
@@ -201,6 +216,7 @@ class BambuVersion:
         self.Logger = logger
         self.HasLoggedPrinterVersion = False
         # We only parse out what we currently use.
+        # Note that not all of these values will be set on some printers.
         self.SoftwareVersion:Optional[str] = None
         self.HardwareVersion:Optional[str] = None
         self.SerialNumber:Optional[str] = None
@@ -211,10 +227,15 @@ class BambuVersion:
 
     # Called when there's a new print message from the printer.
     def OnUpdate(self, msg:Dict[str, Any]) -> None:
+        productNamesLower:List[str] = []
         module = msg.get("module", None)
         if module is None:
             return
         for m in module:
+            # If there is a product name, grab it.
+            pName = m.get("product_name", None)
+            if pName is not None:
+                productNamesLower.append(pName.lower())
             name = m.get("name", None)
             if name is None:
                 continue
@@ -226,7 +247,7 @@ class BambuVersion:
                 self.HardwareVersion = m.get("hw_ver", self.HardwareVersion)
                 self.ProjectName = m.get("project_name", self.ProjectName)
                 self.Cpu = BambuCPUs.ESP32
-            elif name == "rv1126":
+            elif name == "rv1126" or name == "ap":
                 self.HardwareVersion = m.get("hw_ver", self.HardwareVersion)
                 self.ProjectName = m.get("project_name", self.ProjectName)
                 self.Cpu = BambuCPUs.RV1126
@@ -258,8 +279,27 @@ class BambuVersion:
                 }
                 self.PrinterName = esp32_map.get((self.HardwareVersion, self.ProjectName), BambuPrinters.Unknown)
 
+        # We use the info above to get the printer name, but as a fallback we do a string check of the product names.
+        if self.PrinterName is None:
+            for pNameLower in productNamesLower:
+                if pNameLower.find("x1 carbon") != -1:
+                    self.PrinterName = BambuPrinters.X1C
+                elif pNameLower.find("x1e") != -1:
+                    self.PrinterName = BambuPrinters.X1E
+                elif pNameLower.find("p1p") != -1:
+                    self.PrinterName = BambuPrinters.P1P
+                elif pNameLower.find("a1 mini") != -1:
+                    self.PrinterName = BambuPrinters.A1Mini
+                elif pNameLower.find("a1") != -1:
+                    self.PrinterName = BambuPrinters.A1
+                elif pNameLower.find("p1s") != -1:
+                    self.PrinterName = BambuPrinters.P1S
+                elif pNameLower.find("h2d") != -1:
+                    self.PrinterName = BambuPrinters.H2D
+
+        # If we still don't have a printer name, we set it to unknown and report it.
         if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
-            Sentry.LogError(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
+            Sentry.LogInfo(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
                 "CPU": str(self.Cpu),
                 "ProjectName": str(self.ProjectName),
                 "HardwareVersion": str(self.HardwareVersion),

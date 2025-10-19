@@ -22,7 +22,7 @@ class ZStandardDictionary:
 
 
     @staticmethod
-    def Get():
+    def Get() -> "ZStandardDictionary":
         return ZStandardDictionary._Instance
 
 

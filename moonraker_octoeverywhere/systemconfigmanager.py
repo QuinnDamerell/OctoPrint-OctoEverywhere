@@ -100,35 +100,41 @@ subscriptions:
     # TODO - Eventually we will get our PR in that will add this to moonraker's default list.
     @staticmethod
     def EnsureAllowedServicesFile(logger:logging.Logger, klipperConfigDir:str, serviceName:str) -> None:
-        # Make the expected file path, it should be one folder up from the config folder
-        dataRootDir = os.path.abspath(os.path.join(klipperConfigDir, os.pardir))
-        allowedServiceFile = os.path.join(dataRootDir, "moonraker.asvc")
-
-        # Test if we have a file.
-        if os.path.exists(allowedServiceFile) is False:
-            # This isn't the end of the world, so don't worry about it
-            logger.info("Failed to find moonraker allowed services file.")
-            return
-
-        # Check if we are already in the file.
-        with open(allowedServiceFile, "r", encoding="utf-8") as file:
-            lines = file.readlines()
-            for line in lines:
-                # Use in, because the lines will have new lines and such.
-                # Match case, because the entry in the file must match the service name case.
-                if serviceName in line:
-                    logger.info("We found our name existing in the moonraker allowed service file, so there's nothing to do.")
-                    return
-
-        # Add our name.
         try:
-            with open(allowedServiceFile,'a', encoding="utf-8") as f:
-                # The current format this doc is not have a trailing \n, so we need to add one.
-                f.write("\n"+serviceName)
-        except PermissionError as e:
-            logger.warning("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
-            return
-        logger.info("Our name wasn't found in moonraker's allowed service file, so we added it.")
+            # Make the expected file path, it should be one folder up from the config folder
+            dataRootDir = os.path.abspath(os.path.join(klipperConfigDir, os.pardir))
+            allowedServiceFile = os.path.join(dataRootDir, "moonraker.asvc")
+
+            # Test if we have a file.
+            if os.path.exists(allowedServiceFile) is False:
+                # This isn't the end of the world, so don't worry about it
+                logger.info("Failed to find moonraker allowed services file.")
+                return
+
+            # Check if we are already in the file.
+            with open(allowedServiceFile, "r", encoding="utf-8") as file:
+                lines = file.readlines()
+                for line in lines:
+                    # Use in, because the lines will have new lines and such.
+                    # Match case, because the entry in the file must match the service name case.
+                    if serviceName in line:
+                        logger.info("We found our name existing in the moonraker allowed service file, so there's nothing to do.")
+                        return
+
+            # Add our name.
+            try:
+                with open(allowedServiceFile,'a', encoding="utf-8") as f:
+                    # The current format this doc is not have a trailing \n, so we need to add one.
+                    # We also add a few other variants of the name used on different systems. According to the docs only
+                    # The one name should be required, but that doesn't seem to be that case on all Moonraker installs.
+                    f.write("\n"+serviceName)
+                    f.write("\n"+f"{serviceName}_service")
+            except PermissionError as e:
+                logger.warning("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
+                return
+            logger.info("Our name wasn't found in moonraker's allowed service file, so we added it.")
+        except Exception as e:
+            logger.error("Exception throw in EnsureAllowedServicesFile, "+str(e))
 
 
     @staticmethod

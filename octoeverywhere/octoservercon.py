@@ -9,9 +9,7 @@ from .buffer import Buffer
 from .websocketimpl import Client
 from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer
-from .octopingpong import OctoPingPong
-from .threaddebug import ThreadDebug
-from .dnstest import DnsTest
+from .pingpong import PingPong
 from .interfaces import IOctoStream, IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler, IWebSocketClient, WebSocketOpCode
 
 #
@@ -46,7 +44,7 @@ class OctoServerCon(IOctoStream):
 
 
     # Must be > 0 or the increment logic will fail (since it's value X 2)
-    # We want to keep this low though, so incase the connection closes due to a OctoStream error,
+    # We want to keep this low though, so in case the connection closes due to a OctoStream error,
     # we will reconnect quickly again. Remember we always add the random reconnect time as well.
     WsConnectBackOffSec_Default = 1
     # We always add a random second count to the reconnect sleep to add variance. This is the min value.
@@ -72,14 +70,15 @@ class OctoServerCon(IOctoStream):
                 runForSeconds:int,
                 summonMethod:int,
                 serverHostType:int,
-                isCompanion:bool
+                isCompanion:bool,
+                isDockerContainer:bool,
                 ):
         self.ProtocolVersion = 1
-        self.OctoSession = None
+        self.OctoSession:Optional[OctoSession] = None
         self.IsDisconnecting = False
         self.IsWsConnecting = False
         self.ActiveSessionId = 0
-        self.Ws = None
+        self.Ws:Optional[IWebSocketClient] = None
         self.WsConnectBackOffSec = self.WsConnectBackOffSec_Default
         self.NoWaitReconnect = False
 
@@ -93,6 +92,7 @@ class OctoServerCon(IOctoStream):
         self.SummonMethod = summonMethod
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
+        self.IsDockerContainer = isDockerContainer
 
         self.DefaultEndpoint = endpoint
         self.CurrentEndpoint = self.DefaultEndpoint
@@ -106,7 +106,7 @@ class OctoServerCon(IOctoStream):
         # If this is the primary connection, register for the latency data complete callback.
         # This callback wil only fire on the very first time the plugin is ran.
         if self.IsPrimaryConnection:
-            OctoPingPong.Get().RegisterPluginFirstRunLatencyCompleteCallback(self.OnFirstRunLatencyDataComplete)
+            PingPong.Get().RegisterPluginFirstRunLatencyCompleteCallback(self.OnFirstRunLatencyDataComplete)
 
         # Note! Will be None for secondary connections!
         self.StatusChangeHandler = statusChangeHandler
@@ -133,7 +133,7 @@ class OctoServerCon(IOctoStream):
             # This will happen if we tried to connect to the lowest latency server and failed.
             if self.TempDisableLowestLatencyEndpoint is False:
                 # Check if we have a known lowest latency server.
-                lowestLatencySub = OctoPingPong.Get().GetLowestLatencyServerSub()
+                lowestLatencySub = PingPong.Get().GetLowestLatencyServerSub()
                 if lowestLatencySub is not None:
                     newEndpoint = "wss://"+lowestLatencySub+".octoeverywhere.com/octoclientws"
                     self.Logger.info("Attempting to use lowest latency server: "+newEndpoint)
@@ -160,7 +160,7 @@ class OctoServerCon(IOctoStream):
         self.IsDisconnecting = False
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion, self.IsDockerContainer)
         self.OctoSession.StartHandshake(self.SummonMethod)
 
 
@@ -175,12 +175,6 @@ class OctoServerCon(IOctoStream):
             self.TempDisableLowestLatencyEndpoint = True
             self.Logger.info("Blocking lowest latency endpoint, since we failed while the WS connect was happening.")
         self.Logger.error("OctoEverywhere Ws error: " +str(err))
-
-        # TODO - remove this code after debugging some DNS issues.
-        # We added this logic to do an active test of the DNS names.
-        if "failure in name resolution" in str(err):
-            dnsTest = DnsTest(self.Logger)
-            dnsTest.RunTestSync()
 
 
     def OnData(self, ws:IWebSocketClient, msg:Buffer, opCode:WebSocketOpCode):
@@ -206,7 +200,6 @@ class OctoServerCon(IOctoStream):
         self.Logger.info("Handshake complete, server con "+self.GetConnectionString()+", successfully connected to OctoEverywhere!")
 
         # Only primary connections have this handler.
-        # For secondary connections, octoKey and connectedAccounts will be None.
         if self.StatusChangeHandler is not None:
             self.StatusChangeHandler.OnPrimaryConnectionEstablished(octoKey, connectedAccounts)
 
@@ -269,8 +262,6 @@ class OctoServerCon(IOctoStream):
                 Sentry.OnException("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
         else:
             self.Logger.info("OctoServerCon Disconnect was called, but we are skipping the CloseAllWebStreamsAndDisable because it has already been done.")
-            # TODO - Remove this after we figure out this websocket lib dead lock bug.
-            ThreadDebug.DoThreadDumpLogout(self.Logger)
 
         # On every disconnect call, try to disconnect the websocket. We do this because we have seen that for some reason calling Close doesn't seem
         # to always actually cause the websocket to close and cause RunUntilClosed to return. Thus we hope if we keep trying to close it, maybe it will.

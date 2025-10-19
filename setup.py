@@ -30,7 +30,7 @@ plugin_name = "OctoEverywhere"
 
 # The plugin's version. Can be overwritten within OctoPrint's internal data via __plugin_version__ in the plugin module
 # Note that this single version string is used by all of the plugins in OctoEverywhere!
-plugin_version = "4.3.1"
+plugin_version = "4.4.0"
 
 # The plugin's description. Can be overwritten within OctoPrint's internal data via __plugin_description__ in the plugin
 # module
@@ -73,7 +73,7 @@ plugin_license = "AGPLv3"
 #   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
 #   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
 #   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it.
-#   sentry-sdk - We don't use Sentry right now, so we disabled it. It was conflicting with the new OctoPrint RC, so if we add it back, we need to address that.
+#   sentry-sdk - We use the same sentry sdk version that OctoPrint is using, to ensure we don't break it.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 plugin_requires = [
@@ -86,7 +86,7 @@ plugin_requires = [
     "dnspython>=2.3.0",
     "httpx>=0.24.1",
     "urllib3>=2.0.0",
-    #"sentry-sdk>=TODO",
+    "sentry-sdk>=2.20.0,<3"
     #"zstandard" - optional lib see notes
     ]
 

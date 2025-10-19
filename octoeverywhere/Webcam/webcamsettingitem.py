@@ -109,7 +109,7 @@ class WebcamSettingItem:
         if name is not None and len(name) > 0:
             # Enforce max name length.
             if len(name) > WebcamSettingItem.c_MaxWebcamNameLength:
-                name = name[WebcamSettingItem.c_MaxWebcamNameLength]
+                name = name[:WebcamSettingItem.c_MaxWebcamNameLength]
             # Ensure the string is only utf8
             name = name.encode('utf-8', 'ignore').decode('utf-8')
             # Make the first letter uppercase

@@ -1,4 +1,5 @@
 import sys
+from typing import Optional
 
 from linux_host.startup import Startup
 from linux_host.startup import ConfigDataTypes
@@ -11,10 +12,10 @@ if __name__ == '__main__':
     s = Startup()
 
     # Try to parse the config
-    jsonConfigStr = None
+    jsonConfigStr:Optional[str] = None
     try:
         # Get the json from the process args.
-        jsonConfig = s.GetJsonFromArgs(sys.argv)
+        (jsonConfigStr, jsonConfig) = s.GetJsonFromArgs(sys.argv)
 
         #
         # Parse the common, required args.
@@ -26,6 +27,7 @@ if __name__ == '__main__':
         LogFolder = s.GetConfigVarAndValidate(jsonConfig, "LogFolder", ConfigDataTypes.Path)
         ConfigFolder = s.GetConfigVarAndValidate(jsonConfig, "ConfigFolder", ConfigDataTypes.Path)
         InstanceStr   = s.GetConfigVarAndValidate(jsonConfig, "CompanionInstanceIdStr",  ConfigDataTypes.String)
+        IsDockerContainer = s.GetConfigVarAndValidate(jsonConfig, "IsDockerContainer", ConfigDataTypes.Bool, defaultValue=False)
 
     except Exception as e:
         s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)}, Config: {jsonConfigStr}")
@@ -37,7 +39,7 @@ if __name__ == '__main__':
     try:
         # Create and run the main host!
         host = ElegooHost(ConfigFolder, LogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
-        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+        host.RunBlocking(ConfigFolder, LocalFileStoragePath, RepoRootFolder, IsDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main elegoo host class. Error:{str(e)}")
 

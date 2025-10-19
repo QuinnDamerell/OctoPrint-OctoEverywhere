@@ -483,17 +483,28 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
         if self.Logger.isEnabledFor(logging.DEBUG):
             self.Logger.debug("Returned FLUIDD webcam database data: %s", json.dumps(res, indent=4, separators=(", ", ": ")))
 
-        value = res["value"]
-        if len(value) == 0:
-            return False
-
-        # Parse everything we got back.
+        # Try to parse the results.
         webcamSettingItems:List[WebcamSettingItem] = []
-        for guid in value:
-            webcamSettingsObj = value[guid]
-            webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
-            if webcamSettings is not None:
-                webcamSettingItems.append(webcamSettings)
+        value:Optional[Dict[str, Any]] = res["value"]
+        if value is None:
+            self.Logger.debug("Returned FLUIDD webcam with the value key not found.")
+            return False
+        cameras:Optional[list[Dict[str, Any]]] = value.get("cameras", None)
+        # In newer versions, value is a object with a property 'cameras' that holds an array of camera objects.
+        if cameras is not None and isinstance(cameras, list) and len(cameras) > 0:
+            self.Logger.debug(f"Found {len(cameras)} cameras list in the FLUIDD custom namespace.")
+            for webcamSettingsObj in cameras:
+                webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
+                if webcamSettings is not None:
+                    webcamSettingItems.append(webcamSettings)
+        else:
+            # For older versions, 'value' was a dict with a 'cameras' objects and keys.
+            if isinstance(value, dict):
+                for guid in value:
+                    webcamSettingsObj = value[guid]
+                    webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
+                    if webcamSettings is not None:
+                        webcamSettingItems.append(webcamSettings)
 
         # If we found anything, set them!
         if len(webcamSettingItems) == 0:
@@ -598,6 +609,11 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             # Snapshot URL isn't required, but it's nice to have.
             if webcamSettings.SnapshotUrl is None or len(webcamSettings.SnapshotUrl) == 0:
                 webcamSettings.SnapshotUrl = self._TryToFigureOutSnapshotUrl(webcamSettings.StreamUrl)
+
+            # We have seen the rotation be a string in some cases, so ensure it's an int.
+            if webcamSettings.Rotation is None or isinstance(webcamSettings.Rotation, str):
+                self.Logger.warning("Webcam helper found an invalid rotation, resetting to 0. Value: '"+str(webcamSettings.Rotation)+"'")
+                webcamSettings.Rotation = 0
 
             # Ensure these are the correct types.
             webcamSettings.FlipH = bool(webcamSettings.FlipH)

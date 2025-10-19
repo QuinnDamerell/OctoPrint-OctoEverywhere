@@ -2,6 +2,8 @@ name: Python Lint & Type Check
 
 on:
   push:
+    branches:
+      - master
   pull_request:
 
 jobs:

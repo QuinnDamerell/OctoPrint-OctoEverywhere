@@ -20,6 +20,7 @@ class OctoHttpRequest:
     LocalOctoPrintPort = 5000
     LocalHostAddress = "127.0.0.1"
     DisableHttpRelay = False
+    LocalHostUseHttps = False
 
     @staticmethod
     def SetLocalHttpProxyPort(port:int) -> None:
@@ -48,6 +49,13 @@ class OctoHttpRequest:
     @staticmethod
     def GetLocalhostAddress() -> str:
         return OctoHttpRequest.LocalHostAddress
+
+    @staticmethod
+    def SetLocalHostUseHttps(address:bool):
+        OctoHttpRequest.LocalHostUseHttps = address
+    @staticmethod
+    def GetLocalHostUseHttps() -> bool:
+        return OctoHttpRequest.LocalHostUseHttps
 
     @staticmethod
     def SetDisableHttpRelay(disableHttpRelay:bool) -> None:
@@ -118,16 +126,19 @@ class OctoHttpRequest:
         # get a 404 back try the haproxy. This adds a little bit of unneeded overhead, but it works really well to cover all of the cases.
 
         # Setup the protocol we need to use for the http proxy. We need to use the same protocol that was detected.
+        localServiceProtocol = "http://"
+        if OctoHttpRequest.LocalHostUseHttps:
+            localServiceProtocol = "https://"
         httpProxyProtocol = "http://"
         if OctoHttpRequest.LocalHttpProxyIsHttps:
             httpProxyProtocol = "https://"
 
         # Figure out the main and fallback url.
         url = ""
-        fallbackUrl = None
-        fallbackWebcamUrl = None
-        fallbackLocalIpOctoPrintPortSuffix = None
-        fallbackLocalIpHttpProxySuffix = None
+        fallbackUrl:Optional[str] = None
+        fallbackWebcamUrl:Optional[str] = None
+        fallbackLocalIpDirectServicePortSuffix:Optional[str] = None
+        fallbackLocalIpHttpProxySuffix:Optional[str] = None
         if pathOrUrlType == PathTypes.Relative:
 
             # Note!
@@ -142,7 +153,7 @@ class OctoHttpRequest:
 
             # The main URL is directly to this OctoPrint instance
             # This URL will only every be http, it can't be https.
-            url = "http://" + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
+            url = localServiceProtocol + OctoHttpRequest.LocalHostAddress + ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
 
             # The fallback URL is to where we think the http proxy port is.
             # For this address, we need set the protocol correctly depending if the client detected https
@@ -164,7 +175,7 @@ class OctoHttpRequest:
             # Note we only build the suffix part of the string here, because we don't want to do the local IP detection if we don't have to.
             # Also note this will only work for OctoPrint pages.
             # This case only seems to apply to OctoPrint instances running on Windows.
-            fallbackLocalIpOctoPrintPortSuffix = ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
+            fallbackLocalIpDirectServicePortSuffix = ":" + str(OctoHttpRequest.LocalOctoPrintPort) + pathOrUrl
             fallbackLocalIpHttpProxySuffix =  ":" + str(OctoHttpRequest.LocalHttpProxyPort) + pathOrUrl
 
             # If all else fails, and because this logic isn't perfect, yet, we will also try to fallback to the assumed webcam port.
@@ -248,19 +259,19 @@ class OctoHttpRequest:
         # With the local IP, first try to use the http proxy URL, since it's the most likely to be bound to the public IP and not firewalled.
         # It's important we use the right http proxy protocol with the http proxy port.
         localIpFallbackUrl = httpProxyProtocol + localIp + fallbackLocalIpHttpProxySuffix
-        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP Http Proxy Fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackLocalIpOctoPrintPortSuffix, allowRedirects)
+        ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP Http Proxy Fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackLocalIpDirectServicePortSuffix, allowRedirects)
         # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.
         if ret.IsChainDone:
             return ret.Result
 
         # We should have a fallbackLocalIpHttpProxySuffix if we are here.
-        if fallbackLocalIpOctoPrintPortSuffix is None:
+        if fallbackLocalIpDirectServicePortSuffix is None:
             logger.error("Main request failed and no fallbackLocalIpOctoPrintPortSuffix was provided. This is a critical error and should be reported to the OctoEverywhere team.")
             return ret.Result
 
         # Now try the OcotoPrint direct port with the local IP.
-        localIpFallbackUrl = "http://" + localIp + fallbackLocalIpOctoPrintPortSuffix
+        localIpFallbackUrl = "http://" + localIp + fallbackLocalIpDirectServicePortSuffix
         ret = OctoHttpRequest.MakeHttpCallAttempt(logger, "Local IP fallback", method, localIpFallbackUrl, headers, data, mainResult, True, fallbackWebcamUrl, allowRedirects)
         # If the function reports the chain is done, the next fallback URL is invalid and we should always return
         # whatever is in the Response, even if it's None.

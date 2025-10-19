@@ -81,6 +81,11 @@ class MqttWebsocketProxy(IWebSocketClient):
         self._SendMessage(buffer, msgStartOffsetBytes, msgSize)
 
 
+    # Not needed, but required by the interface.
+    def SetDisableCertCheck(self, disable:bool) -> None:
+        pass
+
+
     #
     # Connection logic.
     #

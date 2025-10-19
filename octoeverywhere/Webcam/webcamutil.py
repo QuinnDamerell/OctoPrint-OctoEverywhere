@@ -1,8 +1,6 @@
 import logging
 from typing import Optional
 
-import urllib3
-
 from ..sentry import Sentry
 from ..httpresult import HttpResult
 from ..buffer import Buffer
@@ -89,8 +87,16 @@ class WebcamUtil:
                 if headerLower.startswith("content-length"):
                     # We found the content-length header!
                     p = header.split(':')
+                    # In some webcam servers, they add the content break --<boundary> to the content-length line.
+                    # So we need to strip that off if it's there.
+                    value:str = p[1].strip()
+                    if value.find('--') != -1:
+                        value = value.split('--')[0].strip()
                     if len(p) == 2:
-                        frameSizeInt = int(p[1].strip())
+                        # We have seen weird cases where there's a content-length header, but it's empty, and then there's another that has a length.
+                        if len(value) == 0:
+                            continue
+                        frameSizeInt = int(value)
 
                 # Break when done.
                 if frameSizeInt > 0 and contentType is not None:
@@ -138,12 +144,8 @@ class WebcamUtil:
             # Success!
             return GetSnapshotFromStreamResult(Buffer(imageBuffer), contentType)
         except Exception as e:
-            if e is ConnectionError and "Read timed out" in str(e):
-                logger.debug("GetSnapshotFromStream - Failed, got a timeout while reading the stream.")
-            elif e is urllib3.exceptions.ProtocolError and "IncompleteRead" in str(e):
-                logger.debug("GetSnapshotFromStream - Failed, got a incomplete read while reading the stream.")
-            elif e is urllib3.exceptions.ReadTimeoutError and "Read timed out" in str(e):
-                logger.debug("GetSnapshotFromStream - Failed, got a read timeout while reading stream.")
+            if Sentry.IsCommonHttpError(e):
+                logger.debug(f"GetSnapshotFromStream - Failed, got a common http error while reading the stream. {str(e)}")
             else:
                 Sentry.OnException("Failed to get fallback snapshot.", e)
         return None

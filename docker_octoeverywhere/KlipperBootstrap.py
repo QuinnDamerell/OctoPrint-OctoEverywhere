@@ -45,7 +45,7 @@ class KlipperBootstrap:
         printerPort = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
         if printerPort is None:
             logger.info("Setting The Default Moonraker Port: 7125")
-            config.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, "7215")
+            config.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, "7125")
         else:
             logger.info(f"Target Moonraker Port: {printerPort}")
 

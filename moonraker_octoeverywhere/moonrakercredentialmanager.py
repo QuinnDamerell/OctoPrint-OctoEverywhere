@@ -63,6 +63,9 @@ class MoonrakerCredentialManager:
             if result is None:
                 raise Exception("Failed to get the oneshot token from moonraker.")
             if result.StatusCode != 200:
+                if result.StatusCode == 401:
+                    self.Logger.info("Failed to get the oneshot token from moonraker. Unauthorized. The API key is likely invalid.")
+                    return None
                 raise Exception("Failed to get the oneshot token from moonraker. "+str(result.StatusCode))
 
             # Read the response.
@@ -175,7 +178,7 @@ class MoonrakerCredentialManager:
                 self.Logger.info("_TryToFindUnixSocket - No server block found in moonraker config.")
             else:
                 if "klippy_uds_address" not in moonrakerConfig["server"]:
-                    self.Logger.info("_TryToFindUnixSocket - klippy_uds_address found in moonraker config.")
+                    self.Logger.info("_TryToFindUnixSocket - klippy_uds_address not found in moonraker config.")
                 else:
                     # In most installs, this will be something like `~/printer_data/comms/klippy.sock`
                     klippySocketFilePath = moonrakerConfig["server"]["klippy_uds_address"]
@@ -230,11 +233,13 @@ class MoonrakerCredentialManager:
         while True:
             # Sanity check so we don't spin for ever.
             if len(message) > 10000:
-                self.Logger.error("_ReadSingleJsonObject failed to read message, it was too long. "+message.decode(encoding="utf=8"))
+                self.Logger.error("_ReadSingleJsonObject failed to read message, it was too long. "+message.decode(encoding="utf-8"))
                 return None
 
             # Read one, add it to the buffer, and see if we are done.
             data = sock.recv(1)
+            if not data:
+                return None
             if data[0] == 3: # This is EXT aka End of text. It separates the json messages.
-                return message.decode(encoding="utf=8")
+                return message.decode(encoding="utf-8")
             message += data

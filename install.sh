@@ -108,7 +108,7 @@ OE_ENV="${HOME}/octoeverywhere-env"
 # The python requirements are for the installer and plugin
 # The virtualenv is for our virtual package env we create
 # The curl requirement is for some things in this bootstrap script.
-# python3-venv is required for teh virtualenv command to fully work.
+# python3-venv is required for the virtualenv command to fully work.
 # This must stay in sync with the dockerfile package installs
 PKGLIST="python3 python3-pip virtualenv python3-venv curl"
 # For the Creality OS, we only need to install these.
@@ -318,6 +318,7 @@ install_or_update_system_dependencies()
         log_info "Ensuring zlib is install for Pillow, it's ok if this package install fails."
         sudo apt install --yes zlib1g-dev 2>/dev/null || true
         sudo apt install --yes zlib-devel 2>/dev/null || true
+        sudo apt install --yes libjpeg-dev 2>/dev/null || true
         sudo apt install --yes python-imaging 2>/dev/null || true
         sudo apt install --yes python3-pil 2>/dev/null || true
         sudo apt install --yes python3-pillow 2>/dev/null || true

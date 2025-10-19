@@ -236,7 +236,7 @@ class NotificationsHandler(INotificationHandler):
                 self.StopTimers()
                 return
             else:
-                self.Logger.info("Restore client sync state: There's no print and none of the timers are running.")
+                self.Logger.debug("Restore client sync state: There's no print and none of the timers are running.")
                 return
 
 
@@ -933,7 +933,7 @@ class NotificationsHandler(INotificationHandler):
                         self.Logger.warning("Can't manipulate image because the Image rotation lib failed to import.")
                 except Exception as e:
                     # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
-                    if "name 'Image' is not defined" in str(e):
+                    if isinstance(e, NameError) and "Image" in str(e):
                         self.Logger.info("Can't manipulate image because the Image rotation lib failed to import.")
                     if "cannot identify image file" in str(e):
                         self.Logger.info("Can't manipulate image because the Image lib can't figure out the image type.")

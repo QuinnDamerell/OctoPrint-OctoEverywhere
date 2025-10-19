@@ -276,6 +276,7 @@ class MoonrakerConnector:
         Logger.Debug(f"Checking for moonraker using the address: `{url}`")
         try:
             with Client(url, onWsOpen=OnOpened, onWsData=OnData, onWsError=OnError, onWsClose=OnClosed) as ws:
+                ws.SetDisableCertCheck(True)
                 ws.RunAsync()
 
                 # Wait for the event or a timeout.
