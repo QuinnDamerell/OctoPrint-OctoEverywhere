@@ -6,7 +6,7 @@
 ## For PY 3
 - Use `python3 -m venv py3venv` to create an environment in the current dir
 - Use `source py3venv/bin/activate` to activate
-- Pip install deps from the setup.py file
+- Pip install deps from the pyproject.toml file
 - Pip install octoprint (to make F5 debugging easier)
 - In VS, open the "select python interpreter" dialog and pick the environment.
 
@@ -14,7 +14,7 @@
 ## For PY 2
 - Use `virtualenv py2venv` to create an env
 - Use `source py2venv/bin/activate` to activate
-- Pip install deps from the setup.py file
+- Pip install deps from the pyproject.toml file
 - Pip install octoprint (to make F5 debugging easier)
 - In VS, open the "select python interpreter" dialog and pick the environment.
 
@@ -27,7 +27,7 @@
 
 
 ## Install Other Branches:
-    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/compress.zip
+    - https://github.com/QuinnDamerell/OctoPrint-OctoEverywhere/archive/pyproject.zip
 
 ## Before checking in:
 - Run in py2 env
@@ -38,7 +38,7 @@
 - tail -f ./.octoprint/logs/octoprint.log
 - source ./oprint/bin/activate
 
-### For notes about shared dependencies with OctoPrint, see setup.py
+### For notes about shared dependencies with OctoPrint, see pyproject.toml
 
 <br/>
 <br/>
@@ -55,7 +55,7 @@ The biggest difference between OctoPrint and Moonraker is how the repo is set up
 
 ### OctoPrint Setup
 
-OctoPrint installs and sets up the plugin using the setup.py file. The setup process is all handled by OctoPrint control by the user via the UI. OctoPrint will clone the head of master, install the required python packages from the setup.py file, and then restart to run the plugin. All the information about the OctoPrint server port, webcam details, and such are all able to be pulled from OctoPrint in the plugin code.
+OctoPrint installs and sets up the plugin using the pyproject.toml file. The setup process is all handled by OctoPrint control by the user via the UI. OctoPrint will clone the head of master, install the required python packages from the pyproject.toml file, and then restart to run the plugin. All the information about the OctoPrint server port, webcam details, and such are all able to be pulled from OctoPrint in the plugin code.
 
 ### Moonraker Setup
 

@@ -1,11 +1,11 @@
 #
 # This file is only used by the moonraker setup, not OctoPrint!
-# OctoPrint uses the package list in the setup.py file.
+# OctoPrint uses the package list in the pyproject.toml file.
 #
 # BUT, for the most part, the packages should be exactly synced between these sources.
 # The only exception would be any packages moonraker or OctoPrint depend upon, that the other doesn't.
 #
-# For comments on package lock versions, see the comments in the setup.py file.
+# For comments on package lock versions, see the comments in the pyproject.toml file.
 #
 octowebsocket_client==1.8.3
 requests>=2.31.0

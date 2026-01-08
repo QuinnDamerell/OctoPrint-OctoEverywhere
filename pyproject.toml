@@ -1,0 +1,85 @@
+[build-system]
+requires = [
+    "setuptools>=68",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "OctoEverywhere"
+version = "4.4.0"
+description = "Free and unlimited remote access, AI print failure detection, iPhone and Android apps, notifications, live streaming, and more!"
+authors = [
+    { name = "Quinn Damerell", email = "support@octoeverywhere.com" },
+]
+requires-python = ">=3.7,<4"
+
+
+#
+# On 4/13/2023 we updated to only support PY3, which frees us up from a lot of package issues. A lot the packages we depend on only support PY3 now.
+#
+# octowebsocket_client
+#   We forked this package so we could add a flag to disable websocket frame masking when sending messages, which got us a 30% CPU reduction.
+#   For a full list of changes, reasons, and version details, see the repo readme.md
+#   For the source lib, we must be on version 1.6 due to a bug before that version.
+#   We also must remain compatible with Python 3.7 for the Sonic pad. For now we are pulling the latest changes and fixing any 3.7 issues.
+# dnspython
+#	We depend on a feature that was released with 2.3.0, so we need to require at least that.
+#   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
+# urllib3
+#   There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
+#   The sonic pad can't support anything newer than 2.0.0, so we need to stay below that. But we moved the sonic pad to it's own requirements file, so we can go higher.
+# zstandard
+#   zstandard gives us great compression that's super fast, but it requires a native lib to installed. The PY package will come with a lib and or try to build it, but we can also install it via apt-get.
+#   For the complexity, we can't list it as a required install, since it won't work on some platforms. So instead we will try to install it during runtime, and then it will be used after the following restart.
+#   The package version is defined in octoeverywhere.compression.ZStandardPipPackageString
+#
+# Other lib version notes:
+#   pillow - We don't require a version of pillow because we don't want to mess with other plugins and we use basic, long lived APIs.\
+#   certifi - We use to keep certs on the device that we need for let's encrypt. So we want to keep it fresh.
+#   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
+#   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it.
+#   sentry-sdk - We use the same sentry sdk version that OctoPrint is using, to ensure we don't break it.
+#
+# Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
+#
+dependencies = [
+    "octowebsocket_client==1.8.3",
+    "requests>=2.31.0",
+    "octoflatbuffers==24.3.27",
+    "pillow",
+    "certifi>=2025.1.31",
+    "rsa>=4.9",
+    "dnspython>=2.3.0",
+    "httpx>=0.24.1",
+    "urllib3>=2.0.0",
+    "sentry-sdk>=2.20.0,<3",
+]
+dynamic = [
+    "license",
+]
+
+[project.entry-points."octoprint.plugin"]
+octoeverywhere = "octoprint_octoeverywhere"
+
+[project.urls]
+Homepage = "https://www.octoeverywhere.com"
+
+[project.optional-dependencies]
+develop = [
+    "go-task-bin",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [
+    "octoprint_octoeverywhere",
+    "octoprint_octoeverywhere.*",
+    "octoeverywhere",
+    "octoeverywhere.*",
+]
