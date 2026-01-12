@@ -39,6 +39,7 @@ requires-python = ">=3.7,<4"
 #   rsa - OctoPrint 1.5.3 requires RAS>=4.0, so we must leave it at 4.0.
 #   httpx - Is an asyncio http lib. It seems to be required by dnspython, but dnspython doesn't enforce it.
 #   sentry-sdk - We use the same sentry sdk version that OctoPrint is using, to ensure we don't break it.
+#   pybind11 - We added this because newer versions of OctoPi (around 1/12/2025) started breaking the install if it's not installed by us.
 #
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 #
@@ -53,6 +54,7 @@ dependencies = [
     "httpx>=0.24.1",
     "urllib3>=2.0.0",
     "sentry-sdk>=2.20.0,<3",
+    "pybind11",
 ]
 dynamic = [
     "license",
