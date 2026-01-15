@@ -83,8 +83,15 @@ class HttpInitialContext(object):
             return self._tab.Get(octoflatbuffers.number_types.Int8Flags, o + self._tab.Pos)
         return 0
 
+    # HttpInitialContext
+    def ForwardedForIp(self) -> Optional[str]:
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(16))
+        if o != 0:
+            return self._tab.String(o + self._tab.Pos)
+        return None
+
 def HttpInitialContextStart(builder: octoflatbuffers.Builder):
-    builder.StartObject(6)
+    builder.StartObject(7)
 
 def Start(builder: octoflatbuffers.Builder):
     HttpInitialContextStart(builder)
@@ -130,6 +137,12 @@ def HttpInitialContextAddUseOctoeverywhereAuth(builder: octoflatbuffers.Builder,
 
 def AddUseOctoeverywhereAuth(builder: octoflatbuffers.Builder, useOctoeverywhereAuth: int):
     HttpInitialContextAddUseOctoeverywhereAuth(builder, useOctoeverywhereAuth)
+
+def HttpInitialContextAddForwardedForIp(builder: octoflatbuffers.Builder, forwardedForIp: int):
+    builder.PrependUOffsetTRelativeSlot(6, octoflatbuffers.number_types.UOffsetTFlags.py_type(forwardedForIp), 0)
+
+def AddForwardedForIp(builder: octoflatbuffers.Builder, forwardedForIp: int):
+    HttpInitialContextAddForwardedForIp(builder, forwardedForIp)
 
 def HttpInitialContextEnd(builder: octoflatbuffers.Builder) -> int:
     return builder.EndObject()
