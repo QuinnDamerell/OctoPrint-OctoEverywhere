@@ -6,6 +6,7 @@ from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.telemetry import Telemetry
+from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
@@ -131,6 +132,13 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             OctoHttpRequest.SetLocalHttpProxyPort(80)
             OctoHttpRequest.SetLocalOctoPrintPort(80)
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
+
+            # We need to set the local IP to the last known local IP from the config, if it exists.
+            # This needs to be done before the octostream starts, so it will pull the right local IP.
+            # This value is also updated by the BambuClient if it does a discovery and finds a new IP.
+            configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
+            if configIpOrHostname is not None:
+                LocalIpHelper.SetConnectionTargetIpOverride(configIpOrHostname)
 
             # Init the ping pong helper.
             PingPong.Init(self.Logger, localStorageDir, printerId)

@@ -205,11 +205,11 @@ class OctoWebStreamWsHelper:
                 protocol = "ws://"
                 if OctoHttpRequest.GetLocalHttpProxyIsHttps():
                     protocol = "wss://"
-                uri = protocol + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
+                uri = protocol + LocalIpHelper.TryToGetLocalIpOfConnectionTarget() + ":" + str(OctoHttpRequest.GetLocalHttpProxyPort()) + path
             elif self.ConnectionAttempt == 4:
                 # Attempt 4 will be to try to connect with the device IP.
                 # This is needed if the server isn't bound to localhost, but only the public IP. Try the OctoPrint local port as a last attempt.
-                uri = "ws://" + LocalIpHelper.TryToGetLocalIp() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
+                uri = "ws://" + LocalIpHelper.TryToGetLocalIpOfConnectionTarget() + ":" + str(OctoHttpRequest.GetLocalOctoPrintPort()) + path
             else:
                 # Report the issue and return False to indicate we aren't trying to connect.
                 self.Logger.info(self.getLogMsgPrefix()+" failed to connect to relative path and has nothing else to try.")

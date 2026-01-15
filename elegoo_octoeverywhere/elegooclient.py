@@ -7,6 +7,7 @@ import threading
 from typing import Any, Dict, List, Optional
 
 from octoeverywhere.compat import Compat
+from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.repeattimer import RepeatTimer
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.websocketimpl import Client
@@ -325,6 +326,10 @@ class ElegooClient:
 
                 # Get the current IP we want to try to connect with.
                 self.WebSocketConnectionIp = self._GetIpForConnectionAttempt(isConnectAttemptFromEventBump)
+
+                # We must update the local IP to what we are trying to connect to.
+                # This var is system wides and helps other systems access the target client IP.
+                LocalIpHelper.SetConnectionTargetIpOverride(self.WebSocketConnectionIp)
 
                 # Build the connection URL
                 url = f"ws://{self.WebSocketConnectionIp}:{self.PortStr}/websocket"

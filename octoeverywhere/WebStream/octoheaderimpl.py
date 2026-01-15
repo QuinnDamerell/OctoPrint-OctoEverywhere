@@ -20,6 +20,7 @@ class HeaderHelper:
 
     c_xForwardedForProtoHeaderName = "X-Forwarded-Proto"
     c_xForwardedForHostHeaderName = "X-Forwarded-Host"
+    c_xForwardedForForHeaderName = "X-Forwarded-For"
 
     # Called by slipstream and the main http class to gather and add required headers.
     @staticmethod
@@ -105,6 +106,14 @@ class HeaderHelper:
             if hostStr is None or len(hostStr) == 0:
                 raise Exception("Http headers found an empty Host in http initial context.")
             sendHeaders[HeaderHelper.c_xForwardedForHostHeaderName] = hostStr
+            # TODO - For now we can't set this, because it seems to break some setups.
+            # ip = httpInitialContext.ForwardedForIp()
+            # if ip is None:
+            #     raise Exception("Http headers found no ForwardedForIp in http initial context.")
+            # ipStr = StreamMsgBuilder.BytesToString(ip)
+            # if ipStr is None or len(ipStr) == 0:
+            #     raise Exception("Http headers found an empty ForwardedForIp in http initial context.")
+            # sendHeaders[HeaderHelper.c_xForwardedForForHeaderName] = ipStr
 
         # This tells the OctoPrint web server the client is connected to the proxy via the proper protocol.
         # Since this is our service, it will always be secure (https or wss)

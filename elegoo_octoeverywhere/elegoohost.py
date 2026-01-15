@@ -2,6 +2,7 @@ import logging
 import traceback
 from typing import Any, Dict, List, Optional
 
+from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.deviceid import DeviceId
@@ -124,6 +125,13 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             # Setup the print info manager.
             PrintInfoManager.Init(self.Logger, localStorageDir)
+
+            # We need to set the local IP to the last known local IP from the config, if it exists.
+            # This needs to be done before the octostream starts, so it will pull the right local IP.
+            # This value is also updated by the ElegooClient if it does a discovery and finds a new IP.
+            configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
+            if configIpOrHostname is not None:
+                LocalIpHelper.SetConnectionTargetIpOverride(configIpOrHostname)
 
             # Init the ping pong helper.
             PingPong.Init(self.Logger, localStorageDir, printerId)

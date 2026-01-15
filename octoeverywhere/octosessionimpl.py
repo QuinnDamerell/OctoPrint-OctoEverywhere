@@ -300,7 +300,7 @@ class OctoSession(IOctoSession):
 
             # Build the message
             buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.IsPrimarySession, self.PluginVersion,
-                OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIp(),
+                OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIpOfConnectionTarget(),
                 rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId, self.IsCompanion, self.IsDockerContainer)
 
             # Send!

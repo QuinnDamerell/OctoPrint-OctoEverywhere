@@ -16,7 +16,7 @@ class OctoStreamMsgBuilder:
                             isPrimarySession:bool,
                             pluginVersion:str,
                             localHttpProxyPort:int,
-                            localIp:str,
+                            targetLocalIp:str,
                             rsaChallenge:bytes,
                             rasKeyVersionInt:int,
                             summonMethod:int,
@@ -34,10 +34,10 @@ class OctoStreamMsgBuilder:
         printerIdOffset = builder.CreateString(printerId) #pyright: ignore[reportUnknownMemberType]
         privateKeyOffset = builder.CreateString(privateKey) #pyright: ignore[reportUnknownMemberType]
         pluginVersionOffset = builder.CreateString(pluginVersion) #pyright: ignore[reportUnknownMemberType]
-        localIpOffset = None
-        deviceIdOffset = None
-        if localIp is not None:
-            localIpOffset = builder.CreateString(localIp) #pyright: ignore[reportUnknownMemberType]
+        targetLocalIpOffset:Optional[int] = None
+        if targetLocalIp is not None:
+            targetLocalIpOffset = builder.CreateString(targetLocalIp) #pyright: ignore[reportUnknownMemberType]
+        deviceIdOffset:Optional[int] = None
         if deviceId is not None:
             deviceIdOffset = builder.CreateString(deviceId) #pyright: ignore[reportUnknownMemberType]
 
@@ -54,8 +54,8 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddServerHost(builder, serverHostType)
         HandshakeSyn.AddIsCompanion(builder, isCompanion)
         HandshakeSyn.AddIsDockerContainer(builder, isDockerContainer)
-        if localIpOffset is not None:
-            HandshakeSyn.AddLocalDeviceIp(builder, localIpOffset)
+        if targetLocalIpOffset is not None:
+            HandshakeSyn.AddLocalDeviceIp(builder, targetLocalIpOffset)
         HandshakeSyn.AddLocalHttpProxyPort(builder, localHttpProxyPort)
         HandshakeSyn.AddRsaChallenge(builder, rasChallengeOffset)
         HandshakeSyn.AddRasChallengeVersion(builder, rasKeyVersionInt)

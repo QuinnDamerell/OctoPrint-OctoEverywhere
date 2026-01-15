@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import paho.mqtt.client as mqtt
 
 from octoeverywhere.sentry import Sentry
+from octoeverywhere.localip import LocalIpHelper
 
 from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
@@ -176,6 +177,10 @@ class BambuClient:
                 else:
                     # We are trying to connect to the printer locally, so configure mqtt for a local connection.
                     self.Logger.info(f"Trying to connect to printer via local connection at {ipOrHostname}...")
+
+                    # We must update the local IP to what we are trying to connect to.
+                    # This var is system wides and helps other systems access the target client IP.
+                    LocalIpHelper.SetConnectionTargetIpOverride(ipOrHostname)
 
                 # Try to connect the client, this will throw if it fails.
                 localBackoffCounter += 1

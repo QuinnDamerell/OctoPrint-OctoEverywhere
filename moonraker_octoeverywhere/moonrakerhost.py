@@ -178,8 +178,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
                     self.Logger.error("We are in companion mode but we can't get the ip and port from the companion config file.")
                     raise Exception("Failed to read companion config file.")
                 OctoHttpRequest.SetLocalHostAddress(ipOrHostnameStr)
-                # TODO - this could be an host name, not an IP. That might be a problem?
-                LocalIpHelper.SetLocalIpOverride(ipOrHostnameStr)
+                LocalIpHelper.SetConnectionTargetIpOverride(ipOrHostnameStr)
 
             # Init the ping pong helper.
             PingPong.Init(self.Logger, localStorageDir, printerId)

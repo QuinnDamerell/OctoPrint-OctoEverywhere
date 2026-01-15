@@ -174,7 +174,7 @@ class MDns:
 
             try:
                 # If possible, get our local IP address, to make sure we broadcast on the right IP address.
-                localAdapterIp = LocalIpHelper.TryToGetLocalIp()
+                localAdapterIp = LocalIpHelper.TryToGetLocalIpOfThisDevice()
                 if localAdapterIp is None or len(localAdapterIp) == 0:
                     localAdapterIp = None
                     self.LogDebug("Failed to get local adapter IP.")
@@ -238,7 +238,7 @@ class MDns:
 
         # If there are more than one, try to get our IP and match as much of it as possible.
         # This isn't great, but it works.
-        ourIp = LocalIpHelper.TryToGetLocalIp()
+        ourIp = LocalIpHelper.TryToGetLocalIpOfThisDevice()
         # If we fail to get our IP, just return the local.
         if ourIp is None or len(ourIp) == 0:
             self.LogDebug("Failed to get our local IP, using the first returned result.")
