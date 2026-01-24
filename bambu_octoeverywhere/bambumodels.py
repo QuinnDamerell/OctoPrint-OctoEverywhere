@@ -12,9 +12,12 @@ from .bambuerrors import BAMBU_PRINT_ERROR_STRINGS
 # Note that the print state doesn't have to be ERROR to have an error, during a print it's "PAUSED" but the print_error value is not 0.
 # Here's the full list https://e.bambulab.com/query.php?lang=en
 class BambuPrintErrors(Enum):
-    Unknown = 1             # This will be most errors, since most of them aren't mapped
+    Unknown = 1               # This will be most errors, since most of them aren't mapped
     FilamentRunOut = 2
-    PrintFailureDetected = 3 # The Bambu AI detected a failure.
+    PrintFailureDetected = 3  # The Bambu AI detected a failure.
+    PrintFilePauseCommand = 4 # The print file requested a pause.
+    PausedByUser = 5          # The user paused the print.
+    PausedUnknownReason = 6   # The printer is paused, but we don't know why, but it can be resumed.
 
 
 # Since MQTT syncs a full state and then sends partial updates, we keep track of the full state
@@ -177,7 +180,10 @@ class BambuState:
             "07028011": BambuPrintErrors.FilamentRunOut,
             "07038011": BambuPrintErrors.FilamentRunOut,
             "07FF8011": BambuPrintErrors.FilamentRunOut,
-            "03008003": BambuPrintErrors.PrintFailureDetected
+            "03008003": BambuPrintErrors.PrintFailureDetected,
+            "03008013": BambuPrintErrors.PrintFilePauseCommand,
+            "03008001": BambuPrintErrors.PausedByUser,
+            "03008000": BambuPrintErrors.PausedUnknownReason,
         }
         return errorMap.get(h, BambuPrintErrors.Unknown)
 
@@ -188,7 +194,9 @@ class BambuState:
         if self.print_error is None or self.print_error == 0:
             return None
         h = hex(self.print_error)[2:].rjust(8, '0')
-        return BAMBU_PRINT_ERROR_STRINGS.get(h, "Error")
+        errorStr = BAMBU_PRINT_ERROR_STRINGS.get(h, "Error")
+        # Fix escaped quotes.
+        return errorStr.replace("\\\"", "\"")
 
 
 # Different types of hardware.

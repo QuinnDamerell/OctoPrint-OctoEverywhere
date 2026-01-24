@@ -121,17 +121,21 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         # For errors that are user fixable, like filament run outs, the printer will go into a paused state with
         # a printer error message. In this case we want to fire different things.
         err = bambuState.GetPrinterErrorType()
-        if err is None:
-            # If error is none, this is a user pause
+        if err is not None:
+            self.Logger.debug(f"BambuOnPauseOrTempError - Error code {err}.")
+
+        if err is None or err == BambuPrintErrors.PausedByUser or err == BambuPrintErrors.PausedUnknownReason or err == BambuPrintErrors.PrintFilePauseCommand:
+            # If error is none or this reason, it's just a normal pause.
             self.NotificationsHandler.OnPaused(bambuState.GetFileNameWithNoExtension())
             return
-        # Otherwise, try to match the error.
+
+        # Try to match known temporary errors.
         if err == BambuPrintErrors.FilamentRunOut:
             self.NotificationsHandler.OnFilamentChange()
             return
 
         # Send the error string from the bambu API map.
-        errorStr = bambuState.GetFileNameWithNoExtension()
+        errorStr = bambuState.GetDetailedPrinterErrorStr()
         if errorStr is None:
             errorStr = "General Error"
         self.NotificationsHandler.OnError(errorStr)
