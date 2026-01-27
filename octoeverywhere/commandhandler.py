@@ -67,6 +67,8 @@ class CommandHandler:
     # Used for any printer that can only support a limited number of connections.
     # This indicates the plugin can't connect because too many other clients are connected.
     c_CommandError_CantConnectTooManyClients = 787
+    # Used when a feature is not supported on the current platform.
+    c_CommandError_FeatureNotSupported = 788
 
 
     _Instance:"CommandHandler" = None #pyright: ignore[reportAssignmentType]
@@ -121,6 +123,8 @@ class CommandHandler:
             return self.Resume()
         elif commandPathLower.startswith("cancel"):
             return self.Cancel()
+        elif commandPathLower.startswith("set-light"):
+            return self.SetLight(jsonObj_CanBeNone)
         elif commandPathLower.startswith("rekey"):
             return self.Rekey()
         elif commandPathLower.startswith(CommandHandler.c_MqttWebsocketProxyCommand):
@@ -388,6 +392,29 @@ class CommandHandler:
 
     def Cancel(self) -> CommandResponse:
         return self.PlatformCommandHandler.ExecuteCancel()
+
+
+    # Must return a CommandResponse
+    def SetLight(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        # Parse if we have args
+        if jsonObjData is None:
+            return CommandResponse.Error(400, "No args passed")
+
+        lightType = "chamber"
+        on = False
+        try:
+            lightType = jsonObjData.get("Type", None)
+            on = jsonObjData.get("On", None)
+            if lightType is None or not isinstance(lightType, str):
+                return CommandResponse.Error(400, "No light type passed")
+            if on is None or not isinstance(on, bool):
+                return CommandResponse.Error(400, "No light on/off state passed")
+        except Exception as e:
+            Sentry.OnException("Failed to SetLight, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args")
+
+        # Execute the command
+        return self.PlatformCommandHandler.ExecuteSetLight(lightType, on)
 
 
     def Rekey(self) -> CommandResponse:

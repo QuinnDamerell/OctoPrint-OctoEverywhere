@@ -118,6 +118,12 @@ class BambuClient:
         return self._Publish({"print": {"sequence_id": "0", "command": "stop"}})
 
 
+    # Sends the chamber light control command, returns if the send was successful or not.
+    def SendSetChamberLight(self, on:bool) -> bool:
+        mode = "on" if on else "off"
+        return self._Publish({"system": {"sequence_id": "0", "command": "ledctrl", "led_node": "chamber_light", "led_mode": mode}})
+
+
     # If there's a successful connection, this will return the context used.
     # This will always be set after the first connection and will be updated if the connection is re-established.
     def GetCurrentConnectionContext(self) -> Optional[ConnectionContext]:

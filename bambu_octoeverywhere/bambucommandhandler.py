@@ -260,3 +260,16 @@ class BambuCommandHandler(IPlatformCommandHandler):
             return CommandResponse.Success(None)
         else:
             return CommandResponse.Error(400, "Failed to send command to printer.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sets the light state for the specified light type.
+    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+        # Only chamber light is supported
+        if lightType != "chamber":
+            return CommandResponse.Error(400, f"Unknown light type: {lightType}")
+
+        if BambuClient.Get().SendSetChamberLight(on):
+            return CommandResponse.Success(None)
+        else:
+            return CommandResponse.Error(400, "Failed to send command to printer.")

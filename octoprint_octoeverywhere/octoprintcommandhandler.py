@@ -246,3 +246,10 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
         # Return success.
         return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sets the light state for the specified light type.
+    # OctoPrint doesn't have a standard way to control chamber lights, so this is not supported.
+    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Chamber light control is not supported on OctoPrint.")

@@ -217,6 +217,14 @@ class IPlatformCommandHandler(ABC):
     def ExecuteCancel(self) -> CommandResponse:
         pass
 
+    # Sets the light state for the specified light type.
+    # lightType: The type of light to set. Currently only "chamber" is supported.
+    # on: True to turn the light on, False to turn it off.
+    # Returns a CommandResponse with success or an error if the light type is not supported.
+    @abstractmethod
+    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+        pass
+
 
 class ILocalAuth(ABC):
 

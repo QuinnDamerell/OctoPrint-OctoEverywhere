@@ -156,3 +156,18 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         if result.HasError():
             return CommandResponse.Error(400, "Failed to send command to printer.")
         return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sets the light state for the specified light type.
+    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+        # Only chamber light is supported
+        if lightType != "chamber":
+            return CommandResponse.Error(400, f"Unknown light type: {lightType}")
+
+        # Command 403 is the light control command
+        # SecondLight is the chamber light, RgbLight is the LED strip (we keep it off)
+        result = ElegooClient.Get().SendRequest(403, {"LightStatus": {"SecondLight": on, "RgbLight": [0, 0, 0]}})
+        if result.HasError():
+            return CommandResponse.Error(400, "Failed to send command to printer.")
+        return CommandResponse.Success(None)

@@ -71,7 +71,7 @@ class PrinterState:
         self.ChamberTarget = self._GetFloatOrNone(state, "TempTargetBox")
 
         # Parse chamber light status from LightStatus.SecondLight
-        lightStatus = state.get("LightStatus", None)
+        lightStatus:Optional[Dict[str, Any]] = state.get("LightStatus", None)
         if lightStatus is not None and isinstance(lightStatus, dict):
             secondLight = lightStatus.get("SecondLight", None)
             if secondLight is not None:

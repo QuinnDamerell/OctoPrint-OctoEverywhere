@@ -252,6 +252,13 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return CommandResponse.Success(None)
 
 
+    # !! Platform Command Handler Interface Function !!
+    # Sets the light state for the specified light type.
+    # Klipper doesn't have a standard chamber light interface, so this is not supported.
+    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Chamber light control is not supported on Klipper/Moonraker.")
+
+
     # Checks if the printer is connected and in the correct state (or states)
     # If everything checks out, returns None. Otherwise it returns a CommandResponse
     def _CheckIfConnectedAndForExpectedStates(self, stateArray:List[str]) -> Optional[CommandResponse]:
