@@ -189,11 +189,17 @@ class BambuCommandHandler(IPlatformCommandHandler):
         if bambuState.bed_target_temper is not None:
             bedTarget = round(float(bambuState.bed_target_temper), 2)
 
+        # Get chamber light status: "on", "off", or None if not supported/unknown
+        chamberLightStatus = None
+        if bambuState.chamber_light is not None:
+            chamberLightStatus = "on" if bambuState.chamber_light else "off"
+
         # Build the object and return.
         return {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
+            "ChamberLightStatus": chamberLightStatus,
             "CurrentPrint":
             {
                 "Progress" : progress,

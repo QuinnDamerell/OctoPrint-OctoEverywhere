@@ -127,6 +127,9 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             return {
                 "State": state,
                 "Error": errorStr_CanBeNone,
+                # Chamber light status: "on", "off", or None if not supported/unknown
+                # OctoPrint doesn't have a standard way to control chamber lights.
+                #"ChamberLightStatus": None,
                 "CurrentPrint":
                 {
                     "Progress" : progress,

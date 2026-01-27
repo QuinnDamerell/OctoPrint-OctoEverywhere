@@ -50,9 +50,11 @@ class OctoWebStream(threading.Thread, IWebStream):
     # message off to the thread as quickly as possible.
     def OnIncomingServerMessage(self, webStreamMsg:WebStreamMsg.WebStreamMsg) -> None:
         # Don't accept messages after we are closed.
-        if self.IsClosed:
-            self.Logger.info("Web stream class "+str(self.Id)+" got a incoming message after it has been closed.")
-            return
+        # Check under lock to avoid race condition with Close()
+        with self.StateLock:
+            if self.IsClosed:
+                self.Logger.info("Web stream class "+str(self.Id)+" got a incoming message after it has been closed.")
+                return
 
         # If this is a close message, we need to call close now
         # since the main thread might be blocked waiting on a http call or something.
@@ -60,8 +62,9 @@ class OctoWebStream(threading.Thread, IWebStream):
             # Note right now we don't support getting close messages with data.
             if webStreamMsg.IsControlFlagsOnly is False:
                 self.Logger.warning("Web stream "+str(self.Id)+" got a close message with data. The data will be ignored.")
-            # Set this flag, because we don't need to send a close message if the server already did.
-            self.HasSentCloseMessage = True
+            # Set this flag under lock, because we don't need to send a close message if the server already did.
+            with self.StateLock:
+                self.HasSentCloseMessage = True
             # Call close.
             self.Close()
         else:
@@ -136,7 +139,11 @@ class OctoWebStream(threading.Thread, IWebStream):
 
     def mainThread(self) -> None:
         # Loop until we are closed.
-        while self.IsClosed is False:
+        # Check under lock to avoid race condition with Close()
+        while True:
+            with self.StateLock:
+                if self.IsClosed:
+                    return
 
             # Wait on incoming messages
             # Timeout after 60 seconds just to check that we aren't closed.
@@ -149,9 +156,10 @@ class OctoWebStream(threading.Thread, IWebStream):
                 # We get this exception on the timeout.
                 pass
 
-            # Check that we aren't closed
-            if self.IsClosed is True:
-                return
+            # Check that we aren't closed (under lock for thread safety)
+            with self.StateLock:
+                if self.IsClosed:
+                    return
 
             # Check that we got a message and this wasn't just a timeout
             if webStreamMsg is None:
@@ -187,7 +195,10 @@ class OctoWebStream(threading.Thread, IWebStream):
             # In such a case, self.HasSentCloseMessage will be true. We don't want to rely on the client
             # returning the correct returnValue, so if we see that we will call close to make sure things
             # are going down. Since Close() is guarded against multiple entries, this is totally fine.
-            if self.HasSentCloseMessage is True and self.IsClosed is False:
+            # Check under lock for thread safety.
+            with self.StateLock:
+                shouldClose = self.HasSentCloseMessage is True and self.IsClosed is False
+            if shouldClose:
                 self.Logger.warning("Web stream "+str(self.Id)+" processed a message and has sent a close message, but didn't call close on the web stream. Closing now.")
                 self.Close()
                 return
@@ -269,7 +280,9 @@ class OctoWebStream(threading.Thread, IWebStream):
 
             # If this was the close message, set the has set flag back to false so we send again.
             # (this mostly won't matter, since the entire connection will go down anyways)
-            self.HasSentCloseMessage = False
+            # Reset under lock for thread safety.
+            with self.StateLock:
+                self.HasSentCloseMessage = False
 
             # If we fail, close the entire connection.
             self.OctoSession.OnSessionError(0)

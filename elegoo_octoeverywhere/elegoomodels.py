@@ -40,6 +40,8 @@ class PrinterState:
         self.BedTarget:Optional[float] = None
         self.ChamberActual:Optional[float] = None
         self.ChamberTarget:Optional[float] = None
+        # Chamber light status: True = on, False = off, None = unknown/not supported
+        self.ChamberLightOn:Optional[bool] = None
 
 
     # Called when there's a new print message from the printer.
@@ -67,6 +69,13 @@ class PrinterState:
         self.BedTarget = self._GetFloatOrNone(state, "TempTargetHotbed")
         self.ChamberActual = self._GetFloatOrNone(state, "TempOfBox")
         self.ChamberTarget = self._GetFloatOrNone(state, "TempTargetBox")
+
+        # Parse chamber light status from LightStatus.SecondLight
+        lightStatus = state.get("LightStatus", None)
+        if lightStatus is not None and isinstance(lightStatus, dict):
+            secondLight = lightStatus.get("SecondLight", None)
+            if secondLight is not None:
+                self.ChamberLightOn = bool(secondLight)
 
         # Update the last print info
         self.MostRecentPrintInfo.Update(self)

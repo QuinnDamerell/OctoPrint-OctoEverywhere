@@ -1,6 +1,7 @@
 import time
 import random
 import logging
+import threading
 from datetime import datetime
 from typing import List, Optional
 
@@ -75,6 +76,7 @@ class OctoServerCon(IOctoStream):
                 ):
         self.ProtocolVersion = 1
         self.OctoSession:Optional[OctoSession] = None
+        self.StateLock = threading.Lock()
         self.IsDisconnecting = False
         self.IsWsConnecting = False
         self.ActiveSessionId = 0
@@ -157,7 +159,8 @@ class OctoServerCon(IOctoStream):
         # Also after the open call has been successful, ensure the disconnecting flag is cleared.
         # This ensures any races between the disconnect function and a new connection won't result in the
         # flag getting stuck to being set.
-        self.IsDisconnecting = False
+        with self.StateLock:
+            self.IsDisconnecting = False
 
         # Create a new session for this websocket connection.
         self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion, self.IsDockerContainer)
@@ -193,7 +196,10 @@ class OctoServerCon(IOctoStream):
 
 
     def OnHandshakeComplete(self, sessionId:int, octoKey:str, connectedAccounts:List[str]):
-        if sessionId != self.ActiveSessionId:
+        # Use lock when reading ActiveSessionId to prevent race condition with RunBlocking
+        with self.StateLock:
+            currentSessionId = self.ActiveSessionId
+        if sessionId != currentSessionId:
             self.Logger.info("Got a handshake complete for an old session, "+str(sessionId)+", ignoring.")
             return
 
@@ -209,7 +215,10 @@ class OctoServerCon(IOctoStream):
 
     # Called by the session if we should kill this socket.
     def OnSessionError(self, sessionId:int, backoffModifierSec:int):
-        if sessionId != self.ActiveSessionId:
+        # Use lock when reading ActiveSessionId to prevent race condition with RunBlocking
+        with self.StateLock:
+            currentSessionId = self.ActiveSessionId
+        if sessionId != currentSessionId:
             self.Logger.info("Got a session error callback for an old session, "+str(sessionId)+", ignoring.")
             return
 
@@ -251,8 +260,16 @@ class OctoServerCon(IOctoStream):
         # Only close the OctoStream once, even though we might get multiple calls.
         # This can happen because disconnecting might case proxy socket errors, for example
         # if we closed all of the sockets locally and then the server tries to close one.
-        if self.IsDisconnecting is False:
-            self.IsDisconnecting = True
+        # Use lock to prevent race condition where two threads could both enter the cleanup code.
+        shouldCloseWebStreams = False
+        with self.StateLock:
+            if self.IsDisconnecting is False:
+                self.IsDisconnecting = True
+                shouldCloseWebStreams = True
+            else:
+                self.Logger.info("OctoServerCon Disconnect was called, but we are skipping the CloseAllWebStreamsAndDisable because it has already been done.")
+
+        if shouldCloseWebStreams:
             # Try to close all of the sockets before we disconnect, so we send the messages.
             # It's important to try catch this logic to ensure we always end up calling close on the current websocket.
             try:
@@ -260,8 +277,6 @@ class OctoServerCon(IOctoStream):
                     self.OctoSession.CloseAllWebStreamsAndDisable()
             except Exception as e:
                 Sentry.OnException("Exception when calling CloseAllWebStreamsAndDisable from Disconnect.", e)
-        else:
-            self.Logger.info("OctoServerCon Disconnect was called, but we are skipping the CloseAllWebStreamsAndDisable because it has already been done.")
 
         # On every disconnect call, try to disconnect the websocket. We do this because we have seen that for some reason calling Close doesn't seem
         # to always actually cause the websocket to close and cause RunUntilClosed to return. Thus we hope if we keep trying to close it, maybe it will.
@@ -330,7 +345,8 @@ class OctoServerCon(IOctoStream):
                     # We do this just before connects, because this flag weeds out all of the error noise
                     # that might happen while we are performing a disconnect. But at this time, all of that should be
                     # 100% done now.
-                    self.IsDisconnecting = False
+                    with self.StateLock:
+                        self.IsDisconnecting = False
 
                     # Set the connecting flag, so we know if we are in the middle of a ws connect.
                     # This is set to false when the websocket is established.
@@ -338,7 +354,9 @@ class OctoServerCon(IOctoStream):
 
                     # Since there can be old pending actions from old sessions (session == one websocket connection).
                     # We will keep track of the current session, so old errors from sessions don't effect the new one.
-                    self.ActiveSessionId += 1
+                    # Use lock to prevent race with OnHandshakeComplete and OnSessionError.
+                    with self.StateLock:
+                        self.ActiveSessionId += 1
 
                     # Get the new endpoint. This will either be the default endpoint or the lowest latency endpoint.
                     endpoint = self.GetEndpoint()

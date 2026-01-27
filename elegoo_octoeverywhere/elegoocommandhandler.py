@@ -84,11 +84,17 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         chamberActual = printerState.ChamberActual if printerState.ChamberActual is not None else 0.0
         chamberTarget = printerState.ChamberTarget if printerState.ChamberTarget is not None else 0.0
 
+        # Get chamber light status: "on", "off", or None if not supported/unknown
+        chamberLightStatus = None
+        if printerState.ChamberLightOn is not None:
+            chamberLightStatus = "on" if printerState.ChamberLightOn else "off"
+
         # Build the object and return.
         return {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
+            "ChamberLightStatus": chamberLightStatus,
             "CurrentPrint":
             {
                 "Progress" : progress,

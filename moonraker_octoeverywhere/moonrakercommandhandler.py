@@ -150,6 +150,9 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return {
             "State": state,
             "Error": errorStr,
+            # Chamber light status: "on", "off", or None if not supported/unknown
+            # Klipper doesn't have a standard chamber light interface; it's typically done via output_pin or led objects.
+            # "ChamberLightStatus": None,
             "CurrentPrint":
             {
                 "Progress" : progress,

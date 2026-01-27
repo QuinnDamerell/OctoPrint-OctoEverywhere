@@ -44,6 +44,8 @@ class BambuState:
         # It's a URL if streaming is enabled
         # On other printers, this doesn't exist, so it's None
         self.rtsp_url:Optional[str] = None
+        # Chamber light status: True = on, False = off, None = unknown/not supported
+        self.chamber_light:Optional[bool] = None
         # Custom fields
         self.LastTimeRemainingWallClock:Optional[float] = None
 
@@ -67,6 +69,19 @@ class BambuState:
         ipCam = msg.get("ipcam", None)
         if ipCam is not None:
             self.rtsp_url = ipCam.get("rtsp_url", self.rtsp_url)
+
+        # Parse lights_report for chamber light status
+        # The lights_report is an array of objects with "node" and "mode" fields
+        # Chamber light has node="chamber_light" and mode can be "on", "off", "flashing"
+        lightsReport: Optional[List[Dict[str, Any]]] = msg.get("lights_report", None)
+        if lightsReport is not None and isinstance(lightsReport, list):
+            for light in lightsReport:
+                if isinstance(light, dict) and light.get("node") == "chamber_light":
+                    mode = light.get("mode")
+                    if mode is not None:
+                        # "on" and "flashing" are considered on, "off" is off
+                        self.chamber_light = mode.lower() != "off"
+                    break
 
         # Time remaining has some custom logic, so as it's queried each time it keep counting down in seconds, since Bambu only gives us minutes.
         old_mc_remaining_time = self.mc_remaining_time

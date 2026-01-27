@@ -256,15 +256,25 @@ class Client(IWebSocketClient):
             Sentry.OnException("Websocket client exception in fireWsErrorCallbackThread", e)
 
         # Once the error callback is fired, we can now fire the close callback if needed.
+        # Determine if we should fire the close callback while holding the lock,
+        # but actually fire it outside the lock to prevent potential deadlocks.
+        shouldFireCloseCallback = False
         try:
             with self.wsErrorCallbackLock:
                 self.hasPendingErrorCallbackFire = False
                 # If the close callback was deferred, we need to fire it now.
                 if self.hasDeferredCloseCallbackDueToPendingErrorCallback:
                     self.hasDeferredCloseCallbackDueToPendingErrorCallback = False
-                    self._FireCloseCallback()
+                    shouldFireCloseCallback = True
         except Exception as e:
             Sentry.OnException("Websocket client exception in fireWsErrorCallbackThread", e)
+
+        # Fire the close callback outside the lock to prevent potential deadlocks
+        if shouldFireCloseCallback:
+            try:
+                self._FireCloseCallback()
+            except Exception as e:
+                Sentry.OnException("Websocket client exception in fireWsErrorCallbackThread close callback", e)
 
         # Be sure we always close the WS
         self._Close()
@@ -294,9 +304,19 @@ class Client(IWebSocketClient):
 
     def _SendQueueThread(self):
         try:
-            while self.isClosed is False:
-                # Wait on something to send.
-                context:SendQueueContext = self.SendQueue.get()
+            while True:
+                # Check if closed under lock before blocking on queue
+                with self.isClosedLock:
+                    if self.isClosed:
+                        return
+                # Wait on something to send with a timeout to allow periodic closed check.
+                # This prevents the thread from hanging indefinitely if isClosed is set
+                # after the check but before the get() call.
+                try:
+                    context:SendQueueContext = self.SendQueue.get(timeout=1.0)
+                except Exception:
+                    # Timeout occurred, loop back to check isClosed
+                    continue
                 # If it's None, that means we are shutting down.
                 if context is None or context.Buffer is None:
                     return
