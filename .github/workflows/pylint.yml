@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - py-versions
   pull_request:
 
 jobs:
