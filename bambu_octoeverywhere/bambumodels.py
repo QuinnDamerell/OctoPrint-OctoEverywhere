@@ -39,6 +39,7 @@ class BambuState:
         self.bed_target_temper:Optional[float] = None
         self.mc_remaining_time:Optional[int] = None
         self.project_id:Optional[str] = None
+        self.task_id:Optional[str] = None
         self.print_error:Optional[int] = None
         # On the X1, this is empty is LAN viewing of off
         # It's a URL if streaming is enabled
@@ -60,6 +61,7 @@ class BambuState:
         self.total_layer_num = msg.get("total_layer_num", self.total_layer_num)
         self.subtask_name = msg.get("subtask_name", self.subtask_name)
         self.project_id = msg.get("project_id", self.project_id)
+        self.task_id = msg.get("task_id", self.task_id)
         self.mc_percent = msg.get("mc_percent", self.mc_percent)
         self.nozzle_temper = msg.get("nozzle_temper", self.nozzle_temper)
         self.nozzle_target_temper = msg.get("nozzle_target_temper", self.nozzle_target_temper)
@@ -156,12 +158,15 @@ class BambuState:
     # See details in NotificationHandler._RecoverOrRestForNewPrint
     def GetPrintCookie(self) -> Optional[str]:
         # If there's no project id or subtask name, we shouldn't make a cookie..
-        if self.project_id is None or len(self.project_id) == 0 or self.subtask_name is None or len(self.subtask_name) == 0:
+        if (self.project_id is None or len(self.project_id) == 0
+            or self.task_id is None or len(self.task_id) == 0
+            or self.subtask_name is None or len(self.subtask_name) == 0):
             return None
 
         # From testing, the project_id is always unique for cloud based prints, but is 0 for local prints.
+        # For local prints, the task id seems to be unique per print.
         # The file name changes most of the time, so the combination of both makes a good pair.
-        return f"{self.project_id}-{self.GetFileNameWithNoExtension()}"
+        return f"{self.project_id}-{self.task_id}-{self.GetFileNameWithNoExtension()}"
 
 
     # If the printer is in an error state, this tries to return the type, if known.

@@ -121,7 +121,8 @@ class BambuClient:
     # Sends the chamber light control command, returns if the send was successful or not.
     def SendSetChamberLight(self, on:bool) -> bool:
         mode = "on" if on else "off"
-        return self._Publish({"system": {"sequence_id": "0", "command": "ledctrl", "led_node": "chamber_light", "led_mode": mode}})
+        return self._Publish({"system": {"sequence_id": "0", "command": "ledctrl", "led_node": "chamber_light", "led_mode": mode,
+               "led_on_time": 500, "led_off_time": 500, "loop_times": 0, "interval_time": 0}})
 
 
     # If there's a successful connection, this will return the context used.
