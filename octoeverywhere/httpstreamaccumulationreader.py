@@ -327,7 +327,7 @@ class HttpStreamAccumulationReader:
                     #
                     # We use the max read size so we basically read as much as we can in one call. Since we are sleeping for the accumulation time before each read,
                     # we need to make sure we read a sufficient amount of data each time to keep up.
-                    chunk = response.raw.read1(self.MaxReturnBufferSizeBytes)
+                    chunk = response.raw.read1(self.MaxReturnBufferSizeBytes) #pyright: ignore[reportUnknownMemberType, reportAttributeAccessIssue] this doesn't exist on PY 3.7
                 else:
                     # According to Google some wrappers of the raw object won't have read1, so we fall back to read.
                     # Since read blocks until the requested size is read or the body is done, we read in smaller chunks.
