@@ -1,6 +1,6 @@
-import logging
 import os
 import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from ..sentry import Sentry
@@ -360,7 +360,7 @@ class WebcamHelper:
     # If the camera-streamer webrtc stream URL is found, the correct camera-streamer jmpeg stream is returned.
     # Otherwise None is returned.
     @staticmethod
-    def DetectCameraStreamerWebRTCStreamUrlAndTranslate(streamUrl:Optional[str]) -> Optional[str]:
+    def DetectWebRTCStreamUrlAndTranslate(logger:logging.Logger, streamUrl:Optional[str]) -> Optional[str]:
         # Ensure there's something to work with
         if streamUrl is None:
             return None
@@ -379,7 +379,44 @@ class WebcamHelper:
 
         # This is camera-streamer.
         # We want to preserver the URL before the /webrtc, and only replace the /webrtc.
-        return streamUrl[:webRtcLocation] + "/stream"
+        # This should be something like /webcam/webrtc or /camera/webrtc, but it might also be /webcam2/webrtc or something else.
+        possibleStreamUrl = streamUrl[:webRtcLocation] + "/stream"
+
+        # Some versions of camera streamer use /webcam/stream, others need /webcam/stream.mjpg, like on the Snapmaker U1 custom firmware.
+        # So we need to first try /stream and see if it's a valid jmpeg stream, and if not try /stream.mjpg
+        # If we fail, we go with /stream anyway since it's the most common.
+        def testForJMPEGStream(url:str) -> bool:
+            try:
+                result = OctoHttpRequest.MakeHttpCall(logger, url, OctoHttpRequest.GetPathType(url), "GET", timeoutSec=1.0)
+                if result is None:
+                    raise Exception("MakeHttpCall returned None")
+                # Ensure we use a with clause so the stream body is closed after we are done.
+                with result:
+                    if result.StatusCode != 200:
+                        raise Exception(f"MakeHttpCall returned a non-200 error code. {result.StatusCode}")
+                    # Check the content type to see if it's mjpeg
+                    contentType = result.Headers.get("content-type", "").lower()
+                    if "multipart/x-mixed-replace" in contentType:
+                        # This is good, return this URL.
+                        return True
+            except Exception as e:
+                logger.debug(f"DetectWebRTCStreamUrlAndTranslate test URL [{url}] failed to validate as mjpeg stream. {str(e)}")
+            return False
+
+        # Try the most common .../stream first
+        if testForJMPEGStream(possibleStreamUrl):
+            logger.debug(f"DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [{streamUrl}] to mjpeg stream URL [{possibleStreamUrl}]")
+            return possibleStreamUrl
+
+        # Try adding the less common .mjpg suffix
+        possibleStreamUrlMjpg = possibleStreamUrl + ".mjpg"
+        if testForJMPEGStream(possibleStreamUrlMjpg):
+            logger.debug(f"DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [{streamUrl}] to mjpeg stream URL [{possibleStreamUrlMjpg}]")
+            return possibleStreamUrlMjpg
+
+        # If we fail, default to the most common /stream url.
+        logger.debug(f"DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [{streamUrl}] to mjpeg stream URL [{possibleStreamUrl}] (defaulted)")
+        return possibleStreamUrl
 
 
     # A static helper that provides common logic to detect webcam urls missing a directory slash.

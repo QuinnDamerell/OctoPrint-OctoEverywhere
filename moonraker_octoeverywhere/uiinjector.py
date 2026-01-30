@@ -18,7 +18,7 @@ class UiInjector():
     # This is how often we will check the state of things.
     # Since our checks are light weight, there's no harm in doing this somewhat frequently.
     # We don't have any other way of detecting file changes right now, so this is our only way.
-    c_UpdateCheckIntervalSec = 60
+    c_UpdateCheckIntervalSec = 60 * 5 # 5 minutes
 
     _Instance:"UiInjector" = None #pyright: ignore[reportAssignmentType]
     _Debug = False

@@ -601,8 +601,10 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             # Thus, if we see the /webcam<*>/webrtc URL as the stream URL, we will replace it with the stream URL for OE's internal uses.
             # Luckily, camera-stream also supports jmpeg streaming.
             #
+            # This function also works with the snapper u1 custom firmware, which uses a different version of camera streamer.
+            #
             # We dont need to update the snapshot URL, because camera-streamer has compat for /?action=snapshot -> /snapshot.
-            cameraStreamerJmpegUrl = WebcamHelper.DetectCameraStreamerWebRTCStreamUrlAndTranslate(webcamSettings.StreamUrl)
+            cameraStreamerJmpegUrl = WebcamHelper.DetectWebRTCStreamUrlAndTranslate(self.Logger, webcamSettings.StreamUrl)
             if cameraStreamerJmpegUrl is not None:
                 webcamSettings.StreamUrl = cameraStreamerJmpegUrl
 

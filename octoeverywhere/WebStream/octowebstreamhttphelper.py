@@ -1,6 +1,5 @@
 import time
 import logging
-import threading
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -25,6 +24,7 @@ from ..Proto import OeAuthAllowed
 from ..Proto.PathTypes import PathTypes
 from ..interfaces import IWebStream
 from ..buffer import Buffer, BufferOrNone
+from ..httpstreamaccumulationreader import HttpStreamAccumulationReader
 from ..httpresult import HttpResult, HttpResultOrNone
 
 
@@ -52,6 +52,10 @@ class MsgBuilderContext:
 #
 class OctoWebStreamHttpHelper:
 
+    # This is the max size anyone single message can be.
+    # This should stay in sync with the server size max.
+    c_MaxSingleChunkSizeBytes = int(4.5 * 1024.0 * 1024.0)
+
     # Called by the main socket thread so this should be quick!
     def __init__(self, streamId:int, logger:logging.Logger, webStream:IWebStream, webStreamOpenMsg:WebStreamMsg.WebStreamMsg, openedTime:float) -> None:
         self.Id = streamId
@@ -76,9 +80,9 @@ class OctoWebStreamHttpHelper:
         self.UploadBytesReceivedSoFar:int = 0
         self.UploadBuffer:Optional[Buffer] = None
 
-        # Unknown body size chunk reader
+        # This is our fallback reader for body streams that have unknown lengths.
         # If this is not None, we are doing the unknown body read. Then the rest of the body reads must use this same system.
-        self.UnknownBodyChunkReadContext:Optional[UnknownBodyChunkReadContext] = None
+        self.HttpStreamAccumulationReader:Optional[HttpStreamAccumulationReader] = None
 
         # Perf stats
         self.BodyReadTimeSec = 0.0
@@ -107,13 +111,10 @@ class OctoWebStreamHttpHelper:
         # Set the flag so all of the looping http operations will stop.
         self.IsClosed = True
 
-        # Important! If we are doing a unknown chunk read, we need to set the wait event to unblock the stream read thread.
-        # This will cause the thread to wake up, it will see the IsClosed flag, return, and then allow the web request to close,
-        # which will end the unknown body read thread.
-        if self.UnknownBodyChunkReadContext is not None:
-            # Call set under lock, to ensure the other thread doesn't clear it without us seeing it.
-            with self.UnknownBodyChunkReadContext.BufferLock:
-                self.UnknownBodyChunkReadContext.BufferDataReadyEvent.set()
+        # Important! If we are doing a stream accumulation read, we need to class close on it
+        # to close the http body and let the main executeHttpRequest thread return.
+        if self.HttpStreamAccumulationReader is not None:
+           self.HttpStreamAccumulationReader.Close()
 
 
     # Called when a new message has arrived for this stream from the server.
@@ -546,7 +547,7 @@ class OctoWebStreamHttpHelper:
             # Log about it - only if debug is enabled. Otherwise, we don't want to waste time making the log string.
             responseWriteDone = time.time()
             if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s; body_read:"+str(format(self.BodyReadTimeSec, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s; octo_stream_upload:"+str(format(self.ServiceUploadTimeSec, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" microreads:"+str(self.UnknownBodyChunkReadContext is not None)+" type:"+str(contentTypeLower)+" status:"+str(octoHttpResult.StatusCode)+" cached:"+str(isFromCache)+" for " + uri)
+                self.Logger.debug(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s; body_read:"+str(format(self.BodyReadTimeSec, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s; octo_stream_upload:"+str(format(self.ServiceUploadTimeSec, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" accumulatedStreamReader:"+str(self.HttpStreamAccumulationReader is not None)+" type:"+str(contentTypeLower)+" status:"+str(octoHttpResult.StatusCode)+" cached:"+str(isFromCache)+" for " + uri)
 
 
     def buildHeaderVector(self, builder:octoflatbuffers.Builder, httpResult:HttpResult) -> Optional[int]:
@@ -870,10 +871,16 @@ class OctoWebStreamHttpHelper:
                             finalDataBuffer = Buffer(mvSlice)
                             finalDataBufferNeedsReleased = True
                 else:
-                    if self.UnknownBodyChunkReadContext is not None or (responseHandlerContext is None and self.shouldDoUnknownBodyChunkRead(contentTypeLower, contentLength)):
+                    if self.HttpStreamAccumulationReader is not None or (responseHandlerContext is None and self.shouldDoUnknownBodyChunkRead(contentTypeLower, contentLength)):
                         # According to the HTTP 1.1 spec, if there's no content length and no boundary string, then the body is chunk based transfer encoding.
                         # Note that once we do on read as an unknown body size chunk read, we need to always do it, since there's a thread reading the body.
-                        finalDataBuffer = self.doUnknownBodyChunkRead(httpResult)
+                        if self.HttpStreamAccumulationReader is None:
+                            # Even though we read complete chunks as they come in, we might want to buffer smaller chunks up before sending them so the compression and stream is more efficient.
+                            # This does need to be small, because we want reading this min time period back to back, we are reading a chunk, doing all of the send logic, and then spinning back to here.
+                            # So if we set this at exactly 16.6 for a 60fps stream, for example, we will fall behind.
+                            # So we set the accumulation time to 10ms, which should be small enough to not cause issues.
+                            self.HttpStreamAccumulationReader = HttpStreamAccumulationReader(self.Logger, httpResult, accumulationTimeSec=0.010, maxReturnBufferSizeBytes=self.c_MaxSingleChunkSizeBytes)
+                        finalDataBuffer = self.HttpStreamAccumulationReader.Read()
                     else:
                         # If there is no boundary string, but we know the content length, it's safe to just read.
                         # This will block until either the full defaultBodyReadSizeBytes is read or the full request has been received.
@@ -948,6 +955,10 @@ class OctoWebStreamHttpHelper:
             # So ideally we use the size of the body buffer we will actually send, and add enough overhead to contain the rest of the msg data.
             finalDataBufferSizeBytes = len(finalDataBuffer)
             builderContext.CreateBuilder(finalDataBufferSizeBytes)
+
+            # Warn if the total buffer size is too big. Add the 1kb for headers and other flatbuffer overhead.
+            if finalDataBufferSizeBytes > self.c_MaxSingleChunkSizeBytes - 1024:
+                self.Logger.warning(self.getLogMsgPrefix() + " is creating a flatbuffer message with a very large data buffer size of "+str(finalDataBufferSizeBytes)+" bytes. This is larger than the recommended max single chunk size of "+str(self.c_MaxSingleChunkSizeBytes)+" bytes. This will cause a disconnect.")
 
             builder = builderContext.Builder
             if builder is None:
@@ -1176,184 +1187,12 @@ class OctoWebStreamHttpHelper:
             Sentry.OnException(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read.", e)
             return None
 
-
-    def doUnknownBodyChunkReadThread(self):
-        try:
-            if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug(f"{self.getLogMsgPrefix()}Starting chunk read thread.")
-
-            context = self.UnknownBodyChunkReadContext
-            if context is None:
-                raise Exception("doUnknownBodyChunkReadThread was called with a None context.")
-
-            # Get the Request response object.
-            response = context.HttpResult.ResponseForBodyRead
-            if response is None:
-                raise Exception("doUnknownBodyChunkReadThread was called with a result that has not Response object to read from.")
-
-            # Loop until the stream is closed.
-            # Remember we use the raw stream read, because it will read and entire chunk and return it as soon as it's ready.
-            # BUG - response.raw.stream doesn't close when we close the http request from our side. (but it says it should?)
-            # If server we are calling closes it shutdown correctly, but if our server drops the connection it will not close.
-            # So what happens is that the stream will timeout from the httprequest.MakeHttpCallAttempt timeout, or when it gets a new chunk it will end.
-            # That's not great, but it's not super common, so it's fine.
-            gen = response.raw.stream(amt=None)
-            for i in gen:
-                # When we have a new buffer, add it to the list under lock.
-                with context.BufferLock:
-                    context.BufferList.append(i)
-                    # Call set under lock, to ensure the other thread doesn't clear it without us seeing it.
-                    context.BufferDataReadyEvent.set()
-
-            # When the loop exits, the body read is complete and the stream is closed.
-
-        except urllib3.exceptions.HTTPError as e:
-            # These happen for a variety of reasons, including the stream being closed.
-            # Don't send it to Sentry.
-            self.Logger.info(f"{self.getLogMsgPrefix()} HTTPError exception thrown in doUnknownBodyChunkReadThread, ending read. {str(e)}")
-
-        except Exception as e:
-            # If the web stream is already closed, don't bother logging the exception.
-            # These exceptions happen for use cases as above, where stream() doesn't close in time and such.
-            # Note the exception can be a timeout, but it can also be a "doesn't have a read" function error bc if the socket gets data the lib will try to call read on a fp that's closed and set to None. :/
-            if self.IsClosed is False:
-                Sentry.OnException(self.getLogMsgPrefix()+ " exception thrown in doUnknownBodyChunkReadThread", e)
-        finally:
-            context = self.UnknownBodyChunkReadContext
-            if context is not None:
-                # Ensure we always set this flag, so the web stream will know the body read is done.
-                context.ReadComplete = True
-
-                # Set the event to break the stream read wait, so it will shutdown.
-                # Call set under lock, to ensure the other thread doesn't clear it without us seeing it.
-                with context.BufferLock:
-                    context.BufferDataReadyEvent.set()
-
-                try:
-                    if self.Logger.isEnabledFor(logging.DEBUG):
-                        self.Logger.debug(f"{self.getLogMsgPrefix()}Exiting chunk read thread.")
-                except Exception:
-                    pass
-
-
-    # This function should be used if there's no content length and there's no boundary string.
-    # In that case, the HTTP1.1 standard says the body content must be chunk based transfer encoded, which is what this function does.
-    # Most of the time these HTTP calls are for streams, like an event stream, log stream, etc.
-    #
-    # In the past we had two problems with this:
-    #   1) A body read() will block until the size requested is full, which means we can't stream chunks as they come in.
-    #   2) We then tired to do micro reads to build a buffer but it allowed us to return if there was enough. But this still failed because read still needs to fill the buffer,
-    #      so if we wanted to read the last 5 bytes of the buffer but set our size to 10, it would block until the final 5 bytes were read.
-    #
-    # So, the right way to do this is with response.raw.stream().
-    # This will read each chunk as it comes in, and return each complete chunk. This is the same way a web browser will handle the data, where it won't handle the data until the entire
-    # chunk is read. So there's no need to stream sub-chunks.
-    #
-    # There's still a problem with stream, which is it will block until the next chunk is ready. But for us, once we have data, we want to send it. Thus we must spin off a thread to do
-    # the stream reading, and then transfer the buffer. Also stream() is a generator, so it can't be re-entered.
-    #
-    def doUnknownBodyChunkRead(self, httpResult:HttpResult) -> BufferOrNone:
-
-        # Even though we read complete chunks as they come in, we might want to buffer smaller chunks up
-        # before sending them so the compression and stream is more efficient.
-        # This does need to be small, because we want reading this min time period back to back,
-        # we are reading a chunk, doing all of the send logic, and then spinning back to here.
-        # So if we set this at exactly 16.6 for a 60fps stream, for example, we will fall behind.
-        minBufferBuildTimeSec = 0.010 # 10ms
-
-        # Just as a sanity check, we will define the max amount of time we will wait for one chunk.
-        # This will make sure we don't get stuck in a loop if there are any bugs.
-        maxChunkReadTimeSec = 20 * 60 * 60 # 20 hours
-
-        # If this is the first time, setup the unknown body read info.
-        # Once this is defined, this body read method must be used for the rest of the request.
-        if self.UnknownBodyChunkReadContext is None:
-            context = UnknownBodyChunkReadContext(httpResult)
-            context.Thread = threading.Thread(target=self.doUnknownBodyChunkReadThread)
-            self.UnknownBodyChunkReadContext = context
-            context.Thread.start()
-
-        try:
-            startSec = time.time()
-            chunkBufferList:Optional[List[bytes]] = None
-
-            # Since we will always sleep for at least the min time, there's no need to do work until the min time is meet.
-            # If we did do the loop, we would just end up spinning and sleeping again.
-            time.sleep(minBufferBuildTimeSec)
-
-            # Try to read a chunk or wait for the read to be done.
-            # Only try to read while the stream is open.
-            while self.IsClosed is False:
-
-                # First, sanity check we haven't been running forever.
-                now = time.time()
-                if now - startSec > maxChunkReadTimeSec:
-                    raise Exception(f"doUnknownBodyChunkRead has been waiting for a chunk for {maxChunkReadTimeSec} seconds. This is an error.")
-
-                # Next, check if there are any new buffers to read.
-                with self.UnknownBodyChunkReadContext.BufferLock:
-                    if len(self.UnknownBodyChunkReadContext.BufferList) > 0:
-                        # If there's new chunks, grab them all and reset the buffer list.
-                        if chunkBufferList is None:
-                            chunkBufferList = self.UnknownBodyChunkReadContext.BufferList
-                        else:
-                            chunkBufferList += self.UnknownBodyChunkReadContext.BufferList
-                        self.UnknownBodyChunkReadContext.BufferList = []
-                        # Clear the event under lock, so we don't miss a new set.
-                        self.UnknownBodyChunkReadContext.BufferDataReadyEvent.clear()
-
-                # If we got some chunks, see if we are past the min chunk read time or if the chunk stream is complete.
-                if chunkBufferList is not None and now - startSec > minBufferBuildTimeSec:
-                    break
-
-                # Finally, AFTER we checked if we have new buffers, check is the read is done.
-                # Note we have to do this after we grab any new buffers in the list, because we can have pending chunks from before the stream is closed.
-                if self.UnknownBodyChunkReadContext.ReadComplete:
-                    break
-
-                # If we don't have a chunk, wait on the event until we have something.
-                # This will return when there's new chunks ready, ReadComplete is set, or it hits a timeout.
-                self.UnknownBodyChunkReadContext.BufferDataReadyEvent.wait(maxChunkReadTimeSec)
-
-            # If we broke out of the loop and we have no chunks to send, we are done.
-            if chunkBufferList is None:
-                return None
-
-            # Append all of the chunks together and return the buffer!
-            # Optimize for the single chunk scenario.
-            if len(chunkBufferList) == 1:
-                return Buffer(chunkBufferList[0])
-
-            # Find the final buffer length.
-            totalLength = sum(len(b) for b in chunkBufferList)
-
-            # Allocate a buffer to hold all of the chunks.
-            finalBuffer = bytearray(totalLength)
-            offset = 0
-            for buffer in chunkBufferList:
-                view = memoryview(buffer)
-                with view:
-                    finalBuffer[offset:offset + len(view)] = view
-                    offset += len(view)
-
-            # Sanity check
-            if len(finalBuffer) != totalLength:
-                raise Exception(f"Final appended buffer was {len(finalBuffer)} but it should have been {totalLength}")
-
-            # Return!
-            return Buffer(finalBuffer)
-
-        except Exception as e:
-            Sentry.OnException(self.getLogMsgPrefix()+ " exception thrown in doUnknownBodySizeRead. Ending body read.", e)
-            return None
-
-
     # Based on the content length and the content type, determine if we should do a doUnknownBodySizeRead read.
     # Read doUnknownBodySizeRead about why we need to use it, but since it's not efficient, we only want to use it when we know we should.
     def shouldDoUnknownBodyChunkRead(self, contentTypeLower:Optional[str], contentLengthLower:Optional[int]) -> bool:
 
         # If this is set, we are already doing a unknown body chunk read, so we must keep doing it.
-        if self.UnknownBodyChunkReadContext is not None:
+        if self.HttpStreamAccumulationReader is not None:
             return True
 
         # If there's a known content length, there's no need to do this, because the normal read will fill the requested buffer size
@@ -1388,20 +1227,3 @@ class OctoWebStreamHttpHelper:
     # Formatting helper.
     def _FormatFloat(self, value:float) -> str:
         return str(format(value, '.3f'))
-
-
-# Used to capture the context of the unknown body read thread.
-class UnknownBodyChunkReadContext:
-
-    def __init__(self, httpResult:HttpResult) -> None:
-        self.HttpResult = httpResult
-        self.Thread:Optional[threading.Thread] = None
-        self.BufferLock = threading.Lock()
-        self.BufferDataReadyEvent = threading.Event()
-
-        # We use a list so we can efficiently append all of the pending buffers at once when they are being sent.
-        self.BufferList:List[bytes] = []
-
-        # Set to true when the read is done either from the end of the body or an error.
-        # Once true, it will never read again, but we do need to process the BufferList
-        self.ReadComplete = False

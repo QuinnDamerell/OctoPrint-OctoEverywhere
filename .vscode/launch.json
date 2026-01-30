@@ -96,6 +96,22 @@
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
         },
+                {
+            "name": "Companion 3- Snapmaker U1",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "moonraker_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Companion version of the plugin. These args target the first instance.
+                //
+                // This is the single instance setup
+                "eyJDb25maWdGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbi0zIiwgIkxvZ0ZvbGRlciI6ICIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtY29tcGFuaW9uLTMvbG9ncyIsICJMb2NhbEZpbGVTdG9yYWdlUGF0aCI6ICIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtY29tcGFuaW9uLTMvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtY29tcGFuaW9uLTMiLCAiVmlydHVhbEVudlBhdGgiOiAiL2hvbWUvcGkvb2N0b2V2ZXJ5d2hlcmUtZW52IiwgIlJlcG9Sb290Rm9sZGVyIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlIiwgIklzQ29tcGFuaW9uIjogdHJ1ZSwgIkNvbXBhbmlvbkluc3RhbmNlSWRTdHIiOiAiMyJ9",
+                //
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
         {
             "name": "Companion 1 - Klipper (Memray)",
             "type": "debugpy",
