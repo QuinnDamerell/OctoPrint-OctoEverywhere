@@ -111,10 +111,10 @@ class OctoWebStreamHttpHelper:
         # Set the flag so all of the looping http operations will stop.
         self.IsClosed = True
 
-        # Important! If we are doing a stream accumulation read, we need to class close on it
+        # Important! If we are doing a stream accumulation read, we need to call close on it
         # to close the http body and let the main executeHttpRequest thread return.
         if self.HttpStreamAccumulationReader is not None:
-           self.HttpStreamAccumulationReader.Close()
+            self.HttpStreamAccumulationReader.Close()
 
 
     # Called when a new message has arrived for this stream from the server.
