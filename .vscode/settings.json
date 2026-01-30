@@ -91,6 +91,7 @@
         "frontendsetup",
         "fsensor",
         "fstring",
+        "fullbuffercompression",
         "FULLDICT",
         "gaierror",
         "gcode",

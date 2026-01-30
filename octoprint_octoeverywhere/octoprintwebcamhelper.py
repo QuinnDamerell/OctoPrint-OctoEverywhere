@@ -201,7 +201,7 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
         #
         # We dont need to update the snapshot URL, because camera-streamer has compat for /?action=snapshot -> /snapshot.
         for item in results:
-            cameraStreamerJmpegUrl = WebcamHelper.DetectCameraStreamerWebRTCStreamUrlAndTranslate(item.StreamUrl)
+            cameraStreamerJmpegUrl = WebcamHelper.DetectWebRTCStreamUrlAndTranslate(self.Logger, item.StreamUrl)
             if cameraStreamerJmpegUrl is not None:
                 self.Logger.info(f"Camera-streamer webrtc {item.Name} stream url {item.StreamUrl} converted to jmpeg {cameraStreamerJmpegUrl}")
                 item.StreamUrl = cameraStreamerJmpegUrl
