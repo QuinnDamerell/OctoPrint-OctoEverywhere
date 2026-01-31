@@ -176,9 +176,15 @@ class MoonrakerClient(IMoonrakerClient):
                 # Otherwise, parse the host and port, if they exist.
                 serverBlock = moonrakerConfig["server"]
                 if "host" in serverBlock:
-                    currentHostStr = moonrakerConfig['server']['host']
+                    currentHostStr = moonrakerConfig['server']['host'].strip()
                 if "port" in serverBlock:
-                    currentPortInt = int(moonrakerConfig['server']['port'])
+                    currentPortInt = int(moonrakerConfig['server']['port'].strip())
+
+                # A valid moonraker config is to set host: all, which binds to all interfaces.
+                # If we find that, use localhost. The Snapmaker U1 extended firmware does this for example.
+                if currentHostStr.lower() == "all":
+                    self.Logger.debug("Moonraker config has host: all, using localhost instead.")
+                    currentHostStr = "127.0.0.1"
 
                 # Done!
                 return (currentHostStr, currentPortInt)
