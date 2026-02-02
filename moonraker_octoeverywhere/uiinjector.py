@@ -73,6 +73,9 @@ class UiInjector():
             # First, we might have a few places to search.
             searchRootDirs = [ self.GetParentDirectory(self.OeRepoRoot) ]
 
+            # Used on the snapmaker u1 for frontends.
+            searchRootDirs.append("/home/lava/")
+
             # If we are running on the sonic pad or the k1, the path we want to search is different.
             osType = OsTypeIdentifier.DetectOsType()
             if osType == OsType.OsType.CrealitySonicPad or osType == OsType.OsType.CrealityK1:
