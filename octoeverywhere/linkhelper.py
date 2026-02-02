@@ -11,6 +11,14 @@ class LinkHelper:
     # This is used to prevent the short code from being printed multiple times, like when the plugin is re-connected
     s_HasRunShortCodeLinkLogic = False
 
+    # This is used by the docker manager to detect printers that are not linked and get the printer id so it can be linked.
+    # This line should not change or the docker manager will not be able to detect the printer.
+    c_PrinterNotLinkedPrinterIdLogPrefix = "plugin-not-linked:"
+
+    # This is used by some systems to scan the logs for the printer linking URL.
+    # This line should not change or the systems that use it will break.
+    c_PrinterNotLinkedLinkURLLogPrefix = "account-linking-url:"
+
     # Checks with the service to see if the printer is setup on a account.
     # Returns a tuple of two values
     #   1 - bool - Is the printer connected to the service
@@ -150,7 +158,12 @@ class LinkHelper:
 
         # This is used by the docker manager to detect printers that are not linked and get the printer id so it can be linked.
         # This line should not change or the docker manager will not be able to detect the printer.
-        logger.info(f"plugin-not-linked:<{printerId}>")
+        logger.info(f"{LinkHelper.c_PrinterNotLinkedPrinterIdLogPrefix}<{printerId}>")
+
+        # This is used by some systems to scan the logs for the printer linking URL.
+        # This should not be a short term code, it should be the long term link URL.
+        # This line should not change or the systems that use it will break.
+        logger.info(f"{LinkHelper.c_PrinterNotLinkedLinkURLLogPrefix}<{LinkHelper.GetAddPrinterUrl(printerId)}>")
 
         # This is kicked off when the plugin first connects to the service.
         # In most cases, the user has just installed the plugin and is setting it up, so we want to make the process as easy as possible.
