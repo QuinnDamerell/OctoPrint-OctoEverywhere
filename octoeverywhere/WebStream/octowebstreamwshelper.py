@@ -155,7 +155,7 @@ class OctoWebStreamWsHelper:
             if self.ConnectionAttempt > 1:
                 self.Logger.info(self.getLogMsgPrefix()+" failed to connect to the relay provider and has nothing else to try.")
                 return None
-            self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to using the relay provider, attempt "+ str(self.ConnectionAttempt))
+            self.Logger.debug("%sopening websocket to using the relay provider, attempt %s", self.getLogMsgPrefix(), self.ConnectionAttempt)
             return relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
                     onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
 
@@ -171,7 +171,7 @@ class OctoWebStreamWsHelper:
                 # Return none to indicate a failure and to close the websocket.
                 self.Logger.info(self.getLogMsgPrefix()+" failed to get a websocket provider from the command handler.")
                 return None
-            self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to using the command provider, attempt "+ str(self.ConnectionAttempt))
+            self.Logger.debug("%sopening websocket to using the command provider, attempt %s", self.getLogMsgPrefix(), self.ConnectionAttempt)
             return wsProvider.GetWebsocketObject(self.Id, path, pathType, self.HttpInitialContext,
                     onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
 
@@ -258,7 +258,7 @@ class OctoWebStreamWsHelper:
             raise Exception(self.getLogMsgPrefix()+" AttemptConnection failed to create a URI")
 
         # Make the websocket object and start it running.
-        self.Logger.debug(self.getLogMsgPrefix()+"opening websocket to "+str(uri) + " attempt "+ str(self.ConnectionAttempt))
+        self.Logger.debug("%sopening websocket to %s attempt %s", self.getLogMsgPrefix(), uri, self.ConnectionAttempt)
         return Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
 
 

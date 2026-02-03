@@ -457,7 +457,7 @@ class ElegooClient:
 
             # Print for debugging if desired.
             if ElegooClient.WebSocketMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Incoming Elegoo Message:\r\n"+json.dumps(msg, indent=3))
+                self.Logger.debug("Incoming Elegoo Message:\r\n%s", json.dumps(msg, indent=3))
 
             # If set, this message should be sent to all mux sockets.
             # This is the default behavior, because worst case, sending responses that aren't matched is fine.

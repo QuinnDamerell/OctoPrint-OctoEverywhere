@@ -56,6 +56,6 @@ class MoonrakerDatabase:
                 if result.HasError():
                     self.Logger.error("_Debug_EnumerateDataBase failed to get items for "+n+". "+result.GetLoggingErrorStr())
                     return
-                self.Logger.debug("Database namespace "+n+" : "+json.dumps(result.GetResult(), indent=4, separators=(", ", ": ")))
+                self.Logger.debug("Database namespace %s : %s", n, json.dumps(result.GetResult(), indent=4, separators=(", ", ": ")))
         except Exception as e:
             Sentry.OnException("_Debug_EnumerateDataBase exception.", e)

@@ -279,7 +279,7 @@ class BambuClient:
             if c is not None:
                 c.disconnect()
         except Exception as e:
-            self.Logger.debug(f"_CleanupStateOnDisconnect exception on mqtt disconnect during cleanup. {e}")
+            self.Logger.debug("_CleanupStateOnDisconnect exception on mqtt disconnect during cleanup. %s", e)
 
 
     # Fired when the MQTT connection is made.
@@ -373,7 +373,7 @@ class BambuClient:
 
             # Print for debugging if desired.
             if BambuClient._PrintMQTTMessages and self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Incoming Bambu Message:\r\n"+json.dumps(msg, indent=3))
+                self.Logger.debug("Incoming Bambu Message:\r\n%s", json.dumps(msg, indent=3))
 
             # Since we keep a track of the state locally from the partial updates, we need to feed all updates to our state object.
             isFirstFullSyncResponse = False
@@ -433,7 +433,7 @@ class BambuClient:
         try:
             # Print for debugging if desired.
             if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Outgoing Bambu Message:\r\n" + json.dumps(msg, indent=3))
+                self.Logger.debug("Outgoing Bambu Message:\r\n%s", json.dumps(msg, indent=3))
 
             # Ensure we are connected.
             if self.Client is None or not self.Client.is_connected():

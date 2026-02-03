@@ -129,7 +129,7 @@ class FileMetadataCache:
             # If we got a 404, it means the the meta doesn't exist or doesn't exist yet.
             # We have seen a few times that we will get this 404 error code for a few seconds and then it will start working.
             if result.GetErrorCode() == result.MR_404_NOT_FOUND:
-                self.Logger.debug(f"_RefreshFileMetaDataCache got 404 for file [{filename}]. This can happen for the first few metadata get attempts.")
+                self.Logger.debug("_RefreshFileMetaDataCache got 404 for file [%s]. This can happen for the first few metadata get attempts.", filename)
             else:
                 self.Logger.error("_RefreshFileMetaDataCache failed to get file meta. "+result.GetLoggingErrorStr())
             return

@@ -38,7 +38,7 @@ class DnsTest:
 
     def _TestUrl(self, url:str, recordType:str="A") -> None:
         try:
-            self.Logger.debug(f"Starting DNS resolve test for {url} with record type {recordType}")
+            self.Logger.debug("Starting DNS resolve test for %s with record type %s", url, recordType)
             startSec = time.time()
             dnsResolver = dns.resolver.Resolver()
             dnsResolver.timeout = 5.0 # Timeout in seconds.

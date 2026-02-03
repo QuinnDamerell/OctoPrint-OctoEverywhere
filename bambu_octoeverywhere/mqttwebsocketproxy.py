@@ -105,7 +105,7 @@ class MqttWebsocketProxy(IWebSocketClient):
             # If we have an exception, fire the error callback.
             if exception is not None and self._onWsError is not None:
                 try:
-                    self.Logger.debug(f"{self._GetLogMsgStart()} firing error callback. Exception: {exception}")
+                    self.Logger.debug("%s firing error callback. Exception: %s", self._GetLogMsgStart(), exception)
                     self._onWsError(self, exception)
                 except Exception as e:
                     self.Logger.error(f"{self._GetLogMsgStart()} Error in _onWsError callback: {e}")
@@ -120,11 +120,11 @@ class MqttWebsocketProxy(IWebSocketClient):
             # Finally, fire on close.
             if self._onWsClose is not None:
                 try:
-                    self.Logger.debug(f"{self._GetLogMsgStart()} firing close callback.")
+                    self.Logger.debug("%s firing close callback.", self._GetLogMsgStart())
                     self._onWsClose(self)
                 except Exception as e:
                     self.Logger.error(f"{self._GetLogMsgStart()}  Error in _onWsClose callback: {e}")
-            self.Logger.debug(f"{self._GetLogMsgStart()} close complete.")
+            self.Logger.debug("%s close complete.", self._GetLogMsgStart())
         threading.Thread(target=closeThread, name="MqttWebsocketProxyClose").start()
 
 
@@ -133,7 +133,7 @@ class MqttWebsocketProxy(IWebSocketClient):
         if client is None:
             return
         try:
-            self.Logger.debug(f"{self._GetLogMsgStart()} disconnecting...")
+            self.Logger.debug("%s disconnecting...", self._GetLogMsgStart())
             client.disconnect()
         except Exception as e:
             self.Logger.error(f"{self._GetLogMsgStart()} Error in client disconnect: {e}")
@@ -199,7 +199,7 @@ class MqttWebsocketProxy(IWebSocketClient):
 
     # Fired when the MQTT connection is made.
     def _OnConnect(self, client:mqtt.Client, userdata:Any, flags:Any, reason_code:Any, properties:Any) -> None:
-        self.Logger.debug(f"{self._GetLogMsgStart()} mqtt._OnConnect")
+        self.Logger.debug("%s mqtt._OnConnect", self._GetLogMsgStart())
 
         # When we are fully connected, ensure we should still be connected!
         with self.StateLock:
@@ -213,7 +213,7 @@ class MqttWebsocketProxy(IWebSocketClient):
         # Fire the callback.
         if self._onWsOpen is not None:
             try:
-                self.Logger.debug(f"{self._GetLogMsgStart()} firing open callback.")
+                self.Logger.debug("%s firing open callback.", self._GetLogMsgStart())
                 self._onWsOpen(self)
             except Exception as e:
                 self.Logger.error(f"{self._GetLogMsgStart()} Error in _onWsOpen callback: {e}")
@@ -221,7 +221,7 @@ class MqttWebsocketProxy(IWebSocketClient):
 
     # Fired when the MQTT connection is lost
     def _OnDisconnect(self, client:Any, userdata:Any, disconnect_flags:Any, reason_code:Any, properties:Any) -> None:
-        self.Logger.debug(f"{self._GetLogMsgStart()} mqtt._OnDisconnect")
+        self.Logger.debug("%s mqtt._OnDisconnect", self._GetLogMsgStart())
 
         # Close without any error.
         self._InternalClose()
@@ -270,20 +270,20 @@ class MqttWebsocketProxy(IWebSocketClient):
     # Fired when the MQTT subscribe result has come back.
     def _OnSubscribe(self, client:Any, userdata:Any, mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): #pyright: ignore[reportPrivateImportUsage]
         proxyMessageId = self._WaitForMidBlockAndGeProxyMessageId(mid)
-        self.Logger.debug(f"{self._GetLogMsgStart()} mqtt._OnSubscribe - {mid}")
+        self.Logger.debug("%s mqtt._OnSubscribe - %s", self._GetLogMsgStart(), mid)
         self._SendOutgoingMessage("on_subscribe", mqttMessageId=mid, reasonCodeList=reason_code_list, proxyMessageId=proxyMessageId)
 
 
     # Fired when the MQTT unsubscribe result has come back.
     def _OnUnsubscribe(self, client:Any, userdata:Any, mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): #pyright: ignore[reportPrivateImportUsage]
         proxyMessageId = self._WaitForMidBlockAndGeProxyMessageId(mid)
-        self.Logger.debug(f"{self._GetLogMsgStart()} mqtt._OnUnsubscribe - {mid}")
+        self.Logger.debug("%s mqtt._OnUnsubscribe - %s", self._GetLogMsgStart(), mid)
         self._SendOutgoingMessage("on_unsubscribe", mqttMessageId=mid, reasonCodeList=reason_code_list, proxyMessageId=proxyMessageId)
 
 
     # Fired when there's an incoming MQTT message.
     def _OnMessage(self, client:Any, userdata:Any, mqttMsg:mqtt.MQTTMessage) -> None:
-        self.Logger.debug(f"{self._GetLogMsgStart()} mqtt._OnMessage")
+        self.Logger.debug("%s mqtt._OnMessage", self._GetLogMsgStart())
         self._SendOutgoingMessage("on_message", payload=mqttMsg.payload, mqttMessageId=mqttMsg.mid)
 
 

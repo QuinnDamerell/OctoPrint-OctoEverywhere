@@ -175,7 +175,7 @@ class BambuCloud:
             # On failure reset the access token.
             self._ResetAccessToken()
             return None
-        self.Logger.debug(f"Bambu Cloud Device List: {response.json()}")
+        self.Logger.debug("Bambu Cloud Device List: %s", response.json())
         devices = response.json().get('devices', None)
         if devices is None:
             self.Logger.error("Bambu Cloud GetDeviceList failed, the devices object was missing.")
@@ -195,7 +195,7 @@ class BambuCloud:
             return None
         for d in devices:
             sn = d.get('dev_id', None) #pyright: ignore[reportUnknownMemberType]
-            self.Logger.debug(f"Bambu Cloud Printer Info. SN:{sn} Name:{(d.get('name', None))}") #pyright: ignore[reportUnknownMemberType]
+            self.Logger.debug("Bambu Cloud Printer Info. SN:%s Name:%s", sn, d.get("name", None)) #pyright: ignore[reportUnknownMemberType]
             if sn == localSn:
                 return d
         self.Logger.error("Bambu Cloud failed to find a matching printer SN on the user account.")

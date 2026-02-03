@@ -47,7 +47,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         # Here's a list of all states: https://github.com/greghesp/ha-bambulab/blob/e72e343acd3279c9bccba510f94bf0e291fe5aaa/custom_components/bambu_lab/pybambu/const.py#L83C1-L83C21
         if self.LastState != bambuState.gcode_state:
             # We know the state changed.
-            self.Logger.debug(f"Bambu state change: {self.LastState} -> {bambuState.gcode_state}")
+            self.Logger.debug("Bambu state change: %s -> %s", self.LastState, bambuState.gcode_state)
             if self.LastState is None:
                 # If the last state is None, this is mostly likely the first time we've seen a state.
                 # All we want to do here is update last state to the new state.
@@ -122,7 +122,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         # a printer error message. In this case we want to fire different things.
         err = bambuState.GetPrinterErrorType()
         if err is not None:
-            self.Logger.debug(f"BambuOnPauseOrTempError - Error code {err}.")
+            self.Logger.debug("BambuOnPauseOrTempError - Error code %s.", err)
 
         if err is None or err == BambuPrintErrors.PausedByUser or err == BambuPrintErrors.PausedUnknownReason or err == BambuPrintErrors.PrintFilePauseCommand:
             # If error is none or this reason, it's just a normal pause.

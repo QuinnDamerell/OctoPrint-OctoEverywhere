@@ -131,7 +131,7 @@ class UiInjector():
                 sha1.update(data)
         self.StaticFileHash = f"{sha1.hexdigest()}"
         self.StaticFileHash = self.StaticFileHash[:10]
-        self.Logger.debug("Static UI Files Hash: "+self.StaticFileHash)
+        self.Logger.debug("Static UI Files Hash: %s", self.StaticFileHash)
 
 
     # Given a known static path, try to inject our UI files.

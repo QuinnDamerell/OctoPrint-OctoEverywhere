@@ -335,7 +335,7 @@ class OctoHttpRequest:
             # our logic relies on the exception when the stream is consumed to end the http response stream.
             response = HttpSessions.GetSession(url).request(method, url, headers=headers, data=dataBuffer, timeout=timeoutSec, allow_redirects=allowRedirects, stream=True, verify=False)
         except Exception as e:
-            logger.debug(attemptName + " http URL threw an exception: "+str(e))
+            logger.debug("%s http URL threw an exception: %s", attemptName, e)
 
         # We have seen when making absolute calls to some lower end devices, like external IP cameras, they can't handle the number of headers we send.
         # So if any call fails due to 431 (headers too long) we will retry the call with no headers at all. Note this will break most auth, but
@@ -374,9 +374,9 @@ class OctoHttpRequest:
             return OctoHttpRequest.AttemptResult(True, mainResult)
         else:
             if response is not None:
-                logger.debug(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
+                logger.debug("%s failed and we have no more fallbacks. We DON'T have a main response.", attemptName)
                 return OctoHttpRequest.AttemptResult(True, HttpResult.BuildFromRequestLibResponse(response, url, isFallback))
 
             # Otherwise return the failure.
-            logger.debug(attemptName + " failed and we have no more fallbacks. We DON'T have a main response.")
+            logger.debug("%s failed and we have no more fallbacks. We DON'T have a main response.", attemptName)
             return OctoHttpRequest.AttemptResult(True, None)

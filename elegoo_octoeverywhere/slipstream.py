@@ -209,7 +209,7 @@ class Slipstream(ISlipstreamHandler):
         with self.Lock:
             size = len(self.Cache)
 
-        self.Logger.debug("Slipstream took "+str(time.time()-start)+f" to fully update the cache of {size} files.")
+        self.Logger.debug("Slipstream took %s to fully update the cache of %s files.", time.time() - start, size)
 
 
     # On success returns the fully ready OctoHttpResult object.

@@ -158,7 +158,7 @@ class MDns:
         while True:
             # If we don't have a resolver, we can't resolve.
             if self.dnsResolver is None:
-                self.Logger.debug("Mdns skipping resolve bc we don't have a resolver object."+str(domain))
+                self.Logger.debug("Mdns skipping resolve bc we don't have a resolver object.%s", domain)
                 return None
 
             # Only allow 3 attempts to successfully resolve.

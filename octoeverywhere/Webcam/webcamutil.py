@@ -145,7 +145,7 @@ class WebcamUtil:
             return GetSnapshotFromStreamResult(Buffer(imageBuffer), contentType)
         except Exception as e:
             if Sentry.IsCommonHttpError(e):
-                logger.debug(f"GetSnapshotFromStream - Failed, got a common http error while reading the stream. {str(e)}")
+                logger.debug("GetSnapshotFromStream - Failed, got a common http error while reading the stream. %s", e)
             else:
                 Sentry.OnException("Failed to get fallback snapshot.", e)
         return None

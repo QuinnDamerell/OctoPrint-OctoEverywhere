@@ -77,7 +77,13 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
                     webcam:Webcam = providerContainer.config
                     # Log for debugging.
                     if self.Logger.isEnabledFor(logging.DEBUG):
-                        self.Logger.debug(f"OctoPrint Webcam Config Found: Name: {webcamName}, Can Snapshot: {webcam.canSnapshot}, Webcam Snapshot: \"{webcam.snapshotDisplay}\", Extras: {json.dumps(webcam.extras)}") #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
+                        self.Logger.debug(
+                            "OctoPrint Webcam Config Found: Name: %s, Can Snapshot: %s, Webcam Snapshot: \"%s\", Extras: %s",
+                            webcamName,
+                            webcam.canSnapshot,
+                            webcam.snapshotDisplay,
+                            json.dumps(webcam.extras),
+                        ) #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
 
                     # Some times this bool seems to be reported incorrectly so for now we don't skip the camera if it's set.
                     # Since the snapshot is critical for Gadget and others, only allow webcams that have snapshot (for now)
@@ -114,7 +120,7 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
                     # Ensure we got what we need. We only check snapshot, because that's critical for notifications, Gadget, etc.
                     # It's better to find one webcam with a valid snapshot, rather than finding no webcams with a snapshot and stream url.
                     if webSettingsItem.SnapshotUrl is None: #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
-                        self.Logger.debug(f"OctoPrint Webcam Config Found {webcamName} but no snapshot URL, moving on to the next.")
+                        self.Logger.debug("OctoPrint Webcam Config Found %s but no snapshot URL, moving on to the next.", webcamName)
                         continue
 
                     # Warn if we are missing a stream url, this shouldn't happen often. Most plugins would always have a stream url over a snapshot url.
@@ -135,9 +141,17 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
                     # Ensure we have everything required.
                     if webSettingsItem.Validate(self.Logger):
                         results.append(webSettingsItem)
-                        self.Logger.debug(f"Webcam found. Name: {webSettingsItem.Name}, {webSettingsItem.StreamUrl}, {webSettingsItem.SnapshotUrl}, {webSettingsItem.FlipH}, {webSettingsItem.FlipV}, {webSettingsItem.Rotation}") #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
+                        self.Logger.debug(
+                            "Webcam found. Name: %s, %s, %s, %s, %s, %s",
+                            webSettingsItem.Name,
+                            webSettingsItem.StreamUrl,
+                            webSettingsItem.SnapshotUrl,
+                            webSettingsItem.FlipH,
+                            webSettingsItem.FlipV,
+                            webSettingsItem.Rotation,
+                        ) #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
                     else:
-                        self.Logger.debug(f"Webcam settings item validation failed for {webcamName}")
+                        self.Logger.debug("Webcam settings item validation failed for %s", webcamName)
 
         except Exception as e:
             Sentry.OnException("GetWebcamConfig failed to handle new 1.9.0 logic. Falling back to the old logic.", e)
@@ -188,9 +202,17 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
             webSettingsItem = WebcamSettingItem("Default", snapshotUrl, streamUrl, flipH, flipV, rotationInt)
             if webSettingsItem.Validate(self.Logger):
                 results.append(webSettingsItem)
-                self.Logger.debug(f"Webcam fallback found. Name: {webSettingsItem.Name}, {webSettingsItem.StreamUrl}, {webSettingsItem.SnapshotUrl}, {webSettingsItem.FlipH}, {webSettingsItem.FlipV}, {webSettingsItem.Rotation}")
+                self.Logger.debug(
+                    "Webcam fallback found. Name: %s, %s, %s, %s, %s, %s",
+                    webSettingsItem.Name,
+                    webSettingsItem.StreamUrl,
+                    webSettingsItem.SnapshotUrl,
+                    webSettingsItem.FlipH,
+                    webSettingsItem.FlipV,
+                    webSettingsItem.Rotation,
+                )
             else:
-                self.Logger.debug(f"Webcam settings item validation failed for FALLBACK {webSettingsItem.Name}")
+                self.Logger.debug("Webcam settings item validation failed for FALLBACK %s", webSettingsItem.Name)
 
 
         # As of the new OctoPi image, a common backend is camera-streamer, which supports WebRTC! This is a great choice because it's more efficient than jmpeg,

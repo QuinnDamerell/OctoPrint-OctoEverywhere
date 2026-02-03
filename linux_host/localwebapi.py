@@ -79,9 +79,9 @@ class LocalWebApi:
                 if self.HostName is None or self.HttpPort is None:
                     self.Logger.debug("Local web api is disabled, because the host name or port is not set.")
                     return
-                self.Logger.debug(f"Web Server Starting {self.HostName}:{self.HttpPort}")
+                self.Logger.debug("Web Server Starting %s:%s", self.HostName, self.HttpPort)
                 webServer = HTTPServer((self.HostName, self.HttpPort), LocalWebApi.WebServerHandler)
-                self.Logger.debug(f"Web Server Started {self.HostName}:{self.HttpPort}")
+                self.Logger.debug("Web Server Started %s:%s", self.HostName, self.HttpPort)
                 webServer.serve_forever()
             except Exception as e:
                 self.Logger.error("Web server exception. "+str(e))

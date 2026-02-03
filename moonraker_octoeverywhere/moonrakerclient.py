@@ -1093,7 +1093,7 @@ class MoonrakerCompat(IPrinterStateReporter):
                 )
             if totalLayers == 0:
                 if self.Logger.isEnabledFor(logging.DEBUG):
-                    self.Logger.debug("GetCurrentLayerInfo failed to get a total layer count. "+json.dumps(printStats))
+                    self.Logger.debug("GetCurrentLayerInfo failed to get a total layer count. %s", json.dumps(printStats))
 
             # Next, try to get the current layer.
             currentLayer = 0
@@ -1116,7 +1116,7 @@ class MoonrakerCompat(IPrinterStateReporter):
                     currentLayer = 0
             if currentLayer == 0:
                 if self.Logger.isEnabledFor(logging.DEBUG):
-                    self.Logger.debug("GetCurrentLayerInfo failed to get a current layer count. "+json.dumps(printStats))
+                    self.Logger.debug("GetCurrentLayerInfo failed to get a current layer count. %s", json.dumps(printStats))
 
             # Sanity check.
             currentLayer = min(currentLayer, totalLayers)

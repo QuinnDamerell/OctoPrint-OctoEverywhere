@@ -158,7 +158,12 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             self.AutoSettingsLastWake = time.time()
             self.AutoSettingsWorkerEvent.set()
         else:
-            self.Logger.debug(f"Ignoring the webcam setting read thread due to a request. Forced: {forceUpdate}, NeedAutoSettings: {needToFindAutoSettings}, TimeSinceLastWake: {timeSinceLastWakeSec} sec.")
+            self.Logger.debug(
+                "Ignoring the webcam setting read thread due to a request. Forced: %s, NeedAutoSettings: %s, TimeSinceLastWake: %s sec.",
+                forceUpdate,
+                needToFindAutoSettings,
+                timeSinceLastWakeSec,
+            )
 
 
     # This is the main worker thread that keeps track of webcam settings.
@@ -492,7 +497,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
         cameras:Optional[list[Dict[str, Any]]] = value.get("cameras", None)
         # In newer versions, value is a object with a property 'cameras' that holds an array of camera objects.
         if cameras is not None and isinstance(cameras, list) and len(cameras) > 0:
-            self.Logger.debug(f"Found {len(cameras)} cameras list in the FLUIDD custom namespace.")
+            self.Logger.debug("Found %s cameras list in the FLUIDD custom namespace.", len(cameras))
             for webcamSettingsObj in cameras:
                 webcamSettings = self._TryToParseFluiddCustomWebcamDbEntry(webcamSettingsObj)
                 if webcamSettings is not None:
@@ -667,7 +672,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
             with requests.get(absoluteSnapshotUrl, timeout=20) as response:
                 # Check for success
                 if response.status_code != 200:
-                    self.Logger.debug(f"Test snapshot attempt returned http status {response.status_code}. Url: {absoluteSnapshotUrl}")
+                    self.Logger.debug("Test snapshot attempt returned http status %s. Url: %s", response.status_code, absoluteSnapshotUrl)
                     return None
 
                 # This is a good sign, check the content type.
@@ -677,9 +682,9 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
                         # Success!
                         self.Logger.debug("Found a valid snapshot URL! Url: %s, Content-Type: %s", absoluteSnapshotUrl, response.headers[contentTypeHeaderKey])
                         return possibleSnapshotUrl
-            self.Logger.debug(f"We made the web request for the stream URL but didn't get a valid result. {streamUrl}")
+            self.Logger.debug("We made the web request for the stream URL but didn't get a valid result. %s", streamUrl)
         except Exception as e:
-            self.Logger.debug(f"FAILED to find a snapshot url from stream URL. Url: {streamUrl}, Error: {str(e)}")
+            self.Logger.debug("FAILED to find a snapshot url from stream URL. Url: %s, Error: %s", streamUrl, e)
         return None
 
 
@@ -728,7 +733,15 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
 
         # Print for debugging.
         for i in webcamSettingsItemResults:
-            self.Logger.debug(f'Webcam helper found settings. name: {i.Name}, streamUrl: {i.StreamUrl}, snapshotUrl: {i.SnapshotUrl}, flipH: {i.FlipH}, FlipV: {i.FlipV}, rotation: {i.Rotation}')
+            self.Logger.debug(
+                "Webcam helper found settings. name: %s, streamUrl: %s, snapshotUrl: %s, flipH: %s, FlipV: %s, rotation: %s",
+                i.Name,
+                i.StreamUrl,
+                i.SnapshotUrl,
+                i.FlipH,
+                i.FlipV,
+                i.Rotation,
+            )
             i.Validate(self.Logger)
 
         # We want to use this list of results, so set them now.

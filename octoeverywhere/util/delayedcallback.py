@@ -28,7 +28,7 @@ class DelayedCallback(threading.Thread):
     def run(self):
         try:
             # Wait for the delay to elapse, unless canceled.
-            self.logger.debug("DelayedCallback starting: "+self.name)
+            self.logger.debug("DelayedCallback starting: %s", self.name)
             if self.stopEvent.wait(self.delaySec) is False:
                 # Ensure we don't fire the callback if we weren't asked to.
                 if self.is_alive() is False or self.running is False:
@@ -38,7 +38,7 @@ class DelayedCallback(threading.Thread):
                 except Exception as e:
                     Sentry.OnException("Exception in DelayedCallback thread.", e)
         finally:
-            self.logger.debug("DelayedCallback thread exit: "+self.name)
+            self.logger.debug("DelayedCallback thread exit: %s", self.name)
 
 
     # Returns if the timer is currently running or not.
