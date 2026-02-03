@@ -106,5 +106,15 @@
                 <span data-bind="text: settings.plugins.octoeverywhere.PrinterKey"></span>
             </div>
         </div>
+        <div class="control-group">
+            <label class="control-label" style="padding-top:20px;">Memory Debugging</label>
+            <div class="controls">
+                <label class="checkbox">
+                    <input type="checkbox" data-bind="checked: settings.plugins.octoeverywhere.EnableMemoryDebugging">
+                    Enable periodic memory usage logs (tracemalloc + object summaries).
+                </label>
+                <span class="help-block">Use this to inspect memory usage in octoprint.log. Disable when done to reduce overhead.</span>
+            </div>
+        </div>
     </div>
 </div>

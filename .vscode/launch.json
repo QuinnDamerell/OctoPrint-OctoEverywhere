@@ -127,7 +127,7 @@
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
         },
-           {
+        {
             "name": "Companion 1 - Klipper (Scalene)",
             "type": "debugpy",
             "request": "launch",
@@ -140,6 +140,21 @@
     "moonraker_octoeverywhere",
     "eyJDb25maWdGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbiIsICJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbi9sb2dzIiwgIkxvY2FsRmlsZVN0b3JhZ2VQYXRoIjogIi9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1jb21wYW5pb24vb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtY29tcGFuaW9uIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSIsICJJc0NvbXBhbmlvbiI6IHRydWUsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjogIjEifQ==",
     "{\"LocalServerAddress\":\"\",\"LogLevel\":\"DEBUG\"}"
+            ]
+        },
+        {
+            "name": "Companion 1 - Klipper (FIL)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "filprofiler",
+            "console": "integratedTerminal",
+            "args": [
+                "--output", "~/.fil-profile/moonraker_klipper.html",
+                "--format", "html",
+                "${workspaceFolder}/.vscode/run_module.py",
+                "moonraker_octoeverywhere",
+                "eyJDb25maWdGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbiIsICJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWNvbXBhbmlvbi9sb2dzIiwgIkxvY2FsRmlsZVN0b3JhZ2VQYXRoIjogIi9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1jb21wYW5pb24vb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtY29tcGFuaW9uIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSIsICJJc0NvbXBhbmlvbiI6IHRydWUsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjogIjEifQ==",
+                "{\"LocalServerAddress\":\"\",\"LogLevel\":\"DEBUG\"}"
             ]
         },
         {

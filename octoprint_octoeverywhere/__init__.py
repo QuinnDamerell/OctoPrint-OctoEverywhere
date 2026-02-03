@@ -31,6 +31,7 @@ from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
+from octoeverywhere.memorydebug import MemoryDebug
 from octoeverywhere.interfaces import IPopUpInvoker, IHostCommandHandler, IOctoPrintPlugin, IStateChangeHandler
 
 
@@ -72,6 +73,8 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         self.Logger:logging.Logger = logging.getLogger('octoprint.plugins.octoeverywhere')
         # Let the compat system know this is an OctoPrint host.
         Compat.SetIsOctoPrint(True)
+        # Optional memory debugging helper.
+        self.MemoryDebugger:Optional[MemoryDebug] = None
 
 
      # Assets we use, just for the wizard right now.
@@ -281,6 +284,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Is also must be done when the OctoPrint server is ready, since it's going to kick off a thread to
         # pull and cache the index.
         Slipstream.Init(self.Logger)
+
+        # Setup memory debugging if enabled.
+        self._ConfigureMemoryDebugging()
+
+
+    def on_settings_save(self, data:Dict[str, Any]) -> None: #pyright: ignore[reportIncompatibleMethodOverride]
+        octoprint.plugin.SettingsPlugin.on_settings_save(self, data)
+        self._ConfigureMemoryDebugging()
 
 
     #
@@ -900,6 +911,17 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     def SetAddPrinterUrl(self, url:str):
         self.SaveToSettingsIfUpdated("AddPrinterUrl", url)
+
+
+    def _ConfigureMemoryDebugging(self) -> None:
+        enabled = self.GetBoolFromSettings("EnableMemoryDebugging", False)
+        if enabled:
+            if self.MemoryDebugger is None:
+                self.MemoryDebugger = MemoryDebug(self.Logger)
+            self.MemoryDebugger.Start()
+        else:
+            if self.MemoryDebugger is not None:
+                self.MemoryDebugger.Stop()
 
 
     # Gets the current setting or the default value.
