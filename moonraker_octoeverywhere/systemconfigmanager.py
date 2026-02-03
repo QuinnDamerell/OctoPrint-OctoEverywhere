@@ -128,7 +128,7 @@ subscriptions:
                     # We also add a few other variants of the name used on different systems. According to the docs only
                     # The one name should be required, but that doesn't seem to be that case on all Moonraker installs.
                     f.write("\n"+serviceName)
-                    f.write("\n"+f"{serviceName}_service")
+                    f.write("\n"+f"{serviceName}_service"+"\n")
             except PermissionError as e:
                 logger.warning("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
                 return

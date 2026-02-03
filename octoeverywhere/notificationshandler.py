@@ -79,6 +79,8 @@ class NotificationsHandler(INotificationHandler):
         self.zOffsetNotAtLowestCount = 0
         self.zOffsetHasSeenPositiveExtrude = False
         self.zOffsetTrackingStartTimeSec = 0.0
+        self.FirstLayerExpectedLayerNumber = 0
+        self.FirstLayerLayerStabilizationCount = 0
         self.FirstLayerDoneSince = 0.0
         self.ThirdLayerDoneSince = 0.0
         self.ProgressCompletionReported = []
@@ -101,6 +103,8 @@ class NotificationsHandler(INotificationHandler):
         self.PingTimerHoursReported = 0
         self.HasSendFirstLayerDoneMessage = False
         self.HasSendThirdLayerDoneMessage = False
+        self.FirstLayerExpectedLayerNumber = 0
+        self.FirstLayerLayerStabilizationCount = 0
         self.FirstLayerDoneSince = 0.0
         self.ThirdLayerDoneSince = 0.0
         # The following values are used to figure out when the first layer is done.
@@ -607,7 +611,33 @@ class NotificationsHandler(INotificationHandler):
         # 2) If the platform doesn't support getting the actual layer height, we can try to figure it out with z offsets.
         currentLayer, _ = self.PrinterStateInterface.GetCurrentLayerInfo()
         if currentLayer is not None:
-            # We have layer info from the system, use this to handle the events.
+            # We have seen some Klipper macros or something jump the layer count from 0 to 50 (like on the Snapmaker U1) when it's doing
+            # pre-printing things like dynamic flow calibration and such. Since this timer ticks every 2 seconds, we should almost always see every layer.
+            # If the print was super small and the printer was running really fast, that would be the only risk.
+            # So if the current layer jumps by more than 2, we will ignore it, expecting it to come back down.
+            #
+            # Much like the z-axis logic, we also see occasional layer jumps for things like retractions, z-hops, auto-bed leveling, etc.
+            # It seems in these cases the moonraker is reporting a layer height based on a z-axis distance calculation, rather than gcode position tracking.
+            # To combat this, we use the same logic as in the z-axis tracking, where we need to see the layer height above the expected layer height for so many ticks before we accept it.
+            if currentLayer == self.FirstLayerExpectedLayerNumber:
+                self.Logger.debug(f"First Layer Logic - Current layer is the same as last tick. Current:{currentLayer}")
+                self.FirstLayerLayerStabilizationCount = 0
+            elif currentLayer < self.FirstLayerExpectedLayerNumber:
+                self.Logger.debug(f"First Layer Logic - Below expected first layer, resetting expected layer. Current:{currentLayer}, Was:{self.FirstLayerExpectedLayerNumber}")
+                self.FirstLayerExpectedLayerNumber = currentLayer
+                self.FirstLayerLayerStabilizationCount = 0
+            elif currentLayer > self.FirstLayerExpectedLayerNumber + 1:
+                self.Logger.debug(f"First Layer Logic - Jumped too far ahead in layers, ignoring this value. Current:{currentLayer}, Expecting:{self.FirstLayerExpectedLayerNumber}")
+                self.FirstLayerLayerStabilizationCount = 0
+                return True
+            else:
+                self.FirstLayerLayerStabilizationCount += 1
+                if self.FirstLayerLayerStabilizationCount < NotificationsHandler.FirstLayerCountAboveLowestBeforeNotify:
+                    self.Logger.debug(f"First Layer Logic - Above expected first layer, but waiting for stabilization. Current:{currentLayer}, Was:{self.FirstLayerExpectedLayerNumber}, Count:{self.FirstLayerLayerStabilizationCount}")
+                    return True
+                self.Logger.debug(f"First Layer Logic - The layer has advanced. Current:{currentLayer}, Was:{self.FirstLayerExpectedLayerNumber}")
+                self.FirstLayerExpectedLayerNumber = currentLayer
+                self.FirstLayerLayerStabilizationCount = 0
 
             # If we are over the first layer and haven't sent the notification, start the timer.
             # We use this time to make sure that the print is still in the first layer complete state and it's not a zhop or something.
