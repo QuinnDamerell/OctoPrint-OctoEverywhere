@@ -98,6 +98,9 @@ class OctoWebStream(threading.Thread, IWebStream):
                     self.IsHelperClosed = True
                     localHttpHelper = self.HttpHelper
                     localWsHelper = self.WsHelper
+                    # Important! Ensure these are set to None so we don't have a circular ref.
+                    self.HttpHelper = None
+                    self.WsHelper = None
 
         # Remove ourselves from the session map
         self.OctoSession.WebStreamClosed(self.Id)
@@ -180,11 +183,14 @@ class OctoWebStream(threading.Thread, IWebStream):
 
             # Allow the helper to process the message
             # We should only ever have one, but just for safety, check both.
+            # We need to take a local reference, since they are cleared under lock on close.
             returnValue = True
-            if self.HttpHelper is not None:
-                returnValue = self.HttpHelper.IncomingServerMessage(webStreamMsg)
-            if self.WsHelper is not None:
-                returnValue = self.WsHelper.IncomingServerMessage(webStreamMsg)
+            httpHelper = self.HttpHelper
+            wsHelper = self.WsHelper
+            if httpHelper is not None:
+                returnValue = httpHelper.IncomingServerMessage(webStreamMsg)
+            if wsHelper is not None:
+                returnValue = wsHelper.IncomingServerMessage(webStreamMsg)
 
             # If process server message returns true, we should close the stream.
             if returnValue is True:
@@ -242,6 +248,9 @@ class OctoWebStream(threading.Thread, IWebStream):
                     # We need to call it now.
                     self.IsHelperClosed = True
                     needsToCallCloseOnHelper = True
+                    # Important! Ensure these are set to None so we don't have a circular ref.
+                    self.HttpHelper = None
+                    self.WsHelper = None
 
         # Outside of lock, if we need to close this helper, do it.
         if needsToCallCloseOnHelper is True:
