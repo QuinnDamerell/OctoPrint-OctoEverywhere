@@ -20,6 +20,8 @@ class MemoryDebug:
         self._thread.daemon = True
         self._thread.start()
         self.Logger.info("MemoryDebug enabled. Reporting every %.1f seconds.", self.IntervalSec)
+        self.Logger.error("NOTE THIS MEMORY TRACKING WILL TAKE UP MORE MEMORY AND SLOW THINGS DOWN!")
+        self.Logger.error("IF debugging under VS code, VS code will also hold on to threads when they are dead, which eats memory.")
 
 
     def _Worker(self) -> None:
@@ -151,7 +153,7 @@ class MemoryDebug:
     def _InvestigateClass(self, name:str) -> None:
         # 1. Get all OctoWebStream objects currently in memory
         # (Make sure the class name string matches exactly)
-        streams = objgraph.by_type(name) # pyright: ignore[reportUndefinedVariable, reportUnknownMemberType] pylint: disable=E0602
+        streams = objgraph.by_type(name) # pyright: ignore[reportUndefinedVariable, reportUnknownMemberType] pylint: disable=E0602, noqa: F821
         if not streams:
             self.Logger.info("No OctoWebStream objects found in memory.")
         else:
@@ -160,9 +162,9 @@ class MemoryDebug:
 
             # 3. Find the chain of references pointing to it
             # We use objgraph.is_proper_module to stop the chain at the module level
-            chain = objgraph.find_backref_chain( # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable] pylint: disable=E0602
+            chain = objgraph.find_backref_chain( # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable] pylint: disable=E0602, noqa: F821
                 leaked_stream,
-                objgraph.is_proper_module # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable] pylint: disable=E0602
+                objgraph.is_proper_module # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable] pylint: disable=E0602, noqa: F821
             )
 
             # 4. Format the chain into a readable string
