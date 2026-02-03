@@ -1,5 +1,4 @@
 import gc
-import io
 import logging
 import os
 import sys
