@@ -80,10 +80,10 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
                         self.Logger.debug(
                             "OctoPrint Webcam Config Found: Name: %s, Can Snapshot: %s, Webcam Snapshot: \"%s\", Extras: %s",
                             webcamName,
-                            webcam.canSnapshot,
-                            webcam.snapshotDisplay,
-                            json.dumps(webcam.extras),
-                        ) #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
+                            webcam.canSnapshot, #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
+                            webcam.snapshotDisplay, #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
+                            json.dumps(webcam.extras), #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
+                        )
 
                     # Some times this bool seems to be reported incorrectly so for now we don't skip the camera if it's set.
                     # Since the snapshot is critical for Gadget and others, only allow webcams that have snapshot (for now)
@@ -144,12 +144,12 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
                         self.Logger.debug(
                             "Webcam found. Name: %s, %s, %s, %s, %s, %s",
                             webSettingsItem.Name,
-                            webSettingsItem.StreamUrl,
-                            webSettingsItem.SnapshotUrl,
-                            webSettingsItem.FlipH,
-                            webSettingsItem.FlipV,
+                            webSettingsItem.StreamUrl, #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
+                            webSettingsItem.SnapshotUrl, #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
+                            webSettingsItem.FlipH, #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
+                            webSettingsItem.FlipV, #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
                             webSettingsItem.Rotation,
-                        ) #pyright: ignore[reportUnknownMemberType] after setting the octoprint values, these go bad.
+                        )
                     else:
                         self.Logger.debug("Webcam settings item validation failed for %s", webcamName)
 
