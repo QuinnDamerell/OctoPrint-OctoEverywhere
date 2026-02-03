@@ -118,9 +118,12 @@ class Sentry:
 
         # We don't want sentry to capture error logs, which is it's default.
         # We do want the logging for breadcrumbs, so we will leave it enabled.
+        # We had this set at level=logging.INFO, event_level=logging.FATAL but that caused too many breadcrumbs to be captured.
+        # But it was causing Sentry to capture and hold on to a lot of process memory. So we disabled it.
+        # If we need this, we should look into read adding it back with a lower level.
         sentryLogging = LoggingIntegration(
-            level=logging.INFO,        # Capture info and above as breadcrumbs
-            event_level=logging.FATAL  # Only send FATAL errors and above.
+            level=None,        # Capture info and above as breadcrumbs
+            event_level=None  # Only send FATAL errors and above.
         )
         # Setup and init
         sentry_sdk.init(
@@ -138,6 +141,8 @@ class Sentry:
             enable_tracing= tracingSampleRate > 0.0,
             traces_sample_rate= tracingSampleRate,
             profiles_sample_rate= profilingSampleRate,
+            # This is very important! If we don't set this lower, Sentry will hold a lot of debugging context in memory which kills low memory devices.
+            max_breadcrumbs= 0,
         )
 
         # Set that sentry is ready to use.

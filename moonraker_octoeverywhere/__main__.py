@@ -1,10 +1,14 @@
 import sys
+import threading
 from typing import Optional
 
 from linux_host.startup import Startup
 from linux_host.startup import ConfigDataTypes
 
 from .moonrakerhost import MoonrakerHost
+
+# Set this AT THE VERY TOP of your main script, before creating threads
+threading.stack_size(1024 * 1024) # 1MB stack per thread
 
 if __name__ == '__main__':
 

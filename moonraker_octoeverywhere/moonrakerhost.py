@@ -5,11 +5,12 @@ from typing import Any, Dict, List, Optional
 from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.deviceid import DeviceId
+from octoeverywhere.pingpong import PingPong
 from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.compression import Compression
-from octoeverywhere.pingpong import PingPong
+from octoeverywhere.memorydebug import MemoryDebug
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.printinfo import PrintInfoManager
@@ -50,6 +51,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
         self.MoonrakerWebcamHelper:MoonrakerWebcamHelper = None #pyright: ignore[reportAttributeAccessIssue]
         self.MoonrakerDatabase:MoonrakerDatabase = None #pyright: ignore[reportAttributeAccessIssue]
         self.Secrets:Secrets = None #pyright: ignore[reportAttributeAccessIssue]
+        self.MemoryDebugger:Optional[MemoryDebug] = None
 
         # Let the compat system know this is an Moonraker host.
         Compat.SetIsMoonraker(True)
@@ -134,6 +136,9 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             Telemetry.Init(self.Logger)
             if DevLocalServerAddress_CanBeNone is not None:
                 Telemetry.SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
+
+            # Temp
+            #self.MemoryDebugger = MemoryDebug(self.Logger)
 
             # Init compression
             Compression.Init(self.Logger, localStorageDir)

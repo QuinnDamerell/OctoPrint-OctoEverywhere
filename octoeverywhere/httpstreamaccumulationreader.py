@@ -252,7 +252,6 @@ class HttpStreamAccumulationReader:
                     remainingTimeoutSec = timeoutSec - elapsedSec
                     sleepTimeSec = min(sleepTimeSec, remainingTimeoutSec)
                 if sleepTimeSec > 0:
-                    self.debugLog(f"HttpStreamAccumulationReader.Read waiting for data or timeout of {sleepTimeSec} seconds.")
                     self.BufferDataReadyEvent.wait(sleepTimeSec)
 
             # If we broke out of the loop, 3 things could have happened:

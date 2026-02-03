@@ -1,39 +1,25 @@
 import gc
+import io
 import logging
 import os
 import sys
 import threading
 import tracemalloc
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 
+# A memory debugging utility that periodically logs memory usage and object allocation statistics.
 class MemoryDebug:
-    def __init__(self, logger: logging.Logger, interval_sec: float = 300.0, top_n: int = 10) -> None:
+    def __init__(self, logger: logging.Logger, interval_sec: float = 60.0, top_n: int = 30) -> None:
         self.Logger = logger
         self.IntervalSec = interval_sec
         self.TopN = top_n
-        self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._objgraph_available: Optional[bool] = None
-
-
-    def Start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop_event.clear()
         self._thread = threading.Thread(target=self._Worker, name="MemoryDebug")
         self._thread.daemon = True
         self._thread.start()
         self.Logger.info("MemoryDebug enabled. Reporting every %.1f seconds.", self.IntervalSec)
-
-
-    def Stop(self) -> None:
-        if self._thread is None:
-            return
-        self._stop_event.set()
-        self._thread.join(timeout=5.0)
-        self._thread = None
-        self.Logger.info("MemoryDebug disabled.")
 
 
     def _Worker(self) -> None:
@@ -132,20 +118,91 @@ class MemoryDebug:
         if objgraph is None:
             return
         try:
+            # 1. Get all OctoWebStream objects currently in memory
+            # (Make sure the class name string matches exactly)
+            streams = objgraph.by_type('OctoWebStream')
+            if not streams:
+                self.Logger.info("No OctoWebStream objects found in memory.")
+            else:
+                # 2. Pick the first one (usually the oldest leak)
+                leaked_stream = streams[0]
+                
+                # 3. Find the chain of references pointing to it
+                # We use objgraph.is_proper_module to stop the chain at the module level
+                chain = objgraph.find_backref_chain(
+                    leaked_stream,
+                    objgraph.is_proper_module
+                )
+
+                # 4. Format the chain into a readable string
+                output = io.StringIO()
+                output.write(f"Found {len(streams)} OctoWebStream objects.\n")
+                output.write("Reference Chain for the first object:\n")
+                
+                for i, obj in enumerate(chain):
+                    obj_type = type(obj).__name__
+                    output.write(f"  [{i}] {obj_type}: {str(obj)[:1000]} ...\n")
+                    
+                    # If it's a dict or list, it might be a container holding the object
+                    if isinstance(obj, dict):
+                        # Check if our target is a value or a key?
+                        # (Simplification: just noting it's a dict)
+                        pass
+
+                self.Logger.info(output.getvalue())
+
+                self.FindAnyCycle(leaked_stream, "Leaked OctoWebStream")
+
+
+            # 1. Log the most common types
             most_common = objgraph.most_common_types(limit=self.TopN)
             for idx, (type_name, count) in enumerate(most_common, start=1):
-                self.Logger.info(
-                    "MemoryDebug ObjGraph Top Types %d: type=%s count=%d",
-                    idx,
-                    type_name,
-                    count,
-                )
+                self.Logger.info("MemoryDebug ObjGraph Top Types %d: type=%s count=%d", idx, type_name, count)
+
+            # 2. Log Growth and Trace the "Leakiest" Object
             if hasattr(objgraph, "growth"):
                 growth = objgraph.growth(limit=self.TopN)
                 for idx, growth_item in enumerate(growth, start=1):
                     self.Logger.info("MemoryDebug ObjGraph Growth %d: %s", idx, growth_item)
+
+                # If there's growth, trace the first (usually largest) growth item
+                if growth:
+                    leaky_type = growth[0][0]
+                    # Get one instance of this type
+                    leaky_objs = objgraph.by_type(leaky_type)
+                    if leaky_objs:
+                        # Find the chain of references leading to this object
+                        # We limit to 10 nodes deep to avoid log spam
+                        chain = objgraph.find_backref_chain(leaky_objs[0], objgraph.is_proper_module)
+                        self.Logger.info("MemoryDebug Backref Trace for %s: %s", leaky_type, " -> ".join([str(o) for o in chain]))
+
         except Exception as exc:
             self.Logger.error("MemoryDebug ObjGraph summary failed: %s", str(exc))
+
+
+    def FindAnyCycle(self, obj:Any, obj_name="Target", max_depth=5):
+        self.Logger.info(f"🔍 Deep searching {obj_name} for cycles (Depth 1-{max_depth})...")
+        # Queue: (current_object, path_string, current_depth)
+        queue = [(obj, obj_name, 0)]
+        visited = {id(obj)}
+        while queue:
+            current, path, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+            referents = gc.get_referents(current)
+            for ref in referents:
+                # If we found our original object, we found a cycle!
+                if ref is obj:
+                    self.Logger.info(f"  🚨 CYCLE FOUND (Depth {depth+1}): {path} -> {obj_name}")
+                    return
+                # If we haven't seen this object yet, add it to the queue
+                if id(ref) not in visited:
+                    visited.add(id(ref))
+                    # Try to name the object for the log
+                    type_name = type(ref).__name__
+                    new_path = f"{path} -> {type_name}"
+                    queue.append((ref, new_path, depth + 1))
+        self.Logger.info(f"  ✅ No cycles found within depth {max_depth}.")
 
 
     def _TryGetObjGraph(self):
