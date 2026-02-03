@@ -58,7 +58,7 @@ class MemoryDebug:
             )
 
         type_summary = self._GetTypeSummary()
-        for idx, (type_name, (count, total_size)) in enumerate(type_summary[: self.TopN], start=1):
+        for idx, (type_name, (count, total_size)) in enumerate(type_summary[: self.TopN], start=1): # pyright: ignore[reportIndexIssue]
             self.Logger.info(
                 "MemoryDebug Top Objects %d: type=%s count=%d size=%s",
                 idx,
@@ -118,41 +118,8 @@ class MemoryDebug:
         if objgraph is None:
             return
         try:
-            # 1. Get all OctoWebStream objects currently in memory
-            # (Make sure the class name string matches exactly)
-            streams = objgraph.by_type('OctoWebStream')
-            if not streams:
-                self.Logger.info("No OctoWebStream objects found in memory.")
-            else:
-                # 2. Pick the first one (usually the oldest leak)
-                leaked_stream = streams[0]
-                
-                # 3. Find the chain of references pointing to it
-                # We use objgraph.is_proper_module to stop the chain at the module level
-                chain = objgraph.find_backref_chain(
-                    leaked_stream,
-                    objgraph.is_proper_module
-                )
-
-                # 4. Format the chain into a readable string
-                output = io.StringIO()
-                output.write(f"Found {len(streams)} OctoWebStream objects.\n")
-                output.write("Reference Chain for the first object:\n")
-                
-                for i, obj in enumerate(chain):
-                    obj_type = type(obj).__name__
-                    output.write(f"  [{i}] {obj_type}: {str(obj)[:1000]} ...\n")
-                    
-                    # If it's a dict or list, it might be a container holding the object
-                    if isinstance(obj, dict):
-                        # Check if our target is a value or a key?
-                        # (Simplification: just noting it's a dict)
-                        pass
-
-                self.Logger.info(output.getvalue())
-
-                self.FindAnyCycle(leaked_stream, "Leaked OctoWebStream")
-
+            # Once you find a class with a lot of instances or that's around for a long time, use this functions to dig deeper.
+            #self._InvestigateClass("OctoWebStream")
 
             # 1. Log the most common types
             most_common = objgraph.most_common_types(limit=self.TopN)
@@ -180,7 +147,46 @@ class MemoryDebug:
             self.Logger.error("MemoryDebug ObjGraph summary failed: %s", str(exc))
 
 
-    def FindAnyCycle(self, obj:Any, obj_name="Target", max_depth=5):
+
+    def _InvestigateClass(self, name:str) -> None:
+        # 1. Get all OctoWebStream objects currently in memory
+        # (Make sure the class name string matches exactly)
+        streams = objgraph.by_type(name) # pyright: ignore[reportUndefinedVariable, reportUnknownMemberType] pylint: disable=E0602
+        if not streams:
+            self.Logger.info("No OctoWebStream objects found in memory.")
+        else:
+            # 2. Pick the first one (usually the oldest leak)
+            leaked_stream = streams[0]
+
+            # 3. Find the chain of references pointing to it
+            # We use objgraph.is_proper_module to stop the chain at the module level
+            chain = objgraph.find_backref_chain( # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable] pylint: disable=E0602
+                leaked_stream,
+                objgraph.is_proper_module # pyright: ignore[reportUnknownMemberType, reportUndefinedVariable] pylint: disable=E0602
+            )
+
+            # 4. Format the chain into a readable string
+            output = io.StringIO()
+            output.write(f"Found {len(streams)} OctoWebStream objects.\n")
+            output.write("Reference Chain for the first object:\n")
+
+            for i, obj in enumerate(chain):
+                obj_type = type(obj).__name__
+                output.write(f"  [{i}] {obj_type}: {str(obj)[:1000]} ...\n")
+
+                # If it's a dict or list, it might be a container holding the object
+                if isinstance(obj, dict):
+                    # Check if our target is a value or a key?
+                    # (Simplification: just noting it's a dict)
+                    pass
+
+            self.Logger.info(output.getvalue())
+
+            # Finally, do a deep search for cycles involving this object
+            self._FindAnyCycle(leaked_stream, "Leaked OctoWebStream")
+
+
+    def _FindAnyCycle(self, obj:Any, obj_name="Target", max_depth=5):
         self.Logger.info(f"🔍 Deep searching {obj_name} for cycles (Depth 1-{max_depth})...")
         # Queue: (current_object, path_string, current_depth)
         queue = [(obj, obj_name, 0)]
