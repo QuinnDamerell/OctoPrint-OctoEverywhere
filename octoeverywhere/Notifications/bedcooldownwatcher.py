@@ -57,7 +57,7 @@ class BedCooldownWatcher:
 
     # Sets the temp that the bed must be under to be considered cooled down.
     def SetBedCooldownThresholdTemp(self, tempC:float):
-        self.Logger.debug(f"Bed cooldown watcher, setting threshold temp to {tempC}")
+        self.Logger.debug("Bed cooldown watcher, setting threshold temp to %s", tempC)
         self.CooldownThresholdTempC = tempC
 
 
@@ -93,7 +93,7 @@ class BedCooldownWatcher:
             # Check if we are cooled down yet.
             if bedTempCelsiusFloat > self.CooldownThresholdTempC:
                 # Keep waiting.
-                self.Logger.debug(f"Bed cooldown watcher, bed temp is {bedTempCelsiusFloat}. Waiting...")
+                self.Logger.debug("Bed cooldown watcher, bed temp is %s. Waiting...", bedTempCelsiusFloat)
                 return
 
             # If this is the first read and the bed is already cool, we won't notify.

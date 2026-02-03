@@ -158,7 +158,7 @@ class NetworkSearch:
             if portStr is None:
                 portStr = NetworkSearch.c_BambuDefaultPortStr
             port = int(portStr)
-            logger.debug(f"Testing for Bambu on {ipOrHostname}:{port}")
+            logger.debug("Testing for Bambu on %s:%s", ipOrHostname, port)
             result = {}
             result["Event"] = threading.Event()
             client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, userdata=result) # pyright: ignore[reportPrivateImportUsage]
@@ -169,26 +169,26 @@ class NetworkSearch:
             def connect(client:mqtt.Client, userdata:Dict[Any, Any], flags:Any, reason_code:mqtt.ReasonCode, properties:Any): # pyright: ignore[reportPrivateImportUsage]
                 # If auth is wrong, we will get a connect callback with a failure "Not authorized"
                 if reason_code.is_failure:
-                    logger.debug(f"Bambu {ipOrHostname} connection failure: {reason_code}")
+                    logger.debug("Bambu %s connection failure: %s", ipOrHostname, reason_code)
                     client.disconnect()
                     userdata["Event"].set()
                     return
 
                 # If the connection was successful, the auth was valid.
-                logger.debug(f"Bambu {ipOrHostname} connected.")
+                logger.debug("Bambu %s connected.", ipOrHostname)
                 userdata["IsAuthorized"] = True
 
                 # Try to sub, to make sure the SN is correct.
                 # For most bambu printers, the socket will disconnect if this fails, it doesn't bother to send the sub failed message.
                 (result, mid) = client.subscribe(f"device/{printerSn}/report")
                 if result != mqtt.MQTT_ERR_SUCCESS or mid is None:
-                    logger.debug(f"Bambu {ipOrHostname} failed to send subscribe request.")
+                    logger.debug("Bambu %s failed to send subscribe request.", ipOrHostname)
                     client.disconnect()
                     userdata["Event"].set()
                 userdata["ReportMid"] = mid
 
             def disconnect(client:Any, userdata:Dict[str, Any], disconnect_flags:Any, reason_code:Any, properties:Any):
-                logger.debug(f"Bambu {ipOrHostname} disconnected.")
+                logger.debug("Bambu %s disconnected.", ipOrHostname)
                 userdata["Event"].set()
 
             def subscribe(client:Any, userdata:Dict[str, Any], mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any): # pyright: ignore[reportPrivateImportUsage]
@@ -198,12 +198,12 @@ class NetworkSearch:
                     for r in reason_code_list:
                         if r.is_failure:
                             # On any failure, report it and disconnect.
-                            logger.debug(f"Bambu {ipOrHostname} Sub response for the report subscription reports failure. {r}")
+                            logger.debug("Bambu %s Sub response for the report subscription reports failure. %s", ipOrHostname, r)
                             failedSn = True
                     if not failedSn:
                         # Note we are now subed.
                         userdata["SnSubSuccess"] = True
-                        logger.debug(f"Bambu {ipOrHostname} Sub success.")
+                        logger.debug("Bambu %s Sub success.", ipOrHostname)
                         # Push the message to get the full state, this is needed on teh P1 and A1
                         client.publish(f"device/{printerSn}/request", json.dumps( { "pushing": {"sequence_id": "0", "command": "pushall"}}))
                         # Check if we are done, this will disconnect if we are.
@@ -229,13 +229,13 @@ class NetworkSearch:
                                 rtspUrl = ipCam.get("rtsp_url", None)
                                 userdata["BambuRtspUrl"] = rtspUrl
                             # Report we got the full sync object and see if we are done.
-                            logger.debug(f"Bambu {ipOrHostname} got a full state sync message. RTSP URL: {rtspUrl}")
+                            logger.debug("Bambu %s got a full state sync message. RTSP URL: %s", ipOrHostname, rtspUrl)
                             # Check if we are done, this will disconnect if we are.
                             NetworkSearch._BambuConnectionDone(userdata, client)
                         else:
-                            logger.debug(f"Bambu {ipOrHostname} got a state message, but it was too small to be a full message.")
+                            logger.debug("Bambu %s got a state message, but it was too small to be a full message.", ipOrHostname)
                 except Exception as e:
-                    logger.debug(f"Bambu {ipOrHostname} - message failure {e}")
+                    logger.debug("Bambu %s - message failure %s", ipOrHostname, e)
 
             # Setup functions and connect.
             client.on_connect = connect
@@ -246,13 +246,13 @@ class NetworkSearch:
             # Try to connect, this will throw if it fails to find any server to connect to.
             failedToConnect = True
             try:
-                logger.debug(f"Connecting to Bambu on {ipOrHostname}:{port}...")
+                logger.debug("Connecting to Bambu on %s:%s...", ipOrHostname, port)
                 client.connect(ipOrHostname, port, keepalive=60)
                 failedToConnect = False
                 client.loop_start()
             except Exception as e:
-                logger.debug(f"Bambu {ipOrHostname} - connection failure {e}")
-            logger.debug(f"Connection exit for Bambu on {ipOrHostname}:{port}")
+                logger.debug("Bambu %s - connection failure %s", ipOrHostname, e)
+            logger.debug("Connection exit for Bambu on %s:%s", ipOrHostname, port)
 
             # Wait for the timeout.
             if not failedToConnect:
@@ -297,13 +297,13 @@ class NetworkSearch:
             if portStr is None:
                 portStr = NetworkSearch.c_ElegooDefaultPortStr
             port = int(portStr)
-            logger.debug(f"Testing for Elegoo printer on {ipOrHostname}:{port}")
+            logger.debug("Testing for Elegoo printer on %s:%s", ipOrHostname, port)
             result:dict[str, Any] = {}
             result["Event"] = threading.Event()
 
             def onWsOpen(ws:IWebSocketClient):
                 # We found an open websocket!
-                logger.debug(f"Elegoo {ipOrHostname} websocket connected.")
+                logger.debug("Elegoo %s websocket connected.", ipOrHostname)
                 result["WsConnected"] = True
                 # We want the Attributes message which will contain the main board id.
                 # We need to send any command to get that message back, so we just send this.
@@ -324,7 +324,7 @@ class NetworkSearch:
                 # We got a message back! We expect this to be the response to what we asked for.
                 try:
                     msgStr = message.GetBytesLike().decode("utf-8")
-                    logger.debug(f"Elegoo {ipOrHostname} ws msg: %s", msgStr)
+                    logger.debug("Elegoo %s ws msg: %s", ipOrHostname, msgStr)
                     msg = json.loads(msgStr)
 
                     # After we send our first message, the printer will send back a response as well as some broadcast messages.
@@ -334,25 +334,25 @@ class NetworkSearch:
                         return
                     mainboardMac = attr.get("MainboardMAC", None)
                     if mainboardMac is not None:
-                        logger.debug(f"Elegoo {ipOrHostname} found mainboard id: {mainboardMac}")
+                        logger.debug("Elegoo %s found mainboard id: %s", ipOrHostname, mainboardMac)
                         result["MainboardMac"] = mainboardMac
 
                     # Once we have seen the mainboard id, we are done.
                     result["Event"].set()
                 except Exception as e:
-                    logger.debug(f"Elegoo {ipOrHostname} ws msg error. {e}")
+                    logger.debug("Elegoo %s ws msg error. %s", ipOrHostname, e)
 
             def onWsClose(ws:IWebSocketClient):
                 # The websocket closed, ensure we set the done event.
-                logger.debug(f"Elegoo {ipOrHostname} ws closed.")
+                logger.debug("Elegoo %s ws closed.", ipOrHostname)
                 result["Event"].set()
 
             def onWsError(ws:IWebSocketClient, exception:Exception):
                 # The websocket hit an error, ensure we set the done event.
                 exceptionStr = str(exception)
-                logger.debug(f"Elegoo {ipOrHostname} ws error. %s", exceptionStr)
+                logger.debug("Elegoo %s ws error. %s", ipOrHostname, exceptionStr)
                 if "too many client" in exceptionStr.lower():
-                    logger.debug(f"Elegoo {ipOrHostname} - too many clients error.")
+                    logger.debug("Elegoo %s - too many clients error.", ipOrHostname)
                     result["TooManyClients"] = True
                 result["Event"].set()
 
@@ -361,14 +361,14 @@ class NetworkSearch:
             url = f"ws://{ipOrHostname}:{port}/websocket"
             client:Client = None # pyright: ignore[reportAssignmentType]
             try:
-                logger.debug(f"Connecting to Elegoo on {url}...")
+                logger.debug("Connecting to Elegoo on %s...", url)
                 client = Client(url, onWsOpen=onWsOpen, onWsData=onWsData, onWsClose=onWsClose, onWsError=onWsError)
                 client.SetDisableCertCheck(True)
                 # We must run async, so we don't block this testing thread.
                 client.RunAsync()
                 failedToConnect = False
             except Exception as e:
-                logger.debug(f"Elegoo {url} - connection failure {e}")
+                logger.debug("Elegoo %s - connection failure %s", url, e)
 
             # Wait for the timeout.
             if not failedToConnect:
@@ -378,8 +378,8 @@ class NetworkSearch:
             try:
                 client.Close()
             except Exception as e:
-                logger.debug(f"Elegoo {url} - close exception {e}")
-            logger.debug(f"Connection exit for Elegoo on {url}")
+                logger.debug("Elegoo %s - close exception %s", url, e)
+            logger.debug("Connection exit for Elegoo on %s", url)
 
             # Walk though the connection and see how far we got.
             wsConnected = False
@@ -425,12 +425,12 @@ class NetworkSearch:
                 # If we failed to get it, check if we have an ip hint. If so, use it.
                 if ipHint is not None and len(ipHint) > 0:
                     # If we have a hint, use it as the local IP.
-                    logger.debug(f"Using IP hint as local IP: {ipHint}")
+                    logger.debug("Using IP hint as local IP: %s", ipHint)
                     localIp = ipHint
                 else:
                     logger.debug("Failed to get local IP")
                     return foundIps
-            logger.debug(f"Local IP found as: {localIp}")
+            logger.debug("Local IP found as: %s", localIp)
             if ":" in localIp:
                 logger.info("IPv6 addresses aren't supported for local discovery.")
                 return foundIps
@@ -521,7 +521,7 @@ class NetworkSearch:
                         # Important - when we leave for any reason, mark this thread done.
                         with threadLock:
                             doneThreads[0] += 1
-                            logger.debug(f"Thread {threadId} done. Done: {doneThreads[0]}; Total: {totalThreads}")
+                            logger.debug("Thread %s done. Done: %s; Total: %s", threadId, doneThreads[0], totalThreads)
                             # If all of the threads are done, we are done.
                             if doneThreads[0] == totalThreads:
                                 doneEvent.set()
@@ -603,7 +603,7 @@ class NetworkSearch:
 
                             # Try to process the response.
                             responseStr = data.decode("utf-8")
-                            logger.debug(f"We got the following as a result of the elegoo udp discovery broadcast. {responseStr}")
+                            logger.debug("We got the following as a result of the elegoo udp discovery broadcast. %s", responseStr)
                             response = json.loads(responseStr, strict=False)
                             data = response.get("Data", None)
                             if data is None:
@@ -633,7 +633,7 @@ class NetworkSearch:
                             if result.Success():
                                 # Add the IP to the list.
                                 foundIps.append(ip)
-                                logger.debug(f"Found Elegoo OS printer at {ip} with mainboard id {mainboardId}")
+                                logger.debug("Found Elegoo OS printer at %s with mainboard id %s", ip, mainboardId)
 
                                 # If we are looking for a specific mainboard id, check if it matches.
                                 if returnAfterNumberFound != 0 and len(foundIps) >= returnAfterNumberFound:

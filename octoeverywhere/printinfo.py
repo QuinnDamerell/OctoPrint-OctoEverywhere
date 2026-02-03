@@ -200,7 +200,7 @@ class PrintInfoManager:
                     if name == printCookieFileName:
                         context = PrintInfo.LoadFromFile(self.Logger, fullPath)
                         if context is None:
-                            self.Logger.debug(f"Failed to load print context from {fullPath}.")
+                            self.Logger.debug("Failed to load print context from %s.", fullPath)
                             self._DeleteFile(fullPath)
                     else:
                         self._DeleteFile(fullPath)

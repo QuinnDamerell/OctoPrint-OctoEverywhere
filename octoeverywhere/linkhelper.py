@@ -45,7 +45,7 @@ class LinkHelper:
                 url = "https://octoeverywhere.com/api/printer/info"
                 r = HttpSessions.GetSession(url).post(url, json={"Id": printerId}, timeout=20)
 
-                logger.debug("OE Printer info API Result: "+str(r.status_code))
+                logger.debug("OE Printer info API Result: %s", r.status_code)
                 # If the status code is above 500, retry.
                 if r.status_code >= 500:
                     raise Exception(f"Failed call with status code {r.status_code}")
@@ -56,7 +56,7 @@ class LinkHelper:
 
                 # On success, try to parse the response and see if it's connected.
                 jResult = r.json()
-                logger.debug("OE Printer API info; Name:"+jResult["Result"]["Name"] + " HasOwners:" +str(jResult["Result"]["HasOwners"]))
+                logger.debug("OE Printer API info; Name:%s HasOwners:%s", jResult["Result"]["Name"], jResult["Result"]["HasOwners"])
 
                 # Only return the name if there the printer is linked to an account.
                 printerName = None
@@ -64,7 +64,7 @@ class LinkHelper:
                     printerName = jResult["Result"]["Name"]
                 return (True, printerName)
             except Exception as e:
-                logger.debug("Exception trying to get printer info. "+str(e))
+                logger.debug("Exception trying to get printer info. %s", e)
                 logger.warning("Failed to get printer info from service, trying again in just a second...")
 
 
@@ -104,7 +104,7 @@ class LinkHelper:
                 # Return the code and the amount of time it's valid for.
                 return (codeStr, validForSeconds)
             except Exception as e:
-                logger.debug("Exception trying to get short code. "+str(e))
+                logger.debug("Exception trying to get short code. %s", e)
 
 
     # Given the printer id this will print a QR code directly to the console.

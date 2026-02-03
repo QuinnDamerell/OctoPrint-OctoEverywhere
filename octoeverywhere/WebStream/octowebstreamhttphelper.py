@@ -348,7 +348,16 @@ class OctoWebStreamHttpHelper:
             # Since streams with unknown content-lengths can run for a while, report now when we start one.
             # If the status code is 304 or 204, we don't expect content.
             if self.Logger.isEnabledFor(logging.DEBUG) and contentLength is None and octoHttpResult.StatusCode != 304 and octoHttpResult.StatusCode != 204:
-                self.Logger.debug(self.getLogMsgPrefix() + "STARTING " + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; ] type:"+str(contentTypeLower)+" status:"+str(octoHttpResult.StatusCode)+" for " + uri)
+                self.Logger.debug(
+                    "%sSTARTING %s [upload:%ss; request_exe:%ss; ] type:%s status:%s for %s",
+                    self.getLogMsgPrefix(),
+                    method,
+                    format(requestExecutionStart - self.OpenedTime, ".3f"),
+                    format(requestExecutionEnd - requestExecutionStart, ".3f"),
+                    contentTypeLower,
+                    octoHttpResult.StatusCode,
+                    uri,
+                )
 
             # Check for a response handler and if we have one, check if it might want to edit the response of this call.
             # If so, it will return a context object. If not, it will return None.
@@ -446,7 +455,7 @@ class OctoWebStreamHttpHelper:
                 # For example, if this request is not 200 but has no content, compressBody might be set but we didn't read any body, so we didn't compress anything,
                 # and thus self.CompressionType will not be set.
                 if isLastMessage and nonCompressedContentReadSizeBytes == 0:
-                    self.Logger.debug(self.getLogMsgPrefix()+" read no body so we will turned off the compressBody flag.")
+                    self.Logger.debug("%s read no body so we will turned off the compressBody flag.", self.getLogMsgPrefix())
                     compressBody = False
 
                 builder = builderContext.Builder
@@ -500,7 +509,12 @@ class OctoWebStreamHttpHelper:
                     # If this is a multipart stream (webcam streaming), every 1 second a value will be dumped into MultipartReadsPerSecond
                     # when it's there, we want to send it to the server for telemetry, and then zero it out.
                     if self.Logger.isEnabledFor(logging.DEBUG):
-                        self.Logger.debug(f"Multipart Stats; reads per second: {str(self.MultipartReadsPerSecond)}, body read high water mark {str(format(self.BodyReadTimeHighWaterMarkSec*1000.0, '.2f'))}ms, socket write high water mark {str(format(self.ServiceUploadTimeHighWaterMarkSec*1000.0, '.2f'))}ms")
+                        self.Logger.debug(
+                            "Multipart Stats; reads per second: %s, body read high water mark %sms, socket write high water mark %sms",
+                            self.MultipartReadsPerSecond,
+                            format(self.BodyReadTimeHighWaterMarkSec * 1000.0, ".2f"),
+                            format(self.ServiceUploadTimeHighWaterMarkSec * 1000.0, ".2f"),
+                        )
                     if self.MultipartReadsPerSecond > 255 or self.MultipartReadsPerSecond < 0:
                         self.Logger.warning("self.MultipartReadsPerSecond is larger than uint8. "+str(self.MultipartReadsPerSecond))
                         self.MultipartReadsPerSecond  = 255
@@ -547,7 +561,26 @@ class OctoWebStreamHttpHelper:
             # Log about it - only if debug is enabled. Otherwise, we don't want to waste time making the log string.
             responseWriteDone = time.time()
             if self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug(self.getLogMsgPrefix() + method+" [upload:"+str(format(requestExecutionStart - self.OpenedTime, '.3f'))+"s; request_exe:"+str(format(requestExecutionEnd - requestExecutionStart, '.3f'))+"s; send:"+str(format(responseWriteDone - requestExecutionEnd, '.3f'))+"s; body_read:"+str(format(self.BodyReadTimeSec, '.3f'))+"s; compress:"+str(format(self.CompressionTimeSec, '.3f'))+"s; octo_stream_upload:"+str(format(self.ServiceUploadTimeSec, '.3f'))+"s] size:("+str(nonCompressedContentReadSizeBytes)+"->"+str(contentReadBytes)+") compressed:"+str(compressBody)+" msgcount:"+str(messageCount)+" accumulatedStreamReader:"+str(self.HttpStreamAccumulationReader is not None)+" type:"+str(contentTypeLower)+" status:"+str(octoHttpResult.StatusCode)+" cached:"+str(isFromCache)+" for " + uri)
+                self.Logger.debug(
+                    "%s%s [upload:%ss; request_exe:%ss; send:%ss; body_read:%ss; compress:%ss; octo_stream_upload:%ss] size:(%s->%s) compressed:%s msgcount:%s accumulatedStreamReader:%s type:%s status:%s cached:%s for %s",
+                    self.getLogMsgPrefix(),
+                    method,
+                    format(requestExecutionStart - self.OpenedTime, ".3f"),
+                    format(requestExecutionEnd - requestExecutionStart, ".3f"),
+                    format(responseWriteDone - requestExecutionEnd, ".3f"),
+                    format(self.BodyReadTimeSec, ".3f"),
+                    format(self.CompressionTimeSec, ".3f"),
+                    format(self.ServiceUploadTimeSec, ".3f"),
+                    nonCompressedContentReadSizeBytes,
+                    contentReadBytes,
+                    compressBody,
+                    messageCount,
+                    self.HttpStreamAccumulationReader is not None,
+                    contentTypeLower,
+                    octoHttpResult.StatusCode,
+                    isFromCache,
+                    uri,
+                )
 
 
     def buildHeaderVector(self, builder:octoflatbuffers.Builder, httpResult:HttpResult) -> Optional[int]:

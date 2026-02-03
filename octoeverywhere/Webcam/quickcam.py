@@ -303,13 +303,13 @@ class QuickCam(IQuickCam):
                 # Create the camera implementation we need for this device.
                 camImpl = None
                 if self.Type == QuickCamStreamTypes.RTSP:
-                    self.Logger.debug(f"QuickCam capture thread started for RTSP. {self.Url}")
+                    self.Logger.debug("QuickCam capture thread started for RTSP. %s", self.Url)
                     camImpl = QuickCam_RTSP(self.Logger)
                 elif self.Type == QuickCamStreamTypes.WebSocket:
-                    self.Logger.debug(f"QuickCam capture thread started for Websocket. {self.Url}")
+                    self.Logger.debug("QuickCam capture thread started for Websocket. %s", self.Url)
                     camImpl = QuickCam_WebSocket(self.Logger)
                 elif self.Type == QuickCamStreamTypes.JMPEG:
-                    self.Logger.debug(f"QuickCam capture thread started for JMPEG. {self.Url}")
+                    self.Logger.debug("QuickCam capture thread started for JMPEG. %s", self.Url)
                     camImpl = QuickCam_Jmpeg(self.Logger)
                     # The elegoo webcam server doesn't like us to stream too long, so set a short-ish max time
                     # remember the client streams will not be effected, there will only be a small gap in the stream images.
@@ -884,7 +884,7 @@ class QuickCam_RTSP:
                 if stderr is None:
                     stderr = b""
                 stderr = stderr.decode("utf-8") #pyright: ignore[reportUnknownMemberType]
-                self.Logger.debug(f"ffmpeg gracefully killed. Remaining ffmpeg output:\n{stderr}")
+                self.Logger.debug("ffmpeg gracefully killed. Remaining ffmpeg output:\n%s", stderr)
         except Exception as e:
             self.Logger.warning(f"Exception when trying to gracefully kill ffmpeg. {e}")
 

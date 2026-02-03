@@ -78,7 +78,13 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
         # Based on the old state and the new state, we can determine what to do.
         if self.LastStatus != newStatus:
             # We know the state changed.
-            self.Logger.debug(f"Elegoo printer state change: {self.LastStatus} -> {newStatus} - New Print Info Status: {pState.PrintInfoStatus} New Current Status: {pState.CurrentStatus}")
+            self.Logger.debug(
+                "Elegoo printer state change: %s -> %s - New Print Info Status: %s New Current Status: %s",
+                self.LastStatus,
+                newStatus,
+                pState.PrintInfoStatus,
+                pState.CurrentStatus,
+            )
             if self.LastStatus is None:
                 # If the last state is None, this is mostly likely the first time we've seen a state.
                 # All we want to do here is update last state to the new state.

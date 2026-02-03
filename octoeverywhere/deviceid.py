@@ -47,7 +47,7 @@ class DeviceId:
         if sys.platform == "darwin":
             fid = self._RunCmd("ioreg -d2 -c IOPlatformExpertDevice | awk -F\\\" '/IOPlatformUUID/{print $(NF-1)}'")
             if fid is not None:
-                self.Logger.debug(f"Found device id from darwin device id: {fid}")
+                self.Logger.debug("Found device id from darwin device id: %s", fid)
                 return self._BuildId("darwin", fid)
 
         # Windows
@@ -59,44 +59,44 @@ class DeviceId:
         if sys.platform.startswith("linux"):
             fid = self._ReadFile("/var/lib/dbus/machine-id")
             if fid is not None:
-                self.Logger.debug(f"Found device id from /var/lib/dbus/machine-id: {fid}")
+                self.Logger.debug("Found device id from /var/lib/dbus/machine-id: %s", fid)
                 return self._BuildId("linux-mi", fid)
 
             fid = self._ReadFile('/etc/machine-id')
             if fid is not None:
-                self.Logger.debug(f"Found device id from /etc/machine-id: {fid}")
+                self.Logger.debug("Found device id from /etc/machine-id: %s", fid)
                 return self._BuildId("linux-mie", fid)
 
             group = self._ReadFile('/proc/self/cgroup')
             if group is not None and 'docker' in group:
                 fid = self._RunCmd("head -1 /proc/self/cgroup | cut -d/ -f3")
             if fid is not None:
-                self.Logger.debug(f"Found device id from docker cgroup: {fid}")
+                self.Logger.debug("Found device id from docker cgroup: %s", fid)
                 return self._BuildId("linux-d", fid)
 
             mountInfo = self._ReadFile('/proc/self/mountinfo')
             if mountInfo and 'docker' in mountInfo:
                 fid = self._RunCmd("grep -oP '(?<=docker/containers/)([a-f0-9]+)(?=/hostname)' /proc/self/mountinfo")
             if fid is not None:
-                self.Logger.debug(f"Found device id from docker mountinfo: {fid}")
+                self.Logger.debug("Found device id from docker mountinfo: %s", fid)
                 return self._BuildId("linux-dm", fid)
 
             if 'microsoft' in platform.uname().release:
                 fid = self._RunCmd("powershell.exe -ExecutionPolicy bypass -command '(Get-CimInstance -Class Win32_ComputerSystemProduct).UUID'")
             if fid is not None:
-                self.Logger.debug(f"Found device id from wsl UUID: {fid}")
+                self.Logger.debug("Found device id from wsl UUID: %s", fid)
                 return self._BuildId("wsl", fid)
 
         # BSD
         if sys.platform.startswith(('openbsd', 'freebsd')):
             fid = self._ReadFile("/etc/hostid")
             if fid is not None:
-                self.Logger.debug(f"Found device id from /etc/hostid: {fid}")
+                self.Logger.debug("Found device id from /etc/hostid: %s", fid)
                 return self._BuildId("bsd-h", fid)
 
             fid = self._RunCmd('kenv -q smbios.system.uuid')
             if fid is not None:
-                self.Logger.debug(f"Found device id from kenv -q smbios.system.uuid: {fid}")
+                self.Logger.debug("Found device id from kenv -q smbios.system.uuid: %s", fid)
                 return self._BuildId("bsd-k", fid)
 
         self.Logger.warning(f"Found device ID not found on platform: {sys.platform}")

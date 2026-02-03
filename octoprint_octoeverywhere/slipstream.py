@@ -150,7 +150,7 @@ class Slipstream(ISlipstreamHandler):
                 # Note that this object can be updated!
                 # There's only once case right now, there's logic that will compare the cache header and convert the
                 # Object into a 304 response, which will strip some headers and the body buffer.
-                self.Logger.debug("Slipstream returning cached content for "+path)
+                self.Logger.debug("Slipstream returning cached content for %s", path)
                 return self.Cache[path]
 
         # Otherwise return cache miss.
@@ -339,7 +339,15 @@ class Slipstream(ISlipstreamHandler):
 
             requestDuration = compressStart - start
             compressDuration = time.time() - compressStart
-            self.Logger.debug("Slipstream Cached [request:"+str(format(requestDuration, '.3f'))+", compression:"+str(format(compressDuration, '.3f'))+"] ["+str(ogSize)+"->"+str(len(buffer))+" "+format(((len(buffer)/ogSize)*100), '.3f')+"%] "+url)
+            self.Logger.debug(
+                "Slipstream Cached [request:%s, compression:%s] [%s->%s %s%%] %s",
+                format(requestDuration, ".3f"),
+                format(compressDuration, ".3f"),
+                ogSize,
+                len(buffer),
+                format(((len(buffer) / ogSize) * 100), ".3f"),
+                url,
+            )
 
             # Return the result on success.
             success = True

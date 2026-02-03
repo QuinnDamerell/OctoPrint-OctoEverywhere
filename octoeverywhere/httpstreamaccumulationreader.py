@@ -295,7 +295,7 @@ class HttpStreamAccumulationReader:
         # This should be as fast as possible when debug logging is disabled.
         if not self.ShouldDebugLog:
             return
-        self.Logger.debug(f"{self.getLogMsgPrefix()} {msg}")
+        self.Logger.debug("%s %s", self.getLogMsgPrefix(), msg)
 
 
     def getLogMsgPrefix(self) -> str:

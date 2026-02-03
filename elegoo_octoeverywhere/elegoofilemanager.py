@@ -124,7 +124,7 @@ class ElegooFileManager(IFileManager):
             self._SyncExtraFileInfo()
 
             with self.Lock:
-                self.Logger.debug(f"File manager sync complete. {len(self.Files)-currentFileCount} files added.")
+                self.Logger.debug("File manager sync complete. %s files added.", len(self.Files) - currentFileCount)
         except Exception as e:
             Sentry.OnException("Exception in ElegooFileManager.", e)
         finally:

@@ -19,9 +19,9 @@ class ElegooRelayWebcamUrlDetector(IRelayWebcamStreamDetector):
         # <ip>:3031/video is the path the frontend uses, but the server must re-write it anyways to correct the port.
         urlLower = relativeOrAbsolutePath.lower()
         if urlLower.find("/video") != -1:
-            self.Logger.debug(f"ElegooRelayWebcamStreamDetector: Detected webcam stream request, adding oracle headers. Url: {relativeOrAbsolutePath}")
+            self.Logger.debug("ElegooRelayWebcamStreamDetector: Detected webcam stream request, adding oracle headers. Url: %s", relativeOrAbsolutePath)
             headers[WebcamHelper.c_OracleStreamHeaderKey] = "true"
         # Snapshots don't exist yet, but if so, we will be ready.
         if urlLower.find("/snapshot") != -1:
-            self.Logger.debug(f"ElegooRelayWebcamStreamDetector: Detected webcam snapshot request, adding oracle headers. Url: {relativeOrAbsolutePath}")
+            self.Logger.debug("ElegooRelayWebcamStreamDetector: Detected webcam snapshot request, adding oracle headers. Url: %s", relativeOrAbsolutePath)
             headers[WebcamHelper.c_OracleSnapshotHeaderKey] = "true"

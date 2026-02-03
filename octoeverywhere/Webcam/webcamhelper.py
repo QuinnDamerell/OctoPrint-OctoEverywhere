@@ -400,22 +400,22 @@ class WebcamHelper:
                         # This is good, return this URL.
                         return True
             except Exception as e:
-                logger.debug(f"DetectWebRTCStreamUrlAndTranslate test URL [{url}] failed to validate as mjpeg stream. {str(e)}")
+                logger.debug("DetectWebRTCStreamUrlAndTranslate test URL [%s] failed to validate as mjpeg stream. %s", url, e)
             return False
 
         # Try the most common .../stream first
         if testForJMPEGStream(possibleStreamUrl):
-            logger.debug(f"DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [{streamUrl}] to mjpeg stream URL [{possibleStreamUrl}]")
+            logger.debug("DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [%s] to mjpeg stream URL [%s]", streamUrl, possibleStreamUrl)
             return possibleStreamUrl
 
         # Try adding the less common .mjpg suffix
         possibleStreamUrlMjpg = possibleStreamUrl + ".mjpg"
         if testForJMPEGStream(possibleStreamUrlMjpg):
-            logger.debug(f"DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [{streamUrl}] to mjpeg stream URL [{possibleStreamUrlMjpg}]")
+            logger.debug("DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [%s] to mjpeg stream URL [%s]", streamUrl, possibleStreamUrlMjpg)
             return possibleStreamUrlMjpg
 
         # If we fail, default to the most common /stream url.
-        logger.debug(f"DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [{streamUrl}] to mjpeg stream URL [{possibleStreamUrl}] (defaulted)")
+        logger.debug("DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [%s] to mjpeg stream URL [%s] (defaulted)", streamUrl, possibleStreamUrl)
         return possibleStreamUrl
 
 
