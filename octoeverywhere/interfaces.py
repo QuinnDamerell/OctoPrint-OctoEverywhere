@@ -185,6 +185,14 @@ class IPrinterStateReporter(ABC):
         pass
 
 
+# Feature flags for the platforms.
+FEATURE_LIGHT_CONTROL = 1 << 0
+FEATURE_AXIS_MOVEMENT = 1 << 1
+FEATURE_HOMING        = 1 << 2
+FEATURE_EXTRUSION     = 1 << 3
+FEATURE_TEMPERATURE_CONTROL = 1 << 4
+
+
 class IPlatformCommandHandler(ABC):
 
     # If the plugin is connected and in a good state, this should return the standard job status.
@@ -197,6 +205,11 @@ class IPlatformCommandHandler(ABC):
     # This must return the platform version as a string.
     @abstractmethod
     def GetPlatformVersionStr(self) -> str:
+        pass
+
+    # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
+    @abstractmethod
+    def GetSupportedFeatureFlags(self) -> int:
         pass
 
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.

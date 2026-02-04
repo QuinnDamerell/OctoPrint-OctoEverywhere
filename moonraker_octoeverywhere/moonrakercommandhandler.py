@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.interfaces import IPlatformCommandHandler
+from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL
 
 from .moonrakerclient import MoonrakerClient
 from .smartpause import SmartPause
@@ -193,6 +193,13 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     def GetPlatformVersionStr(self) -> str:
         # We don't supply this for moonraker at the moment.
         return "1.0.0"
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
+    def GetSupportedFeatureFlags(self) -> int:
+        # These are all we support right now.
+        return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING | FEATURE_AXIS_MOVEMENT | FEATURE_EXTRUSION | FEATURE_TEMPERATURE_CONTROL
 
 
     # !! Platform Command Handler Interface Function !!

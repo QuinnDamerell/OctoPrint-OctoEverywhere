@@ -3,7 +3,7 @@ from typing import Any, Dict, Union, Optional, List
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.printinfo import PrintInfoManager
-from octoeverywhere.interfaces import IPlatformCommandHandler
+from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, IPlatformCommandHandler
 
 from .bambuclient import BambuClient
 from .bambumodels import BambuPrintErrors
@@ -230,6 +230,13 @@ class BambuCommandHandler(IPlatformCommandHandler):
         if version is None:
             return "0.0.0"
         return f"{version.SoftwareVersion}-{version.PrinterName}"
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
+    def GetSupportedFeatureFlags(self) -> int:
+        # These are all we support right now.
+        return 0 | FEATURE_LIGHT_CONTROL
 
 
     # !! Platform Command Handler Interface Function !!

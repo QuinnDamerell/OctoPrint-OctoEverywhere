@@ -168,6 +168,13 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     # !! Platform Command Handler Interface Function !!
+    # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
+    def GetSupportedFeatureFlags(self) -> int:
+        # We don't support any extra features right now.
+        return 0
+
+
+    # !! Platform Command Handler Interface Function !!
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.

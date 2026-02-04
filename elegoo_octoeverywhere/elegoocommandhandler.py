@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, Optional, Union, List
 
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
-from octoeverywhere.interfaces import IPlatformCommandHandler
+from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
@@ -131,6 +131,13 @@ class ElegooCommandHandler(IPlatformCommandHandler):
 
 
     # !! Platform Command Handler Interface Function !!
+    # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
+    def GetSupportedFeatureFlags(self) -> int:
+        # These are all we support right now.
+        return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING
+
+
+    # !! Platform Command Handler Interface Function !!
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.
     # If not, it must return the correct two error codes accordingly.
     # This must return a CommandResponse.
@@ -191,7 +198,11 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     # !! Platform Command Handler Interface Function !!
     # Homes all axes.
     def ExecuteHome(self) -> CommandResponse:
-        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+        data = {"Axis": "XYZ"}
+        result = ElegooClient.Get().SendRequest(402, data)
+        if result.HasError():
+            return CommandResponse.Error(400, "Failed to send command to printer.")
+        return CommandResponse.Success(None)
 
 
     # !! Platform Command Handler Interface Function !!

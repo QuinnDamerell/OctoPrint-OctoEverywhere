@@ -244,6 +244,16 @@ class CommandHandler:
         except Exception as e:
             Sentry.OnExceptionNoSend("API command GetStatus failed to get OctoPrint version", e)
 
+        # Get the supported features for this platform.
+        features:int = 0
+        try:
+            if self.PlatformCommandHandler is None:
+                self.Logger.warning("GetStatus command has no PlatformCommandHandler")
+            else:
+                features = self.PlatformCommandHandler.GetSupportedFeatureFlags()
+        except Exception as e:
+            Sentry.OnExceptionNoSend("API command GetStatus failed to get OctoPrint version", e)
+
         # Get the list webcams response as well
         # Don't include the URL to reduce the payload size.
         webcamInfoCommandResponse = self.ListWebcams(False)
@@ -257,6 +267,7 @@ class CommandHandler:
             "JobStatus" : jobStatus,
             "OctoEverywhereStatus" : octoeverywhereStatus,
             "PlatformVersion" : versionStr,
+            "Features": features,
             "ListWebcams" : webcamInfoCommandResponse.ResultDict
         }
         return CommandResponse.Success(responseObj)
