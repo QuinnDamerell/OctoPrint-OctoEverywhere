@@ -275,14 +275,6 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self.Logger.info("ExecuteSetLight: No lights detected in printer configuration")
             return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "No lights detected in printer configuration")
 
-        # Check that we're connected to the printer
-        result = self._CheckIfConnectedAndForExpectedStates(["standby", "printing", "paused", "complete"])
-        if result is not None:
-            # If the printer is not connected, return the appropriate error
-            # But we still want to allow light control in most states except error
-            if result.StatusCode == CommandHandler.c_CommandError_HostNotConnected:
-                return result
-
         # Attempt to set the light state
         success = LightManager.Get().SetLightState(lightName, on)
         if success:
@@ -291,6 +283,133 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         else:
             self.Logger.error("ExecuteSetLight: Failed to set light state")
             return CommandResponse.Error(500, "Failed to set light state")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Moves the specified axis by the given distance in mm.
+    def ExecuteMoveAxis(self, axis:str, distanceMm:float) -> CommandResponse:
+        # Validate axis parameter
+        axis_upper = axis.upper()
+        if axis_upper not in ["X", "Y", "Z"]:
+            self.Logger.error(f"ExecuteMoveAxis: Invalid axis '{axis}'")
+            return CommandResponse.Error(400, "Invalid axis. Must be X, Y, or Z")
+
+        # Build G-code command
+        # G91: Set to relative positioning
+        # G1: Linear move with feedrate
+        # Feedrate: 3000 mm/min (50 mm/s) for X/Y, 500 mm/min for Z
+        feedrate = 500 if axis_upper == "Z" else 3000
+        gcode = f"G91\nG1 {axis_upper}{distanceMm} F{feedrate}\nG90"
+
+        # Execute G-code
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.gcode.script", {
+            "script": gcode
+        })
+
+        if result.HasError():
+            self.Logger.error(f"ExecuteMoveAxis failed: {result.GetLoggingErrorStr()}")
+            return CommandResponse.Error(500, "Failed to move axis: "+result.GetLoggingErrorStr())
+
+        self.Logger.info(f"ExecuteMoveAxis: Successfully moved {axis_upper} by {distanceMm}mm")
+        return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Homes all axes.
+    def ExecuteHome(self) -> CommandResponse:
+
+        # G28: Home all axes
+        gcode = "G28"
+
+        # Execute G-code
+        # Most printers will block until the homing is done, which can include heating the bed and such.
+        # So we set a long timeout so we don't miss the actual result.
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.gcode.script", {
+            "script": gcode
+        }, timeoutSec=120.0)
+
+        if result.HasError():
+            self.Logger.error(f"ExecuteHome failed: {result.GetLoggingErrorStr()}")
+            return CommandResponse.Error(500, "Failed to home axes: "+result.GetLoggingErrorStr())
+
+        self.Logger.info("ExecuteHome: Successfully homed all axes")
+        return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Extrudes or retracts filament for the specified extruder.
+    def ExecuteExtrude(self, extruder:int, distanceMm:float) -> CommandResponse:
+        # Validate extruder parameter
+        if extruder < 0 or extruder > 10:
+            self.Logger.error(f"ExecuteExtrude: Invalid extruder index '{extruder}'")
+            return CommandResponse.Error(400, "Invalid extruder index")
+
+        # Build G-code command
+        # M83: Set extruder to relative mode
+        # G1: Extrude with feedrate
+        # Feedrate: 300 mm/min (5 mm/s) for extrusion
+        # T{n}: Select extruder (if not extruder 0)
+        extruder_select = f"T{extruder}\n" if extruder > 0 else ""
+        gcode = f"{extruder_select}M83\nG1 E{distanceMm} F300"
+
+        # Execute G-code
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.gcode.script", {
+            "script": gcode
+        })
+
+        if result.HasError():
+            self.Logger.error(f"ExecuteExtrude failed: {result.GetLoggingErrorStr()}")
+            return CommandResponse.Error(500, "Failed to extrude: "+result.GetLoggingErrorStr())
+
+        action = "extruded" if distanceMm > 0 else "retracted"
+        self.Logger.info(f"ExecuteExtrude: Successfully {action} {abs(distanceMm)}mm on extruder {extruder}")
+        return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sets the temperature for bed, chamber, or tool.
+    def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
+
+        # Build G-code commands
+        gcode_commands:List[str] = []
+
+        if bedC:
+            # M140: Set bed temperature without waiting
+            gcode_commands.append(f"M140 S{bedC}")
+
+        if toolC:
+            # M104: Set hotend temperature without waiting
+            gcode_commands.append(f"M104 S{toolC}")
+
+        if chamberC:
+            # Chamber heating in Klipper is typically done via heater_generic
+            # Use SET_HEATER_TEMPERATURE command if chamber heater exists
+            # Note: This assumes chamber heater is named "chamber" in printer.cfg
+            gcode_commands.append(f"SET_HEATER_TEMPERATURE HEATER=chamber TARGET={chamberC}")
+
+        # Combine all commands with newlines
+        gcode = "\n".join(gcode_commands)
+
+        # Execute G-code
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.gcode.script", {
+            "script": gcode
+        })
+
+        if result.HasError():
+            self.Logger.error(f"ExecuteSetTemp failed: {result.GetLoggingErrorStr()}")
+            return CommandResponse.Error(500, "Failed to set temperature: "+result.GetLoggingErrorStr())
+
+        # Build success message
+        targets:List[str] = []
+        if bedC:
+            targets.append(f"bed to {bedC}°C")
+        if toolC:
+            targets.append(f"tool to {toolC}°C")
+        if chamberC:
+            targets.append(f"chamber to {chamberC}°C")
+
+        self.Logger.info(f"ExecuteSetTemp: Successfully set {', '.join(targets)}")
+        return CommandResponse.Success(None)
 
 
     # Checks if the printer is connected and in the correct state (or states)

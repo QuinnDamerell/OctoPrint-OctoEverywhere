@@ -125,6 +125,14 @@ class CommandHandler:
             return self.Cancel()
         elif commandPathLower.startswith("set-light"):
             return self.SetLight(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("move-axis"):
+            return self.MoveAxis(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("home"):
+            return self.Home()
+        elif commandPathLower.startswith("extrude"):
+            return self.Extrude(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("set-temp"):
+            return self.SetTemp(jsonObj_CanBeNone)
         elif commandPathLower.startswith("rekey"):
             return self.Rekey()
         elif commandPathLower.startswith(CommandHandler.c_MqttWebsocketProxyCommand):
@@ -415,6 +423,110 @@ class CommandHandler:
 
         # Execute the command
         return self.PlatformCommandHandler.ExecuteSetLight(lightName, on)
+
+
+    def MoveAxis(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        # Parse args
+        if jsonObjData is None:
+            return CommandResponse.Error(400, "No args passed")
+
+        axis = None
+        distanceMm = None
+        try:
+            axis = jsonObjData.get("Axis", None)
+            distanceMm = jsonObjData.get("DistanceMm", None)
+            if axis is None or not isinstance(axis, str):
+                return CommandResponse.Error(400, "No axis specified or invalid type")
+            if distanceMm is None or not isinstance(distanceMm  , (int, float)):
+                return CommandResponse.Error(400, "No distance specified or invalid type")
+            distanceMm = float(distanceMm)
+        except Exception as e:
+            Sentry.OnException("Failed to MoveAxis, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args")
+
+        # Execute the command
+        return self.PlatformCommandHandler.ExecuteMoveAxis(axis, distanceMm)
+
+
+    def Home(self) -> CommandResponse:
+        # Execute the command (no args needed)
+        return self.PlatformCommandHandler.ExecuteHome()
+
+
+    def Extrude(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        # Parse args
+        if jsonObjData is None:
+            return CommandResponse.Error(400, "No args passed")
+
+        extruder = None
+        distanceMm = None
+        try:
+            extruder = jsonObjData.get("Extruder", None)
+            distanceMm = jsonObjData.get("DistanceMm", None)
+            if extruder is None or not isinstance(extruder, int):
+                return CommandResponse.Error(400, "No extruder specified or invalid type")
+            if distanceMm is None or not isinstance(distanceMm, (int, float)):
+                return CommandResponse.Error(400, "No distanceMm specified or invalid type")
+            distanceMm = float(distanceMm)
+        except Exception as e:
+            Sentry.OnException("Failed to Extrude, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args")
+
+        # Execute the command
+        return self.PlatformCommandHandler.ExecuteExtrude(extruder, distanceMm)
+
+
+    def SetTemp(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        # Parse args
+        if jsonObjData is None:
+            return CommandResponse.Error(400, "No args passed")
+
+        bedC:Optional[float] = None
+        chamberC:Optional[float] = None
+        toolC:Optional[float] = None
+        toolNumber:Optional[int] = None
+        try:
+            bedC = jsonObjData.get("BedC", None)
+            chamberC = jsonObjData.get("ChamberC", None)
+            toolC = jsonObjData.get("ToolC", None)
+            toolNumber = jsonObjData.get("ToolNumber", None)
+            if bedC is not None and not isinstance(bedC, (int, float)):
+                return CommandResponse.Error(400, "Invalid bedC type")
+            if chamberC is not None and not isinstance(chamberC, (int, float)):
+                return CommandResponse.Error(400, "Invalid chamberC type")
+            if toolC is not None and not isinstance(toolC, (int, float)):
+                return CommandResponse.Error(400, "Invalid toolC type")
+            if toolNumber is not None and not isinstance(toolNumber, int):
+                return CommandResponse.Error(400, "Invalid toolNumber type")
+        except Exception as e:
+            Sentry.OnException("Failed to Extrude, bad args.", e)
+            return CommandResponse.Error(400, "Failed to parse args")
+
+        # Safety check the temps
+        # Some printers might be able to do higher than these, but these are reasonable max temps to prevent issues.
+        MAX_BED_TEMP_C = 75.0
+        MAX_CHAMBER_TEMP_C = 75.0
+        MAX_TOOL_TEMP_C = 260.0
+        if not bedC and not chamberC and not toolC:
+            self.Logger.error("ExecuteSetTemp: No heater specified")
+            return CommandResponse.Error(400, "At least one heater must be specified")
+
+        # Safety check: enforce maximum temperatures
+        if bedC and bedC > MAX_BED_TEMP_C:
+            self.Logger.error(f"ExecuteSetTemp: Bed temperature {bedC}°C exceeds maximum {MAX_BED_TEMP_C}°C")
+            return CommandResponse.Error(400, f"Bed temperature cannot exceed {MAX_BED_TEMP_C}°C")
+
+        if chamberC and chamberC > MAX_CHAMBER_TEMP_C:
+            self.Logger.error(f"ExecuteSetTemp: Chamber temperature {chamberC}°C exceeds maximum {MAX_CHAMBER_TEMP_C}°C")
+            return CommandResponse.Error(400, f"Chamber temperature cannot exceed {MAX_CHAMBER_TEMP_C}°C")
+
+        if toolC and toolC > MAX_TOOL_TEMP_C:
+            self.Logger.error(f"ExecuteSetTemp: Tool temperature {toolC}°C exceeds maximum {MAX_TOOL_TEMP_C}°C")
+            return CommandResponse.Error(400, f"Tool temperature cannot exceed {MAX_TOOL_TEMP_C}°C")
+
+        # Execute the command
+        return self.PlatformCommandHandler.ExecuteSetTemp(bedC, chamberC, toolC, toolNumber)
+
 
 
     def Rekey(self) -> CommandResponse:

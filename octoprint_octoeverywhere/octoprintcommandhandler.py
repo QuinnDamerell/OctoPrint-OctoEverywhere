@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 from octoprint import __version__
 from octoprint.printer import PrinterInterface
@@ -253,3 +253,32 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # OctoPrint doesn't have a standard way to control chamber lights, so this is not supported.
     def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Light control is not supported on OctoPrint.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Moves the specified axis by the given distance in mm.
+    def ExecuteMoveAxis(self, axis:str, distanceMm:float) -> CommandResponse:
+        # Validate axis parameter
+        axis_upper = axis.upper()
+        if axis_upper not in ["X", "Y", "Z"]:
+            self.Logger.error(f"ExecuteMoveAxis: Invalid axis '{axis}'")
+            return CommandResponse.Error(400, "Invalid axis. Must be X, Y, or Z")
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Homes all axes.
+    def ExecuteHome(self) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Extrudes or retracts filament for the specified extruder.
+    def ExecuteExtrude(self, extruder:int, distanceMm:float) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sets the temperature for bed, chamber, or tool.
+    def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")

@@ -225,6 +225,34 @@ class IPlatformCommandHandler(ABC):
     def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
         pass
 
+    # Moves the specified axis by the given distance in mm.
+    # axis: The axis to move ("X", "Y", or "Z")
+    # distanceMm: The distance to move in mm (positive or negative)
+    # Returns a CommandResponse with success or an error.
+    @abstractmethod
+    def ExecuteMoveAxis(self, axis:str, distanceMm:float) -> CommandResponse:
+        pass
+
+    # Homes all axes.
+    # Returns a CommandResponse with success or an error.
+    @abstractmethod
+    def ExecuteHome(self) -> CommandResponse:
+        pass
+
+    # Extrudes or retracts filament for the specified extruder.
+    # extruder: The extruder index (0-based)
+    # distanceMm: The distance to extrude in mm (positive=extrude, negative=retract)
+    # Returns a CommandResponse with success or an error.
+    @abstractmethod
+    def ExecuteExtrude(self, extruder:int, distanceMm:float) -> CommandResponse:
+        pass
+
+    # Sets the temperature for bed, chamber, or tool.
+    # Returns a CommandResponse with success or an error.
+    @abstractmethod
+    def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
+        pass
+
 
 class ILocalAuth(ABC):
 

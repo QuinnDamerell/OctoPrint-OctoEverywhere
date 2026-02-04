@@ -237,7 +237,7 @@ class MoonrakerClient(IMoonrakerClient):
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None, timeoutSec:Optional[float]=None) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -268,7 +268,8 @@ class MoonrakerClient(IMoonrakerClient):
                 return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
 
             # Wait for a response
-            waitContext.GetEvent().wait(MoonrakerClient.RequestTimeoutSec)
+            timeoutSec = timeoutSec if timeoutSec is not None else MoonrakerClient.RequestTimeoutSec
+            waitContext.GetEvent().wait(timeoutSec)
 
             # Check if we got a result.
             result = waitContext.GetResult()

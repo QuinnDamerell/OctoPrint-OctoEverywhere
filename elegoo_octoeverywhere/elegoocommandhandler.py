@@ -175,3 +175,32 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         if result.HasError():
             return CommandResponse.Error(400, "Failed to send command to printer.")
         return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Moves the specified axis by the given distance in mm.
+    def ExecuteMoveAxis(self, axis:str, distanceMm:float) -> CommandResponse:
+        # Validate axis parameter
+        axis_upper = axis.upper()
+        if axis_upper not in ["X", "Y", "Z"]:
+            self.Logger.error(f"ExecuteMoveAxis: Invalid axis '{axis}'")
+            return CommandResponse.Error(400, "Invalid axis. Must be X, Y, or Z")
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Homes all axes.
+    def ExecuteHome(self) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Extrudes or retracts filament for the specified extruder.
+    def ExecuteExtrude(self, extruder:int, distanceMm:float) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sets the temperature for bed, chamber, or tool.
+    def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
