@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, Optional, List
 
 from octoeverywhere.commandhandler import CommandResponse
 from octoeverywhere.printinfo import PrintInfoManager
@@ -10,6 +10,8 @@ from .bambumodels import BambuPrintErrors
 
 # This class implements the Platform Command Handler Interface
 class BambuCommandHandler(IPlatformCommandHandler):
+
+    c_ChamberLightName = "chamber"
 
     def __init__(self, logger: logging.Logger) -> None:
         self.Logger = logger
@@ -189,17 +191,18 @@ class BambuCommandHandler(IPlatformCommandHandler):
         if bambuState.bed_target_temper is not None:
             bedTarget = round(float(bambuState.bed_target_temper), 2)
 
-        # Get chamber light status: "on", "off", or None if not supported/unknown
-        chamberLightStatus = None
+        # Get light status.
+        # None if there are no lights, otherwise a list of lights and their status.
+        lights: Optional[List[Dict[str, Any]]] = None
         if bambuState.chamber_light is not None:
-            chamberLightStatus = "on" if bambuState.chamber_light else "off"
+            lights = [ {"Name": self.c_ChamberLightName, "On": bambuState.chamber_light}   ]
 
         # Build the object and return.
         return {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
-            "ChamberLightStatus": chamberLightStatus,
+            "Lights": lights,
             "CurrentPrint":
             {
                 "Progress" : progress,
@@ -264,10 +267,10 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
     # !! Platform Command Handler Interface Function !!
     # Sets the light state for the specified light type.
-    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+    def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
         # Only chamber light is supported
-        if lightType != "chamber":
-            return CommandResponse.Error(400, f"Unknown light type: {lightType}")
+        if lightName != self.c_ChamberLightName:
+            return CommandResponse.Error(400, f"Unknown light name: {lightName}")
 
         if BambuClient.Get().SendSetChamberLight(on):
             return CommandResponse.Success(None)

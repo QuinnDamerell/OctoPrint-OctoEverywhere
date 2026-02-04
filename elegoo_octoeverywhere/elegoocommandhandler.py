@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union, List
+
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 from octoeverywhere.interfaces import IPlatformCommandHandler
 
@@ -9,6 +10,9 @@ from .elegoofilemanager import ElegooFileManager
 
 # This class implements the Platform Command Handler Interface
 class ElegooCommandHandler(IPlatformCommandHandler):
+
+    c_ChamberLightName = "chamber"
+
 
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
@@ -84,17 +88,18 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         chamberActual = printerState.ChamberActual if printerState.ChamberActual is not None else 0.0
         chamberTarget = printerState.ChamberTarget if printerState.ChamberTarget is not None else 0.0
 
-        # Get chamber light status: "on", "off", or None if not supported/unknown
-        chamberLightStatus = None
+        # Get light status.
+        # None if there are no lights, otherwise a list of lights and their status.
+        lights: Optional[List[Dict[str, Any]]] = None
         if printerState.ChamberLightOn is not None:
-            chamberLightStatus = "on" if printerState.ChamberLightOn else "off"
+            lights = [ {"Name": self.c_ChamberLightName, "On": printerState.ChamberLightOn} ]
 
         # Build the object and return.
         return {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
-            "ChamberLightStatus": chamberLightStatus,
+            "Lights": lights,
             "CurrentPrint":
             {
                 "Progress" : progress,
@@ -160,10 +165,9 @@ class ElegooCommandHandler(IPlatformCommandHandler):
 
     # !! Platform Command Handler Interface Function !!
     # Sets the light state for the specified light type.
-    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
-        # Only chamber light is supported
-        if lightType != "chamber":
-            return CommandResponse.Error(400, f"Unknown light type: {lightType}")
+    def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
+        if lightName != self.c_ChamberLightName:
+            return CommandResponse.Error(400, f"Unknown light name: {lightName}")
 
         # Command 403 is the light control command
         # SecondLight is the chamber light, RgbLight is the LED strip (we keep it off)

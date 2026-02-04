@@ -40,6 +40,7 @@ from .moonrakerapirouter import MoonrakerApiRouter
 from .moonrakercredentialmanager import MoonrakerCredentialManager
 from .filemetadatacache import FileMetadataCache
 from .uiinjector import UiInjector
+from .lightmanager import LightManager
 from .interfaces import IMoonrakerConnectionStatusHandler
 
 
@@ -205,6 +206,9 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             # Init our file meta data cache helper
             FileMetadataCache.Init(self.Logger, MoonrakerClient.Get())
 
+            # Init the light manager for detecting and controlling lights
+            LightManager.Init(self.Logger)
+
             # Setup the command handler
             CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger), self)
 
@@ -368,7 +372,8 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
     # MoonrakerClient ConnectionStatusHandler Interface - Called by the MoonrakerClient when the moonraker connection has been established and klippy is fully ready to use.
     #
     def OnMoonrakerClientConnected(self) -> None:
-        pass
+        # Detect available lights when the printer connection is ready
+        LightManager.Get().DetectLights(True)
 
 
     #

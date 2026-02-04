@@ -218,11 +218,11 @@ class IPlatformCommandHandler(ABC):
         pass
 
     # Sets the light state for the specified light type.
-    # lightType: The type of light to set. Currently only "chamber" is supported.
+    # lightName: The name of the light to set. This name is reflected from what's returned in the status API.
     # on: True to turn the light on, False to turn it off.
     # Returns a CommandResponse with success or an error if the light type is not supported.
     @abstractmethod
-    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
+    def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
         pass
 
 

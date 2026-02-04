@@ -2,7 +2,8 @@ import math
 import time
 import logging
 import threading
-from typing import List, Optional
+from collections import deque
+from typing import Deque, Optional
 
 from .sentry import Sentry
 from .repeattimer import RepeatTimer
@@ -25,7 +26,7 @@ class FinalSnap:
     # We must keep this buffer a little larger, for the extrude command logic to have enough buffer to operate in.
     # This buffer must also be large enough to have data for the c_onCompleteSnapDelaySec time.
     # This buffer can't be too large, or we will use too much memory on low end hardware
-    c_snapshotBufferDepth = 20
+    c_snapshotBufferDepth = 15
 
     # When the on complete notification fires, this is how long we will try to go back in time to fetch a snapshot,
     # if we don't have a last extrude command sent time.
@@ -38,7 +39,16 @@ class FinalSnap:
         self.LastExtrudeCommandSent:float = 0.0
         self.NotificationHandler = notificationHandler
         self.SnapLock = threading.Lock()
-        self.SnapHistory:List[Buffer] = []
+
+        # Pre-compute the needed buffer size so the deque can trim automatically.
+        desiredBufferDepth = max(
+            FinalSnap.c_snapshotBufferDepth,
+            int(math.ceil(float(FinalSnap.c_onCompleteSnapDelaySec) / float(FinalSnap.c_defaultSnapIntervalSec))),
+        )
+
+        # Deque gives O(1) append/pop from both ends and handles trimming via maxlen.
+        self.SnapHistory:Deque[Buffer] = deque(maxlen=desiredBufferDepth)
+
         self.Profiler:Optional[DebugProfiler] = None
         self.Timer = RepeatTimer(self.Logger, "FinalSnap", FinalSnap.c_defaultSnapIntervalSec, self._snapCallback)
         self.Timer.start()
@@ -90,7 +100,7 @@ class FinalSnap:
                     targetArrayIndex = len(self.SnapHistory) - 1
 
                 # Return the image selected.
-                # Clear the array to free up space of stored images, just incase this class leaks.
+                # Clear the array to free up space of stored images, just encase this class leaks.
                 self.Logger.info(f"Stopping final snap and using snapshot from ~{targetTimeDeltaSec} sec ago, index slot {targetArrayIndex} / {len(self.SnapHistory)}")
                 snap = self.SnapHistory[targetArrayIndex]
                 self.SnapHistory.clear()
@@ -120,25 +130,8 @@ class FinalSnap:
                 if self.Timer.IsRunning() is False:
                     return
 
-                # Add this most recent snapshot to the front.
-                self.SnapHistory.insert(0, snapshot)
-
-                # Figure out the desired buffer depth.
-                # `c_snapshotBufferDepth` should always be large enough, but we will make sure.
-                desiredBufferDepth = FinalSnap.c_snapshotBufferDepth
-                minBufferDepthForFixedTime = int(math.ceil(float(FinalSnap.c_onCompleteSnapDelaySec) / float(FinalSnap.c_defaultSnapIntervalSec)))
-                if minBufferDepthForFixedTime > desiredBufferDepth:
-                    self.Logger.warning(f"Final snap had to expand the default buffer size due to the time. {minBufferDepthForFixedTime}")
-                    desiredBufferDepth = minBufferDepthForFixedTime
-
-                # Sanity check.
-                if desiredBufferDepth < 1:
-                    self.Logger.error(f"FinalSnap desiredImageHistoryCount is < 1!! {desiredBufferDepth}")
-                    desiredBufferDepth = 1
-
-                while len(self.SnapHistory) > desiredBufferDepth:
-                    # Remove the oldest image, which is the image at the end of the list.
-                    self.SnapHistory.pop()
+                # Add this most recent snapshot to the front; deque auto-trims to maxlen.
+                self.SnapHistory.appendleft(snapshot)
 
             # Report if needed
             self.Profiler.ReportIfNeeded()

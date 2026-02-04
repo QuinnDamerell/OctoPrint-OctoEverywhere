@@ -9,6 +9,7 @@ from .moonrakerclient import MoonrakerClient
 from .smartpause import SmartPause
 from .filemetadatacache import FileMetadataCache
 from .jsonrpcresponse import JsonRpcResponse
+from .lightmanager import LightManager
 
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler(IPlatformCommandHandler):
@@ -30,18 +31,23 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+
+        # Build the query objects dict, including light objects if available
+        query_objects: Dict[str, None] = {
+            "print_stats": None,    # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
+            "gcode_move": None,     # Needed for GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult to get the current speed
+            "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
+            "extruder": None,       # Needed for temps
+            "heater_bed": None,     # Needed for temps
+        }
+
+        # Add light objects to the query if any are detected
+        light_objects = LightManager.Get().GetLightObjectNames()
+        query_objects.update(light_objects)
+
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
-            "objects": {
-                "print_stats": None,    # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
-                "gcode_move": None,     # Needed for GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult to get the current speed
-                "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
-                "extruder": None,       # Needed for temps
-                "heater_bed": None,     # Needed for temps
-                # "webhooks": None,
-                # "extruder": None,
-                # "bed_mesh": None,
-            }
+            "objects": query_objects
         })
         # Validate
         if result.HasError():
@@ -146,13 +152,22 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             if target is not None:
                 bedTarget = round(float(target), 2)
 
+        # Get the light status if available
+        lights:Optional[List[Dict[str, Any]]] = None
+        try:
+            light_status_objects = LightManager.Get().GetLightStatus(statusObjectOrEmptyDict)
+            # Convert LightStatus objects to dicts for JSON serialization
+            if light_status_objects:
+                lights = [{"Name": ls.Name, "On": ls.IsOn} for ls in light_status_objects]
+        except Exception as e:
+            self.Logger.debug(f"Failed to get light status: {e}")
+
         # Build the object and return.
         return {
             "State": state,
             "Error": errorStr,
-            # Chamber light status: "on", "off", or None if not supported/unknown
-            # Klipper doesn't have a standard chamber light interface; it's typically done via output_pin or led objects.
-            # "ChamberLightStatus": None,
+            # List of lights with their status, or None if not supported/unknown
+            "Lights": lights,
             "CurrentPrint":
             {
                 "Progress" : progress,
@@ -254,9 +269,28 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
     # !! Platform Command Handler Interface Function !!
     # Sets the light state for the specified light type.
-    # Klipper doesn't have a standard chamber light interface, so this is not supported.
-    def ExecuteSetLight(self, lightType:str, on:bool) -> CommandResponse:
-        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Chamber light control is not supported on Klipper/Moonraker.")
+    def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
+        # Check if we have any lights available
+        if not LightManager.Get().HasLights():
+            self.Logger.info("ExecuteSetLight: No lights detected in printer configuration")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "No lights detected in printer configuration")
+
+        # Check that we're connected to the printer
+        result = self._CheckIfConnectedAndForExpectedStates(["standby", "printing", "paused", "complete"])
+        if result is not None:
+            # If the printer is not connected, return the appropriate error
+            # But we still want to allow light control in most states except error
+            if result.StatusCode == CommandHandler.c_CommandError_HostNotConnected:
+                return result
+
+        # Attempt to set the light state
+        success = LightManager.Get().SetLightState(lightName, on)
+        if success:
+            self.Logger.info(f"ExecuteSetLight: Successfully set light to {'ON' if on else 'OFF'}")
+            return CommandResponse.Success(None)
+        else:
+            self.Logger.error("ExecuteSetLight: Failed to set light state")
+            return CommandResponse.Error(500, "Failed to set light state")
 
 
     # Checks if the printer is connected and in the correct state (or states)

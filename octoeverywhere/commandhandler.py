@@ -400,13 +400,13 @@ class CommandHandler:
         if jsonObjData is None:
             return CommandResponse.Error(400, "No args passed")
 
-        lightType = "chamber"
+        lightName = None
         on = False
         try:
-            lightType = jsonObjData.get("Type", None)
+            lightName = jsonObjData.get("Name", None)
             on = jsonObjData.get("On", None)
-            if lightType is None or not isinstance(lightType, str):
-                return CommandResponse.Error(400, "No light type passed")
+            if lightName is None or not isinstance(lightName, str):
+                return CommandResponse.Error(400, "No light name passed")
             if on is None or not isinstance(on, bool):
                 return CommandResponse.Error(400, "No light on/off state passed")
         except Exception as e:
@@ -414,7 +414,7 @@ class CommandHandler:
             return CommandResponse.Error(400, "Failed to parse args")
 
         # Execute the command
-        return self.PlatformCommandHandler.ExecuteSetLight(lightType, on)
+        return self.PlatformCommandHandler.ExecuteSetLight(lightName, on)
 
 
     def Rekey(self) -> CommandResponse:
