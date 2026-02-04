@@ -87,6 +87,9 @@ class Service:
     Type=simple
     User={context.UserName}
     WorkingDirectory={context.RepoRootFolder}
+    # We added these to try to control PY's memory usage on low memory systems.
+    Environment="MALLOC_TRIM_THRESHOLD_=65536"
+    Environment="MALLOC_ARENA_MAX=2"
     ExecStart={context.VirtualEnvPath}/bin/python3 -m {moduleNameToRun} "{argsJsonBase64}"
     Restart=always
     # Since we will only restart on a fatal Logger.Error, set the restart time to be a bit higher, so we don't spin and spam.
@@ -135,6 +138,8 @@ start_service() {{
     procd_open_instance
     procd_set_param env HOME=/root
     procd_set_param env PYTHONPATH={context.RepoRootFolder}
+    procd_set_param env MALLOC_TRIM_THRESHOLD_=65536
+    procd_set_param env MALLOC_ARENA_MAX=2
     procd_set_param oom_adj $OOM_ADJ
     procd_set_param command {context.VirtualEnvPath}/bin/python3 -m {moduleNameToRun} "{argsJsonBase64}"
     procd_close_instance
@@ -188,7 +193,10 @@ exit $?
 PID_FILE=/var/run/octoeverywhere.pid
 
 start() {
-        HOME=/root start-stop-daemon -S -q -b -m -p $PID_FILE --exec '''+runScriptFilePath+'''
+    # We added these to try to control PY's memory usage on low memory systems.
+    export MALLOC_TRIM_THRESHOLD_=65536
+    export MALLOC_ARENA_MAX=2
+    HOME=/root start-stop-daemon -S -q -b -m -p $PID_FILE --exec '''+runScriptFilePath+'''
 }
 stop() {
         start-stop-daemon -K -q -p $PID_FILE
