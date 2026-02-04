@@ -259,7 +259,7 @@ class LightManager:
                 power_device_status = self._GetPowerDeviceStatus()
                 if power_device_status:
                     with self.DetectedPowerDevicesLock:
-                        for device_name in self.DetectedPowerDevices.keys():
+                        for device_name, _ in self.DetectedPowerDevices:
                             if device_name in power_device_status:
                                 is_on = power_device_status[device_name]
                                 light_statuses.append(LightStatus(device_name, is_on))
@@ -291,7 +291,7 @@ class LightManager:
                     device_name = device.get("device", "")
                     # Status can be "on", "off", or other values
                     status = device.get("status", "off")
-                    status_dict[device_name] = (status == "on")
+                    status_dict[device_name] = status == "on"
 
             return status_dict
 
