@@ -356,12 +356,12 @@ class Client(IWebSocketClient):
                     # If the send queue is too large, we will block until it goes down. This is to prevent out of memory issues if the producer is producing data faster than the websocket can send it.
                     # We will check every second, so if the consumer is very slow, we won't be adding more and more data to the queue and eventually run out of memory.
                     # This also provides back pressure to the producer, which can be useful to prevent it from producing too much data in the first place.
-                    self.SendQueueLock.release()
                     # Report a warning so we can find this happening in users logs.
                     logger = logging.getLogger("octoeverywhere.websocketimpl")
                     logger.warning("WebSocket send queue is too large. Blocking until it drains. Current size: %.2f KB", self.SendQueueDataSizeBytes/1024.0)
+                    self.SendQueueLock.release()
                     threading.Event().wait(0.1)
-                    self.SendQueueLock.acquire()
+                    self.SendQueueLock.acquire() #pylint: disable=consider-using-with
 
                 # Ensure the send queue is still open.
                 if not self.SendQueueOpen:

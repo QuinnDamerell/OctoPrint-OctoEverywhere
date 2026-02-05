@@ -362,7 +362,7 @@ class HttpStreamAccumulationReader:
                             self.Logger.debug(f"{self.getLogMsgPrefix()} Pending buffer size of {self.BufferListPendingSize/1024.0/1024.0} MB exceeds the max of {self.c_MaxPendingBufferSizeBytes/1024.0/1024.0} MB. Sleeping to apply back pressure until it goes down." )
                         self.BufferLock.release()
                         time.sleep(0.5)
-                        self.BufferLock.acquire()
+                        self.BufferLock.acquire() #pylint: disable=consider-using-with
 
 
             # When the loop exits, the body read is complete and the stream is closed.
