@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "OctoEverywhere"
-version = "4.6.5"
+version = "4.6.6"
 description = "Free and unlimited remote access, AI print failure detection, iPhone and Android apps, notifications, live streaming, and more!"
 authors = [
     { name = "Quinn Damerell", email = "support@octoeverywhere.com" },

@@ -409,7 +409,9 @@ class WebcamHelper:
             return possibleStreamUrl
 
         # Try adding the less common .mjpg suffix
-        possibleStreamUrlMjpg = possibleStreamUrl + ".mjpg"
+        # Note, the snapmaker seems to be the only printer that uses this .mjpg for now, which is good, because we need to force 10fps on it.
+        # The problem is it tries to stream 1080p at 30FPS, which the wifi struggles handling. 10fps is totally fine, so we use it.
+        possibleStreamUrlMjpg = possibleStreamUrl + ".mjpg?fps=10"
         if testForJMPEGStream(possibleStreamUrlMjpg):
             logger.debug("DetectWebRTCStreamUrlAndTranslate translated WebRTC URL [%s] to mjpeg stream URL [%s]", streamUrl, possibleStreamUrlMjpg)
             return possibleStreamUrlMjpg
