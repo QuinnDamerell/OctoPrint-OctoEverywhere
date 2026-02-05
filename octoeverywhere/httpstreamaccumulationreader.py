@@ -31,6 +31,10 @@ class HttpStreamAccumulationReader:
     # This is only used for logging so it doesn't need to be thread safe.
     c_UniqueIdCounter = 0
 
+    # This is the max size of the pending buffer list. If the pending buffer list exceeds this size, the read thread will block until it goes back down.
+    # This is to prevent memory issues if the producer is producing data faster than the consumer can consume it.
+    # We need to make sure we think about low memory devices, where we don't want to eat RAM.
+    c_MaxPendingBufferSizeBytes = 10 * 1024 * 1024 # 10 MB.
 
     # After being constructed the reading starts immediately.
     # This class must be disposed of properly to stop the read thread.
@@ -347,7 +351,19 @@ class HttpStreamAccumulationReader:
                     if bufferLen > self.MaxReturnBufferSizeBytes:
                         raise Exception(f"The unknown body chunk read thread read a chunk larger than the max single chunk size of {self.MaxReturnBufferSizeBytes} bytes! Read size: {bufferLen} bytes.")
 
+                    # Let the consumer know we have data ready to be read!
                     self.BufferDataReadyEvent.set()
+
+                    # Important! Since our sending websocket logic will block if there's too much back pressure on sending on the WS,
+                    # We must also bound this pending buffer size so it doesn't eat memory just accumulating buffers that can't be sent.
+                    # This is a crude way of blocking the data, by just sleeping, but it shouldn't happen often and it will at least prevent memory issues if it does.
+                    while self.IsClosed is False and self.BufferListPendingSize > self.c_MaxPendingBufferSizeBytes:
+                        if self.Logger.isEnabledFor(logging.DEBUG):
+                            self.Logger.debug(f"{self.getLogMsgPrefix()} Pending buffer size of {self.BufferListPendingSize/1024.0/1024.0} MB exceeds the max of {self.c_MaxPendingBufferSizeBytes/1024.0/1024.0} MB. Sleeping to apply back pressure until it goes down." )
+                        self.BufferLock.release()
+                        time.sleep(0.5)
+                        self.BufferLock.acquire()
+
 
             # When the loop exits, the body read is complete and the stream is closed.
 

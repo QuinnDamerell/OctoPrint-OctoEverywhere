@@ -441,7 +441,7 @@ class OctoWebStreamHttpHelper:
                 # Validate.
                 if contentLength is not None and nonCompressedContentReadSizeBytes > contentLength:
                     self.Logger.warning(self.getLogMsgPrefix()+" the http stream read more data than the content length indicated.")
-                if dataOffset is not None and contentLength is not None and nonCompressedContentReadSizeBytes < contentLength:
+                if dataOffset is None and contentLength is not None and nonCompressedContentReadSizeBytes < contentLength:
                     # This might happen if the connection closes unexpectedly before the transfer is done.
                     self.Logger.warning(self.getLogMsgPrefix()+f" we expected a fixed length response, but the body read completed before we read it all. cl:{contentLength}, got:{nonCompressedContentReadSizeBytes} {uri}")
 
