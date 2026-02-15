@@ -216,14 +216,21 @@ class Client(IWebSocketClient):
             if ws is None:
                 return
             # Tune TCP behavior for lower-latency sends and better throughput on lossy links.
-            sockopt = [
+            sockopt:List[tuple[int, int, int]] = [
                 (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1),
                 (socket.SOL_SOCKET, socket.SO_SNDBUF, self.c_SocketSendBufferBytes),
                 (socket.SOL_SOCKET, socket.SO_RCVBUF, self.c_SocketReceiveBufferBytes),
             ]
 
             # Some websocket lib builds may not support sockopt. Fall back safely.
-            ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt=sslopt, ping_payload=pingPayload, sockopt=sockopt)  #pyright: ignore[reportUnknownMemberType]
+            ws.run_forever( #pyright: ignore[reportUnknownMemberType]
+                skip_utf8_validation=True,
+                ping_interval=pingIntervalSec,
+                ping_timeout=pingTimeoutSec,
+                sslopt=sslopt,
+                ping_payload=pingPayload,
+                sockopt=sockopt #pyright: ignore[reportArgumentType] This is the correct type, the websocket lib just doesn't have the correct type hints for it.
+                )
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,
