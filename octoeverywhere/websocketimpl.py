@@ -1,6 +1,8 @@
 import queue
 import ssl
 import weakref
+import socket
+import time
 import threading
 import logging
 from typing import Any, Dict, List, Callable, Optional
@@ -27,6 +29,9 @@ class Client(IWebSocketClient):
     # To test the current size, we adjusted this buffer size and the delay we sleep before checking again using a large download file directly on our hardwired klipper printer.
     # At 10MB and 100ms delay, it was only impacted by a very small amount, from about 240mbps to 230mbps.
     c_MaxSendQueueSizeBytes = 10 * 1024 * 1024
+    c_SocketSendBufferBytes = 512 * 1024
+    c_SocketReceiveBufferBytes = 512 * 1024
+    c_SendQueueBackpressureLogIntervalSec = 1.0
 
 
     # Allows us to still enable the websocket debug logs if we want.
@@ -76,6 +81,7 @@ class Client(IWebSocketClient):
         self.SendQueueDataSizeBytes = 0
         self.SendQueueOpen = True
         self.SendQueueThreadHasRun = False
+        self.SendQueueLastBackpressureLogSec = 0.0
 
         # Used to indicate if the client has started to close this WS. If so, we won't fire
         # any errors.
@@ -209,7 +215,15 @@ class Client(IWebSocketClient):
             ws = self.Ws
             if ws is None:
                 return
-            ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt=sslopt, ping_payload=pingPayload)  #pyright: ignore[reportUnknownMemberType]
+            # Tune TCP behavior for lower-latency sends and better throughput on lossy links.
+            sockopt = [
+                (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1),
+                (socket.SOL_SOCKET, socket.SO_SNDBUF, self.c_SocketSendBufferBytes),
+                (socket.SOL_SOCKET, socket.SO_RCVBUF, self.c_SocketReceiveBufferBytes),
+            ]
+
+            # Some websocket lib builds may not support sockopt. Fall back safely.
+            ws.run_forever(skip_utf8_validation=True, ping_interval=pingIntervalSec, ping_timeout=pingTimeoutSec, sslopt=sslopt, ping_payload=pingPayload, sockopt=sockopt)  #pyright: ignore[reportUnknownMemberType]
         except Exception as e:
             # There's a compat issue where  run_forever will try to access "isAlive" when the socket is closing
             # "isAlive" apparently doesn't exist in some PY versions of thread, so this throws. We will ignore that error,
@@ -351,16 +365,21 @@ class Client(IWebSocketClient):
             if buffer is None:
                 raise Exception("We tired to send a message to the websocket with a None buffer.")
 
+            queuedDataSizeBytes = self._GetQueuedDataSizeBytes(buffer, msgStartOffsetBytes, msgSize)
+
             with self.SendQueueLock:
                 while self.SendQueueOpen and self.SendQueueDataSizeBytes > self.c_MaxSendQueueSizeBytes:
                     # If the send queue is too large, we will block until it goes down. This is to prevent out of memory issues if the producer is producing data faster than the websocket can send it.
                     # We will check every second, so if the consumer is very slow, we won't be adding more and more data to the queue and eventually run out of memory.
                     # This also provides back pressure to the producer, which can be useful to prevent it from producing too much data in the first place.
-                    # Report a warning so we can find this happening in users logs.
-                    logger = logging.getLogger("octoeverywhere.websocketimpl")
-                    logger.warning("WebSocket send queue is too large. Blocking until it drains. Current size: %.2f KB", self.SendQueueDataSizeBytes/1024.0)
+                    # Report a warning so we can find this happening in users logs, but don't flood logs while blocked.
+                    nowSec = time.time()
+                    if nowSec - self.SendQueueLastBackpressureLogSec >= self.c_SendQueueBackpressureLogIntervalSec:
+                        logger = logging.getLogger("octoeverywhere.websocketimpl")
+                        logger.warning("WebSocket send queue is too large. Blocking until it drains. Current size: %.2f KB", self.SendQueueDataSizeBytes/1024.0)
+                        self.SendQueueLastBackpressureLogSec = nowSec
                     self.SendQueueLock.release()
-                    threading.Event().wait(0.1)
+                    time.sleep(0.020) # 20ms
                     self.SendQueueLock.acquire() #pylint: disable=consider-using-with
 
                 # Ensure the send queue is still open.
@@ -368,9 +387,9 @@ class Client(IWebSocketClient):
                     return
 
                 # We are going to send, add this to the size.
-                self.SendQueueDataSizeBytes += len(buffer.Get())
+                self.SendQueueDataSizeBytes += queuedDataSizeBytes
 
-            self.SendQueue.put(SendQueueContext(buffer, msgStartOffsetBytes, msgSize, optCode))
+            self.SendQueue.put(SendQueueContext(buffer, msgStartOffsetBytes, msgSize, optCode, queuedDataSizeBytes))
         except Exception as e:
             # If any exception happens during sending, we want to report the error
             # and shutdown the entire websocket.
@@ -411,7 +430,7 @@ class Client(IWebSocketClient):
 
                 # Remove the size of this message from the total size, now that it's sent.
                 with self.SendQueueLock:
-                    self.SendQueueDataSizeBytes -= len(context.Buffer.Get())
+                    self.SendQueueDataSizeBytes -= context.QueuedSizeBytes
                     if self.SendQueueDataSizeBytes < 0:
                         self.SendQueueDataSizeBytes = 0
         except Exception as e:
@@ -457,9 +476,19 @@ class Client(IWebSocketClient):
             pass
 
 
+    def _GetQueuedDataSizeBytes(self, buffer:Buffer, msgStartOffsetBytes:Optional[int], msgSize:Optional[int]) -> int:
+        # If the message size or start offset is not provided, we assume the full buffer is being sent.
+        if msgSize is None or msgStartOffsetBytes is None:
+            return len(buffer.Get())
+        if msgSize < 0 or msgStartOffsetBytes + msgSize > len(buffer.Get()):
+            raise Exception("Invalid websocket send message size.")
+        return msgSize
+
+
 class SendQueueContext():
-    def __init__(self, buffer:BufferOrNone, msgStartOffsetBytes:Optional[int] = None, msgSize:Optional[int] = None, optCode=WebSocketOpCode.BINARY) -> None:
+    def __init__(self, buffer:BufferOrNone, msgStartOffsetBytes:Optional[int] = None, msgSize:Optional[int] = None, optCode=WebSocketOpCode.BINARY, queuedSizeBytes:int=0) -> None:
         self.Buffer = buffer
         self.MsgStartOffsetBytes = msgStartOffsetBytes
         self.MsgSize = msgSize
         self.OptCode = optCode
+        self.QueuedSizeBytes = queuedSizeBytes

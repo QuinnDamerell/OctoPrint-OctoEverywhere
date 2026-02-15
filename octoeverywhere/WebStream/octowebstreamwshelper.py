@@ -33,6 +33,11 @@ from ..Proto import DataCompression
 #
 class OctoWebStreamWsHelper:
 
+    # If binary compression doesn't save at least this much, treat it as inefficient.
+    c_BinaryCompressionMinSavingsRatio = 0.05
+    # Disable binary compression for the stream after this many inefficient attempts.
+    c_BinaryCompressionDisableAfterCount = 3
+
     # Called by the main socket thread so this should be quick!
     # Throwing from here will shutdown the entire connection.
     def __init__(self, streamId:int, logger:logging.Logger, webStream:IWebStream, webStreamOpenMsg:WebStreamMsg.WebStreamMsg, openedTime:float):
@@ -48,6 +53,8 @@ class OctoWebStreamWsHelper:
         self.ResolvedLocalHostnameUrl:Optional[str] = None
         self.LookingForConnectMsgAttempts = 0
         self.CompressionContext = CompressionContext(self.Logger)
+        self.DisableBinaryCompression = False
+        self.BinaryCompressionInefficientCount = 0
 
         # These vars indicate if the actual websocket is opened or closed.
         # This is different from IsClosed, which is tracking if the webstream closed status.
@@ -422,12 +429,33 @@ class OctoWebStreamWsHelper:
 
             # Figure out if we should compress the data.
             usingCompression = len(buffer) >= Compression.MinSizeToCompress
+            if sendType == WebSocketDataTypes.WebSocketDataTypes.Binary and self.DisableBinaryCompression:
+                usingCompression = False
             originalDataSize = 0
             compressionResult:Optional[CompressionResult] = None
             if usingCompression:
                 originalDataSize = len(buffer)
                 compressionResult = Compression.Get().Compress(self.CompressionContext, buffer)
-                buffer = compressionResult.Bytes
+                compressedSize = len(compressionResult.Bytes)
+
+                # If compression doesn't reduce size enough, don't use it.
+                minCompressedSizeThreshold = int(float(originalDataSize) * (1.0 - self.c_BinaryCompressionMinSavingsRatio))
+                if compressedSize >= minCompressedSizeThreshold:
+                    compressionResult = None
+
+                    # Binary payloads are often already compressed. Disable future attempts for this stream.
+                    if sendType == WebSocketDataTypes.WebSocketDataTypes.Binary:
+                        self.BinaryCompressionInefficientCount += 1
+                        if self.BinaryCompressionInefficientCount >= self.c_BinaryCompressionDisableAfterCount:
+                            self.DisableBinaryCompression = True
+                            self.Logger.info(
+                                "%sbinary compression disabled for this stream after repeated inefficient results.",
+                                self.getLogMsgPrefix(),
+                            )
+                else:
+                    if sendType == WebSocketDataTypes.WebSocketDataTypes.Binary:
+                        self.BinaryCompressionInefficientCount = 0
+                    buffer = compressionResult.Bytes
 
             # Send the message along!
             builder = OctoStreamMsgBuilder.CreateBuffer(len(buffer) + 200)
