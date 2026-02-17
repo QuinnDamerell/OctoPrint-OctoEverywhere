@@ -34,6 +34,7 @@ from .bambuwebcamhelper import BambuWebcamHelper
 from .bambucommandhandler import BambuCommandHandler
 from .bambustatetranslater import BambuStateTranslator
 from .mqttwebsocketproxy import MqttWebsocketProxyProviderBuilder
+from .bambumqttbroker import BambuMqttBroker
 
 # This file is the main host for the bambu service.
 class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
@@ -164,6 +165,15 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             # Setup and start the Bambu Client
             BambuClient.Init(self.Logger, self.Config, stateTranslator)
+
+            # Start the local MQTT broker/relay. It accepts connections from any standard MQTT 3.1.1
+            # client (e.g. Bambu Studio, custom apps) and multiplexes them through the single upstream
+            # Bambu printer connection, working around the printer's 1-2 client limit.
+            mqttBrokerPort = self.Config.GetIntRequired(Config.SectionBambu, Config.BambuMqttBrokerPort, Config.BambuMqttBrokerPortDefault)
+            mqttBroker = BambuMqttBroker(self.Logger, mqttBrokerPort)
+            mqttBroker.Start()
+            BambuClient.Get().AddBrokerMessageListener(mqttBroker.OnUpstreamMessage)
+            BambuClient.Get().AddUpstreamReconnectListener(mqttBroker.OnUpstreamReconnect)
 
             # Create our MQTT websocket proxy provider.
             Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))

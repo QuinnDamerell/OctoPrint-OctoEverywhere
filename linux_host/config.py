@@ -82,6 +82,10 @@ class Config:
     BambuConnectionModeValueLocal = "local"
     BambuConnectionModeValueCloud = "cloud"
     BambuConnectionModeDefault = BambuConnectionModeValueLocal
+    # Local MQTT broker/relay settings. The broker accepts connections from any MQTT client and multiplexes them
+    # down to the single upstream connection to the Bambu printer (working around the 1-2 client limit).
+    BambuMqttBrokerPort = "mqtt_broker_port"
+    BambuMqttBrokerPortDefault = 1883
 
     #
     # Used only for Elegoo Connect
@@ -103,6 +107,7 @@ class Config:
         { "Target": BambuAccessToken,  "Comment": "The access token to the Bambu printer. It can be found using the LCD screen on the printer, in the settings. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": BambuPrinterSn,    "Comment": "The serial number of your Bambu printer. It can be found using this guide: https://wiki.bambulab.com/en/general/find-sn  The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": BambuConnectionMode,"Comment": "The connection mode used for Bambu Connect. Can be 'cloud' or 'local'. 'cloud' will use the bambu cloud which requires the user's email and password to be set, `local` will connect via the LAN."},
+        { "Target": BambuMqttBrokerPort,"Comment": "The port for the local MQTT broker/relay. The relay accepts standard MQTT 3.1.1 connections from any client and multiplexes them to the single upstream Bambu printer connection, working around the printer's 1-2 client limit. Default is 1883. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
         { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
         { "Target": WebcamStreamUrl,  "Comment": "Webcam streaming URL. This can be a local relative path (ex: /webcam/?action=stream) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=stream or http://webcam.local/webcam/?action=stream)"},

@@ -4,7 +4,7 @@ import time
 import json
 import socket
 import threading
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -51,6 +51,15 @@ class BambuClient:
     def __init__(self, logger:logging.Logger, config:Config, stateTranslator:IBambuStateTranslator) -> None:
         self.Logger = logger
         self.StateTranslator = stateTranslator # BambuStateTranslator
+
+        # Callbacks registered by the local MQTT broker to receive raw upstream messages.
+        # Each callback signature is: (topic: str, payload: bytes) -> None
+        self._BrokerMessageListeners:List[Callable[[str, bytes], None]] = []
+
+        # Callbacks invoked when the upstream MQTT connection is (re)established.
+        # Used by the local MQTT broker to re-subscribe downstream topics upstream.
+        # Each callback signature is: () -> None
+        self._UpstreamReconnectListeners:List[Callable[[], None]] = []
 
         # Used to keep track of the printer state
         # None means we are disconnected.
@@ -129,6 +138,35 @@ class BambuClient:
     # This will always be set after the first connection and will be updated if the connection is re-established.
     def GetCurrentConnectionContext(self) -> Optional[ConnectionContext]:
         return self.CurrentConnectionContext
+
+
+    # Registers a callback to be invoked for every raw message received from the upstream printer.
+    # Used by the local MQTT broker/relay to forward messages to connected downstream clients.
+    # Callback signature: (topic: str, payload: bytes) -> None
+    def AddBrokerMessageListener(self, callback:Callable[[str, bytes], None]) -> None:
+        self._BrokerMessageListeners.append(callback)
+
+
+    # Registers a callback to be invoked whenever the upstream MQTT connection is (re)established.
+    # Used by the local MQTT broker to re-subscribe downstream client topics upstream after reconnect.
+    def AddUpstreamReconnectListener(self, callback:Callable[[], None]) -> None:
+        self._UpstreamReconnectListeners.append(callback)
+
+
+    # Publishes raw bytes to any topic on the upstream MQTT connection.
+    # Used by the local MQTT broker/relay to forward publish commands from downstream clients.
+    def PublishRaw(self, topic:str, payload:bytes) -> bool:
+        try:
+            if self.Client is None or not self.Client.is_connected():
+                self.Logger.info("PublishRaw: Can't publish, upstream not connected.")
+                self.SleepEvent.set()
+                return False
+            result = self.Client.publish(topic, payload)
+            result.wait_for_publish(20)
+            return True
+        except Exception as e:
+            Sentry.OnException("BambuClient.PublishRaw failed.", e)
+        return False
 
 
     # A helper to setup and connect the mqtt client.
@@ -362,6 +400,14 @@ class BambuClient:
             # Sub success! Force a full state sync.
             self._ForceStateSyncAsync()
 
+            # Notify reconnect listeners (e.g. the local MQTT broker) so they can
+            # re-subscribe any downstream topics on the new upstream connection.
+            for listener in self._UpstreamReconnectListeners:
+                try:
+                    listener()
+                except Exception as e:
+                    Sentry.OnException("BambuClient upstream reconnect listener exception.", e)
+
 
     # Fired when there's an incoming MQTT message.
     def _OnMessage(self, client:Any, userdata:Any, mqttMsg:mqtt.MQTTMessage) -> None:
@@ -426,6 +472,15 @@ class BambuClient:
 
         except Exception as e:
             Sentry.OnException(f"Failed to handle incoming mqtt message. `{mqttMsg.payload}`", e)
+
+        # Notify the local MQTT broker/relay listeners with the raw message bytes.
+        # This is intentionally OUTSIDE the try block above so broker clients receive
+        # every upstream message even if our own JSON parsing fails.
+        for listener in self._BrokerMessageListeners:
+            try:
+                listener(mqttMsg.topic, mqttMsg.payload)
+            except Exception as e:
+                Sentry.OnException("BambuClient broker message listener exception.", e)
 
 
     # Publishes a message and blocks until it knows if the message send was successful or not.
