@@ -2,7 +2,6 @@ import time
 import random
 import logging
 import threading
-from datetime import datetime
 from typing import List, Optional
 
 from .sentry import Sentry
@@ -115,8 +114,8 @@ class OctoServerCon(IOctoStream):
 
         # Setup RunFor
         self.RunForSeconds = runForSeconds
-        self.CreationTime = datetime.now()
-        self.LastUserActivityTime = self.CreationTime
+        self.CreationTimeSec = time.time()
+        self.LastUserActivityTimeSec = self.CreationTimeSec
 
 
     # Returns a printable string that says the endpoint and the active session id.
@@ -182,7 +181,7 @@ class OctoServerCon(IOctoStream):
 
     def OnData(self, ws:IWebSocketClient, msg:Buffer, opCode:WebSocketOpCode):
         # When we get any message, consider it user activity.
-        self.LastUserActivityTime = datetime.now()
+        self.LastUserActivityTimeSec = time.time()
 
         if self.OctoSession:
             # Grab the session id now, since it can change by the time this call is done.
@@ -193,6 +192,11 @@ class OctoServerCon(IOctoStream):
             except Exception as e:
                 Sentry.OnException("Exception in OctoSession.HandleMessage " + self.GetConnectionString() + ".", e)
                 self.OnSessionError(localSessionId, 0)
+
+            # Do a quick watch dog check to ensure messages aren't hanging the main websocket thread.
+            deltaSec = time.time() - self.LastUserActivityTimeSec
+            if deltaSec > 0.100:
+                self.Logger.warning("It took " + str(deltaSec) + " seconds to process the last message. This might mean the main websocket thread is hung. Last message received was opcode "+str(opCode)+".")
 
 
     def OnHandshakeComplete(self, sessionId:int, octoKey:str, connectedAccounts:List[str]):
@@ -291,23 +295,24 @@ class OctoServerCon(IOctoStream):
 
 
     # Returns if the RunFor time has expired, including considering user activity.
-    def IsRunForTimeComplete(self):
+    def IsRunForTimeComplete(self) -> bool:
         # Check if we are past our RunFor time.
-        hasRanFor = datetime.now() - self.CreationTime
-        if hasRanFor.total_seconds() > self.RunForSeconds:
+        nowSec = time.time()
+        hasRanForSec = nowSec - self.CreationTimeSec
+        if hasRanForSec > self.RunForSeconds:
             # Check the last user activity.
-            timeSinceUserActivity = datetime.now() - self.LastUserActivityTime
-            if timeSinceUserActivity.total_seconds() > self.RunForMinTimeSinceLastUserActivitySec:
+            timeSinceUserActivitySec = nowSec - self.LastUserActivityTimeSec
+            if timeSinceUserActivitySec > self.RunForMinTimeSinceLastUserActivitySec:
                 # We have passed the RunFor time and the min amount of time since the last user activity.
-                self.Logger.info("Server con "+self.GetConnectionString()+" IS past it's RunFor time "+str(hasRanFor)+" and IS past it's time since last user activity "+str(timeSinceUserActivity))
+                self.Logger.info("Server con "+self.GetConnectionString()+" IS past it's RunFor time "+str(hasRanForSec)+" and IS past it's time since last user activity "+str(timeSinceUserActivitySec))
                 return True
             else:
                 # Check how long we have been waiting on user activity.
-                timeSinceRunForShouldHaveEnded = hasRanFor.total_seconds() - self.RunForSeconds
-                if timeSinceRunForShouldHaveEnded > self.RunForMaxUserActivityWaitTimeSec:
-                    self.Logger.info("Server con "+self.GetConnectionString()+" IS past it's RunFor time "+str(hasRanFor)+", but IS NOT past it's time since last user activity "+str(timeSinceUserActivity) + " BUT we have exceeded the max user activity time.")
+                timeSinceRunForShouldHaveEndedSec = hasRanForSec - self.RunForSeconds
+                if timeSinceRunForShouldHaveEndedSec > self.RunForMaxUserActivityWaitTimeSec:
+                    self.Logger.info("Server con "+self.GetConnectionString()+" IS past it's RunFor time "+str(hasRanForSec)+", but IS NOT past it's time since last user activity "+str(timeSinceUserActivitySec) + " BUT we have exceeded the max user activity time.")
                     return True
-                self.Logger.info("Server con "+self.GetConnectionString()+" IS past it's RunFor time "+str(hasRanFor)+", but IS NOT past it's time since last user activity "+str(timeSinceUserActivity))
+                self.Logger.info("Server con "+self.GetConnectionString()+" IS past it's RunFor time "+str(hasRanForSec)+", but IS NOT past it's time since last user activity "+str(timeSinceUserActivitySec))
         return False
 
 
@@ -409,7 +414,7 @@ class OctoServerCon(IOctoStream):
 
     def SendMsg(self, buffer:Buffer, msgStartOffsetBytes:int, msgSize:int) -> None:
         # When we send any message, consider it user activity.
-        self.LastUserActivityTime = datetime.now()
+        self.LastUserActivityTimeSec = time.time()
         ws = self.Ws
         if ws is not None:
             ws.Send(buffer, msgStartOffsetBytes, msgSize, True)

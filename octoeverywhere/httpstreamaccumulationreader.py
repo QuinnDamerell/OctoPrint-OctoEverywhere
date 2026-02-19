@@ -1,5 +1,3 @@
-
-
 import collections
 import logging
 import threading
@@ -28,9 +26,6 @@ from .sentry import Sentry
 #
 class HttpStreamAccumulationReader:
 
-    # This is only used for logging so it doesn't need to be thread safe.
-    c_UniqueIdCounter = 0
-
     # This is the max size of the pending buffer list. If the pending buffer list exceeds this size, the read thread will block until it goes back down.
     # This is to prevent memory issues if the producer is producing data faster than the consumer can consume it.
     # We need to make sure we think about low memory devices, where we don't want to eat RAM.
@@ -38,8 +33,9 @@ class HttpStreamAccumulationReader:
 
     # After being constructed the reading starts immediately.
     # This class must be disposed of properly to stop the read thread.
-    def __init__(self, logger:logging.Logger, httpResult:HttpResult, accumulationTimeSec:float, maxReturnBufferSizeBytes:Optional[int]=None):
+    def __init__(self, logger:logging.Logger, streamId:int, httpResult:HttpResult, accumulationTimeSec:float, maxReturnBufferSizeBytes:Optional[int]=None):
         self.Logger = logger
+        self.StreamId = streamId
         self.HttpResult = httpResult
         self.AccumulationTimeSec = accumulationTimeSec
 
@@ -61,9 +57,13 @@ class HttpStreamAccumulationReader:
         # Set when this object has been told to close.
         self.IsClosed = False
 
-        # Not thread safe, but we only use this for logging so it's ok.
-        self.LogId = HttpStreamAccumulationReader.c_UniqueIdCounter
-        HttpStreamAccumulationReader.c_UniqueIdCounter += 1
+        # Stats
+        self.OpenedTimeSec = time.time()
+        self.SocketReads = 0
+        self.OctoStreamReads = 0
+        self.TotalBytesRead = 0
+
+        # Cache this so we don't have to read each time.
         self.ShouldDebugLog = self.Logger.isEnabledFor(logging.DEBUG)
 
         # Ensure we have something to read
@@ -81,35 +81,41 @@ class HttpStreamAccumulationReader:
 
     # Must be called to close the stream reader and clean up the thread.
     # NOTE - This will also close the stream body to ensure the read thread exists!
-    def Close(self):
+    # IMPORTANT NOTE - This must not block or the main websocket thread will be blocked.
+    def CloseAsync(self):
         try:
-            self.debugLog("Close called on HttpStreamAccumulationReader.")
+            self.debugLog("CloseAsync called on HttpStreamAccumulationReader.")
 
             # Set the event to break the stream read wait, so it will shutdown.
             # Call set under lock, to ensure the other thread doesn't clear it without us seeing it.
             with self.BufferLock:
                 if self.IsClosed:
-                    self.debugLog("Close called but HttpStreamAccumulationReader is already closed, ignoring this call.")
+                    self.debugLog("CloseAsync called but HttpStreamAccumulationReader is already closed, ignoring this call.")
                     return
                 self.IsClosed = True
                 self.ReadComplete = True
                 self.BufferDataReadyEvent.set()
 
             # We need to make sure the http body is closed to ensure the read thread exits.
-            try:
-                if self.ResponseBody is not None:
-                    self.debugLog("Closing HTTP response body in HttpStreamAccumulationReader.Close.")
-                    self.ResponseBody.raw.close()
-            except Exception as e:
-                self.Logger.info(f"{self.getLogMsgPrefix()} Exception thrown when closing the HTTP response body in HttpStreamAccumulationReader.Close: {str(e)}")
+            # The response body close CAN BLOCK FOR UP TO THE READ TIME OUT (which we set high) SO IT MUST BE CALLED ON A SEPARATE THREAD.
+            # WE CAN NOT BLOCK IN THIS FUNCTION OR THE MAIN WEBSOCKET WILL BE HUNG.
+            def closeBodyWorker():
+                try:
+                    self.debugLog("Calling raw.close() on the response body.")
+                    if self.ResponseBody is not None:
+                        self.ResponseBody.raw.close()
+                    self.debugLog("raw.close() close complete.")
+                except Exception as e:
+                    self.Logger.info(f"{self.getLogMsgPrefix()} Exception thrown when closing the HTTP response body in HttpStreamAccumulationReader.CloseAsync closeBody thread: {str(e)}")
+            closeBodyThread = threading.Thread(target=closeBodyWorker, daemon=True)
+            closeBodyThread.start()
 
-            # We do not want to join the thread because we don't close the HTTP body, and the thread will not return until the body read is done.
+            # We CAN NOT AND DO NOT WANT TO join the thread because we don't close the HTTP body, and the thread will not return until the body read is done.
             # Instead, we just set the IsClosed flag and the event, and let the thread exit when the body read is done.
+            self.debugLog("CloseAsync completed on HttpStreamAccumulationReader.")
 
-            self.debugLog("Close completed on HttpStreamAccumulationReader.")
         except Exception as e:
-            Sentry.OnException(self.getLogMsgPrefix()+ " exception thrown in HttpStreamAccumulationReader.Close", e)
-
+            Sentry.OnException(self.getLogMsgPrefix()+ " exception thrown in HttpStreamAccumulationReader.CloseAsync", e)
 
 
     # Reads up to the max buffer size, and will always wait for accumulation.
@@ -136,6 +142,9 @@ class HttpStreamAccumulationReader:
             mustReturnAccumulatedBuffers = False
             firstAccumulatedBufferTime = None
             isFirstLoopRun = True
+
+            # Note the read
+            self.OctoStreamReads += 1
 
             # Since we will always sleep for at least the min time, there's no need to do work until the min time is meet.
             # If we did do the loop, we would just end up spinning and sleeping again.
@@ -302,7 +311,7 @@ class HttpStreamAccumulationReader:
 
 
     def getLogMsgPrefix(self) -> str:
-        return f"[HttpStreamAccumulationReader-{self.LogId}]"
+        return f"[HttpStreamAccumulationReader-{self.StreamId}]"
 
 
     # This is the read thread, where the actual reading from the HTTP response happens.
@@ -347,6 +356,10 @@ class HttpStreamAccumulationReader:
                     bufferLen = len(chunk)
                     self.BufferListPendingSize += bufferLen
 
+                    # Update stats.
+                    self.SocketReads += 1
+                    self.TotalBytesRead += len(chunk)
+
                     # This should be impossible due to the read1 size, but sanity check it.
                     if bufferLen > self.MaxReturnBufferSizeBytes:
                         raise Exception(f"The unknown body chunk read thread read a chunk larger than the max single chunk size of {self.MaxReturnBufferSizeBytes} bytes! Read size: {bufferLen} bytes.")
@@ -363,7 +376,6 @@ class HttpStreamAccumulationReader:
                         self.BufferLock.release()
                         time.sleep(0.5)
                         self.BufferLock.acquire() #pylint: disable=consider-using-with
-
 
             # When the loop exits, the body read is complete and the stream is closed.
 
@@ -388,6 +400,8 @@ class HttpStreamAccumulationReader:
                 self.BufferDataReadyEvent.set()
 
             try:
-                self.debugLog("Read thread exited.")
+                runTimeSec = time.time() - self.OpenedTimeSec
+                if self.Logger.isEnabledFor(logging.DEBUG):
+                    self.Logger.debug(f"{self.getLogMsgPrefix()} Read thread exited. Run Time: {runTimeSec:.2f} sec, SocketReads: {self.SocketReads}, OctoStreamReads: {self.OctoStreamReads}, TotalBytesRead: {self.TotalBytesRead/1024.0:.2f} KB")
             except Exception:
                 pass

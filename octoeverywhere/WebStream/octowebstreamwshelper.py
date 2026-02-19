@@ -270,8 +270,8 @@ class OctoWebStreamWsHelper:
 
 
     # When close is called, all http operations should be shutdown.
-    # Called by the main socket thread so this should be quick!
-    def Close(self):
+    # IMPORTANT NOTE - This function should not block and must be quick, as it will block the entire main websocket connection.
+    def Close(self) -> None:
         # Don't try to close twice.
         wsToClose:Optional[IWebSocketClient] = None
         with self.StateLock:
@@ -287,20 +287,26 @@ class OctoWebStreamWsHelper:
 
         self.Logger.info(self.getLogMsgPrefix()+"websocket closed after " +str(time.time() - self.OpenedTime) + " seconds")
 
-        # The initial connection is created (or at least started) in the constructor, but there's re-attempt logic
-        # that can cause the websocket to be destroyed and re-created. For that reason we need to grab a local ref
-        # and make sure it's not null. If the close fails, just ignore it, since we are shutting down already.
-        if wsToClose is not None:
-            try:
-                wsToClose.Close()
-            except Exception as _ :
-                pass
+        # This close is called by the main websocket thread for the entire connection and thus it can't be blocked or hang.
+        # To ensure that doesn't happen we run the close logic on a separate thread.
+        def closeWorker():
+            self.Logger.debug(self.getLogMsgPrefix()+"starting async websocket close")
+            # The initial connection is created (or at least started) in the constructor, but there's re-attempt logic
+            # that can cause the websocket to be destroyed and re-created. For that reason we need to grab a local ref
+            # and make sure it's not null. If the close fails, just ignore it, since we are shutting down already.
+            if wsToClose is not None:
+                try:
+                    wsToClose.Close()
+                except Exception as _ :
+                    pass
 
-        # Ensure the compressor is cleaned up
-        try:
-            self.CompressionContext.__exit__(None, None, None)
-        except Exception as e:
-            Sentry.OnException("Websocket stream helper failed to clean up the compression context.", e)
+            # Ensure the compressor is cleaned up
+            try:
+                self.CompressionContext.__exit__(None, None, None)
+            except Exception as e:
+                Sentry.OnException("Websocket stream helper failed to clean up the compression context.", e)
+            self.Logger.debug(self.getLogMsgPrefix()+"finished async websocket close")
+        threading.Thread(target=closeWorker, daemon=True).start()
 
 
     # Called when a new message has arrived for this stream from the server.

@@ -106,15 +106,16 @@ class OctoWebStreamHttpHelper:
 
 
     # When close is called, all http operations should be shutdown.
-    # Called by the main socket thread so this should be quick!
+    # IMPORTANT NOTE - This function should not block and must be quick, as it will block the entire main websocket connection.
     def Close(self) -> None:
         # Set the flag so all of the looping http operations will stop.
         self.IsClosed = True
 
         # Important! If we are doing a stream accumulation read, we need to call close on it
         # to close the http body and let the main executeHttpRequest thread return.
+        # WE CAN NOT BLOCK IN THIS FUNCTION OR THE MAIN WEBSOCKET WILL BE HUNG.
         if self.HttpStreamAccumulationReader is not None:
-            self.HttpStreamAccumulationReader.Close()
+            self.HttpStreamAccumulationReader.CloseAsync()
 
 
     # Called when a new message has arrived for this stream from the server.
@@ -912,7 +913,7 @@ class OctoWebStreamHttpHelper:
                             # This does need to be small, because we want reading this min time period back to back, we are reading a chunk, doing all of the send logic, and then spinning back to here.
                             # So if we set this at exactly 16.6 for a 60fps stream, for example, we will fall behind.
                             # So we set the accumulation time to 10ms, which should be small enough to not cause issues.
-                            self.HttpStreamAccumulationReader = HttpStreamAccumulationReader(self.Logger, httpResult, accumulationTimeSec=0.010, maxReturnBufferSizeBytes=self.c_MaxSingleChunkSizeBytes)
+                            self.HttpStreamAccumulationReader = HttpStreamAccumulationReader(self.Logger, self.Id, httpResult, accumulationTimeSec=0.010, maxReturnBufferSizeBytes=self.c_MaxSingleChunkSizeBytes)
                         finalDataBuffer = self.HttpStreamAccumulationReader.Read()
                     else:
                         # If there is no boundary string, but we know the content length, it's safe to just read.
@@ -1220,6 +1221,7 @@ class OctoWebStreamHttpHelper:
             Sentry.OnException(self.getLogMsgPrefix()+ " exception thrown in doBodyRead. Ending body read.", e)
             return None
 
+
     # Based on the content length and the content type, determine if we should do a doUnknownBodySizeRead read.
     # Read doUnknownBodySizeRead about why we need to use it, but since it's not efficient, we only want to use it when we know we should.
     def shouldDoUnknownBodyChunkRead(self, contentTypeLower:Optional[str], contentLengthLower:Optional[int]) -> bool:
@@ -1237,9 +1239,30 @@ class OctoWebStreamHttpHelper:
         if contentTypeLower is None:
             return True
 
-        # mjpegstreamer doesn't return a content type for snapshots (which is annoying) so if we know the content is a single image, don't stream it, allow the full
-        # buffer read to read it in one bit.
-        if contentTypeLower == "image/jpeg":
+        # If we know that the content doesn't have to be streaming, it's better to use the non-unknown content size read, because it needs another thread that adds overhead.
+        # So if the content type is something we know won't stream, we don't need to do it.
+        # But we have to be careful, because even things like text/plane is used to do streaming logs in HA.
+        if contentTypeLower.startswith("text/"):
+            # For text, we only allow plain to take the possibly streamable path.
+            if contentTypeLower.find("plain") != -1:
+                return True
+            # All other text don't stream.
+            return False
+
+        if contentTypeLower.startswith("image/"):
+            # For images, only allow gifs to be possibly streamable
+            if contentTypeLower.find("gif") != -1:
+                return True
+            return False
+
+        if contentTypeLower.startswith("application/"):
+            # For application, we allow octet-stream.
+            if contentTypeLower.find("octet-stream") != -1:
+                return True
+            return False
+
+        if contentTypeLower.startswith("font/"):
+            # Never allow fonts to be streamable.
             return False
 
         # Otherwise, default to true
