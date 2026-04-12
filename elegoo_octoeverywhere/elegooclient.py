@@ -688,8 +688,11 @@ class ElegooClient:
             # Since we know this is the IP, we will update it in the config. This mean in the future we will use this IP directly
             # And everything else trying to connect to the printer (webcam and ftp) will use the correct IP.
             ip = results[0].Ip
-            self.Logger.info(f"We found a new IP for this printer. [{configIpOrHostname} -> {ip}] Updating the config and using it to connect.")
-            self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ip)
+            if configIpOrHostname is not None and configIpOrHostname.strip().lower() == ip.strip().lower():
+                self.Logger.info(f"Network scan confirmed the existing printer IP {ip}. Using it to connect.")
+            else:
+                self.Logger.info(f"We found a new IP for this printer. [{configIpOrHostname} -> {ip}] Updating the config and using it to connect.")
+                self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, ip)
             return ip
 
         # If we don't find anything, just use the config IP.
