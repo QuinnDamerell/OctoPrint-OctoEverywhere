@@ -165,6 +165,19 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             # Setup and start the Bambu Client
             BambuClient.Init(self.Logger, self.Config, stateTranslator)
 
+            # Start the MQTT relay broker so LAN clients can connect and receive printer messages.
+            try:
+                from .bambumqttrelay import StartBambuMqttRelay
+                relayPortStr = self.Config.GetStr(Config.SectionBambu, Config.BambuMqttRelayPort, Config.BambuMqttRelayPortDefault)
+                relayPort = int(relayPortStr) if relayPortStr else 0
+                if relayPort > 0:
+                    self.Logger.info("Starting MQTT relay broker on port %s...", relayPort)
+                    StartBambuMqttRelay(self.Logger, BambuClient.Get(), port=relayPort)
+                else:
+                    self.Logger.info("MQTT relay broker is disabled (port set to 0).")
+            except Exception as e:
+                self.Logger.error("Failed to start MQTT relay broker, continuing without it: %s", e)
+
             # Create our MQTT websocket proxy provider.
             Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))
 

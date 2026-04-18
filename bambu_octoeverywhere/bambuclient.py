@@ -80,6 +80,9 @@ class BambuClient:
         # This flag indicates if we have tried a network scan since the plugin started. If not, we should do it again.
         self.HasDoneNetScanSincePluginStart = False
 
+        # Optional MQTT relay for muxing LAN clients through our connection.
+        self.MqttRelay:Any = None  # Optional[MqttRelay]
+
         # Start a thread to setup and maintain the connection.
         self.CurrentConnectionContext:Optional[ConnectionContext] = None
         self.Client:Optional[mqtt.Client] = None
@@ -123,6 +126,25 @@ class BambuClient:
         mode = "on" if on else "off"
         return self._Publish({"system": {"sequence_id": "0", "command": "ledctrl", "led_node": "chamber_light", "led_mode": mode,
                "led_on_time": 500, "led_off_time": 500, "loop_times": 0, "interval_time": 0}})
+
+
+    def SetMqttRelay(self, relay:Any) -> None:
+        """Set the MQTT relay instance. Messages from the printer will be forwarded to it."""
+        self.MqttRelay = relay
+
+
+    def PublishRaw(self, topic: str, payload: bytes) -> bool:
+        """Publish a raw message to the upstream MQTT connection (used by the relay)."""
+        try:
+            if self.Client is None or not self.Client.is_connected():
+                self.SleepEvent.set()
+                return False
+            state = self.Client.publish(topic, payload)
+            state.wait_for_publish(20)
+            return True
+        except Exception as e:
+            Sentry.OnException("Failed to publish raw relay message.", e)
+        return False
 
 
     # If there's a successful connection, this will return the context used.
@@ -272,6 +294,14 @@ class BambuClient:
         self.HasDoneFirstFullStateSync = False
         self.ReportSubscribeMid = None
         self.IsPendingSubscribe = False
+        # Notify the MQTT relay that upstream is down - this disconnects all LAN clients
+        # and rejects new connections until we reconnect.
+        relay = self.MqttRelay
+        if relay is not None:
+            try:
+                relay.SetUpstreamConnected(False)
+            except Exception:
+                pass
         # For some reason, the Bambu Cloud MQTT server will fire a disconnect message but doesn't actually disconnect.
         # So we always call disconnect to ensure we force it, to ensure our connection loop closes.
         try:
@@ -359,12 +389,29 @@ class BambuClient:
             self.ConsecutivelyFailedConnectionAttempts = 0
             LocalWebApi.Get().SetPrinterConnectionState(True)
 
+            # Notify the MQTT relay that upstream is connected - LAN clients can now connect.
+            relay = self.MqttRelay
+            if relay is not None:
+                try:
+                    relay.SetUpstreamConnected(True)
+                except Exception:
+                    pass
+
             # Sub success! Force a full state sync.
             self._ForceStateSyncAsync()
 
 
     # Fired when there's an incoming MQTT message.
     def _OnMessage(self, client:Any, userdata:Any, mqttMsg:mqtt.MQTTMessage) -> None:
+        # Forward the raw message to the MQTT relay if one is set.
+        # This broadcasts printer messages to all connected LAN clients.
+        relay = self.MqttRelay
+        if relay is not None:
+            try:
+                relay.OnUpstreamMessage(mqttMsg.topic, mqttMsg.payload)
+            except Exception as e:
+                self.Logger.error("Failed to forward message to MQTT relay: %s", e)
+
         try:
             # Try to deserialize the message.
             msg = json.loads(mqttMsg.payload)

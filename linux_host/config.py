@@ -82,6 +82,10 @@ class Config:
     BambuConnectionModeValueLocal = "local"
     BambuConnectionModeValueCloud = "cloud"
     BambuConnectionModeDefault = BambuConnectionModeValueLocal
+    # MQTT relay port. Any MQTT client on the LAN can connect to this port to receive printer messages.
+    # Set to "0" to disable.
+    BambuMqttRelayPort = "mqtt_relay_port"
+    BambuMqttRelayPortDefault = "1883"
 
     #
     # Used only for Elegoo Connect
@@ -103,6 +107,7 @@ class Config:
         { "Target": BambuAccessToken,  "Comment": "The access token to the Bambu printer. It can be found using the LCD screen on the printer, in the settings. The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": BambuPrinterSn,    "Comment": "The serial number of your Bambu printer. It can be found using this guide: https://wiki.bambulab.com/en/general/find-sn  The OctoEverywhere plugin service needs to be restarted before changes will take effect."},
         { "Target": BambuConnectionMode,"Comment": "The connection mode used for Bambu Connect. Can be 'cloud' or 'local'. 'cloud' will use the bambu cloud which requires the user's email and password to be set, `local` will connect via the LAN."},
+        { "Target": BambuMqttRelayPort,"Comment": "The port for the local MQTT relay broker. Any MQTT client on the LAN (Bambu Studio, Home Assistant, etc.) can connect to this port to receive printer messages muxed through the single connection. Set to 0 to disable."},
         { "Target": WebcamNameToUseAsPrimary,  "Comment": "This is the webcam name OctoEverywhere will use for Gadget AI, notifications, and such. This much match the camera 'Name' from your Mainsail of Fluidd webcam settings. The default value of 'Default' will pick whatever camera the system can find."},
         { "Target": WebcamAutoSettings,  "Comment": "Enables or disables auto webcam setting detection. If enabled, OctoEverywhere will find the webcam settings configured via the frontend (Fluidd, Mainsail, etc) and use them. Disable to manually set the values and have them not be overwritten."},
         { "Target": WebcamStreamUrl,  "Comment": "Webcam streaming URL. This can be a local relative path (ex: /webcam/?action=stream) or absolute http URL (ex: http://10.0.0.1:8080/webcam/?action=stream or http://webcam.local/webcam/?action=stream)"},
