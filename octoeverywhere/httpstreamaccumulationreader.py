@@ -57,6 +57,12 @@ class HttpStreamAccumulationReader:
         # Set when this object has been told to close.
         self.IsClosed = False
 
+        # Event used for back-pressure signaling from consumer to producer.
+        # When the pending buffer exceeds the max, the producer waits on this event
+        # instead of sleeping a fixed duration, so it resumes as soon as the consumer
+        # drains enough data.
+        self.BackpressureRelievedEvent = threading.Event()
+
         # Stats
         self.OpenedTimeSec = time.time()
         self.SocketReads = 0
@@ -209,6 +215,9 @@ class HttpStreamAccumulationReader:
                                 # Remove it from the pending list.
                                 self.BufferList.popleft()
                                 self.BufferListPendingSize -= nextBufferSize
+
+                        # Signal the producer that buffer space has been freed, relieving back-pressure.
+                        self.BackpressureRelievedEvent.set()
 
                         # Before we clear it under lock, always check to see if the isClosed flag is set.
                         # This ensures we don't miss the close flag before we clear the event and wait on it again.
@@ -369,12 +378,14 @@ class HttpStreamAccumulationReader:
 
                     # Important! Since our sending websocket logic will block if there's too much back pressure on sending on the WS,
                     # We must also bound this pending buffer size so it doesn't eat memory just accumulating buffers that can't be sent.
-                    # This is a crude way of blocking the data, by just sleeping, but it shouldn't happen often and it will at least prevent memory issues if it does.
+                    # We use an event-based approach: the consumer signals BackpressureRelievedEvent when it drains data,
+                    # allowing the producer to resume immediately instead of sleeping a fixed duration.
                     while self.IsClosed is False and self.BufferListPendingSize > self.c_MaxPendingBufferSizeBytes:
                         if self.Logger.isEnabledFor(logging.DEBUG):
-                            self.Logger.debug(f"{self.getLogMsgPrefix()} Pending buffer size of {self.BufferListPendingSize/1024.0/1024.0} MB exceeds the max of {self.c_MaxPendingBufferSizeBytes/1024.0/1024.0} MB. Sleeping to apply back pressure until it goes down." )
+                            self.Logger.debug(f"{self.getLogMsgPrefix()} Pending buffer size of {self.BufferListPendingSize/1024.0/1024.0} MB exceeds the max of {self.c_MaxPendingBufferSizeBytes/1024.0/1024.0} MB. Waiting for consumer to drain buffer." )
+                        self.BackpressureRelievedEvent.clear()
                         self.BufferLock.release()
-                        time.sleep(0.5)
+                        self.BackpressureRelievedEvent.wait(timeout=0.5)
                         self.BufferLock.acquire() #pylint: disable=consider-using-with
 
             # When the loop exits, the body read is complete and the stream is closed.

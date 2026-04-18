@@ -673,8 +673,11 @@ class OctoWebStreamHttpHelper:
                 # We know exactly how much to allocate
                 newBufferSizeBytes = self.KnownFullStreamUploadSizeBytes
             else:
-                # If we don't know the size, allocate this message plus the current size, plus some buffer (50kb).
-                newBufferSizeBytes = thisMessageDataLen + self.UploadBytesReceivedSoFar + 1204 * 50
+                # Use exponential growth to minimize reallocations for large uploads.
+                # At least double the previous allocation, with a minimum of 64KB headroom.
+                neededSize = thisMessageDataLen + self.UploadBytesReceivedSoFar
+                currentSize = len(self.UploadBuffer) if self.UploadBuffer is not None else 0
+                newBufferSizeBytes = max(neededSize + 64 * 1024, currentSize * 2)
 
             # If there's a buffer, grab it since we need to copy it over
             oldBuffer = self.UploadBuffer
@@ -856,11 +859,11 @@ class OctoWebStreamHttpHelper:
         # This is 490kb
         defaultBodyReadSizeBytes = 490 * 1024
 
-        # If we are going to compress this read, use a much higher number. Since most of what we compress is text,
-        # and that text usually compresses down to 25% of the og size, we will use a x4 multiplier.
-        # We do want to make sure this value isn't too big, because we dont want to allocate a huge buffer on low memory systems.
+        # If we are going to compress this read, use a higher number. Since most of what we compress is text,
+        # and that text usually compresses down to 25% of the og size, we use a x2 multiplier as a balance
+        # between throughput and memory pressure on low-end devices like Raspberry Pi.
         if shouldCompress:
-            defaultBodyReadSizeBytes = defaultBodyReadSizeBytes * 4
+            defaultBodyReadSizeBytes = defaultBodyReadSizeBytes * 2
 
         # Finally check if we know the content length of the request. If we do, we will set the buffer to be exactly that value.
         # This is a lot more efficient, because we only allocate a buffer the exact size we need for the request.
@@ -1033,12 +1036,12 @@ class OctoWebStreamHttpHelper:
         try:
             # Loop until found or we have hit the search limit.
             while foundContentLength is False and tempBufferFilledSize < c_maxHeaderSearchSizeBytes:
-                # Read a small chunk to try to read the header
-                # We want to read enough that hopefully we get all of the headers, but not so much that
+                # Read a chunk to try to read the header
+                # We want to read enough that we get all of the headers in one call, but not so much that
                 # we accidentally read two boundary messages at once.
-                # 3/24/24 - After a lot of testing, it seems most times we get the full headers in 120 chars.
-                # So we will target that much, hoping we can do one read and get them.
-                headerBuffer = self.doBodyRead(httpResult, 120)
+                # Most boundary headers fit well under 512 bytes, so reading this much
+                # almost always gets all headers in a single syscall.
+                headerBuffer = self.doBodyRead(httpResult, 512)
 
                 # If this returns 0, the body read is complete
                 if headerBuffer is None:
