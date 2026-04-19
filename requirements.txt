@@ -20,7 +20,7 @@ sentry-sdk>=2.20.0,<3
 #zstandard>=0.22.0,<0.23.0
 
 # Required only for linux host based plugins, used by the installer and the plugin for setup.
-qrcode<=8.0.0
+qrcode<=8.2
 
 # The following are required only for Moonraker
 configparser
