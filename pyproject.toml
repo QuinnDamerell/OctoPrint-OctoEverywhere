@@ -44,7 +44,7 @@ requires-python = ">=3.7,<4"
 # Note! These also need to stay in sync with requirements.txt, for the most part they should be the exact same!
 #
 dependencies = [
-    "octowebsocket_client==1.8.3",
+    "octowebsocket_client==1.9.0",
     "requests>=2.31.0",
     "octoflatbuffers==24.3.27",
     "pillow",
