@@ -188,6 +188,7 @@
         "Octo",
         "octoclients",
         "octoclientws",
+        "octoclientwsv",
         "octoeverywhere",
         "octoeverywhereimpl",
         "octoflatbuffers",

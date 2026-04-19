@@ -21,6 +21,7 @@ from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
 from octoeverywhere.interfaces import IPrinterStateReporter, IPopUpInvoker, IStateChangeHandler
+from octoeverywhere.hostcommon import HostCommon
 #from .threaddebug import ThreadDebug
 
 from .localauth import LocalAuth
@@ -207,7 +208,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, SignalHandler)
 
     # Dev props
-    OctoEverywhereWsUri = "wss://starport-v1.octoeverywhere.com/octoclientws"
+    OctoEverywhereWsUri = f"wss://starport-v1.octoeverywhere.com/{HostCommon.c_OctoEverywhereOctoClientEndpointBase}"
 
     # Setup the http requester
     OctoHttpRequest.SetLocalHttpProxyPort(80)
@@ -220,7 +221,7 @@ if __name__ == '__main__':
     if OctoPrintPort is not None:
         OctoHttpRequest.SetLocalOctoPrintPort(OctoPrintPort)
     if LocalServerAddress is not None:
-        OctoEverywhereWsUri = "ws://"+LocalServerAddress+"/octoclientws"
+        OctoEverywhereWsUri = "ws://"+LocalServerAddress+"/"+HostCommon.c_OctoEverywhereOctoClientEndpointBase
 
     # Init the ping pong helper.
     PingPong.Init(logger, PluginFilePathRoot, PrinterId)

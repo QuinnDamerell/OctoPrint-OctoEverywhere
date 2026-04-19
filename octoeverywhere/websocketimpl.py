@@ -424,15 +424,15 @@ class Client(IWebSocketClient):
                 if context is None or context.Buffer is None:
                     return
 
-                # Send it!
-                # Important! We don't want to use the frame mask because it adds about 30% CPU usage on low end devices.
-                # The frame masking was only need back when websockets were used over the internet without SSL.
-                # Our server, OctoPrint, and Moonraker all accept unmasked frames, so its safe to do this for all WS.
                 dataToSend:Any = context.Buffer.Get()
                 ws = self.Ws
                 if ws is None:
                     raise Exception("_SendQueueThread has no ws object to send to.")
 
+                # Send it!
+                # Important! We don't want to use the frame mask because it adds about 30% CPU usage on low end devices.
+                # The frame masking was only need back when websockets were used over the internet without SSL.
+                # Our server, OctoPrint, and Moonraker all accept unmasked frames, so its safe to do this for all WS.
                 ws.send(dataToSend, context.OptCode.ToWsLibInt(), False, context.MsgStartOffsetBytes, context.MsgSize)
 
                 # Remove the size of this message from the total size, now that it's sent.

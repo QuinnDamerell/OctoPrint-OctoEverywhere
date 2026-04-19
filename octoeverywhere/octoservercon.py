@@ -11,6 +11,7 @@ from .octosessionimpl import OctoSession
 from .repeattimer import RepeatTimer
 from .pingpong import PingPong
 from .interfaces import IOctoStream, IOctoEverywhereHost, IPopUpInvoker, IStateChangeHandler, IWebSocketClient, WebSocketOpCode
+from .hostcommon import HostCommon
 
 #
 # This class is responsible for connecting and maintaining a connection to a server.
@@ -136,7 +137,7 @@ class OctoServerCon(IOctoStream):
                 # Check if we have a known lowest latency server.
                 lowestLatencySub = PingPong.Get().GetLowestLatencyServerSub()
                 if lowestLatencySub is not None:
-                    newEndpoint = "wss://"+lowestLatencySub+".octoeverywhere.com/octoclientws"
+                    newEndpoint = "wss://"+lowestLatencySub+".octoeverywhere.com/"+HostCommon.c_OctoEverywhereOctoClientEndpointBase
                     self.Logger.info("Attempting to use lowest latency server: "+newEndpoint)
 
         # Otherwise use the default endpoint.

@@ -170,7 +170,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             # Now start the main runner!
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
-                OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/octoclientws"
+                OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/"+HostCommon.c_OctoEverywhereOctoClientEndpointBase
             oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo, True, isDockerContainer)
             oe.RunBlocking()
         except Exception as e:

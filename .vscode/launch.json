@@ -96,10 +96,11 @@
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
         },
-                {
+        {
             "name": "Companion 3- Snapmaker U1",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "moonraker_octoeverywhere",
             "justMyCode": false,
             "args": [
