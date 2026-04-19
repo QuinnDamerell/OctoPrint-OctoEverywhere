@@ -3,7 +3,7 @@
 # This file should be IDENTICAL to the requirements.txt file, except for the comments:
 #  - urllib3 must be under 2.0, because it needs openssl 1.1.1, which the sonic pad doesn't have.
 #
-octowebsocket_client==1.8.3
+octowebsocket_client==1.9.0
 requests>=2.31.0
 octoflatbuffers==24.3.27
 pillow
