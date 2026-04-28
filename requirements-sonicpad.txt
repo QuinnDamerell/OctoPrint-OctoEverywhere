@@ -22,4 +22,4 @@ qrcode<=8.0.0
 configparser
 
 # Only used for Bambu Connect
-paho-mqtt>=2.0.0
+paho-mqtt>=2.1.0
