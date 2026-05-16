@@ -12,6 +12,7 @@ class Compat:
     _IsCompanionMode = False
     _IsBambu = False
     _IsElegooOs = False
+    _IsElegooCc2 = False
     @staticmethod
     def IsOctoPrint() -> bool:
         return Compat._IsOctoPrintHost
@@ -36,6 +37,9 @@ class Compat:
     @staticmethod
     def SetIsElegooOs(b:bool):
         Compat._IsElegooOs = b
+    @staticmethod
+    def SetIsElegooCc2(b:bool):
+        Compat._IsElegooCc2 = b
 
 
     _LocalAuthObj:Optional[ILocalAuth] = None

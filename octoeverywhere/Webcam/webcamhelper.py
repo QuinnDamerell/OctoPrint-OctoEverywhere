@@ -129,17 +129,14 @@ class WebcamHelper:
     # On failure, this returns None. Returning None will fail out the request.
     # On success, this will return a valid OctoHttpRequest.
     def GetWebcamStream(self, cameraIndex:Optional[int]=None) -> HttpResultOrNone:
-        # Wrap the entire result in the add transform function, so on success the header gets added.
-        return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal(cameraIndex), cameraIndex)
-
-
-    def _GetWebcamStreamInternal(self, cameraIndex:Optional[int]=None) -> HttpResultOrNone:
-        # Get the webcam settings object for this request.
-        # If there are no webcams, this will return None
         webcamSettingsObj = self._GetWebcamSettingObj(cameraIndex)
         if webcamSettingsObj is None:
             return None
+        # Wrap the entire result in the add transform function, so on success the header gets added.
+        return self._AddOeWebcamTransformHeader(self._GetWebcamStreamInternal(webcamSettingsObj), webcamSettingsObj)
 
+
+    def _GetWebcamStreamInternal(self, webcamSettingsObj:WebcamSettingItem) -> HttpResultOrNone:
         # First, check if this webcam URL needs to be handled by the QuickCam system.
         result = QuickCamManager.Get().TryGetStream(webcamSettingsObj)
         if result is not None:
@@ -166,18 +163,15 @@ class WebcamHelper:
     # On failure, this returns None. Returning None will fail out the request.
     # On success, this will return a valid OctoHttpRequest that's fully filled out. The stream will always already be fully read, and will be FullBodyBuffer var.
     def GetSnapshot(self, cameraIndex:Optional[int]=None) -> HttpResultOrNone:
-        # Wrap the entire result in the _EnsureJpegHeaderInfo function, so ensure the returned snapshot can be used by all image processing libs.
-        # Wrap the entire result in the add transform function, so on success the header gets added.
-        return self._AddOeWebcamTransformHeader(self._EnsureJpegHeaderInfo(self._GetSnapshotInternal(cameraIndex)), cameraIndex)
-
-
-    def _GetSnapshotInternal(self, cameraIndex:Optional[int]=None) -> HttpResultOrNone:
-        # Get the webcam settings object for this request.
-        # If there are no webcams, this will return None
         webcamSettingsObj = self._GetWebcamSettingObj(cameraIndex)
         if webcamSettingsObj is None:
             return None
+        # Wrap the entire result in the _EnsureJpegHeaderInfo function, so ensure the returned snapshot can be used by all image processing libs.
+        # Wrap the entire result in the add transform function, so on success the header gets added.
+        return self._AddOeWebcamTransformHeader(self._EnsureJpegHeaderInfo(self._GetSnapshotInternal(webcamSettingsObj)), webcamSettingsObj)
 
+
+    def _GetSnapshotInternal(self, webcamSettingsObj:WebcamSettingItem) -> HttpResultOrNone:
         # First, check if this webcam URL needs to be handled by the QuickCam system.
         result = QuickCamManager.Get().TryToGetSnapshot(webcamSettingsObj)
         if result is not None:
@@ -273,15 +267,17 @@ class WebcamHelper:
     def ListWebcams(self) -> Optional[List[WebcamSettingItem]]:
         try:
             # Get the webcams from the platform.
-            ret = self.WebcamPlatformHelperInterface.GetWebcamConfig()
+            platformWebcamItems = self.WebcamPlatformHelperInterface.GetWebcamConfig()
+            ret = None if platformWebcamItems is None else list(platformWebcamItems)
 
             # Check if there are any plugin local items to return.
             # Note the cameras returned from ListWebcams() must always be first - the bambu logic depends on this! (see GetSnapshot_Override)
             pluginLocalWebcamItems = self.GetPluginLocalWebcamList()
             if pluginLocalWebcamItems is not None and len(pluginLocalWebcamItems) > 0:
                 if ret is None:
-                    ret = []
-                ret.extend(pluginLocalWebcamItems)
+                    ret = list(pluginLocalWebcamItems)
+                else:
+                    ret.extend(pluginLocalWebcamItems)
 
             # Ensure we got something
             if ret is None or len(ret) == 0:
@@ -294,15 +290,14 @@ class WebcamHelper:
 
     # Checks if the result was success and if so adds the common header.
     # Returns the octoHttpResult, so the function is chainable
-    def _AddOeWebcamTransformHeader(self, octoHttpResult:HttpResultOrNone, cameraIndex:Optional[int]) -> HttpResultOrNone:
+    def _AddOeWebcamTransformHeader(self, octoHttpResult:HttpResultOrNone, settings:Optional[WebcamSettingItem]) -> HttpResultOrNone:
         if octoHttpResult is None or octoHttpResult.StatusCode > 300:
             return octoHttpResult
 
         # Default to none
         transformStr = "none"
 
-        # If there are any settings build a string with them all contaminated.
-        settings = self._GetWebcamSettingObj(cameraIndex)
+        # If there are any settings build a string with them all concatenated.
         if settings is not None and (settings.FlipH or settings.FlipV or settings.Rotation != 0):
             transformStr = ""
             if settings.FlipH:

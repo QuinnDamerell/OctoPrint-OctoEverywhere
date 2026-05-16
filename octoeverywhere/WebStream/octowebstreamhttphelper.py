@@ -1022,6 +1022,7 @@ class OctoWebStreamHttpHelper:
         # If the temp array isn't setup, do it now.
         if self.BodyReadTempBuffer is None:
             self.BodyReadTempBuffer = Buffer(bytearray(10*1024))
+        tempBufferByteArray = self.BodyReadTempBuffer.ForceAsByteArray()
 
         # Note. OctoPrint webcam streams have content-length headers in each chunk. However, the standard
         # says it's not required. So if we can find them use them, but if not we will set the
@@ -1032,6 +1033,12 @@ class OctoWebStreamHttpHelper:
         # If we can't find it after our max size, we declare it's not there (which is fine)
         # and will use a different read method going forward.
         c_maxHeaderSearchSizeBytes = 5 * 1024
+        endOfAllHeadersMatch = b"\r\n\r\n"
+        endOfHeaderMatch = b"\r\n"
+        contentLengthHeaderName = b"content-length"
+        boundaryBytes = boundaryStr.encode("utf-8")
+        boundaryWithPrefixBytes = b"--" + boundaryBytes
+        boundaryWithLeadingNewlineBytes = b"\r\n--" + boundaryBytes
         tempBufferFilledSize = 0
         try:
             # Loop until found or we have hit the search limit.
@@ -1049,32 +1056,24 @@ class OctoWebStreamHttpHelper:
                     return tempBufferFilledSize
 
                 # Add the header buffer to the temp output
-                ba = self.BodyReadTempBuffer.ForceAsByteArray()
-                ba[tempBufferFilledSize:tempBufferFilledSize+len(headerBuffer)] = headerBuffer
+                tempBufferByteArray[tempBufferFilledSize:tempBufferFilledSize+len(headerBuffer)] = headerBuffer.Get()
                 tempBufferFilledSize += len(headerBuffer)
-
-                # Convert the entire buffer read so far into a string for parsing.
-                # We must use the decode function here, not just str(), because in py3 str() will make a "ToString" the object,
-                # and not actually return us the contents of the buffer as a string.
-                headerStr = ba[:tempBufferFilledSize].decode(errors="ignore")
 
                 # Validate the headers starts with what we expect.
                 # According the the RFC, the boundary should start with the boundary string or '--' + boundary string.
                 # However, we have also seen \r\n--<str> and also no boundary string for the first frame as well. So this might fire once or twice, and that's fine.
                 # These are in order of how common they are, for perf.
-                if headerStr.startswith("--"+boundaryStr) is False and headerStr.startswith(boundaryStr) is False and headerStr.startswith("\r\n--"+boundaryStr) is False:
+                if (
+                    tempBufferByteArray.startswith(boundaryWithPrefixBytes, 0, tempBufferFilledSize) is False
+                    and tempBufferByteArray.startswith(boundaryBytes, 0, tempBufferFilledSize) is False
+                    and tempBufferByteArray.startswith(boundaryWithLeadingNewlineBytes, 0, tempBufferFilledSize) is False
+                ):
                     # Always report the first time we find this, otherwise, report only occasionally.
                     if self.MissingBoundaryWarningCounter % 120 == 0:
                         # Trim the string to print it.
-                        outputStr = headerStr
-                        if len(outputStr) > 40:
-                            outputStr = outputStr[:40]
+                        outputStr = tempBufferByteArray[:min(tempBufferFilledSize, 40)].decode(errors="ignore")
                         self.Logger.warning("We read a web stream body frame, but it didn't start with the expected boundary header. expected:'"+boundaryStr+"' got:^^"+outputStr+"^^")
                     self.MissingBoundaryWarningCounter += 1
-
-                # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
-                endOfAllHeadersMatch = "\r\n\r\n"
-                endOfHeaderMatch = "\r\n"
 
                 # Try to find headers
                 # This logic checks for errors, and if found, don't stop the logic because of them
@@ -1082,21 +1081,27 @@ class OctoWebStreamHttpHelper:
                 # chunks, we could read a chunk that splits the content-length header in half, which would cause errors.
                 # So we just allow the system to keep reading until we hit the limit, because the next read would then have the full
                 # header we are looking for.
-                headerSize = headerStr.find(endOfAllHeadersMatch)
+                headerSize = tempBufferByteArray.find(endOfAllHeadersMatch, 0, tempBufferFilledSize)
                 if headerSize != -1:
                     # We found at least some headers!
 
                     # Add 4 bytes for the \r\n\r\n end of header sequence. Also add two bytes for the \r\n at the end of this boundary chunk.
-                    headerSize += 4 + 2
+                    headerEnd = headerSize
+                    headerSize += len(endOfAllHeadersMatch) + 2
 
                     # Split out the headers
-                    headers = headerStr.split(endOfHeaderMatch)
+                    headers = tempBufferByteArray[:headerEnd].split(endOfHeaderMatch)
                     for header in headers:
-                        if header.lower().startswith("content-length"):
+                        name, _, value = header.partition(b":")
+                        if name.strip().lower() == contentLengthHeaderName:
                             # We found the content-length header!
-                            p = header.split(':')
-                            if len(p) == 2:
-                                frameSize = int(p[1].strip())
+                            value = value.strip()
+                            if len(value) > 0:
+                                boundaryStart = value.find(b"--")
+                                if boundaryStart != -1:
+                                    value = value[:boundaryStart].strip()
+                            if len(value) > 0:
+                                frameSize = int(value)
                                 foundContentLength = True
                             break
 
@@ -1137,8 +1142,7 @@ class OctoWebStreamHttpHelper:
                 self.Logger.warning(self.getLogMsgPrefix()+" while reading a boundary chunk, doBodyRead didn't return the full size we requested.")
 
             # Copy this data into the temp buffer
-            ba = self.BodyReadTempBuffer.ForceAsByteArray()
-            ba[tempBufferFilledSize:tempBufferFilledSize+len(data)] = data.Get()
+            tempBufferByteArray[tempBufferFilledSize:tempBufferFilledSize+len(data)] = data.Get()
             tempBufferFilledSize += len(data)
 
         # Update our read rate. This is a metric we send along in the stream if the it's a multipart stream, to know how fast we are reading it.

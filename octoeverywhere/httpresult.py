@@ -72,6 +72,16 @@ class HttpResult():
         return HttpResult(statusCode, headers, url, didFallback, fullBodyBuffer=Buffer(bytearray()))
 
 
+    # Allows for a quick way to create a Result object that is a redirect.
+    @staticmethod
+    def Redirect(url:str, didFallback:bool=False) -> "HttpResult":
+        headers = CaseInsensitiveDict()
+        headers["Location"] = url
+        # We must use a content length of 0 and set an empty body for the request to be handled correctly.
+        headers["Content-Length"] = "0"
+        return HttpResult(302, headers, url, didFallback, fullBodyBuffer=Buffer(bytearray()))
+
+
     # Builds a Result object from a requests.Response object.
     @staticmethod
     def BuildFromRequestLibResponse(response:requests.Response, url:str, isFallback:bool=False) -> "HttpResult":

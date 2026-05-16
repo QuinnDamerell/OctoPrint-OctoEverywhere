@@ -87,8 +87,13 @@ class Config:
     # Used only for Elegoo Connect
     #
     SectionElegoo = "elegoo"
+    ElegooPrinterProtocol = "printer_type"
+    ElegooPrinterProtocolCc1 = "cc1"
+    ElegooPrinterProtocolCc2 = "cc2"
     ElegooMainboardMac = "mainboard_mac"
     AutoActivateChamberLightForWebcam = "auto_activate_chamber_light_for_webcam"
+    ElegooCc2AccessCode = "cc2_access_code"
+    ElegooCc2PrinterSn = "cc2_printer_serial_number"
 
 
     # This allows us to add comments into our config.
@@ -111,8 +116,11 @@ class Config:
         { "Target": WebcamFlipV,  "Comment": "Flips the webcam image vertically. Valid values are True or False"},
         { "Target": WebcamRotation,  "Comment": "Rotates the webcam image. Valid values are 0, 90, 180, or 270"},
         { "Target": GeneralBedCooldownThresholdTempC,  "Comment": "The temperature in Celsius that the bed must be under to be considered cooled down. This is used to fire the Bed Cooldown Complete notification."},
+        { "Target": ElegooPrinterProtocol,  "Comment": "The Elegoo printer type this instance uses. Valid values are 'cc1' for the Elegoo Centauri Carbon 1 and 'cc2' for the Elegoo Centauri Carbon 2."},
         { "Target": ElegooMainboardMac,  "Comment": "This is the MAC address of the mainboard for the linked printer."},
         { "Target": AutoActivateChamberLightForWebcam,  "Comment": "If enabled, the chamber light will be automatically turned on when the webcam is in use."},
+        { "Target": ElegooCc2AccessCode,  "Comment": "The LAN only access code to the Elegoo Centauri Carbon 2 printer. See https://octoeverywhere.com/s/cc2-access-code for help."},
+        { "Target": ElegooCc2PrinterSn,  "Comment": "The serial number of your Elegoo Centauri Carbon 2 printer. If blank, OctoEverywhere will try to discover it from the printer IP. See https://octoeverywhere.com/s/cc2-sn for help."},
         { "Target": MoonrakerApiKey,  "Comment": "Leave blank unless your Moonraker requires an API key to connect. Moonraker API keys can be generated from the Mainsail or Fluidd."},
     ]
 

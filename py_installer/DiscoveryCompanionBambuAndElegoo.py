@@ -1,6 +1,8 @@
 import os
 from typing import List
 
+from linux_host.config import Config
+
 from .Logging import Logger
 from .Context import Context
 from .Util import Util
@@ -65,12 +67,18 @@ class DiscoveryCompanionBambuAndElegoo:
             Logger.Info("Options:")
             for folder in existingCompanionFolders:
                 instanceId = self._GetCompanionBambuOrElegooIdFromFolderName(folder)
+                typeSuffix = ""
+                configFolderPath = os.path.join(context.UserHomePath, folder)
+                if context.IsElegooSetup:
+                    protocol = ConfigHelper.TryToGetElegooPrinterProtocol(configFolderPath=configFolderPath)
+                    if protocol is not None:
+                        typeSuffix = " - Centauri Carbon 2" if protocol == Config.ElegooPrinterProtocolCc2 else " - Centauri Carbon 1"
                 # Try to parse the config, if there is one and it's valid.
-                ip, port = ConfigHelper.TryToGetCompanionDetails(configFolderPath=os.path.join(context.UserHomePath, folder))
+                ip, port = ConfigHelper.TryToGetCompanionDetails(configFolderPath=configFolderPath)
                 if ip is None and port is None:
-                    Logger.Info(f"  {count}) Plugin ID {instanceId} - Path: {folder}")
+                    Logger.Info(f"  {count}) Plugin ID {instanceId}{typeSuffix} - Path: {folder}")
                 else:
-                    Logger.Info(f"  {count}) Plugin ID {instanceId} - {ip}:{port}")
+                    Logger.Info(f"  {count}) Plugin ID {instanceId}{typeSuffix} - {ip}:{port}")
                 count += 1
             Logger.Info(f"  n) Setup a new {pluginTypeStr} plugin instance")
             Logger.Blank()

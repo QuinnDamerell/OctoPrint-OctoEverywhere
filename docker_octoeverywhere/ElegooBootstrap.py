@@ -13,6 +13,7 @@ class ElegooBootstrap:
         # These are constants that are always used for Elegoo connect.
         # The Elegoo OS webserver is on 3030
         # Always set these to ensure they override any other settings from other companion modes.
+        config.SetStr(Config.SectionElegoo, Config.ElegooPrinterProtocol, Config.ElegooPrinterProtocolCc1)
         config.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, "3030")
         config.SetStr(Config.RelaySection, Config.RelayFrontEndPortKey, "3030")
 

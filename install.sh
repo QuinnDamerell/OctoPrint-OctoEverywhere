@@ -434,6 +434,7 @@ log_info      "  - Free & Unlimited Next-Gen AI Print Failure Detection"
 log_info      "  - Free Full Frame Rate & Full Resolution Webcam Streaming"
 log_info      "  - 5 Star Rated iOS & Android Apps"
 log_info      "  - Real-Time Print Notifications"
+log_info      "  - Remote AI MCP Server"
 log_info      "  - And So Much More"
 log_blank
 log_blank

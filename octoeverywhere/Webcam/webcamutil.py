@@ -16,6 +16,14 @@ class GetSnapshotFromStreamResult:
 # A class of common utilities for the webcam service.
 class WebcamUtil:
 
+    c_JfifApp0Header = bytes([
+        0xFF, 0xE0, 0x00, 0x10,
+        0x4A, 0x46, 0x49, 0x46, 0x00,
+        0x01, 0x01, 0x00,
+        0x00, 0x01, 0x00, 0x01,
+        0x00, 0x00,
+    ])
+
     # This will try to read a single jpeg image from a jmpeg stream.
     # The OctoHttpResult should be checked for success before calling this function.
     # Note this WILL NOT close the response object, it's up to the caller to do that.
@@ -26,19 +34,9 @@ class WebcamUtil:
             # Only validate if requested, so we don't have to do this constantly.
             if validateMultiStreamHeader:
                 # We expect this to be a multipart stream if it's going to be a mjpeg stream.
-                isMultipartStream = False
-                contentTypeLower = ""
-                headers = result.Headers
-                for name in headers:
-                    nameLower = name.lower()
-                    if nameLower == "content-type":
-                        contentTypeLower = headers[name].lower()
-                        if contentTypeLower.startswith("multipart/"):
-                            isMultipartStream = True
-                        break
-
                 # If this isn't a multipart stream, get out of here.
-                if isMultipartStream is False:
+                contentTypeLower = result.Headers.get("content-type", "").lower()
+                if contentTypeLower.startswith("multipart/") is False:
                     logger.info("GetSnapshotFromStream - Failed, not correct content type: "+str(contentTypeLower))
                     return None
 
@@ -50,21 +48,22 @@ class WebcamUtil:
 
             # Try to read some of the stream, so we can find the content type and the size of this first frame.
             # We use the raw response, so we can control directly how much we read.
+            endOfAllHeadersMatch = b"\r\n\r\n"
             dataBuffer = responseForBodyRead.raw.read(300)
-            if dataBuffer is None:
+            if dataBuffer is None or len(dataBuffer) == 0:
                 logger.info("GetSnapshotFromStream - Failed, no data returned.")
                 return None
+            while dataBuffer.find(endOfAllHeadersMatch) == -1 and len(dataBuffer) < 4096:
+                moreData = responseForBodyRead.raw.read(300)
+                if moreData is None or len(moreData) == 0:
+                    break
+                dataBuffer += moreData
 
-            # Decode the headers
             # Example --boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
             #      or \r\n--boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
             #      or boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
-            headerStr = dataBuffer.decode(errors="ignore")
-
             # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
-            endOfAllHeadersMatch = "\r\n\r\n"
-            endOfHeaderMatch = "\r\n"
-            headerStrSize = headerStr.find(endOfAllHeadersMatch)
+            headerStrSize = dataBuffer.find(endOfAllHeadersMatch)
             if headerStrSize == -1:
                 logger.info("GetSnapshotFromStream - Failed, no end of headers found.")
                 return None
@@ -75,28 +74,25 @@ class WebcamUtil:
             # Try to find the size of this chunk.
             frameSizeInt = 0
             contentType = None
-            headers = headerStr.split(endOfHeaderMatch)
+            headers = dataBuffer[0:headerStrSize].split(b"\r\n")
             for header in headers:
-                headerLower = header.lower()
-                if headerLower.startswith("content-type"):
-                    # We found the content-length header!
-                    p = header.split(':')
-                    if len(p) == 2:
-                        contentType = p[1].strip()
+                name, _, value = header.partition(b":")
+                nameLower = name.strip().lower()
+                if nameLower == b"content-type":
+                    contentType = value.strip().decode(errors="ignore")
 
-                if headerLower.startswith("content-length"):
+                elif nameLower == b"content-length":
                     # We found the content-length header!
-                    p = header.split(':')
                     # In some webcam servers, they add the content break --<boundary> to the content-length line.
                     # So we need to strip that off if it's there.
-                    value:str = p[1].strip()
-                    if value.find('--') != -1:
-                        value = value.split('--')[0].strip()
-                    if len(p) == 2:
-                        # We have seen weird cases where there's a content-length header, but it's empty, and then there's another that has a length.
-                        if len(value) == 0:
-                            continue
-                        frameSizeInt = int(value)
+                    value = value.strip()
+                    boundaryStart = value.find(b"--")
+                    if boundaryStart != -1:
+                        value = value[0:boundaryStart].strip()
+                    # We have seen weird cases where there's a content-length header, but it's empty, and then there's another that has a length.
+                    if len(value) == 0:
+                        continue
+                    frameSizeInt = int(value)
 
                 # Break when done.
                 if frameSizeInt > 0 and contentType is not None:
@@ -110,36 +106,20 @@ class WebcamUtil:
                 return None
 
             # Read the entire first image into the buffer.
-            # We use a bytearray so we can slice it efficiently. Down stream uses of it also might need to modify it, and there's no cost difference here between the bytes copy and this.
-            totalDesiredBufferSize = frameSizeInt + headerStrSize
-            toRead = totalDesiredBufferSize - len(dataBuffer)
-            fullBuffer:bytearray
-            if toRead > 0:
-                data = responseForBodyRead.raw.read(toRead)
-                if data is None:
+            # We avoid buffering the multipart headers with the image, which saves a large copy per frame.
+            imageBuffer = bytearray(frameSizeInt)
+            imageBytesRead = len(dataBuffer) - headerStrSize
+            if imageBytesRead > 0:
+                imageBytesRead = min(imageBytesRead, frameSizeInt)
+                imageBuffer[0:imageBytesRead] = dataBuffer[headerStrSize:headerStrSize + imageBytesRead]
+            while imageBytesRead < frameSizeInt:
+                data = responseForBodyRead.raw.read(frameSizeInt - imageBytesRead)
+                if data is None or len(data) == 0:
                     logger.error("GetSnapshotFromStream - Failed, failed to read the rest of the image buffer.")
                     return None
-                fullBuffer = bytearray(len(dataBuffer) + len(data))
-                fullBuffer[0:len(dataBuffer)] = dataBuffer
-                fullBuffer[len(dataBuffer):] = data
-            else:
-                # We already have the full buffer, just copy it.
-                fullBuffer = bytearray(dataBuffer)
-
-            # If we got extra data trim it.
-            # This shouldn't happen, but just incase the api changes.
-            if len(fullBuffer) > totalDesiredBufferSize:
-                fullBuffer = fullBuffer[:totalDesiredBufferSize]
-
-            # Check we got what we wanted.
-            if len(fullBuffer) != totalDesiredBufferSize:
-                logger.warning("GetSnapshotFromStream - Failed, the data read loop didn't produce the expected data size. desired: "+str(totalDesiredBufferSize)+", got: "+str(len(fullBuffer)))
-                return None
-
-            # Get only the jpeg buffer
-            imageBuffer = fullBuffer[headerStrSize:]
-            if len(imageBuffer) != frameSizeInt:
-                logger.warning("GetSnapshotFromStream - Failed, final image size was not the frame size. expected: "+str(frameSizeInt)+", got: "+str(len(imageBuffer)))
+                readSize = min(len(data), frameSizeInt - imageBytesRead)
+                imageBuffer[imageBytesRead:imageBytesRead + readSize] = data[0:readSize]
+                imageBytesRead += readSize
 
             # Success!
             return GetSnapshotFromStreamResult(Buffer(imageBuffer), contentType)
@@ -168,7 +148,22 @@ class WebcamUtil:
         try:
             # Check if this is a jpeg, it must start with FF D8
             bufLen = len(buf)
-            if bufLen < 2 or buf[0] != 0xFF or buf[1] != 0xD8:
+            rawBuffer = buf.Get()
+            if bufLen < 2 or rawBuffer[0] != 0xFF or rawBuffer[1] != 0xD8:
+                return buf
+
+            if (
+                bufLen >= 11
+                and rawBuffer[2] == 0xFF
+                and rawBuffer[3] == 0xE0
+                and rawBuffer[4] == 0x00
+                and rawBuffer[5] == 0x10
+                and rawBuffer[6] == 0x4A
+                and rawBuffer[7] == 0x46
+                and rawBuffer[8] == 0x49
+                and rawBuffer[9] == 0x46
+                and rawBuffer[10] == 0
+            ):
                 return buf
 
             # Search the headers for the APP0
@@ -178,52 +173,50 @@ class WebcamUtil:
                 if pos + 1 >= bufLen:
                     logger.warning("EnsureJpegHeaderInfo - Ran out of buffer before we found a jpeg APP0 header")
                     return buf
-                if buf[pos] != 0xFF:
+                if rawBuffer[pos] != 0xFF:
                     logger.error("EnsureJpegHeaderInfo - jpeg segment header didn't start with 0xff")
                     return buf
 
                 # The first byte is always FF, so we only care about the second.
-                segmentType = buf[pos+1]
+                segmentType = rawBuffer[pos+1]
                 if segmentType == 0xDA:
                     # This is the start of the image, the headers are over.
-                    logger.debug("EnsureJpegHeaderInfo - We found the start of the jpeg image before we found the APP0 header.")
-                    return buf
+                    # Some webcam servers, including the Elegoo CC2, send JPEGs without a JFIF APP0 marker.
+                    # Add a standard JFIF APP0 segment immediately after the SOI marker.
+                    newBuffer = bytearray(bufLen + len(WebcamUtil.c_JfifApp0Header))
+                    newBuffer[0] = 0xFF
+                    newBuffer[1] = 0xD8
+                    app0End = 2 + len(WebcamUtil.c_JfifApp0Header)
+                    newBuffer[2:app0End] = WebcamUtil.c_JfifApp0Header
+                    newBuffer[app0End:] = rawBuffer[2:]
+                    return Buffer(newBuffer)
                 elif segmentType == 0xE0:
                     # This is the APP0 header.
                     # Skip past the segment header and size bytes
+                    if pos + 8 >= bufLen:
+                        logger.warning("EnsureJpegHeaderInfo - Ran out of buffer while reading the jpeg APP0 header")
+                        return buf
                     pos += 4
 
-                    # If these next bytes aren't set, we will set them to the default of "JFIF\0"
+                    # If the identifier isn't JFIF\0, set it to the default.
                     # Note that the last byte should be 0!
-                    needsChanges = buf[pos] == 0 or buf[pos+1] == 0 or buf[pos+2] == 0 or buf[pos+3] == 0 or buf[pos+4] == 0 or buf[pos+5] != 0
+                    needsChanges = (
+                        rawBuffer[pos] != 0x4A
+                        or rawBuffer[pos+1] != 0x46
+                        or rawBuffer[pos+2] != 0x49
+                        or rawBuffer[pos+3] != 0x46
+                        or rawBuffer[pos+4] != 0
+                    )
 
                     # If we don't need changes, we are done.
                     # No need to process more headers.
                     if needsChanges is False:
                         return buf
 
-                    # We call the function on the buffer to get a reference to a buffer that can be editable.
-                    # If the buffer is already a bytearray, this is a no-op.
-                    buf.ConvertToEditableBuffer()
-
                     # To edit the byte array, we need a bytearray.
                     # This adds overhead, but it's required because bytes objects aren't editable.
-                    if buf[pos] == 0:
-                        buf[pos] = 0x4a # J
-                    pos += 1
-                    if buf[pos] == 0:
-                        buf[pos] = 0x46 # F
-                    pos += 1
-                    if buf[pos] == 0:
-                        buf[pos] = 0x49 # I
-                    pos += 1
-                    if buf[pos] == 0:
-                        buf[pos] = 0x46 # F
-                    pos += 1
-                    # This should be 0.
-                    if buf[pos] != 0:
-                        buf[pos] = 0 # /0
-                    pos += 1
+                    editableBuffer = buf.ForceAsByteArray()
+                    editableBuffer[pos:pos+5] = b"JFIF\0"
 
                     # Done, No need to process more headers.
                     return buf
@@ -232,8 +225,13 @@ class WebcamUtil:
                     # First skip past the type two bytes.
                     pos += 2
                     # Now read the length, two bytes
-                    rawBuffer = buf.Get()
+                    if pos + 1 >= bufLen:
+                        logger.warning("EnsureJpegHeaderInfo - Ran out of buffer before we found a jpeg segment length")
+                        return buf
                     segLen = (rawBuffer[pos] << 8) + rawBuffer[pos+1]
+                    if segLen < 2:
+                        logger.warning("EnsureJpegHeaderInfo - jpeg segment length was too small")
+                        return buf
                     # Now skip past the segment length (the two length bytes are included in the length size)
                     pos += segLen
 

@@ -24,6 +24,7 @@
             "name": "Moonraker - Klipper",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "moonraker_octoeverywhere",
             "justMyCode": false,
             "args": [
@@ -36,9 +37,10 @@
             ]
         },
         {
-            "name": "Elegoo Connect - Primary",
+            "name": "Elegoo Connect - CC1",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "elegoo_octoeverywhere",
             "justMyCode": false,
             "args": [
@@ -51,9 +53,26 @@
             ]
         },
         {
+            "name": "Elegoo Connect - CC2",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
+            "module": "elegoo_cc2_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Bambu Connect version of the plugin. These args target the first instance.
+                //
+                // { "ServiceName": "octoeverywhere-elegoo-2", "VirtualEnvPath":"/home/pi/octoeverywhere-env", "RepoRootFolder":"/home/pi/octoeverywhere/", "LogFolder":"/home/pi/.octoeverywhere-elegoo-2/logs", "LocalFileStoragePath":"/home/pi/.octoeverywhere-elegoo-2/octoeverywhere-store", "ConfigFolder":"/home/pi/.octoeverywhere-elegoo-2/", "CompanionInstanceIdStr":"1" }
+                "eyAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtZWxlZ29vLTIiLCAiVmlydHVhbEVudlBhdGgiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS1lbnYiLCAiUmVwb1Jvb3RGb2xkZXIiOiIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZS8iLCAiTG9nRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWVsZWdvby0yL2xvZ3MiLCAiTG9jYWxGaWxlU3RvcmFnZVBhdGgiOiIvaG9tZS9waS8ub2N0b2V2ZXJ5d2hlcmUtZWxlZ29vLTIvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiQ29uZmlnRm9sZGVyIjoiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLWVsZWdvby0yLyIsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjoiMSIgfQ===",
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
+        {
             "name": "Bambu Connect - X1C",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "bambu_octoeverywhere",
             "justMyCode": false,
             "args": [
@@ -69,6 +88,7 @@
             "name": "Bambu Connect - P1S",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "bambu_octoeverywhere",
             "justMyCode": false,
             "args": [
@@ -84,6 +104,7 @@
             "name": "Companion 1 - Klipper",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "moonraker_octoeverywhere",
             "justMyCode": false,
             "args": [
@@ -117,6 +138,7 @@
             "name": "Companion 1 - Klipper (Memray)",
             "type": "debugpy",
             "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "module": "memray",
             "console": "integratedTerminal",
             "args": [
@@ -198,16 +220,17 @@
             ]
         },
         {
-            "name": "Installer - Elegoo Connect",
+            "name": "Installer - Elegoo Connect (CC1 & CC2)",
             "type": "debugpy",
             "request": "launch",
             "module": "py_installer",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
             "justMyCode": false,
             "args": [
                 // The module requires this json object to be passed.
-                // Normally the install.sh script runs, ensure everything is installed, creates a virtural env, and then runs this modlue giving it these args.
+                // Normally the install.sh script runs, ensure everything is installed, creates a virtual env, and then runs this module giving it these args.
                 // But for debugging, we can skip that assuming it's already been ran.
-                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -elegoo -debug\"}"
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -elegoo\"}"
             ]
         },
         {

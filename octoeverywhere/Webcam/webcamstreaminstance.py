@@ -13,6 +13,13 @@ class WebcamStreamInstance:
 
     # The string doesn't matter what it is, but we define it so it's consistent
     c_OeStreamBoundaryString = "oestreamboundary"
+    c_OeStreamBoundaryBytes = b"--oestreamboundary\r\nContent-Type: image/jpeg\r\nContent-Length: "
+    c_OeStreamHeaderEndBytes = b"\r\n\r\n"
+    c_OeStreamFrameEndBytes = b"\r\n"
+
+    SharedFrameCacheLock = threading.Lock()
+    SharedFrameCacheImage:BufferOrNone = None
+    SharedFrameCacheBuffer:BufferOrNone = None
 
 
     def __init__(self, logger:logging.Logger, quickCam:IQuickCam) -> None:
@@ -65,17 +72,16 @@ class WebcamStreamInstance:
                     self.ImageReadyEvent.clear()
 
                     # Build the buffer to send
-                    header = f"--{WebcamStreamInstance.c_OeStreamBoundaryString}\r\nContent-Type: image/jpeg\r\nContent-Length: {len(capturedImage)}\r\n\r\n"
-                    imageChunkBuffer = b''.join((header.encode('utf-8'), capturedImage.Get(), b"\r\n"))
+                    imageChunkBuffer = WebcamStreamInstance._GetOrMakeFrameBuffer(capturedImage)
 
                     # TODO - I don't know why, but chrome seems to delay the rendering of the image until it gets two?
                     # This could be something in the pipeline not flushing correctly, or other things. But for now, on the first send we double the image to make it render instantly.
                     if self.IsFirstSend:
-                        imageChunkBuffer = imageChunkBuffer + imageChunkBuffer
+                        imageChunkBuffer = Buffer(imageChunkBuffer.Get() + imageChunkBuffer.Get())
                         self.IsFirstSend = False
                         if self.Logger.isEnabledFor(logging.DEBUG):
                             self.Logger.debug("QuickCam took %s seconds from octostream stream open to first image sent.", round(time.time() - self.StreamOpenTimeSec, 3))
-                    return Buffer(imageChunkBuffer)
+                    return imageChunkBuffer
 
                 # If we didn't get an image, wait on the event for a new one.
                 if self.ImageReadyEvent.wait(timeout=60.0) is False:
@@ -91,3 +97,30 @@ class WebcamStreamInstance:
     def _CustomBodyStreamClosed(self) -> None:
         # It's important this is called so the stream will be detached!
         self.QuickCam.DetachImageStreamCallback(self._NewImageCallback)
+        WebcamStreamInstance._ClearSharedFrameCache()
+
+
+    @staticmethod
+    def _GetOrMakeFrameBuffer(capturedImage:Buffer) -> Buffer:
+        with WebcamStreamInstance.SharedFrameCacheLock:
+            if WebcamStreamInstance.SharedFrameCacheImage is capturedImage and WebcamStreamInstance.SharedFrameCacheBuffer is not None:
+                return WebcamStreamInstance.SharedFrameCacheBuffer
+
+        header = b"".join((
+            WebcamStreamInstance.c_OeStreamBoundaryBytes,
+            str(len(capturedImage)).encode("ascii"),
+            WebcamStreamInstance.c_OeStreamHeaderEndBytes,
+        ))
+        imageChunkBuffer = Buffer(b"".join((header, capturedImage.Get(), WebcamStreamInstance.c_OeStreamFrameEndBytes)))
+
+        with WebcamStreamInstance.SharedFrameCacheLock:
+            WebcamStreamInstance.SharedFrameCacheImage = capturedImage
+            WebcamStreamInstance.SharedFrameCacheBuffer = imageChunkBuffer
+        return imageChunkBuffer
+
+
+    @staticmethod
+    def _ClearSharedFrameCache() -> None:
+        with WebcamStreamInstance.SharedFrameCacheLock:
+            WebcamStreamInstance.SharedFrameCacheImage = None
+            WebcamStreamInstance.SharedFrameCacheBuffer = None

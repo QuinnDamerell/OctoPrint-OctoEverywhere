@@ -8,7 +8,7 @@ from octoeverywhere.httpsessions import HttpSessions
 from .Linker import Linker
 from .Logging import Logger
 from .Service import Service
-from .Context import Context, OsTypes
+from .Context import Context, ElegooPrinterProtocols, OsTypes
 from .Discovery import Discovery
 from .DiscoveryCompanionBambuAndElegoo import DiscoveryCompanionBambuAndElegoo
 from .Configure import Configure
@@ -229,7 +229,7 @@ class Installer:
         elif context.IsBambuSetup:
             installTarget = "Bambu"
         elif context.IsElegooSetup:
-            installTarget = "Elegoo"
+            installTarget = "ElegooCc2" if context.ElegooPrinterProtocol == ElegooPrinterProtocols.Cc2 else "ElegooCc1"
         elif context.OsType == OsTypes.SonicPad:
             installTarget = "SonicPad"
         elif context.OsType == OsTypes.K1:
@@ -254,6 +254,7 @@ class Installer:
         Logger.Info("   - OctoEverywhere for Creality - Where this device is a Creality device (Sonic Pad, K1, Ender v3, etc)")
         Logger.Info("   - OctoEverywhere Companion - Where this plugin will connect to Moonraker running on a different device on the same LAN.")
         Logger.Info("   - OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu Lab printer on the same LAN.")
+        Logger.Info("   - OctoEverywhere Elegoo Connect - Where this plugin will connect to an Elegoo Centauri Carbon 1 or Centauri Carbon 2 printer on the same LAN.")
         Logger.Blank()
         Logger.Warn("This installer is NOT for:")
         Logger.Info("   - OctoPrint or OctoKlipper - If you're using OctoPrint, install OctoEverywhere directly in OctoPrint from the plugin manager.")

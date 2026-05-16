@@ -148,6 +148,49 @@ class ConfigHelper:
     # Elegoo Only
     #
 
+    @staticmethod
+    def TryToGetElegooPrinterProtocol(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Optional[str]:
+        try:
+            c = ConfigHelper._GetConfig(context, configFolderPath)
+            if c is None:
+                return None
+
+            protocol = c.GetStr(Config.SectionElegoo, Config.ElegooPrinterProtocol, None)
+            if protocol is not None:
+                protocol = protocol.lower().strip()
+                if protocol == Config.ElegooPrinterProtocolCc1 or protocol == Config.ElegooPrinterProtocolCc2:
+                    return protocol
+
+            # Backward compatibility for configs created before the protocol marker existed.
+            printerSn = c.GetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, None)
+            if printerSn is not None:
+                return Config.ElegooPrinterProtocolCc2
+
+            mainboardMac = c.GetStr(Config.SectionElegoo, Config.ElegooMainboardMac, None)
+            if mainboardMac is not None:
+                return Config.ElegooPrinterProtocolCc1
+
+            port = c.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, None)
+            if port == "1883":
+                return Config.ElegooPrinterProtocolCc2
+            if port == "3030":
+                return Config.ElegooPrinterProtocolCc1
+        except Exception as e:
+            Logger.Warn("Failed to parse elegoo printer protocol from existing config. "+str(e))
+        return None
+
+
+    @staticmethod
+    def WriteElegooPrinterProtocol(context:Context, protocol:str) -> None:
+        try:
+            if protocol != Config.ElegooPrinterProtocolCc1 and protocol != Config.ElegooPrinterProtocolCc2:
+                raise Exception(f"Unknown Elegoo protocol. {protocol}")
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
+            c.SetStr(Config.SectionElegoo, Config.ElegooPrinterProtocol, protocol)
+        except Exception as e:
+            Logger.Error("Failed to write elegoo printer protocol to config. "+str(e))
+            raise Exception("Failed to write elegoo printer protocol to config") from e
+
 
     @staticmethod
     def TryToGetElegooData(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Optional[str]:
@@ -171,10 +214,44 @@ class ConfigHelper:
             # Load the config, force it to be created if it doesn't exist.
             c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
             # Write the new values
+            c.SetStr(Config.SectionElegoo, Config.ElegooPrinterProtocol, Config.ElegooPrinterProtocolCc1)
             c.SetStr(Config.SectionElegoo, Config.ElegooMainboardMac, mainboardMac)
+            c.SetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, None)
+            c.SetStr(Config.SectionElegoo, Config.ElegooCc2AccessCode, None)
         except Exception as e:
             Logger.Error("Failed to write elegoo details to config. "+str(e))
             raise Exception("Failed to write elegoo details to config") from e
+
+
+    @staticmethod
+    def TryToGetElegooCc2Data(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Tuple[Optional[str], Optional[str]]:
+        try:
+            # Load the config, if this returns None, there is no existing file.
+            c = ConfigHelper._GetConfig(context, configFolderPath)
+            if c is None:
+                return (None, None)
+            # Use a default of None so if they don't exist, they aren't added to the config.
+            accessToken = c.GetStr(Config.SectionElegoo, Config.ElegooCc2AccessCode, None)
+            printerSn = c.GetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, None)
+            return (accessToken, printerSn)
+        except Exception as e:
+            Logger.Warn("Failed to parse elegoo cc2 details from existing config. "+str(e))
+        return (None, None)
+
+
+    @staticmethod
+    def WriteElegooCc2Details(context:Context, accessToken:str, printerSn:str):
+        try:
+            # Load the config, force it to be created if it doesn't exist.
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
+            # Write the new values
+            c.SetStr(Config.SectionElegoo, Config.ElegooPrinterProtocol, Config.ElegooPrinterProtocolCc2)
+            c.SetStr(Config.SectionElegoo, Config.ElegooCc2AccessCode, accessToken)
+            c.SetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, printerSn)
+            c.SetStr(Config.SectionElegoo, Config.ElegooMainboardMac, None)
+        except Exception as e:
+            Logger.Error("Failed to write elegoo cc2 details to config. "+str(e))
+            raise Exception("Failed to write elegoo cc2 details to config") from e
 
     #
     # Moonraker Only

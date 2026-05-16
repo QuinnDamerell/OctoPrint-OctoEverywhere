@@ -63,8 +63,14 @@ class NetworkSearch:
 
     # The default port all Bambu printers will run MQTT on.
     c_BambuDefaultPortStr = "8883"
+
     # The default port the elegoo WebSocket & http server runs on.
     c_ElegooDefaultPortStr = "3030"
+
+    # The default MQTT port and access code for the Elegoo Centauri Carbon 2 printer, which uses MQTT instead of WebSockets.
+    c_ElegooCc2DefaultMqttPortStr = "1883"
+    # The user can turn off the access code (idk why), if they do, this is the value that must be used.
+    c_ElegooCc2DefaultAccessCode = "123456"
 
 
     # Scans the local IP LAN subset for Bambu servers that successfully authorize given the access code and printer sn.

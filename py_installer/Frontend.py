@@ -5,7 +5,7 @@ from linux_host.networksearch import NetworkSearch
 
 from .Util import Util
 from .Logging import Logger
-from .Context import Context
+from .Context import Context, ElegooPrinterProtocols
 from .ConfigHelper import ConfigHelper, KnownFrontends
 
 # A helper class.
@@ -30,7 +30,8 @@ class Frontend:
         # The elegoo os only allows for one frontend and doesn't have printer access, so we don't need to ask the user.
         if context.IsElegooSetup:
             Logger.Debug("Skipping frontend setup, elegoo os only allows for one frontend.")
-            ConfigHelper.WriteFrontendDetails(context, str(NetworkSearch.c_ElegooDefaultPortStr), KnownFrontends.Elegoo)
+            frontendPort = "80" if context.ElegooPrinterProtocol == ElegooPrinterProtocols.Cc2 else str(NetworkSearch.c_ElegooDefaultPortStr)
+            ConfigHelper.WriteFrontendDetails(context, frontendPort, KnownFrontends.Elegoo)
             return
 
         Logger.Debug("Starting Web Interface Setup")

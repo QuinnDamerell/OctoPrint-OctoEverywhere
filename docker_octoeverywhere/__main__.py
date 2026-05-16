@@ -20,6 +20,7 @@ from linux_host.startup import Startup
 from linux_host.config import Config
 
 from .BambuBootstrap import BambuBootstrap
+from .ElegooCc2Bootstrap import ElegooCc2Bootstrap
 from .ElegooBootstrap import ElegooBootstrap
 from .KlipperBootstrap import KlipperBootstrap
 
@@ -29,6 +30,7 @@ class CompanionMode(Enum):
     BambuConnect  = 1
     ElegooConnect = 2
     Klipper   = 3
+    ElegooCc2Connect = 4
 
     # Makes to str() cast not to include the class name.
     def __str__(self):
@@ -119,6 +121,8 @@ if __name__ == '__main__':
                 mode = CompanionMode.BambuConnect
             elif modeStr == "elegoo":
                 mode = CompanionMode.ElegooConnect
+            elif modeStr == "elegoo_cc2" or modeStr == "elegoocc2" or modeStr == "cc2":
+                mode = CompanionMode.ElegooCc2Connect
             elif modeStr == "klipper":
                 mode = CompanionMode.Klipper
             logger.info(f"Companion mode: {mode}")
@@ -134,6 +138,8 @@ if __name__ == '__main__':
             BambuBootstrap.Bootstrap(logger, config)
         elif mode == CompanionMode.ElegooConnect:
             ElegooBootstrap.Bootstrap(logger, config)
+        elif mode == CompanionMode.ElegooCc2Connect:
+            ElegooCc2Bootstrap.Bootstrap(logger, config)
         elif mode == CompanionMode.Klipper:
             KlipperBootstrap.Bootstrap(logger, config)
         else:
@@ -183,6 +189,8 @@ if __name__ == '__main__':
         pyPackage = "bambu_octoeverywhere"
         if mode == CompanionMode.ElegooConnect:
             pyPackage = "elegoo_octoeverywhere"
+        elif mode == CompanionMode.ElegooCc2Connect:
+            pyPackage = "elegoo_cc2_octoeverywhere"
         elif mode == CompanionMode.Klipper:
             pyPackage = "moonraker_octoeverywhere"
 

@@ -26,5 +26,5 @@ qrcode<=8.0.0
 # The following are required only for Moonraker
 configparser
 
-# Only used for Bambu Connect
+# Only used for Bambu Connect and Elegoo CC2 Connect
 paho-mqtt>=2.0.0

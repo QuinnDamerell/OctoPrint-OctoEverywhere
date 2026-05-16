@@ -10,7 +10,8 @@ import os
 import signal
 
 from enum import Enum
-from typing import IO, Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.interfaces import IQuickCam
@@ -125,24 +126,7 @@ class QuickCamManager:
     # Returns a QuickCam instances for this url. If auth is required, the auth should be added to the URL in the http:// style. Ex rtsp://username:password@hostname...
     # The QuickCam class will be shared across multiple instances, it's thread safe.
     def _GetOrCreate(self, url:str) -> "QuickCam":
-
-        # We need to be careful with the URL to make sure it doesn't have any cache busting query params.
-        # But we do need to support query params for things like /webcam/?action=stream
-        queryParamsStart = url.find("?")
-        if queryParamsStart != -1:
-            # Remove all of the query params to start.
-            ogUrl = url
-            url = url[:queryParamsStart]
-
-            # We decided to do an opt-in for query params, so we will only remove them if they are not in the opt-in list.
-            # This is because some printers use query params for things like /webcam/?action=stream
-            # We don't want to remove those, since they are part of the URL.
-            actionIndex = ogUrl.find("action=")
-            if actionIndex != -1:
-                actionEnd = ogUrl.find("&", queryParamsStart)
-                if actionEnd == -1:
-                    actionEnd = len(ogUrl)
-                url += "?" + ogUrl[queryParamsStart:actionEnd]
+        url = QuickCamManager._NormalizeQuickCamUrl(url)
 
         with self.QuickCamMapLock:
             # If it already exists, get it and return it.
@@ -154,6 +138,22 @@ class QuickCamManager:
             qc = QuickCam(self.Logger, url, self.WebcamPlatformHelperInterface)
             self.QuickCamMap[url] = qc
             return qc
+
+
+    @staticmethod
+    def _NormalizeQuickCamUrl(url:str) -> str:
+        # Strip cache-busting query params while preserving action=stream style URLs.
+        if url.find("?") == -1:
+            return url
+
+        parts = urlsplit(url)
+        actionParams:List[Tuple[str, str]] = []
+        for name, value in parse_qsl(parts.query, keep_blank_values=True):
+            if name.lower() == "action":
+                actionParams.append((name, value))
+
+        query = urlencode(actionParams)
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
 
 
 # This class handles webcam streaming from different streaming endpoints that aren't http.
@@ -183,6 +183,7 @@ class QuickCam(IQuickCam):
         self.IsCaptureThreadRunning = False
         self.CurrentImage:BufferOrNone = None
         self.ImageCounter = 0 # Used to monitor stalls
+        self.CaptureThreadGeneration = 0
         self.LastImageRequestTimeSec:float = 0.0
         self.ImageStreamCallbacks:List[Callable[[Buffer], None]] = []
         self.ImageStreamCallbackLock = threading.Lock()
@@ -250,7 +251,8 @@ class QuickCam(IQuickCam):
     def DetachImageStreamCallback(self, callback:Callable[[Buffer], None]):
         # Remove our callback.
         with self.ImageStreamCallbackLock:
-            self.ImageStreamCallbacks.remove(callback)
+            if callback in self.ImageStreamCallbacks:
+                self.ImageStreamCallbacks.remove(callback)
 
 
     # Called when there's a new image from the capture thread.
@@ -276,18 +278,20 @@ class QuickCam(IQuickCam):
                 return
             self.Logger.info("QuickCam capture thread starting.")
             self.IsCaptureThreadRunning = True
-            t = threading.Thread(target=self._captureThread, name=f"QuickCamCaptureThread-{self.Type}")
+            self.CaptureThreadGeneration += 1
+            captureThreadGeneration = self.CaptureThreadGeneration
+            t = threading.Thread(target=self._captureThread, args=(captureThreadGeneration, ), name=f"QuickCamCaptureThread-{self.Type}")
             t.daemon = True
             t.start()
             # We only use this thread for jmpeg right now, since it's the only one that can stall and we can do something about (for Elegoo)
             if self.Type == QuickCamStreamTypes.JMPEG:
-                m = threading.Thread(target=self._stallMonitor, name=f"QuickCamCaptureThread-StallMonitor-{self.Type}")
+                m = threading.Thread(target=self._stallMonitor, args=(captureThreadGeneration, ), name=f"QuickCamCaptureThread-StallMonitor-{self.Type}")
                 m.daemon = True
                 m.start()
 
 
     # Does the image image capture work.
-    def _captureThread(self) -> None:
+    def _captureThread(self, captureThreadGeneration:int) -> None:
         try:
             # We allow a few attempts, so if there are any connection issues or errors we buffer them out.
             # This is really helpful for ffmpeg and for the Elegoo OS webcam server, which can be flaky.
@@ -364,29 +368,37 @@ class QuickCam(IQuickCam):
         finally:
             # Before exit the thread...
             # Note that order is important here!
-            # Ensure we clear the image ready event.
-            self.ImageReady.clear()
-            # Clear the flag that we are running.
+            # Ensure we clear the image ready event and running flag.
+            shouldClearCurrentImage = False
             with self.Lock:
-                self.IsCaptureThreadRunning = False
+                if self.CaptureThreadGeneration == captureThreadGeneration:
+                    self.ImageReady.clear()
+                    self.IsCaptureThreadRunning = False
+                    shouldClearCurrentImage = True
             # And ensure that the current image is cleaned up, so clients don't get a stale image.
-            self.CurrentImage = None
+            if shouldClearCurrentImage:
+                self.CurrentImage = None
             self.Logger.info("QuickCam capture thread exit.")
 
 
-    def _stallMonitor(self) -> None:
+    def _isCaptureThreadGenerationRunning(self, captureThreadGeneration:int) -> bool:
+        with self.Lock:
+            return self.IsCaptureThreadRunning and self.CaptureThreadGeneration == captureThreadGeneration
+
+
+    def _stallMonitor(self, captureThreadGeneration:int) -> None:
         # Keep running while the capture thread is running.
-        while self.IsCaptureThreadRunning:
+        while self._isCaptureThreadGenerationRunning(captureThreadGeneration):
             try:
                 # We loop here so that we don't keep making the exception block
                 # Set the last counter here so if something throws we still get current values.
                 lastImageCounter = self.ImageCounter
-                while self.IsCaptureThreadRunning:
+                while self._isCaptureThreadGenerationRunning(captureThreadGeneration):
                     # Sleep for a bit until we want to check for a stall.
                     time.sleep(QuickCam.c_StallMonitorThreadCheckIntervalSec)
 
                     # Ensure we are still running.
-                    if self.IsCaptureThreadRunning is False:
+                    if self._isCaptureThreadGenerationRunning(captureThreadGeneration) is False:
                         return
 
                     # Check if the image counter hasn't changed.
@@ -396,7 +408,7 @@ class QuickCam(IQuickCam):
                         self.WebcamPlatformHelperInterface.OnQuickCamStreamStall(self.Url)
 
                     # Update the counter.
-                    self.ImageCounter = lastImageCounter
+                    lastImageCounter = self.ImageCounter
             except Exception as e:
                 Sentry.OnException("Exception in QuickCam stall monitor thread. ", e)
 
@@ -409,18 +421,23 @@ class QuickCam(IQuickCam):
         # Parse the username and password from the URL if it exists.
         userName = None
         password = None
-        if url.find("://") != -1:
-            hostnameAndPath = url.split("://")[1]
-            if hostnameAndPath.find("@") != -1:
-                userNameAndPassword = hostnameAndPath.split("@")[0]
-                if userNameAndPassword.find(":") -1:
-                    userName, password = userNameAndPassword.split(":")
+        protocolEnd = url.find("://")
+        if protocolEnd != -1:
+            authStart = protocolEnd + 3
+            authEnd = url.find("/", authStart)
+            if authEnd == -1:
+                authEnd = len(url)
+            hostnameAndPath = url[authStart:authEnd]
+            atSign = hostnameAndPath.rfind("@")
+            if atSign != -1:
+                userNameAndPassword = hostnameAndPath[:atSign]
+                separator = userNameAndPassword.find(":")
+                if separator != -1:
+                    userName = userNameAndPassword[:separator]
+                    password = userNameAndPassword[separator+1:]
                 else:
                     userName = userNameAndPassword
-                # Remove the username and password from the URL
-                protocolEnd = url.find("://") + 3
-                atSign = url.find("@")
-                url = url[:protocolEnd] + url[atSign+1:]
+                url = url[:authStart] + hostnameAndPath[atSign+1:] + url[authEnd:]
         return url, userName, password
 
 
@@ -435,8 +452,8 @@ class QuickCam_WebSocket:
         # Image getting stuff
         self.ImageBuffer = bytearray()
         self.ExpectedImageSize = 0
-        self.JpegStartSequence = bytearray([0xff, 0xd8, 0xff, 0xe0])
-        self.JpegEndSequence = bytearray([0xff, 0xd9])
+        self.JpegStartSequence = b"\xff\xd8\xff\xe0"
+        self.JpegEndSequence = b"\xff\xd9"
 
 
     # ~~ Interface Function ~~
@@ -451,19 +468,10 @@ class QuickCam_WebSocket:
         # Build the auth packet if needed
         authData = None
         if userName is not None and password is not None:
-            authData= bytearray()
-            authData += struct.pack("<I", 0x40)
-            authData += struct.pack("<I", 0x3000)
-            authData += struct.pack("<I", 0)
-            authData += struct.pack("<I", 0)
-            for _, char in enumerate(userName):
-                authData += struct.pack("<c", char.encode('ascii'))
-            for _ in range(0, 32 - len(userName)):
-                authData += struct.pack("<x")
-            for _, char in enumerate(password):
-                authData += struct.pack("<c", char.encode('ascii'))
-            for _ in range(0, 32 - len(password)):
-                authData += struct.pack("<x")
+            authData = bytearray()
+            authData += struct.pack("<IIII", 0x40, 0x3000, 0, 0)
+            authData += userName.encode("ascii")[:32].ljust(32, b"\0")
+            authData += password.encode("ascii")[:32].ljust(32, b"\0")
 
         # Setup the SSL context to not verify the cert or check the hostname.
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -471,17 +479,11 @@ class QuickCam_WebSocket:
         ctx.verify_mode = ssl.CERT_NONE
 
         # Parse just the hostname from the url.
-        hostname = url
+        parts = urlsplit(url)
+        hostname = parts.hostname or url
         port = 80
-        if hostname.find("://") != -1:
-            hostname = hostname.split("://")[1]
-        # Remove any URL path
-        if hostname.find("/") != -1:
-            hostname = hostname.split("/")[0]
-        # Finally, if there's a port, parse it.
-        if hostname.find(":") != -1:
-            hostname, port = hostname.split(":")
-            port = int(port)
+        if parts.port is not None:
+            port = parts.port
 
         # Create the socket connect and wrap it in SSL.
         self.Socket = socket.create_connection((hostname, port), 5.0)
@@ -522,9 +524,9 @@ class QuickCam_WebSocket:
                 # Check if the image is done.
                 if len(self.ImageBuffer) == self.ExpectedImageSize:
                     # We have the full image. Sanity check the jpeg start and end bytes exist.
-                    if self.ImageBuffer[:4] != self.JpegStartSequence:
+                    if self.ImageBuffer.startswith(self.JpegStartSequence) is False:
                         raise Exception("QuickCam got an image of the expected size, but we failed to find the jpeg start sequence.")
-                    elif self.ImageBuffer[-2:] != self.JpegEndSequence:
+                    elif self.ImageBuffer.endswith(self.JpegEndSequence) is False:
                         raise Exception("QuickCam got an image of the expected size, but we failed to find the jpeg end sequence.")
                     self.ExpectedImageSize = 0
                     buffer = Buffer(self.ImageBuffer)
@@ -620,6 +622,12 @@ class QuickCam_RTSP:
     # How long we will wait for data on each read before timing out.
     c_ReadTimeoutSec = 5.0
 
+    # Keep stdout reads bounded; the previous huge read size can allocate large buffers in the Python IO layer.
+    c_StdoutReadSizeBytes = 64 * 1024
+
+    # We need enough room for larger JPEG frames when stdout arrives in multiple reads.
+    c_MaxPendingImageBufferBytes = 2 * 1024 * 1024
+
     # Adds a ton of logging useful for debugging.
     c_DebugLogging = False
 
@@ -629,12 +637,13 @@ class QuickCam_RTSP:
         self.Process:subprocess.Popen = None #pyright: ignore[reportAttributeAccessIssue]
 
         # Image getting stuff
-        self.Buffer:Optional[bytes] = None
+        self.Buffer:Optional[bytearray] = None
         self.SearchedIndex = 0
-        self.JpegStartSequence = bytearray([0xff, 0xd8, 0xff, 0xfe, 0x00, 0x10])
+        self.JpegStartSequence = b"\xff\xd8\xff\xfe\x00\x10"
         self.JpegStartSequenceLen = len(self.JpegStartSequence)
-        self.JpegEndSequence = bytearray([0xff, 0xd9])
+        self.JpegEndSequence = b"\xff\xd9"
         self.PipeSelect = selectors.DefaultSelector()
+        self.StdoutFd = -1
         self.TimeSinceLastImg = time.time()
 
         # Std Error logic
@@ -685,8 +694,8 @@ class QuickCam_RTSP:
         stdout = self.Process.stdout #pyright: ignore[reportUnknownMemberType]
         if stdout is None:
             raise Exception("QuickCam_RTSP failed to start ffmpeg process. No stdout pipe.")
-        os.set_blocking(stdout.fileno(), False)
-        os.set_blocking(stdout.fileno(), False)
+        self.StdoutFd = stdout.fileno()
+        os.set_blocking(self.StdoutFd, False)
         self.PipeSelect.register(stdout, selectors.EVENT_READ)
 
         # Since we setup the stderr pipe, we must read from it. If it fills it's buffer it will block the ffmpeg process.
@@ -697,9 +706,11 @@ class QuickCam_RTSP:
             self.Logger.debug("Ffmpeg process started.")
 
 
-    # We have to keep this as it's own function, to force the type for pyright.
-    def _Read(self, stdout:Optional[IO[bytes]], readSize:int) -> Optional[bytes]:
-        return stdout.read(readSize) #pyright: ignore[reportOptionalMemberAccess]
+    def _Read(self) -> Optional[bytes]:
+        try:
+            return os.read(self.StdoutFd, QuickCam_RTSP.c_StdoutReadSizeBytes)
+        except BlockingIOError:
+            return None
 
 
     # ~~ Interface Function ~~
@@ -716,12 +727,12 @@ class QuickCam_RTSP:
             # We timeout after 5 seconds, which is plenty of time for the stream to be ready.
             self.PipeSelect.select(QuickCam_RTSP.c_ReadTimeoutSec)
 
-            # Read all of the data we can.
-            buffer = self._Read(stdout, 100000000)
+            # Read a bounded chunk from stdout. If more data is ready, select will return immediately on the next loop.
+            buffer = self._Read()
 
             # Check for a timeout. This can happen because the select timeout, or it's been too long since we got an image parsed.
             # This usually means that ffmpeg has died or is not running correctly.
-            if self.Process.returncode is not None or (time.time() - self.TimeSinceLastImg) > QuickCam_RTSP.c_ReadTimeoutSec: #pyright: ignore[reportUnknownMemberType]
+            if self.Process.poll() is not None or (time.time() - self.TimeSinceLastImg) > QuickCam_RTSP.c_ReadTimeoutSec: #pyright: ignore[reportUnknownMemberType]
                 if self.StdErrBuffer is None or len(self.StdErrBuffer) == 0: #pyright: ignore[reportUnknownMemberType]
                     self.StdErrBuffer = "<None>"
                 raise Exception(f"Ffmpeg read timeout. ffmpeg output:\n{self.StdErrBuffer}") #pyright: ignore[reportUnknownMemberType]
@@ -743,9 +754,9 @@ class QuickCam_RTSP:
 
             # Append this buffer to the current pending buffer.
             if self.Buffer is None:
-                self.Buffer = buffer
+                self.Buffer = bytearray(buffer)
             else:
-                self.Buffer += buffer
+                self.Buffer.extend(buffer)
 
             # Ensure the buffer is long enough to check.
             buffLen = len(self.Buffer)
@@ -761,12 +772,11 @@ class QuickCam_RTSP:
                 return Buffer(img)
 
             # Scan the buffer for the jpeg end sequence.
-            newImageStart = -1
-            while self.SearchedIndex < buffLen - self.JpegStartSequenceLen:
-                if self.Buffer[self.SearchedIndex] == self.JpegEndSequence[0] and self.Buffer[self.SearchedIndex+1] == self.JpegEndSequence[1]:
-                    newImageStart = self.SearchedIndex + 2
-                    break
-                self.SearchedIndex += 1
+            newImageStart = self.Buffer.find(self.JpegEndSequence, self.SearchedIndex)
+            if newImageStart != -1:
+                newImageStart += len(self.JpegEndSequence)
+            else:
+                self.SearchedIndex = max(0, buffLen - len(self.JpegEndSequence) + 1)
 
             # See if we found a complete image.
             if newImageStart != -1:
@@ -799,7 +809,7 @@ class QuickCam_RTSP:
     def _ResetLocalBufferIfOverLimit(self) -> None:
         # A normal image is around 37,000, so if the buffer is too long, reset it so
         # we can try to recover the buffer.
-        if self.Buffer is not None and len(self.Buffer) > 50000:
+        if self.Buffer is not None and len(self.Buffer) > QuickCam_RTSP.c_MaxPendingImageBufferBytes:
             self.Logger.info("Quick cam rtsp buffer reset. This means we are running behind.")
             self._ResetLocalBuffer()
 
@@ -848,9 +858,9 @@ class QuickCam_RTSP:
     def _CheckIfFullJpeg(self, buffer:ByteLike) -> bool:
         if buffer is None or len(buffer) <= self.JpegStartSequenceLen:
             return False
-        if buffer[:self.JpegStartSequenceLen] != self.JpegStartSequence:
+        if buffer.startswith(self.JpegStartSequence) is False:
             return False
-        if buffer[-2:] != self.JpegEndSequence:
+        if buffer.endswith(self.JpegEndSequence) is False:
             return False
         return True
 
