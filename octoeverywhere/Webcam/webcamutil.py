@@ -61,24 +61,31 @@ class WebcamUtil:
                 logger.warning("GetSnapshotFromStream - Failed, the result didn't have a requests lib Response object to read from.")
                 return None
 
-            # Try to read some of the stream, so we can find the content type and the size of this first frame.
-            # We use the raw response, so we can control directly how much we read.
+            # We need to read the headers for this chunk first, to find out how big the image is, and where the content type is.
+            headersSearchSizeLimit = 4096
+            headerBuffer = bytearray(headersSearchSizeLimit)
+            headerBufferPos = 0
+            useReadInto = StreamReadHelper.CanTryReadInto(responseForBodyRead.raw)
+
+            # Read until we find the end of the headers or hit our search limit.
+            foundEndOfHeaders = False
             endOfAllHeadersMatch = b"\r\n\r\n"
-            dataBuffer = responseForBodyRead.raw.read(300)
-            if dataBuffer is None or len(dataBuffer) == 0:
-                logger.info("GetSnapshotFromStream - Failed, no data returned.")
-                return None
-            while dataBuffer.find(endOfAllHeadersMatch) == -1 and len(dataBuffer) < 4096:
-                moreData = responseForBodyRead.raw.read(300)
-                if moreData is None or len(moreData) == 0:
+            while foundEndOfHeaders is False and headerBufferPos < headersSearchSizeLimit:
+                bytesRead, useReadInto = StreamReadHelper.ReadIntoByteArrayFull(responseForBodyRead.raw, headerBuffer, headerBufferPos, len(headerBuffer) - headerBufferPos, useReadInto)
+                if bytesRead is None or bytesRead == 0:
+                    logger.info("GetSnapshotFromStream - Failed, no data returned.")
+                    return None
+                headerBufferPos += bytesRead
+
+                if headerBuffer.find(endOfAllHeadersMatch) != -1:
+                    foundEndOfHeaders = True
                     break
-                dataBuffer += moreData
 
             # Example --boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
             #      or \r\n--boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
             #      or boundarydonotcross\r\nContent-Type: image/jpeg\r\nContent-Length: 48861\r\nX-Timestamp: 2122192.753042\r\n\r\n\x00!AVI1\x00\x01...
             # Find out how long the headers are. The \r\n\r\n sequence ends the headers.
-            headerStrSize = dataBuffer.find(endOfAllHeadersMatch)
+            headerStrSize = headerBuffer.find(endOfAllHeadersMatch)
             if headerStrSize == -1:
                 logger.info("GetSnapshotFromStream - Failed, no end of headers found.")
                 return None
@@ -89,7 +96,7 @@ class WebcamUtil:
             # Try to find the size of this chunk.
             frameSizeInt = 0
             contentType = None
-            headers = dataBuffer[0:headerStrSize].split(b"\r\n")
+            headers = headerBuffer[0:headerStrSize].split(b"\r\n")
             for header in headers:
                 name, _, value = header.partition(b":")
                 nameLower = name.strip().lower()
@@ -120,17 +127,22 @@ class WebcamUtil:
                     logger.info("GetSnapshotFromStream - Failed, failed to find the content type.")
                 return None
 
-            # Read the entire first image into the buffer.
-            # We avoid buffering the multipart headers with the image, which saves a large copy per frame.
+            # Since we have to pass a bytearray into the Buffer class, we need to ensure the buffer is the exact size.
             imageBuffer = bytearray(frameSizeInt)
-            imageBytesRead = len(dataBuffer) - headerStrSize
-            if imageBytesRead > 0:
-                imageBytesRead = min(imageBytesRead, frameSizeInt)
-                imageBuffer[0:imageBytesRead] = dataBuffer[headerStrSize:headerStrSize + imageBytesRead]
-            useReadInto = StreamReadHelper.CanTryReadInto(responseForBodyRead.raw)
-            bytesRead, useReadInto = StreamReadHelper.ReadIntoByteArrayFull(responseForBodyRead.raw, imageBuffer, imageBytesRead, frameSizeInt - imageBytesRead, useReadInto)
-            if bytesRead < frameSizeInt:
-                logger.error("GetSnapshotFromStream - Failed, failed to read the rest of the image buffer. bytesRead: %d, expected: %d", bytesRead, frameSizeInt)
+
+            # If there is extra data after the headers, we need to move it to the start of the buffer so we can read the rest of the image after it.
+            imageBufferPos = headerBufferPos - headerStrSize
+            if headerBufferPos > headerStrSize:
+                imageBuffer[0:imageBufferPos] = headerBuffer[headerStrSize:headerBufferPos]
+
+            # Read the rest of the image data, starting after what we already have, until we have the full image or hit an error.
+            bytesRead, useReadInto = StreamReadHelper.ReadIntoByteArrayFull(responseForBodyRead.raw, imageBuffer, imageBufferPos, frameSizeInt - imageBufferPos, useReadInto)
+            if bytesRead is None or bytesRead == 0:
+                logger.info("GetSnapshotFromStream - Failed to build the rest of the image.")
+                return None
+            imageBufferPos += bytesRead
+            if imageBufferPos != frameSizeInt:
+                logger.info("GetSnapshotFromStream - Failed to read the rest of the image frame. bytesRead: %d, expected: %d", imageBufferPos, frameSizeInt)
                 return None
 
             # Success!
