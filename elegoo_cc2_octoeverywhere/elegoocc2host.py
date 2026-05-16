@@ -118,11 +118,11 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))
 
-            # The Elegoo CC2 only runs a HTTP server to handle websocket connections from the HTML shipped with the slicer.
-            # So we set up our proxy to 9001, so that if any apps try to connect the WS for remote access.
-            OctoHttpRequest.SetLocalHttpProxyPort(9001)
+            # The Elegoo CC2 runs a HTTP server on 9001 for the websocket and web server on 8080 for the webcam stream.
+            # The frontend isn't served, they ship the frontend HTML with the slicer.
+            OctoHttpRequest.SetLocalOctoPrintPort(9001)
+            OctoHttpRequest.SetLocalHttpProxyPort(8080)
             OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
-            OctoHttpRequest.SetLocalOctoPrintPort(9001 )
 
             # For the CC2, we need to send the serial number and access code because they need to be added into the JS in the frontend.
             # These can't change in the plugin unless the user changes them and restarts, so it safe to send them in the handshake.
