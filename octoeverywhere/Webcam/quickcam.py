@@ -18,6 +18,7 @@ from octoeverywhere.interfaces import IQuickCam
 from octoeverywhere.buffer import Buffer, BufferOrNone, ByteLike
 from octoeverywhere.httpresult import HttpResult, HttpResultOrNone
 from octoeverywhere.interfaces import IWebcamPlatformHelper
+from octoeverywhere.streamreadhelper import StreamReadHelper
 
 from .webcamutil import WebcamUtil
 from ..octohttprequest import OctoHttpRequest
@@ -451,7 +452,10 @@ class QuickCam_WebSocket:
 
         # Image getting stuff
         self.ImageBuffer = bytearray()
+        self.ImageBytesRead = 0
         self.ExpectedImageSize = 0
+        self.HeaderBuffer = bytearray(16)
+        self.HeaderBytesRead = 0
         self.JpegStartSequence = b"\xff\xd8\xff\xe0"
         self.JpegEndSequence = b"\xff\xd9"
 
@@ -502,27 +506,37 @@ class QuickCam_WebSocket:
         # Read from the socket
         while True:
             # We have seen this receive fail with SSLWantReadError when the socket if valid and there's more to read. In that case, keep the current socket going and try again.
-            data = None
             try:
                 # We will read either the 16 byte header that starts every image or we will read the remainder of the current image.
-                readSize = 16 if self.ExpectedImageSize == 0 else self.ExpectedImageSize - len(self.ImageBuffer)
-                data = self.SslSocket.recv(readSize)
+                if self.ExpectedImageSize == 0:
+                    readSize = len(self.HeaderBuffer) - self.HeaderBytesRead
+                    bytesRead = StreamReadHelper.RecvInto(self.SslSocket, self.HeaderBuffer, self.HeaderBytesRead, readSize)
+                else:
+                    readSize = self.ExpectedImageSize - self.ImageBytesRead
+                    bytesRead = StreamReadHelper.RecvInto(self.SslSocket, self.ImageBuffer, self.ImageBytesRead, readSize)
             except ssl.SSLWantReadError:
                 time.sleep(1)
                 continue
 
             # If the expected image size is 0, then this is the first read of 16 bytes for the header.
             if self.ExpectedImageSize == 0:
-                if len(data) != 16:
-                    raise Exception(f"QuickCam capture thread got a first payload that was not 16 bytes. len:{len(data)}, bytes:{data.hex()}")
-                self.ExpectedImageSize = int.from_bytes(data[0:3], byteorder='little')
+                if bytesRead == 0:
+                    raise Exception("QuickCam capture thread got an empty header payload.")
+                self.HeaderBytesRead += bytesRead
+                if self.HeaderBytesRead < len(self.HeaderBuffer):
+                    continue
+                self.ExpectedImageSize = int.from_bytes(self.HeaderBuffer[0:3], byteorder='little')
+                self.ImageBuffer = bytearray(self.ExpectedImageSize)
+                self.ImageBytesRead = 0
+                self.HeaderBytesRead = 0
             # Otherwise, we are building an image
             else:
-                # Always add to the current buffer.
-                self.ImageBuffer += data
+                if bytesRead == 0:
+                    raise Exception("QuickCam capture thread got an empty image payload.")
+                self.ImageBytesRead += bytesRead
 
                 # Check if the image is done.
-                if len(self.ImageBuffer) == self.ExpectedImageSize:
+                if self.ImageBytesRead == self.ExpectedImageSize:
                     # We have the full image. Sanity check the jpeg start and end bytes exist.
                     if self.ImageBuffer.startswith(self.JpegStartSequence) is False:
                         raise Exception("QuickCam got an image of the expected size, but we failed to find the jpeg start sequence.")
@@ -531,9 +545,10 @@ class QuickCam_WebSocket:
                     self.ExpectedImageSize = 0
                     buffer = Buffer(self.ImageBuffer)
                     self.ImageBuffer = bytearray()
+                    self.ImageBytesRead = 0
                     return buffer
                 # Sanity check we didn't get misaligned from the stream.
-                elif len(self.ImageBuffer) > self.ExpectedImageSize:
+                elif self.ImageBytesRead > self.ExpectedImageSize:
                     raise Exception(f"QuickCam was building an image expected to be {self.ExpectedImageSize} but ended up with a buffer that was {self.ImageBuffer}")
 
 
@@ -565,6 +580,8 @@ class QuickCam_Jmpeg:
         self.Logger = logger
         self.HttpResult:HttpResultOrNone = None #pyright: ignore[reportAttributeAccessIssue]
         self.IsFirstImagePull = True
+        self.JpegHeaderFixMode = WebcamUtil.c_JpegHeaderFixModeUnknown
+        self.JpegHeaderFixApp0IdentifierStart = 0
 
 
     # ~~ Interface Function ~~
@@ -598,7 +615,12 @@ class QuickCam_Jmpeg:
 
         # We must use the ensure jpeg header info function to ensure the image is a valid jpeg.
         # We know, for example, the Elegoo OS webcam server doesn't send the jpeg header info properly.
-        return WebcamUtil.EnsureJpegHeaderInfo(self.Logger, result.ImageBuffer)
+        if self.JpegHeaderFixMode == WebcamUtil.c_JpegHeaderFixModeUnknown:
+            jpegHeaderInfoResult = WebcamUtil.EnsureJpegHeaderInfoWithDetails(self.Logger, result.ImageBuffer)
+            self.JpegHeaderFixMode = jpegHeaderInfoResult.FixMode
+            self.JpegHeaderFixApp0IdentifierStart = jpegHeaderInfoResult.App0IdentifierStart
+            return jpegHeaderInfoResult.ImageBuffer
+        return WebcamUtil.ApplyCachedJpegHeaderInfo(self.Logger, result.ImageBuffer, self.JpegHeaderFixMode, self.JpegHeaderFixApp0IdentifierStart)
 
 
     # Allows us to using the with: scope.
