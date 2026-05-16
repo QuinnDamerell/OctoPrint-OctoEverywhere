@@ -4,6 +4,7 @@
 
 import octoflatbuffers
 from typing import Any
+from octoeverywhere.Proto.Property import Property
 from typing import Optional
 class HandshakeSyn(object):
     __slots__ = ['_tab']
@@ -183,8 +184,32 @@ class HandshakeSyn(object):
             return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
         return False
 
+    # HandshakeSyn
+    def Properties(self, j: int) -> Optional[Property]:
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(42))
+        if o != 0:
+            x = self._tab.Vector(o)
+            x += octoflatbuffers.number_types.UOffsetTFlags.py_type(j) * 4
+            x = self._tab.Indirect(x)
+            obj = Property()
+            obj.Init(self._tab.Bytes, x)
+            return obj
+        return None
+
+    # HandshakeSyn
+    def PropertiesLength(self) -> int:
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(42))
+        if o != 0:
+            return self._tab.VectorLen(o)
+        return 0
+
+    # HandshakeSyn
+    def PropertiesIsNone(self) -> bool:
+        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(42))
+        return o == 0
+
 def HandshakeSynStart(builder: octoflatbuffers.Builder):
-    builder.StartObject(19)
+    builder.StartObject(20)
 
 def Start(builder: octoflatbuffers.Builder):
     HandshakeSynStart(builder)
@@ -308,6 +333,18 @@ def HandshakeSynAddIsDockerContainer(builder: octoflatbuffers.Builder, isDockerC
 
 def AddIsDockerContainer(builder: octoflatbuffers.Builder, isDockerContainer: bool):
     HandshakeSynAddIsDockerContainer(builder, isDockerContainer)
+
+def HandshakeSynAddProperties(builder: octoflatbuffers.Builder, properties: int):
+    builder.PrependUOffsetTRelativeSlot(19, octoflatbuffers.number_types.UOffsetTFlags.py_type(properties), 0)
+
+def AddProperties(builder: octoflatbuffers.Builder, properties: int):
+    HandshakeSynAddProperties(builder, properties)
+
+def HandshakeSynStartPropertiesVector(builder, numElems: int) -> int:
+    return builder.StartVector(4, numElems, 4)
+
+def StartPropertiesVector(builder, numElems: int) -> int:
+    return HandshakeSynStartPropertiesVector(builder, numElems)
 
 def HandshakeSynEnd(builder: octoflatbuffers.Builder) -> int:
     return builder.EndObject()
