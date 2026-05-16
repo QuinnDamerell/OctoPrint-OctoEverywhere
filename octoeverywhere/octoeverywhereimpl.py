@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from typing import Optional
+from typing import Dict, Optional, Any
 
 from .sentry import Sentry
 from .threaddebug import ThreadDebug
@@ -37,7 +37,8 @@ class OctoEverywhere(IOctoEverywhereHost):
                 pluginVersion:str,
                 serverHostType:int,
                 isCompanion:bool,
-                isDockerContainer:bool
+                isDockerContainer:bool,
+                conProperties:Optional[Dict[str, Any]] = None
                 ) -> None:
         self.Endpoint = endpoint
         self.PrinterId = printerId
@@ -49,6 +50,7 @@ class OctoEverywhere(IOctoEverywhereHost):
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
         self.IsDockerContainer = isDockerContainer
+        self.ConProperties = conProperties
         self.SecondaryServerCons:dict[str, threading.Thread] = {}
         self.SecondaryServerConsLock = threading.Lock()
 
@@ -118,4 +120,4 @@ class OctoEverywhere(IOctoEverywhereHost):
 
 
     def createOctoServerCon(self, endpoint:str, isPrimary:bool, shouldUseLowestLatencyServer:bool, statusChangeHandler:Optional[IStateChangeHandler], runTime:int, summonMethod:int):
-        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType, self.IsCompanion, self.IsDockerContainer)
+        return OctoServerCon(self, endpoint, isPrimary, shouldUseLowestLatencyServer, self.PrinterId, self.PrivateKey, self.Logger, self.UiPopupInvoker, statusChangeHandler, self.PluginVersion, runTime, summonMethod, self.ServerHostType, self.IsCompanion, self.IsDockerContainer, self.ConProperties)

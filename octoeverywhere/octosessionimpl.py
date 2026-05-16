@@ -1,7 +1,7 @@
 import sys
 import threading
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 #
 # This file represents one connection session to the service. If anything fails it is destroyed and a new connection will be made.
@@ -42,7 +42,8 @@ class OctoSession(IOctoSession):
                     pluginVersion:str,
                     serverHostType:int,
                     isCompanion:bool,
-                    isDockerContainer:bool
+                    isDockerContainer:bool,
+                    conProperties:Optional[Dict[str, Any]] = None
                 ):
         self.ActiveWebStreams:Dict[int,OctoWebStream] = {}
         self.ActiveWebStreamsLock = threading.Lock()
@@ -59,6 +60,7 @@ class OctoSession(IOctoSession):
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
         self.IsDockerContainer = isDockerContainer
+        self.ConProperties = conProperties
 
         # Create our server auth helper.
         self.ServerAuth = ServerAuthHelper(self.Logger)
@@ -305,7 +307,7 @@ class OctoSession(IOctoSession):
             # Build the message
             buffer, msgStartOffsetBytes, msgSizeBytes = OctoStreamMsgBuilder.BuildHandshakeSyn(self.PrinterId, self.PrivateKey, self.IsPrimarySession, self.PluginVersion,
                 OctoHttpRequest.GetLocalHttpProxyPort(), LocalIpHelper.TryToGetLocalIpOfConnectionTarget(),
-                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId, self.IsCompanion, self.IsDockerContainer)
+                rasChallenge, rasChallengeKeyVerInt, summonMethod, self.ServerHostType, OsTypeIdentifier.DetectOsType(), receiveCompressionType, deviceId, self.IsCompanion, self.IsDockerContainer, self.ConProperties)
 
             # Send!
             self.OctoStream.SendMsg(buffer, msgStartOffsetBytes, msgSizeBytes)

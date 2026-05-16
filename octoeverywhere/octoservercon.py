@@ -2,7 +2,7 @@ import time
 import random
 import logging
 import threading
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from .sentry import Sentry
 from .buffer import Buffer
@@ -73,6 +73,7 @@ class OctoServerCon(IOctoStream):
                 serverHostType:int,
                 isCompanion:bool,
                 isDockerContainer:bool,
+                conProperties:Optional[Dict[str, Any]] = None
                 ):
         self.ProtocolVersion = 1
         self.OctoSession:Optional[OctoSession] = None
@@ -95,6 +96,7 @@ class OctoServerCon(IOctoStream):
         self.ServerHostType = serverHostType
         self.IsCompanion = isCompanion
         self.IsDockerContainer = isDockerContainer
+        self.ConProperties = conProperties
 
         self.DefaultEndpoint = endpoint
         self.CurrentEndpoint = self.DefaultEndpoint
@@ -163,7 +165,7 @@ class OctoServerCon(IOctoStream):
             self.IsDisconnecting = False
 
         # Create a new session for this websocket connection.
-        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion, self.IsDockerContainer)
+        self.OctoSession = OctoSession(self, self.Logger, self.PrinterId, self.PrivateKey, self.IsPrimaryConnection, self.ActiveSessionId, self.UiPopupInvoker, self.PluginVersion, self.ServerHostType, self.IsCompanion, self.IsDockerContainer, self.ConProperties)
         self.OctoSession.StartHandshake(self.SummonMethod)
 
 

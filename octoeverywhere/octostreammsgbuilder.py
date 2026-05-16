@@ -1,9 +1,10 @@
-from typing import Any, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 import octoflatbuffers
 
 from .buffer import Buffer
 from .Proto import MessageContext
 from .Proto import HandshakeSyn
+from .Proto import Property
 from .Proto import OctoStreamMessage
 
 # A helper class that builds our OctoStream messages as flatbuffers.
@@ -25,10 +26,35 @@ class OctoStreamMsgBuilder:
                             receiveCompressionType:int,
                             deviceId:Optional[str],
                             isCompanion:bool,
-                            isDockerContainer:bool
+                            isDockerContainer:bool,
+                            conProperties:Optional[Dict[str, Any]] = None
                         ) -> Tuple[Buffer, int, int]:
         # Get a buffer
         builder = OctoStreamMsgBuilder.CreateBuffer(500)
+
+        # Build the list of con properties if there are any.
+        propertyTableOffsets:List[int] = []
+        if conProperties is not None:
+            for key, value in conProperties.items():
+                keyOffset = builder.CreateString(key) #pyright: ignore[reportUnknownMemberType]
+                stringValueOffset:Optional[int] = None
+                if isinstance(value, str):
+                    stringValueOffset = builder.CreateString(value) #pyright: ignore[reportUnknownMemberType]
+                Property.Start(builder)
+                Property.AddKey(builder, keyOffset)
+                if stringValueOffset is not None:
+                    Property.AddStrValue(builder, stringValueOffset)
+                if isinstance(value, bool):
+                    Property.AddBoolValue(builder, bool(value))
+                if isinstance(value, int):
+                    Property.AddIntValue(builder, int(value))
+                propertyTableOffsets.append(Property.End(builder))
+        propertyTableVectorOffset:Optional[int] = None
+        if len(propertyTableOffsets) > 0:
+            HandshakeSyn.StartPropertiesVector(builder, len(propertyTableOffsets)) #pyright: ignore[reportUnknownMemberType]
+            for offset in reversed(propertyTableOffsets):
+                 builder.PrependUOffsetTRelative(offset) #pyright: ignore[reportUnknownMemberType]
+            propertyTableVectorOffset = builder.EndVector() #pyright: ignore[reportUnknownMemberType]
 
         # Setup strings
         printerIdOffset = builder.CreateString(printerId) #pyright: ignore[reportUnknownMemberType]
@@ -63,6 +89,8 @@ class OctoStreamMsgBuilder:
         HandshakeSyn.AddReceiveCompressionType(builder, receiveCompressionType)
         if deviceIdOffset is not None:
             HandshakeSyn.AddDeviceId(builder, deviceIdOffset)
+        if propertyTableVectorOffset is not None:
+            HandshakeSyn.AddProperties(builder, propertyTableVectorOffset)
         synOffset = HandshakeSyn.End(builder)
 
         # Create and return.

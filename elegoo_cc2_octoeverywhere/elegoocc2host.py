@@ -21,6 +21,7 @@ from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.mdns import MDns
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
+from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.pingpong import PingPong
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.Proto.ServerHost import ServerHost
@@ -117,10 +118,23 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))
 
+            # The Elegoo CC2 only runs a HTTP server to handle websocket connections from the HTML shipped with the slicer.
+            # So we set up our proxy to 9001, so that if any apps try to connect the WS for remote access.
+            OctoHttpRequest.SetLocalHttpProxyPort(9001)
+            OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
+            OctoHttpRequest.SetLocalOctoPrintPort(9001 )
+
+            # For the CC2, we need to send the serial number and access code because they need to be added into the JS in the frontend.
+            # These can't change in the plugin unless the user changes them and restarts, so it safe to send them in the handshake.
+            conProperties:Dict[str, Any] = {
+                "access_code": self.Config.GetStrRequired(Config.SectionElegoo, Config.ElegooCc2AccessCode, ""),
+                "sn": self.Config.GetStrRequired(Config.SectionElegoo, Config.ElegooCc2PrinterSn, ""),
+            }
+
             OctoEverywhereWsUri = HostCommon.c_OctoEverywhereOctoClientWsUri
             if DevLocalServerAddress_CanBeNone is not None:
                 OctoEverywhereWsUri = "ws://"+DevLocalServerAddress_CanBeNone+"/"+HostCommon.c_OctoEverywhereOctoClientEndpointBase
-            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo2, True, isDockerContainer)
+            oe = OctoEverywhere(OctoEverywhereWsUri, printerId, privateKey, self.Logger, self, self, pluginVersionStr, ServerHost.Elegoo2, True, isDockerContainer, conProperties)
             oe.RunBlocking()
         except Exception as e:
             Sentry.OnException("!! Exception thrown out of main Elegoo CC2 host run function.", e)
