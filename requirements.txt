@@ -17,6 +17,7 @@ dnspython>=2.3.0
 httpx>=0.24.1
 urllib3>=2.0.0
 sentry-sdk>=2.20.0,<3
+pybind11
 #zstandard>=0.22.0,<0.23.0
 
 # Required only for linux host based plugins, used by the installer and the plugin for setup.

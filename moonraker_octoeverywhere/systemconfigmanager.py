@@ -101,6 +101,14 @@ subscriptions:
     @staticmethod
     def EnsureAllowedServicesFile(logger:logging.Logger, klipperConfigDir:str, serviceName:str) -> None:
         try:
+            allowedServiceNames = [serviceName, f"{serviceName}_service"]
+            # K1/K1 Max installs use an init.d file name like S66octoeverywhere_service,
+            # but the update-manager config intentionally maps the managed service name
+            # to "octoeverywhere". Add both so older Moonraker builds can restart the
+            # service after updates.
+            if serviceName.startswith("S66"):
+                allowedServiceNames.append("octoeverywhere")
+
             # Make the expected file path, it should be one folder up from the config folder
             dataRootDir = os.path.abspath(os.path.join(klipperConfigDir, os.pardir))
             allowedServiceFile = os.path.join(dataRootDir, "moonraker.asvc")
@@ -114,12 +122,16 @@ subscriptions:
             # Check if we are already in the file.
             with open(allowedServiceFile, "r", encoding="utf-8") as file:
                 lines = file.readlines()
+                existingEntries = set()
                 for line in lines:
-                    # Use in, because the lines will have new lines and such.
-                    # Match case, because the entry in the file must match the service name case.
-                    if serviceName in line:
-                        logger.info("We found our name existing in the moonraker allowed service file, so there's nothing to do.")
-                        return
+                    entry = line.strip()
+                    if len(entry) != 0:
+                        existingEntries.add(entry)
+
+                missingEntries = [name for name in allowedServiceNames if name not in existingEntries]
+                if len(missingEntries) == 0:
+                    logger.info("We found our name existing in the moonraker allowed service file, so there's nothing to do.")
+                    return
 
             # Add our name.
             try:
@@ -127,8 +139,9 @@ subscriptions:
                     # The current format this doc is not have a trailing \n, so we need to add one.
                     # We also add a few other variants of the name used on different systems. According to the docs only
                     # The one name should be required, but that doesn't seem to be that case on all Moonraker installs.
-                    f.write("\n"+serviceName)
-                    f.write("\n"+f"{serviceName}_service"+"\n")
+                    for name in missingEntries:
+                        f.write("\n"+name)
+                    f.write("\n")
             except PermissionError as e:
                 logger.warning("We tried to write the moonraker allowed services file but don't have permissions "+str(e))
                 return
