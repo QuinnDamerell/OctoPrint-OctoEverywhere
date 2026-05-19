@@ -3,7 +3,7 @@
 OctoEverywhere's Companion Docker image works with: ✅
 
 - [OctoEverywhere Bambu Connect](https://octoeverywhere.com/bambu?source=github_readme_docker) - OctoEverywhere for Bambu Lab 3D printers.
-- [OctoEverywhere Elegoo Connect](https://octoeverywhere.com/elegoo-centauri?source=github_readme_docker) - OctoEverywhere for Elegoo Centauri & Centauri Carbon 3D printers.
+- [OctoEverywhere Elegoo Connect](https://octoeverywhere.com/elegoo-centauri-carbon?source=github_readme_docker) - OctoEverywhere for Elegoo Centauri Carbon (original) and Elegoo Centauri Carbon 2 3D printers.
 - [OctoEverywhere Klipper Companion](https://octoeverywhere.com/?source=github_readme_docker) - OctoEverywhere for Klipper 3D printers.
 
 OctoEverywhere's Companion Docker image **does not work with:** ⛔
@@ -20,11 +20,12 @@ Official Docker Compose: [GitHub Repo File](https://github.com/QuinnDamerell/Oct
 
 ## Required Image Setup Information
 
-There are three modes of the OctoEverywhere docker image depending on what 3D printer you're trying to use.
+There are four modes of the OctoEverywhere docker image depending on what 3D printer you're trying to use.
 
-- `COMPANION_MODE=bambu` - Bambu Connect for Bambu Lab 3D printer.
-- `COMPANION_MODE=elegoo` - Elegoo Connect for the Elegoo Centauri & Centauri Carbon.
-- `COMPANION_MODE=klipper` - For Klipper / Moonraker based 3D printers.
+- `COMPANION_MODE=bambu`      - Bambu Connect for Bambu Lab 3D printer.
+- `COMPANION_MODE=elegoo`     - Elegoo Connect for the Elegoo Centauri & Centauri Carbon (original).
+- `COMPANION_MODE=elegoo_cc2` - Elegoo Connect for the Elegoo Centauri Carbon 2.
+- `COMPANION_MODE=klipper`    - For Klipper / Moonraker based 3D printers.
 
 Different companion modes need different printer information.
 
@@ -42,7 +43,7 @@ These three values must be set as environment vars when you first run the contai
 - SERIAL_NUMBER=(serial number)
 - PRINTER_IP=(ip address)
 
-### Elegoo Connect
+### Elegoo Connect for the Elegoo Centauri Carbon (original)
 
 To use Elegoo Connect, you need to get the following information.
 
@@ -51,6 +52,18 @@ To use Elegoo Connect, you need to get the following information.
 The IP address must be set as an environment var when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
 - PRINTER_IP=(ip address)
+
+### Elegoo Connect for the Elegoo Centauri Carbon 2
+
+To use Elegoo Connect for the CC2, you need to get the following information.
+
+- Your Elegoo CC2 printer's IP address. - https://octoeverywhere.com/s/cc2-ip
+- Your Elegoo CC2 printer's access code - https://octoeverywhere.com/s/cc2-access-code
+
+These two values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
+
+- PRINTER_IP=(ip address)
+- ACCESS_CODE=(access code)
 
 ### Klipper Companion
 
