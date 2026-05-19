@@ -103,6 +103,8 @@ class Cc2ConnectionContext:
         self.AccessCode = accessCode
 
 
+# Here's a really good overview of the elegoo centauri carbon 2 MQTT protocol
+# https://github.com/danielcherubini/elegoo-homeassistant/blob/main/docs/CC2_PROTOCOL.md
 class ElegooCc2Client:
 
     RequestTimeoutSec = 10.0

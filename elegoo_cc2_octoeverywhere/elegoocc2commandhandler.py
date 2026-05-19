@@ -132,7 +132,8 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         if lightName != self.c_ChamberLightName:
             return CommandResponse.Error(400, f"Unknown light name: {lightName}")
 
-        result = ElegooCc2Client.Get().SendRequest(1029, {"brightness": 255 if on else 0})
+        # According to the docs, both brightness is the correct value, but it doesn't wok on some firmware versions and the official elegoo HTML page uses "power" instead.
+        result = ElegooCc2Client.Get().SendRequest(1029, {"brightness": 255 if on else 0, "power" : 1 if on else 0})
         if result.HasError():
             return CommandResponse.Error(400, "Failed to send command to printer.")
         return CommandResponse.Success(None)
