@@ -37,22 +37,8 @@ class Property(object):
             return self._tab.String(o + self._tab.Pos)
         return None
 
-    # Property
-    def IntValue(self):
-        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(8))
-        if o != 0:
-            return self._tab.Get(octoflatbuffers.number_types.Int32Flags, o + self._tab.Pos)
-        return 0
-
-    # Property
-    def BoolValue(self):
-        o = octoflatbuffers.number_types.UOffsetTFlags.py_type(self._tab.Offset(10))
-        if o != 0:
-            return bool(self._tab.Get(octoflatbuffers.number_types.BoolFlags, o + self._tab.Pos))
-        return False
-
 def PropertyStart(builder: octoflatbuffers.Builder):
-    builder.StartObject(4)
+    builder.StartObject(2)
 
 def Start(builder: octoflatbuffers.Builder):
     PropertyStart(builder)
@@ -68,18 +54,6 @@ def PropertyAddStrValue(builder: octoflatbuffers.Builder, strValue: int):
 
 def AddStrValue(builder: octoflatbuffers.Builder, strValue: int):
     PropertyAddStrValue(builder, strValue)
-
-def PropertyAddIntValue(builder: octoflatbuffers.Builder, intValue: int):
-    builder.PrependInt32Slot(2, intValue, 0)
-
-def AddIntValue(builder: octoflatbuffers.Builder, intValue: int):
-    PropertyAddIntValue(builder, intValue)
-
-def PropertyAddBoolValue(builder: octoflatbuffers.Builder, boolValue: bool):
-    builder.PrependBoolSlot(3, boolValue, 0)
-
-def AddBoolValue(builder: octoflatbuffers.Builder, boolValue: bool):
-    PropertyAddBoolValue(builder, boolValue)
 
 def PropertyEnd(builder: octoflatbuffers.Builder) -> int:
     return builder.EndObject()

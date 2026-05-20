@@ -36,18 +36,15 @@ class OctoStreamMsgBuilder:
         propertyTableOffsets:List[int] = []
         if conProperties is not None:
             for key, value in conProperties.items():
+                if not isinstance(value, str):
+                    raise Exception("Only string values are supported in the connection properties. Key: "+key)
                 keyOffset = builder.CreateString(key) #pyright: ignore[reportUnknownMemberType]
                 stringValueOffset:Optional[int] = None
-                if isinstance(value, str):
-                    stringValueOffset = builder.CreateString(value) #pyright: ignore[reportUnknownMemberType]
+                stringValueOffset = builder.CreateString(value) #pyright: ignore[reportUnknownMemberType]
                 Property.Start(builder)
                 Property.AddKey(builder, keyOffset)
                 if stringValueOffset is not None:
                     Property.AddStrValue(builder, stringValueOffset)
-                if isinstance(value, bool):
-                    Property.AddBoolValue(builder, bool(value))
-                if isinstance(value, int):
-                    Property.AddIntValue(builder, int(value))
                 propertyTableOffsets.append(Property.End(builder))
         propertyTableVectorOffset:Optional[int] = None
         if len(propertyTableOffsets) > 0:
