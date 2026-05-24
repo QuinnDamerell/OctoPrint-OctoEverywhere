@@ -219,7 +219,7 @@ class MemoryDebug:
         try:
             # pylint: disable=import-error
             # pylint: disable=import-outside-toplevel
-            import objgraph
+            import objgraph # pyright: ignore[reportMissingModuleSource]
             self._objgraph_available = True
             return objgraph
         except Exception:

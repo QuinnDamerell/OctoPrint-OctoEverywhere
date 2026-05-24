@@ -495,7 +495,7 @@ class QuickCam_WebSocket:
 
         # Send the auth packet
         if authData is not None:
-            self.SslSocket.write(authData)
+            self.SslSocket.sendall(authData)
 
 
     # ~~ Interface Function ~~

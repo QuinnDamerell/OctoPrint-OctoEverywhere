@@ -4,7 +4,7 @@ import random
 import socket
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import paho.mqtt.client as mqtt
 
@@ -528,8 +528,11 @@ class ElegooCc2Client:
             return
 
         method = msg.get("method", None)
-        resultObj = msg.get("result", None)
-        if isinstance(resultObj, dict) and int(resultObj.get("error_code", 0)) == 0:
+        rawResultObj = msg.get("result", None)
+        resultObj:Optional[Dict[str, Any]] = None
+        if isinstance(rawResultObj, dict):
+            resultObj = cast(Dict[str, Any], rawResultObj)
+        if resultObj is not None and int(resultObj.get("error_code", 0)) == 0:
             if method == 1001:
                 self._HandleAttributesUpdate(resultObj)
             elif method == 1002:
@@ -547,11 +550,11 @@ class ElegooCc2Client:
 
             error = msg.get("error", None)
             if isinstance(error, dict):
-                context.SetResultAndEvent(resultObj if isinstance(resultObj, dict) else None, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(error))
-            elif isinstance(resultObj, dict) and int(resultObj.get("error_code", 0)) != 0:
+                context.SetResultAndEvent(resultObj, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(error))
+            elif resultObj is not None and int(resultObj.get("error_code", 0)) != 0:
                 context.SetResultAndEvent(resultObj, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(resultObj.get("error_msg", "Printer command failed.")))
             else:
-                context.SetResultAndEvent(resultObj if isinstance(resultObj, dict) else {})
+                context.SetResultAndEvent(resultObj if resultObj is not None else {})
 
 
     def _HandleStatusMessage(self, msg:Dict[str, Any], isAsyncStatus:bool) -> None:
@@ -734,6 +737,8 @@ class ElegooCc2Client:
             raise Exception("An IP address or hostname must be provided in the config for Elegoo CC2 Connect.")
 
         self.SerialNumber = serialNumber
+        if self.PortStr is None:
+            raise Exception("A port must be provided in the config for Elegoo CC2 Connect.")
         return Cc2ConnectionContext(configIpOrHostname, self.PortStr, serialNumber, accessCode)
 
 

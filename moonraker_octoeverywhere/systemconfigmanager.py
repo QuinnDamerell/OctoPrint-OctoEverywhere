@@ -1,6 +1,7 @@
 import os
 import subprocess
 import logging
+from typing import Set
 
 class SystemConfigManager:
 
@@ -122,7 +123,7 @@ subscriptions:
             # Check if we are already in the file.
             with open(allowedServiceFile, "r", encoding="utf-8") as file:
                 lines = file.readlines()
-                existingEntries = set()
+                existingEntries:Set[str] = set()
                 for line in lines:
                     entry = line.strip()
                     if len(entry) != 0:

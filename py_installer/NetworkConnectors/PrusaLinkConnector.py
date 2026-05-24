@@ -5,7 +5,7 @@ import requests
 from requests.auth import HTTPDigestAuth
 
 from linux_host.config import Config
-from linux_host.networksearch import NetworkSearch
+from linux_host.networksearch import NetworkSearch, NetworkValidationResult
 
 from py_installer.ConfigHelper import ConfigHelper
 from py_installer.Context import Context
@@ -21,7 +21,7 @@ class _PrusaLinkAuthDetails:
         self.ApiKey = apiKey
 
 
-class _PrusaLinkValidationResult:
+class _PrusaLinkValidationResult(NetworkValidationResult):
     def __init__(
         self,
         failedToConnect:bool=False,
@@ -31,6 +31,7 @@ class _PrusaLinkValidationResult:
         printerName:Optional[str]=None,
         exception:Optional[Exception]=None,
     ) -> None:
+        super().__init__(failedToConnect=failedToConnect, failedAuth=failedAuth, exception=exception)
         self.FailedToConnect = failedToConnect
         self.FailedAuth = failedAuth
         self.IsSuccess = success

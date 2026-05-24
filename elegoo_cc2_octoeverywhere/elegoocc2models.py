@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from octoeverywhere.sentry import Sentry
 
@@ -149,6 +149,7 @@ class PrinterState:
     def OnUpdate(self, state:Dict[str, Any]) -> None:
         machineStatus = state.get("machine_status", {})
         if isinstance(machineStatus, dict):
+            machineStatus = cast(Dict[str, Any], machineStatus)
             self.MachineStatus = self._GetIntOrNone(machineStatus, "status", self.MachineStatus)
             self.SubStatus = self._GetIntOrNone(machineStatus, "sub_status", self.SubStatus)
             exceptionStatus = machineStatus.get("exception_status", None)
@@ -158,6 +159,7 @@ class PrinterState:
 
         printStatus = state.get("print_status", {})
         if isinstance(printStatus, dict):
+            printStatus = cast(Dict[str, Any], printStatus)
             self.FileName = self._GetStrOrNone(printStatus, "filename", self.FileName)
             self.TaskId = self._GetStrOrNone(printStatus, "uuid", self.TaskId)
             self.CurrentLayer = self._GetIntOrNone(printStatus, "current_layer", self.CurrentLayer)
@@ -169,21 +171,25 @@ class PrinterState:
 
         extruder = state.get("extruder", {})
         if isinstance(extruder, dict):
+            extruder = cast(Dict[str, Any], extruder)
             self.HotendActual = self._GetFloatOrNone(extruder, "temperature", self.HotendActual)
             self.HotendTarget = self._GetFloatOrNone(extruder, "target", self.HotendTarget)
 
         heaterBed = state.get("heater_bed", {})
         if isinstance(heaterBed, dict):
+            heaterBed = cast(Dict[str, Any], heaterBed)
             self.BedActual = self._GetFloatOrNone(heaterBed, "temperature", self.BedActual)
             self.BedTarget = self._GetFloatOrNone(heaterBed, "target", self.BedTarget)
 
         chamber = state.get("ztemperature_sensor", state.get("chamber", {}))
         if isinstance(chamber, dict):
+            chamber = cast(Dict[str, Any], chamber)
             self.ChamberActual = self._GetFloatOrNone(chamber, "temperature", self.ChamberActual)
             self.ChamberTarget = self._GetFloatOrNone(chamber, "target", self.ChamberTarget)
 
         led = state.get("led", {})
         if isinstance(led, dict):
+            led = cast(Dict[str, Any], led)
             ledStatus = led.get("status", None)
             if ledStatus is not None:
                 self.ChamberLightOn = int(ledStatus) > 0
@@ -239,7 +245,7 @@ class PrinterState:
 
         if self.MachineStatus == PrinterState.MACHINE_PRINTING:
             subState = self.SubStatus
-            subStateStr = PrinterState.SubStatusMap.get(subState, None)
+            subStateStr = PrinterState.SubStatusMap.get(subState, None) if subState is not None else None
             if subState in [
                 PrinterState.SUB_EXTRUDER_PREHEATING,
                 PrinterState.SUB_EXTRUDER_PREHEATING_2,
@@ -370,6 +376,7 @@ class PrinterAttributes:
         self.HardwareVersion = msg.get("hardware_version", self.HardwareVersion)
         softwareVersion = msg.get("software_version", None)
         if isinstance(softwareVersion, dict):
+            softwareVersion = cast(Dict[str, Any], softwareVersion)
             self.OtaVersion = softwareVersion.get("ota_version", self.OtaVersion)
             self.McuVersion = softwareVersion.get("mcu_version", self.McuVersion)
             self.SocVersion = softwareVersion.get("soc_version", self.SocVersion)

@@ -50,7 +50,7 @@ class OctoStreamMsgBuilder:
         if len(propertyTableOffsets) > 0:
             HandshakeSyn.StartPropertiesVector(builder, len(propertyTableOffsets)) #pyright: ignore[reportUnknownMemberType]
             for offset in reversed(propertyTableOffsets):
-                 builder.PrependUOffsetTRelative(offset) #pyright: ignore[reportUnknownMemberType]
+                builder.PrependUOffsetTRelative(offset) #pyright: ignore[reportUnknownMemberType]
             propertyTableVectorOffset = builder.EndVector() #pyright: ignore[reportUnknownMemberType]
 
         # Setup strings

@@ -179,7 +179,10 @@ class MqttWebsocketProxy(IWebSocketClient):
             # We connect with the requested transport. Some printers expose MQTT on a raw TCP port,
             # while others also expose MQTT over WebSocket.
             clientId = "" if connectionContext.ClientId is None else connectionContext.ClientId
-            self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=clientId, transport=connectionContext.Transport) #pyright: ignore[reportPrivateImportUsage]
+            transport = connectionContext.Transport
+            if transport != "tcp" and transport != "websockets" and transport != "unix":
+                raise Exception(f"{self._GetLogMsgStart()} Unsupported MQTT transport: {transport}")
+            self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=clientId, transport=transport) #pyright: ignore[reportPrivateImportUsage]
 
             # Since we are local, we can do more aggressive reconnect logic.
             # The default is min=1 max=120 seconds.

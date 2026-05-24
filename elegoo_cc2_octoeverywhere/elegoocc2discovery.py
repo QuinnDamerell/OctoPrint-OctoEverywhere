@@ -2,7 +2,7 @@ import json
 import logging
 import socket
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from octoeverywhere.sentry import Sentry
 
@@ -69,6 +69,7 @@ class ElegooCc2Discovery:
             if not isinstance(result, dict):
                 logger.debug("Elegoo CC2 discovery response missing result object: %s", msg)
                 return None
+            result = cast(Dict[str, Any], result)
             return ElegooCc2DiscoveryResult(
                 ip,
                 result.get("sn", None),

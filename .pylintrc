@@ -6,7 +6,6 @@ disable=
     C0103, # Disable bad attribute names
     W0511, # Ignore TODOs
     W0231, # Disable warns about init function calls
-    W0601, # OctoPrint global function issues
     R0901, # Too many ancestors
     R0904, # too-many-public-methods
     R0903, # too-few-public-methods
@@ -27,7 +26,6 @@ disable=
     R1724, # Unnecessary "else" after "break"
     R1715, # consider-using-get for dict gets.
     R1711, # Useless return at end of function or method (useless-return)
-    E1136, # Value 'CaseInsensitiveDict' is unsubscriptable (unsubscriptable-object) - pyright and ruff will catch these.
 
 
 
@@ -86,10 +84,6 @@ persistent=yes
 # version used to run pylint.
 # py-version=3.9
 
-# When enabled, pylint would attempt to guess common misconfiguration and emit
-# user-friendly hints instead of false-positive error messages.
-suggestion-mode=yes
-
 # Allow loading of arbitrary C extensions. Extensions are imported into the
 # active Python interpreter and may run arbitrary code.
 unsafe-load-any-extension=no
@@ -118,8 +112,6 @@ disable=raw-checker-failed,
         useless-suppression,
         deprecated-pragma,
         use-symbolic-message-instead,
-        too-many-function-args,
-        keyword-arg-before-vararg,
         use-dict-literal,
         too-many-lines
 

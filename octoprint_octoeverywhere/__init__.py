@@ -415,7 +415,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # This can return a lot of different things, but we don't return anything.
-    def queuing_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, subcode:Any=None, tags:Any=None, *args:Any, **kwargs:Any) -> None:
+    def queuing_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, subcode:Any=None, tags:Any=None, *args:Any, **kwargs:Any) -> None: # pylint: disable=keyword-arg-before-vararg
         # Make sure smart pause is setup, since this can be called really early on startup.
         smartPause = SmartPause.Get()
         if smartPause is None:
@@ -946,19 +946,20 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 __plugin_name__ = "OctoEverywhere!"
 __plugin_pythoncompat__ = ">=3.0,<4" # Only PY3
+__plugin_implementation__:Any = None
+__plugin_hooks__:Dict[str, Any] = {}
 
 def __plugin_load__():
-    global __plugin_implementation__
-    __plugin_implementation__ = OctoeverywherePlugin()
+    plugin = OctoeverywherePlugin()
+    globals()["__plugin_implementation__"] = plugin
 
-    global __plugin_hooks__
-    __plugin_hooks__ = {
-        "octoprint.accesscontrol.keyvalidator": __plugin_implementation__.key_validator,
-        "octoprint.plugin.softwareupdate.check_config": __plugin_implementation__.get_update_information,
-        "octoprint.comm.protocol.gcode.received": __plugin_implementation__.received_gcode,
-        "octoprint.comm.protocol.gcode.sent": __plugin_implementation__.sent_gcode,
-        "octoprint.comm.protocol.gcode.queuing": __plugin_implementation__.queuing_gcode,
+    globals()["__plugin_hooks__"] = {
+        "octoprint.accesscontrol.keyvalidator": plugin.key_validator,
+        "octoprint.plugin.softwareupdate.check_config": plugin.get_update_information,
+        "octoprint.comm.protocol.gcode.received": plugin.received_gcode,
+        "octoprint.comm.protocol.gcode.sent": plugin.sent_gcode,
+        "octoprint.comm.protocol.gcode.queuing": plugin.queuing_gcode,
         # We supply a int here to set our order, so we can be one of the first plugins to execute, to prevent issues.
         # The default order value is 1000
-        "octoprint.comm.protocol.scripts": (__plugin_implementation__.script_hook, 1337),
+        "octoprint.comm.protocol.scripts": (plugin.script_hook, 1337),
     }

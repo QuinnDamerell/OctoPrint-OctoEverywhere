@@ -326,6 +326,8 @@ class ElegooClient:
 
                 # Get the current IP we want to try to connect with.
                 self.WebSocketConnectionIp = self._GetIpForConnectionAttempt(isConnectAttemptFromEventBump)
+                if self.WebSocketConnectionIp is None:
+                    raise Exception("No Elegoo printer IP address is available for this connection attempt.")
 
                 # We must update the local IP to what we are trying to connect to.
                 # This var is system wides and helps other systems access the target client IP.

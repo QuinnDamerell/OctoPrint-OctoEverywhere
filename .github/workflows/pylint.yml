@@ -42,10 +42,13 @@ jobs:
         pylint ./octoprint_octoeverywhere/
         pylint ./moonraker_octoeverywhere/
         pylint ./elegoo_octoeverywhere/
+        pylint ./elegoo_cc2_octoeverywhere/
         pylint ./bambu_octoeverywhere/
+        pylint ./prusalink_octoeverywhere/
         pylint ./linux_host/
         pylint ./py_installer/
         pylint ./docker_octoeverywhere/
+        pylint ./setup.py
 
     - name: 👉 Pyright
       run: |

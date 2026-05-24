@@ -1,6 +1,6 @@
 import logging
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, cast
 
 from octoeverywhere.sentry import Sentry
 
@@ -46,6 +46,7 @@ class PrinterState:
     def OnUpdate(self, status:Dict[str, Any], job:Optional[Dict[str, Any]], info:Optional[Dict[str, Any]]) -> None:
         printer = status.get("printer", {})
         if isinstance(printer, dict):
+            printer = cast(Dict[str, Any], printer)
             self.PrinterState = self._GetStrOrNone(printer, "state", self.PrinterState)
             self.HotendActual = self._GetFloatOrNone(printer, "temp_nozzle", self.HotendActual)
             self.HotendTarget = self._GetFloatOrNone(printer, "target_nozzle", self.HotendTarget)
@@ -55,9 +56,11 @@ class PrinterState:
 
             statusPrinter = printer.get("status_printer", None)
             if isinstance(statusPrinter, dict):
+                statusPrinter = cast(Dict[str, Any], statusPrinter)
                 self.StatusMessage = self._GetStrOrNone(statusPrinter, "message", self.StatusMessage)
             statusConnect = printer.get("status_connect", None)
             if isinstance(statusConnect, dict):
+                statusConnect = cast(Dict[str, Any], statusConnect)
                 self.ConnectMessage = self._GetStrOrNone(statusConnect, "message", self.ConnectMessage)
 
         statusJob = status.get("job", None)
@@ -95,12 +98,14 @@ class PrinterState:
 
             fileObj = job.get("file", None)
             if isinstance(fileObj, dict):
+                fileObj = cast(Dict[str, Any], fileObj)
                 self.FileName = self._GetStrOrNone(fileObj, "display_name", self.FileName)
                 if self.FileName is None:
                     self.FileName = self._GetStrOrNone(fileObj, "name", self.FileName)
                 self.FileSizeBytes = self._GetIntOrNone(fileObj, "size", self.FileSizeBytes)
                 meta = fileObj.get("meta", None)
                 if isinstance(meta, dict):
+                    meta = cast(Dict[str, Any], meta)
                     self.TotalPrintTimeEstSec = self._GetIntOrNone(meta, "estimated_print_time", self.TotalPrintTimeEstSec)
                     if self.TotalPrintTimeEstSec is None:
                         self.TotalPrintTimeEstSec = self._GetIntOrNone(meta, "print_time", self.TotalPrintTimeEstSec)

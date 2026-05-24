@@ -298,7 +298,7 @@ class Sentry:
     @staticmethod
     def _HandleCantCreateThreadException(logger:logging.Logger, e:Exception) -> bool:
         # Filter the exception
-        if e is not RuntimeError or "can't start new thread" not in str(e):
+        if not isinstance(e, RuntimeError) or "can't start new thread" not in str(e):
             return False
 
         # If we can't restart, return false, and the normal exception handling will occur.
@@ -312,7 +312,7 @@ class Sentry:
         Sentry._IsHandlingCantCreateThreadException = True
 
         # Log the error
-        ThreadDebug.DoThreadDumpLogout(logger, True)
+        ThreadDebug.DoThreadDumpLogout(logger)
         logger.error("~~~~~~~~~ Process Restarting Due To Threading Bug ~~~~~~~~~~~~")
         Sentry.OnException("Can't start new thread - restarting the process.", e)
 
