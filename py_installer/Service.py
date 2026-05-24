@@ -53,6 +53,8 @@ class Service:
                 moduleNameToRun = "elegoo_cc2_octoeverywhere"
             else:
                 moduleNameToRun = "elegoo_octoeverywhere"
+        elif context.IsPrusaLinkSetup:
+            moduleNameToRun = "prusalink_octoeverywhere"
 
         # Base on the OS type, install the service differently
         if context.OsType == OsTypes.Debian:
@@ -74,6 +76,9 @@ class Service:
             optionalAfter = ""
         if context.IsElegooSetup:
             serviceName = "Elegoo Printers"
+            optionalAfter = ""
+        if context.IsPrusaLinkSetup:
+            serviceName = "Prusa Link"
             optionalAfter = ""
         s = f'''\
     # OctoEverywhere For {serviceName}

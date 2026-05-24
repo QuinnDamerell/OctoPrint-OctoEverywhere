@@ -19,11 +19,13 @@
 #    OctoEverywhere Companion      - The plugin will connect to Moonraker running on a different device on the same LAN
 #    OctoEverywhere Bambu Connect  - The plugin will connect to A Bambu Lab printer running on the save LAN.
 #    OctoEverywhere Elegoo Connect - The plugin will connect to A Elegoo printer running on the save LAN.
+#    OctoEverywhere Prusa Link     - The plugin will connect to a Prusa Link 3D printer running on the same LAN.
 #
 # For local Klipper or Creality devices, no arguments are required.
 # For a companion install, use the -companion argument.
 # For a Bambu Connect install, use the -bambu argument.
 # For a Elegoo Connect install, use the -elegoo argument.
+# For a Prusa Link install, use the -prusalink argument.
 #
 # Simply run ./install.sh from the git repo root directory to get started!
 #
@@ -371,9 +373,9 @@ check_for_octoprint()
         # Skip, there's no need and we don't have curl.
         return
     else
-        # Check if we are running in the Bambu Connect or Companion mode, if so, don't do this since
+        # Check if we are running in a network connector or Companion mode, if so, don't do this since
         # The device could be running OctoPrint and that's fine.
-        if [[ "$*" == *"-bambu"* ]] || [[ "$*" == *"-companion"* ]]
+        if [[ "$*" == *"-bambu"* ]] || [[ "$*" == *"-companion"* ]] || [[ "$*" == *"-elegoo"* ]] || [[ "$*" == *"-prusalink"* ]] || [[ "$*" == *"-prusa"* ]]
         then
             return
         fi

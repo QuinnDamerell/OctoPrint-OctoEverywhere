@@ -13,6 +13,8 @@ echo "Running pylint on the Elegoo Module..."
 pylint ./elegoo_octoeverywhere/
 echo "Running pylint on the Bambu Module..."
 pylint ./bambu_octoeverywhere/
+echo "Running pylint on the Prusa Link Module..."
+pylint ./prusalink_octoeverywhere/
 echo "Running pylint on the Linux Host Module..."
 pylint ./linux_host/
 echo "Running pylint on the Installer Module..."

@@ -230,6 +230,8 @@ class Installer:
             installTarget = "Bambu"
         elif context.IsElegooSetup:
             installTarget = "ElegooCc2" if context.ElegooPrinterProtocol == ElegooPrinterProtocols.Cc2 else "ElegooCc1"
+        elif context.IsPrusaLinkSetup:
+            installTarget = "PrusaLink"
         elif context.OsType == OsTypes.SonicPad:
             installTarget = "SonicPad"
         elif context.OsType == OsTypes.K1:
@@ -246,7 +248,7 @@ class Installer:
         Logger.Blank()
         Logger.Blank()
         Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-        Logger.Header("    OctoEverywhere For Klipper And Bambu Connect    ")
+        Logger.Header("      OctoEverywhere For Klipper And Connectors     ")
         Logger.Header("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         Logger.Blank()
         Logger.Info("This installer can be used for:")
@@ -255,6 +257,7 @@ class Installer:
         Logger.Info("   - OctoEverywhere Companion - Where this plugin will connect to Moonraker running on a different device on the same LAN.")
         Logger.Info("   - OctoEverywhere Bambu Connect - Where this plugin will connect to a Bambu Lab printer on the same LAN.")
         Logger.Info("   - OctoEverywhere Elegoo Connect - Where this plugin will connect to an Elegoo Centauri Carbon 1 or Centauri Carbon 2 printer on the same LAN.")
+        Logger.Info("   - OctoEverywhere Prusa Link - Where this plugin will connect to a Prusa Link printer on the same LAN.")
         Logger.Blank()
         Logger.Warn("This installer is NOT for:")
         Logger.Info("   - OctoPrint or OctoKlipper - If you're using OctoPrint, install OctoEverywhere directly in OctoPrint from the plugin manager.")
@@ -273,6 +276,7 @@ class Installer:
         Logger.Info("  -companion       - Makes the setup target a OctoEverywhere Companion plugin setup.")
         Logger.Info("  -bambu           - Makes the setup target a OctoEverywhere Bambu Connect plugin setup.")
         Logger.Info("  -elegoo          - Makes the setup target a OctoEverywhere Elegoo Connect plugin setup.")
+        Logger.Info("  -prusalink       - Makes the setup target a Prusa Link server instance.")
         Logger.Info("  -noatuoselect    - Disables auto selecting a moonraker instance, allowing the user to always choose.")
         Logger.Info("  -debug           - Enable debug logging to the console.")
         Logger.Info("  -skipsudoactions - Skips sudo required actions. This is useful for debugging, but will make the install not fully work.")

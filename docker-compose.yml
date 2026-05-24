@@ -8,6 +8,7 @@ services:
         #   - elegoo:     Elegoo Connect For Elegoo Centauri Carbon (original).
         #   - elegoo_cc2: Elegoo Connect For Elegoo Centauri Carbon 2.
         #   - klipper:    Use this for Klipper / Moonraker based printers.
+        #   - prusalink:  Prusa 3D printers running Prusa Link or Prusa Connect.
         #
         # Set this to the mode you want to use, and then uncomment the required settings for the mode bellow.
         - COMPANION_MODE=bambu
@@ -56,6 +57,24 @@ services:
         #- WEBSERVER_PORT=80
 
 
+        # Required For Prusa Link
+        #
+        #  Required - The IP address of your Prusa Link 3D printer
+        #- PRINTER_IP=XXX.XXX.XXX.XXX
+        #
+        #  Required - EITHER your Prusa Link username/password or API key.
+        #
+        #  Get Help -> https://octoeverywhere.com/s/prusa-link-password
+        #- USERNAME=username
+        #- PASSWORD=your-password
+        #
+        #  Get Help -> https://octoeverywhere.com/s/prusa-link-api-key
+        #- API_KEY=your-api-key
+        #
+        #  Optional - The Prusa Link port. This defaults to 80 if not set.
+        #- PRUSALINK_PORT=80
+
+
         #
         # Optional Settings For All Modes
         #
@@ -81,6 +100,7 @@ services:
   #       #   - elegoo:  Elegoo Connect - for Elegoo OS 3D printers such as the Elegoo Centauri & Elegoo Centauri Carbon.
   #       #   - elegoo_cc2: Elegoo Connect For Elegoo Centauri Carbon 2.
   #       #   - klipper: Use this for Klipper / Moonraker based printers.
+  #       #   - prusalink: Prusa Link Connect for Prusa printers running Prusa Link.
   #       #
   #       # Set this to the mode you want to use, and then uncomment the required settings for the mode bellow.
   #       - COMPANION_MODE=bambu
@@ -129,6 +149,23 @@ services:
   #       #
   #       #  Optional - The port of frontend webserver. This defaults to 80 if not set.
   #       #- WEBSERVER_PORT=80
+
+  #       # Required For Prusa Link
+  #       #
+  #       #  Required - The IP address of your Prusa Link 3D printer
+  #       #- PRINTER_IP=XXX.XXX.XXX.XXX
+  #       #
+  #       #  Required - EITHER your Prusa Link username/password or API key.
+  #       #
+  #       #  Get Help -> https://octoeverywhere.com/s/prusa-link-password
+  #       #- USERNAME=username
+  #       #- PASSWORD=your-password
+  #       #
+  #       #  Get Help -> https://octoeverywhere.com/s/prusa-link-api-key
+  #       #- API_KEY=your-api-key
+  #       #
+  #       #  Optional - The Prusa Link port. This defaults to 80 if not set.
+  #       #- PRUSALINK_PORT=80
 
   #       #
   #       # Optional Settings For All Modes

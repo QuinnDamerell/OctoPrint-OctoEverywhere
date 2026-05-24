@@ -134,6 +134,23 @@
                 "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
             ]
         },
+                {
+            "name": "Prusa Link",
+            "type": "debugpy",
+            "request": "launch",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
+            "module": "prusalink_octoeverywhere",
+            "justMyCode": false,
+            "args": [
+                // These args reflect the correct setup for a pi installed with the Companion version of the plugin. These args target the first instance.
+                //
+                // This is the single instance setup
+                "eyJDb25maWdGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLXBydXNhbGluayIsICJMb2dGb2xkZXIiOiAiL2hvbWUvcGkvLm9jdG9ldmVyeXdoZXJlLXBydXNhbGluay9sb2dzIiwgIkxvY2FsRmlsZVN0b3JhZ2VQYXRoIjogIi9ob21lL3BpLy5vY3RvZXZlcnl3aGVyZS1wcnVzYWxpbmsvb2N0b2V2ZXJ5d2hlcmUtc3RvcmUiLCAiU2VydmljZU5hbWUiOiAib2N0b2V2ZXJ5d2hlcmUtcHJ1c2FsaW5rIiwgIlZpcnR1YWxFbnZQYXRoIjogIi9ob21lL3BpL29jdG9ldmVyeXdoZXJlLWVudiIsICJSZXBvUm9vdEZvbGRlciI6ICIvaG9tZS9waS9vY3RvZXZlcnl3aGVyZSIsICJJc0NvbXBhbmlvbiI6IHRydWUsICJDb21wYW5pb25JbnN0YW5jZUlkU3RyIjogIjMifQ==",
+                //
+                // We can optionally pass a dev config json object, which has dev specific overwrites we can make.
+                "{\"LocalServerAddress\":\"\", \"LogLevel\":\"DEBUG\"}"
+            ]
+        },
         {
             "name": "Companion 1 - Klipper (Memray)",
             "type": "debugpy",
@@ -230,7 +247,21 @@
                 // The module requires this json object to be passed.
                 // Normally the install.sh script runs, ensure everything is installed, creates a virtual env, and then runs this module giving it these args.
                 // But for debugging, we can skip that assuming it's already been ran.
-                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -elegoo\"}"
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -elegoo -debug\"}"
+            ]
+        },
+                {
+            "name": "Installer - Prusa Link",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "py_installer",
+            "python": "/home/pi/octoeverywhere-env/bin/python",
+            "justMyCode": false,
+            "args": [
+                // The module requires this json object to be passed.
+                // Normally the install.sh script runs, ensure everything is installed, creates a virtual env, and then runs this module giving it these args.
+                // But for debugging, we can skip that assuming it's already been ran.
+                "{\"OE_REPO_DIR\":\"/home/pi/octoeverywhere\",\"OE_ENV\":\"/home/pi/octoeverywhere-env\",\"USERNAME\":\"pi\",\"USER_HOME\":\"/home/pi\",\"CMD_LINE_ARGS\":\"-skipsudoactions -prusalink -debug\"}"
             ]
         },
         {

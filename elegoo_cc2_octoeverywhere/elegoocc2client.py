@@ -684,6 +684,7 @@ class ElegooCc2Client:
 
     def _GetConnectionContextToTry(self, isConnectAttemptFromEventBump:bool) -> Cc2ConnectionContext:
         self.ConsecutivelyFailedConnectionAttempts += 1
+        self.ConsecutivelyFailedConnectionAttemptsSinceSearch += 1
 
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
         serialNumber = self.Config.GetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, self.SerialNumber)
@@ -709,6 +710,25 @@ class ElegooCc2Client:
             self.Config.SetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, serialNumber)
             self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, discovery.Ip)
             self.Logger.info("Discovered Elegoo CC2 printer %s at %s.", serialNumber, discovery.Ip)
+
+        # If we have failed 3 times in a row and it's been more than a few times since the last search, search now.
+        if self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 3:
+            self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
+            self.Logger.info("Multiple failed connection attempts to Elegoo CC2 printer. Running discovery again...")
+            results = ElegooCc2Discovery.Discover(self.Logger, None, timeoutSec=3.0)
+            if serialNumber is None or len(serialNumber) == 0:
+                self.Logger.info(f"We found {len(results)} Elegoo CC2 printers on the network during discovery. But have no set serial number, so we can't auto rediscover.")
+            else:
+                foundMatchingSerial = False
+                for r in results:
+                    if r.SerialNumber == serialNumber:
+                        foundMatchingSerial = True
+                        self.Logger.info(f"We found the Elegoo CC2 printer with the correct serial number {serialNumber} at {r.Ip}. Updating config and trying to connect there.")
+                        configIpOrHostname = r.Ip
+                        self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, r.Ip)
+                        break
+                if not foundMatchingSerial:
+                    self.Logger.info(f"We found {len(results)} Elegoo CC2 printers on the network during discovery. But none had the correct serial number {serialNumber}.")
 
         if configIpOrHostname is None or len(configIpOrHostname) == 0:
             raise Exception("An IP address or hostname must be provided in the config for Elegoo CC2 Connect.")

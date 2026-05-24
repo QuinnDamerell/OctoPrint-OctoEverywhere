@@ -5,6 +5,7 @@ OctoEverywhere's Companion Docker image works with: ✅
 - [OctoEverywhere Bambu Connect](https://octoeverywhere.com/bambu?source=github_readme_docker) - OctoEverywhere for Bambu Lab 3D printers.
 - [OctoEverywhere Elegoo Connect](https://octoeverywhere.com/elegoo-centauri-carbon?source=github_readme_docker) - OctoEverywhere for Elegoo Centauri Carbon (original) and Elegoo Centauri Carbon 2 3D printers.
 - [OctoEverywhere Klipper Companion](https://octoeverywhere.com/?source=github_readme_docker) - OctoEverywhere for Klipper 3D printers.
+- [OctoEverywhere Prusa Link](https://octoeverywhere.com/prusa-link?source=github_readme_docker) - OctoEverywhere for Prusa 3D printers running Prusa Link or Prusa Connect.
 
 OctoEverywhere's Companion Docker image **does not work with:** ⛔
 
@@ -20,12 +21,13 @@ Official Docker Compose: [GitHub Repo File](https://github.com/QuinnDamerell/Oct
 
 ## Required Image Setup Information
 
-There are four modes of the OctoEverywhere docker image depending on what 3D printer you're trying to use.
+There are five modes of the OctoEverywhere docker image depending on what 3D printer you're trying to use.
 
 - `COMPANION_MODE=bambu`      - Bambu Connect for Bambu Lab 3D printer.
 - `COMPANION_MODE=elegoo`     - Elegoo Connect for the Elegoo Centauri & Centauri Carbon (original).
 - `COMPANION_MODE=elegoo_cc2` - Elegoo Connect for the Elegoo Centauri Carbon 2.
 - `COMPANION_MODE=klipper`    - For Klipper / Moonraker based 3D printers.
+- `COMPANION_MODE=prusalink`  - Prusa Link for Prusa 3D printers running Prusa Link.
 
 Different companion modes need different printer information.
 
@@ -39,9 +41,9 @@ To use Bambu Connect, you need to get the following information.
 
 These three values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
-- ACCESS_CODE=(code)
-- SERIAL_NUMBER=(serial number)
-- PRINTER_IP=(ip address)
+- `ACCESS_CODE=(code)`
+- `SERIAL_NUMBER=(serial number)`
+- `PRINTER_IP=(ip address)`
 
 ### Elegoo Connect for the Elegoo Centauri Carbon (original)
 
@@ -51,7 +53,7 @@ To use Elegoo Connect, you need to get the following information.
 
 The IP address must be set as an environment var when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
-- PRINTER_IP=(ip address)
+- `PRINTER_IP=(ip address)`
 
 ### Elegoo Connect for the Elegoo Centauri Carbon 2
 
@@ -60,10 +62,12 @@ To use Elegoo Connect for the CC2, you need to get the following information.
 - Your Elegoo CC2 printer's IP address. - https://octoeverywhere.com/s/cc2-ip
 - Your Elegoo CC2 printer's access code - https://octoeverywhere.com/s/cc2-access-code
 
+**Note if you disabled the access code on your CC2, use the default value of `123456`.**
+
 These two values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
-- PRINTER_IP=(ip address)
-- ACCESS_CODE=(access code)
+- `PRINTER_IP=(ip address)`
+- `ACCESS_CODE=(access code)`
 
 ### Klipper Companion
 
@@ -76,10 +80,26 @@ To use the Klipper Companion, you need to get the following information.
 
 These three values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
-- PRINTER_IP=(ip address)
-- MOONRAKER_PORT=(port)
-- MOONRAKER_API_KEY=(apiKey)
-- WEBSERVER_PORT=(port)
+- `PRINTER_IP=(ip address)`
+- `MOONRAKER_PORT=(port)`
+- `MOONRAKER_API_KEY=(apiKey)`
+- `WEBSERVER_PORT=(port)`
+
+### Prusa Link Connect
+
+To use Prusa Link Connect, you need to get the following information.
+
+- Your Prusa Link IP address.
+- Your Prusa Link username and password, or your Prusa Link API key.
+
+For help finding the your Prusa Link API key, see https://octoeverywhere.com/s/prusa-link-api-key
+
+These values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
+
+- `PRINTER_IP=(ip address)`
+- `USERNAME=(username)`
+- `PASSWORD=(password)`
+- `API_KEY=(api key)`
 
 ## Required Persistent Storage
 

@@ -95,6 +95,18 @@ class Config:
     ElegooCc2AccessCode = "cc2_access_code"
     ElegooCc2PrinterSn = "cc2_printer_serial_number"
 
+    #
+    # Used only for Prusa Link Connect
+    #
+    SectionPrusaLink = "prusa_link"
+    PrusaLinkDefaultPortStr = "80"
+    PrusaLinkAuthMode = "auth_mode"
+    PrusaLinkAuthModePassword = "password"
+    PrusaLinkAuthModeApiKey = "api_key"
+    PrusaLinkUsername = "username"
+    PrusaLinkPassword = "password"
+    PrusaLinkApiKey = "api_key"
+
 
     # This allows us to add comments into our config.
     # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
@@ -122,6 +134,10 @@ class Config:
         { "Target": ElegooCc2AccessCode,  "Comment": "The LAN only access code to the Elegoo Centauri Carbon 2 printer. See https://octoeverywhere.com/s/cc2-access-code for help."},
         { "Target": ElegooCc2PrinterSn,  "Comment": "The serial number of your Elegoo Centauri Carbon 2 printer. If blank, OctoEverywhere will try to discover it from the printer IP. See https://octoeverywhere.com/s/cc2-sn for help."},
         { "Target": MoonrakerApiKey,  "Comment": "Leave blank unless your Moonraker requires an API key to connect. Moonraker API keys can be generated from the Mainsail or Fluidd."},
+        { "Target": PrusaLinkAuthMode,  "Comment": "The authentication mode used for Prusa Link. Valid values are 'password' to use your Prusa Link username/password or 'api_key' to use the Prusa Link API key."},
+        { "Target": PrusaLinkUsername,  "Comment": "The Prusa Link username, Only used when auth_mode is 'password'."},
+        { "Target": PrusaLinkPassword,  "Comment": "The Prusa Link password. Only used when auth_mode is 'password'. This is stored locally and never uploaded."},
+        { "Target": PrusaLinkApiKey,  "Comment": "The Prusa Link API key. Only used when auth_mode is 'api_key'. See https://octoeverywhere.com/s/prusa-link-api-key for help."},
     ]
 
 

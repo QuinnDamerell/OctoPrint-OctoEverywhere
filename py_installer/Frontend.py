@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple
 import requests
 
+from linux_host.config import Config
 from linux_host.networksearch import NetworkSearch
 
 from .Util import Util
@@ -32,6 +33,15 @@ class Frontend:
             Logger.Debug("Skipping frontend setup, elegoo os only allows for one frontend.")
             frontendPort = "80" if context.ElegooPrinterProtocol == ElegooPrinterProtocols.Cc2 else str(NetworkSearch.c_ElegooDefaultPortStr)
             ConfigHelper.WriteFrontendDetails(context, frontendPort, KnownFrontends.Elegoo)
+            return
+
+        # Prusa Link serves its own UI on the same port as the API.
+        if context.IsPrusaLinkSetup:
+            Logger.Debug("Skipping frontend setup, Prusa Link uses the configured printer web port.")
+            (_, port) = ConfigHelper.TryToGetCompanionDetails(context)
+            if port is None:
+                port = Config.PrusaLinkDefaultPortStr
+            ConfigHelper.WriteFrontendDetails(context, port, KnownFrontends.PrusaLink)
             return
 
         Logger.Debug("Starting Web Interface Setup")

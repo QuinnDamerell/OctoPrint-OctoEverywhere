@@ -19,6 +19,7 @@ class DiscoveryCompanionBambuAndElegoo:
     c_CompanionPluginDataRootFolder_Lower = ".octoeverywhere-companion"
     c_BambuPluginDataRootFolder_Lower = ".octoeverywhere-bambu"
     c_ElegooPluginDataRootFolder_Lower = ".octoeverywhere-elegoo"
+    c_PrusaLinkPluginDataRootFolder_Lower = ".octoeverywhere-prusalink"
 
 
     def Discovery(self, context:Context) -> None:
@@ -38,6 +39,9 @@ class DiscoveryCompanionBambuAndElegoo:
         elif context.IsElegooSetup:
             pluginTypeStr = "Elegoo Connect"
             pluginDataRootFolder = DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower
+        elif context.IsPrusaLinkSetup:
+            pluginTypeStr = "Prusa Link Connect"
+            pluginDataRootFolder = DiscoveryCompanionBambuAndElegoo.c_PrusaLinkPluginDataRootFolder_Lower
 
         # Look for existing companion or bambu data installs.
         existingCompanionFolders:List[str] = []
@@ -147,6 +151,8 @@ class DiscoveryCompanionBambuAndElegoo:
             folderSuffix = folderName_lower[len(DiscoveryCompanionBambuAndElegoo.c_BambuPluginDataRootFolder_Lower):]
         elif folderName_lower.startswith(DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower) is True:
             folderSuffix = folderName_lower[len(DiscoveryCompanionBambuAndElegoo.c_ElegooPluginDataRootFolder_Lower):]
+        elif folderName_lower.startswith(DiscoveryCompanionBambuAndElegoo.c_PrusaLinkPluginDataRootFolder_Lower) is True:
+            folderSuffix = folderName_lower[len(DiscoveryCompanionBambuAndElegoo.c_PrusaLinkPluginDataRootFolder_Lower):]
         else:
             Logger.Error(f"We tried to get an companion, elegoo connect, or bambu connect ID from a non-companion, elegoo connect, or bambu connect data folder. {folderName}")
             raise Exception("We tried to get an companion, elegoo connect, or bambu connect ID from a non-companion, elegoo connect, or bambu connect data folder")

@@ -23,6 +23,7 @@ from .BambuBootstrap import BambuBootstrap
 from .ElegooCc2Bootstrap import ElegooCc2Bootstrap
 from .ElegooBootstrap import ElegooBootstrap
 from .KlipperBootstrap import KlipperBootstrap
+from .PrusaLinkBootstrap import PrusaLinkBootstrap
 
 
 # Possible modes for the companion.
@@ -31,6 +32,7 @@ class CompanionMode(Enum):
     ElegooConnect = 2
     Klipper   = 3
     ElegooCc2Connect = 4
+    PrusaLinkConnect = 5
 
     # Makes to str() cast not to include the class name.
     def __str__(self):
@@ -125,6 +127,8 @@ if __name__ == '__main__':
                 mode = CompanionMode.ElegooCc2Connect
             elif modeStr == "klipper":
                 mode = CompanionMode.Klipper
+            elif modeStr == "prusalink" or modeStr == "prusa_link" or modeStr == "prusa":
+                mode = CompanionMode.PrusaLinkConnect
             logger.info(f"Companion mode: {mode}")
         else:
             logger.info("No companion mode set, defaulting to Bambu Connect.")
@@ -142,6 +146,8 @@ if __name__ == '__main__':
             ElegooCc2Bootstrap.Bootstrap(logger, config)
         elif mode == CompanionMode.Klipper:
             KlipperBootstrap.Bootstrap(logger, config)
+        elif mode == CompanionMode.PrusaLinkConnect:
+            PrusaLinkBootstrap.Bootstrap(logger, config)
         else:
             raise Exception(f"Invalid companion mode: {mode}")
 
@@ -193,6 +199,8 @@ if __name__ == '__main__':
             pyPackage = "elegoo_cc2_octoeverywhere"
         elif mode == CompanionMode.Klipper:
             pyPackage = "moonraker_octoeverywhere"
+        elif mode == CompanionMode.PrusaLinkConnect:
+            pyPackage = "prusalink_octoeverywhere"
 
         # Instead of running the plugin in our process, we decided to launch a different process so it's clean and runs
         # just like the plugin normally runs.

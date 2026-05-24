@@ -2,7 +2,7 @@ import os
 import subprocess
 # pylint: disable=import-error # Only exists on linux
 import pwd
-from typing import Tuple
+from typing import List, Tuple
 
 from .Logging import Logger
 from .Context import Context
@@ -75,6 +75,24 @@ class Util:
             except Exception as e:
                 Logger.Warn("Invalid input, try again. Logger.Error: "+str(e))
         return val == "y"
+
+
+    # Helper to ask the user a multi answer question.
+    @staticmethod
+    def AskMultipleChoiceQuestion(question:str, options:List[str]) -> int:
+        while True:
+            Logger.Info(question)
+            for i, option in enumerate(options):
+                Logger.Info(f"  {i+1}) {option}")
+            val = None
+            try:
+                Logger.Blank()
+                val = input("Enter the number next to your choice: ").strip()
+                selection = int(val) - 1
+                if selection >= 0 and selection < len(options):
+                    return selection
+            except Exception as e:
+                Logger.Warn("Invalid input, try again. Logger.Error: "+str(e))
 
 
     @staticmethod

@@ -83,6 +83,9 @@ class Context:
         # Note that this indicates we are using Elegoo Connect, but we won't know which printer protocol until we do the discovery process.
         self.IsElegooSetup:bool = False
 
+        # Parsed from the command line args, if set, this plugin should be installed as a Prusa Link connector.
+        self.IsPrusaLinkSetup:bool = False
+
         # Set during Elegoo Connect configuration after the installer discovers the printer protocol.
         self.ElegooPrinterProtocol:ElegooPrinterProtocols = None #pyright: ignore[reportAttributeAccessIssue] we allow these to not be optional, so logic doesn't have to check. The validation function will check before they are used.
 
@@ -154,7 +157,7 @@ class Context:
 
     # Returns true if the target is a companion, bambu connect, or elegoo connect setup.
     def IsCompanionBambuOrElegoo(self) -> bool:
-        return self.IsCompanionSetup or self.IsBambuSetup or self.IsElegooSetup
+        return self.IsCompanionSetup or self.IsBambuSetup or self.IsElegooSetup or self.IsPrusaLinkSetup
 
 
     # Returns true if this is a bambu, elegoo, companion plugin and it's the primary, aka it has an instance ID of 1.
@@ -277,6 +280,9 @@ class Context:
                     Logger.Debug("Setup running in Elegoo Connect setup mode.")
                     # Note this is used for both the CC1 and CC2, we will determine which one during the discovery phase.
                     self.IsElegooSetup = True
+                elif rawArgLower == "prusalink" or rawArgLower == "prusa-link" or rawArgLower == "prusa":
+                    Logger.Debug("Setup running in Prusa Link Connect setup mode.")
+                    self.IsPrusaLinkSetup = True
                 elif rawArgLower == "update" or rawArgLower == "upgrade":
                     Logger.Debug("Setup running in update mode.")
                     self.IsUpdateMode = True

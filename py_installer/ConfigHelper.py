@@ -15,6 +15,7 @@ class KnownFrontends(Enum):
     Fluidd   = 3
     Creality = 4 # This is Creality's K1 default web interface (not nearly as good as the others)
     Elegoo   = 5 # This is Elegoo's default web interface.
+    PrusaLink = 6 # Prusa Link's default web interface.
 
     # Makes to str() cast not to include the class name.
     def __str__(self):
@@ -252,6 +253,51 @@ class ConfigHelper:
         except Exception as e:
             Logger.Error("Failed to write elegoo cc2 details to config. "+str(e))
             raise Exception("Failed to write elegoo cc2 details to config") from e
+
+    #
+    # Prusa Link Only
+    #
+
+    @staticmethod
+    def TryToGetPrusaLinkData(context:Optional[Context]=None, configFolderPath:Optional[str]=None) -> Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+        try:
+            c = ConfigHelper._GetConfig(context, configFolderPath)
+            if c is None:
+                return (None, None, None, None)
+            authMode = c.GetStr(Config.SectionPrusaLink, Config.PrusaLinkAuthMode, None)
+            username = c.GetStr(Config.SectionPrusaLink, Config.PrusaLinkUsername, None)
+            password = c.GetStr(Config.SectionPrusaLink, Config.PrusaLinkPassword, None)
+            apiKey = c.GetStr(Config.SectionPrusaLink, Config.PrusaLinkApiKey, None)
+            return (authMode, username, password, apiKey)
+        except Exception as e:
+            Logger.Warn("Failed to parse Prusa Link details from existing config. "+str(e))
+        return (None, None, None, None)
+
+
+    @staticmethod
+    def WritePrusaLinkDigestDetails(context:Context, username:str, password:str) -> None:
+        try:
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkAuthMode, Config.PrusaLinkAuthModePassword)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkUsername, username)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkPassword, password)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkApiKey, None)
+        except Exception as e:
+            Logger.Error("Failed to write Prusa Link details to config. "+str(e))
+            raise Exception("Failed to write Prusa Link details to config") from e
+
+
+    @staticmethod
+    def WritePrusaLinkApiKeyDetails(context:Context, apiKey:str) -> None:
+        try:
+            c = ConfigHelper._GetConfig_CreateIfNotExisting(context)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkAuthMode, Config.PrusaLinkAuthModeApiKey)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkUsername, None)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkPassword, None)
+            c.SetStr(Config.SectionPrusaLink, Config.PrusaLinkApiKey, apiKey)
+        except Exception as e:
+            Logger.Error("Failed to write Prusa Link details to config. "+str(e))
+            raise Exception("Failed to write Prusa Link details to config") from e
 
     #
     # Moonraker Only
