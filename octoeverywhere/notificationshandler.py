@@ -86,7 +86,7 @@ class NotificationsHandler(INotificationHandler):
         self.ProgressCompletionReported = []
         self.RestorePrintProgressPercentage = False
 
-        self.SpammyEventTimeDict:dict[str, SpammyEventContext] = {}
+        self.SpammyEventTimeDict:Dict[str, SpammyEventContext] = {}
         self.SpammyEventLock = threading.Lock()
 
         # Call this to init all of the vars to their default values.
@@ -844,7 +844,7 @@ class NotificationsHandler(INotificationHandler):
             flipH = WebcamHelper.Get().GetWebcamFlipH()
             flipV = WebcamHelper.Get().GetWebcamFlipV()
             rotation = WebcamHelper.Get().GetWebcamRotation()
-            if rotation is not None and flipH is not None and flipV is not None and rotation != 0 or flipH or flipV or snapshotResizeParams is not None:
+            if (rotation is not None and flipH is not None and flipV is not None and rotation != 0) or flipH or flipV or snapshotResizeParams is not None:
                 try:
                     if Image is not None: #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
 

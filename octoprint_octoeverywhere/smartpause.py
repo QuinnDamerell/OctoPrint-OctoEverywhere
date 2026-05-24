@@ -45,8 +45,8 @@ class SmartPause(ISmartPauseHandler):
         # Used to hold any pause or resume scripts that should be applied when we get
         # the hook for pause and resume. Since that hook fires whenever the printer does a pause
         # and resume, these will stay empty until we do our smart pause and resume.
-        self.PauseScripts:list[str] = []
-        self.ResumeScripts:list[str] = []
+        self.PauseScripts:List[str] = []
+        self.ResumeScripts:List[str] = []
         self._ResetScripts()
 
 
@@ -125,10 +125,10 @@ class SmartPause(ISmartPauseHandler):
         # Start the the hotend, order matters once again.
         # If we are doing both the hotend and bed, we want the bed to re-enable first, to ensure the print sticks.
         # We also need to make sure the cooling is done after the retraction.
-        currentTemps:dict[str, Any] = self.OctoPrintPrinterObj.get_current_temperatures() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
+        currentTemps:Dict[str, Any] = self.OctoPrintPrinterObj.get_current_temperatures() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
         if disableHotendBool:
             # https://docs.octoprint.org/en/master/modules/printer.html#octoprint.printer.profile.PrinterProfileManager
-            extruder:dict[str, Any] = self.OctoPrintPrinterProfileObj.get("extruder") #pyright: ignore[reportAssignmentType]
+            extruder:Dict[str, Any] = self.OctoPrintPrinterProfileObj.get("extruder") #pyright: ignore[reportAssignmentType]
             count = extruder.get("count", 1)
 
             # If there is a shared nozzle, only work with the first tool, if there is one.

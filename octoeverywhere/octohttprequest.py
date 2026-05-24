@@ -342,7 +342,7 @@ class OctoHttpRequest:
         # most of these systems don't need auth headers or anything.
         # Strangely this seems to only work on Linux, where as on Windows the request.request function will throw a 'An existing connection was forcibly closed by the remote host' error.
         # Thus for windows, if the response is ever null, try again. This isn't ideal, but most windows users are just doing dev anyways.
-        if response is not None and response.status_code == 431 or (platform.system() == "Windows" and response is None):
+        if (response is not None and response.status_code == 431) or (platform.system() == "Windows" and response is None):
             if response is not None and response.status_code == 431:
                 logger.info(url + " http call returned 431, too many headers. Trying again with no headers.")
             else:

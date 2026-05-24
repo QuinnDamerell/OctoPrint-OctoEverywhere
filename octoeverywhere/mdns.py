@@ -244,9 +244,7 @@ class MDns:
             self.LogDebug("Failed to get our local IP, using the first returned result.")
             return ipList[0]
 
-        matches:List[bool] = []
-        for ip in ipList:
-            matches.append(True)
+        matches:List[bool] = [True] * len(ipList)
 
         # See which IP in our list matches this the best.
         offset = 0

@@ -2,7 +2,7 @@ import json
 import socket
 import threading
 import ipaddress
-from typing import Any, Optional, Tuple, List
+from typing import Any, Dict, Optional, Tuple, List
 
 from octoeverywhere.websocketimpl import Client
 from octoeverywhere.interfaces import IWebSocketClient, WebSocketOpCode
@@ -202,7 +202,7 @@ class MoonrakerConnector:
     def _CheckForMoonraker(self, ip:str, port:str, apiKey:Optional[str]=None, timeoutSec:float=5.0) -> MoonrakerConnectionResult:
         doneEvent = threading.Event()
         lock = threading.Lock()
-        result:dict[str, Any] = {}
+        result:Dict[str, Any] = {}
 
         # Create the URL
         url = f"ws://{ip}:{port}/websocket"

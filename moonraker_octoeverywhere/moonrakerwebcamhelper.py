@@ -494,7 +494,7 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
         if value is None:
             self.Logger.debug("Returned FLUIDD webcam with the value key not found.")
             return False
-        cameras:Optional[list[Dict[str, Any]]] = value.get("cameras", None)
+        cameras:Optional[List[Dict[str, Any]]] = value.get("cameras", None)
         # In newer versions, value is a object with a property 'cameras' that holds an array of camera objects.
         if cameras is not None and isinstance(cameras, list) and len(cameras) > 0:
             self.Logger.debug("Found %s cameras list in the FLUIDD custom namespace.", len(cameras))

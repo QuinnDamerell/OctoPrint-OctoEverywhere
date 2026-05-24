@@ -3,3 +3,6 @@
 
 # Exclude the proto folder for Ruff since we can't control it.
 extend-exclude = ["octoeverywhere/Proto"]
+
+[lint]
+extend-select = ["B", "RUF021"]

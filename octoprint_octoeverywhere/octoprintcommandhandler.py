@@ -41,7 +41,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         try:
             # Get the date from the octoprint printer object.
-            currentData:dict[str, Any] = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
+            currentData:Dict[str, Any] = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
 
             # Get progress
             progress = 0.0

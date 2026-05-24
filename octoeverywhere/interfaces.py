@@ -270,6 +270,7 @@ class IPlatformCommandHandler(ABC):
 class ILocalAuth(ABC):
 
     # Adds the auth header with the auth key.
+    @abstractmethod
     def AddAuthHeader(self, headers:Dict[str,str]) -> None:
         pass
 

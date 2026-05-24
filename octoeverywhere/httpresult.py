@@ -1,6 +1,6 @@
 from __future__ import annotations # Needed for PY 3.7.3 on the Elegoo Neptune 4 Plus, otherwise customBodyStreamClosedCallback:Optional[Callable[[],None]]=None breaks.
 import logging
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import requests
 from requests.structures import CaseInsensitiveDict
@@ -170,7 +170,7 @@ class HttpResult():
         if self._requestLibResponseObj is None:
             raise Exception("ReadAllContentFromStreamResponse was called on a result with no request lib Response object.")
         # It's more efficient to gather the data in a single buffer, and append together at the end.
-        buffers:list[bytes | bytearray] = []
+        buffers:List[Union[bytes, bytearray]] = []
 
         # In the past, we used iter_content, but it has a lot of overhead and also doesn't read all available data, it will only read a chunk if the transfer encoding is chunked.
         # This isn't great because it's slow and also we don't need to reach each chunk, process it, just to dump it in a buffer and read another.

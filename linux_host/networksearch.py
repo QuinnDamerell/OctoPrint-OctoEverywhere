@@ -105,7 +105,7 @@ class NetworkSearch:
             ) -> List[ElegooNetworkSearchResult]:
 
         # First, define our result list and our test function callback.
-        foundPrinters:dict[str, NetworkValidationResult] = {}
+        foundPrinters:Dict[str, NetworkValidationResult] = {}
         def callback(ip:str):
             result = NetworkSearch.ValidateConnection_Elegoo(logger, ip, portStr, timeoutSec=2)
             # We want to keep track of successful printers and ones we know are Elegoo printers, but we can't connect to.
@@ -304,7 +304,7 @@ class NetworkSearch:
                 portStr = NetworkSearch.c_ElegooDefaultPortStr
             port = int(portStr)
             logger.debug("Testing for Elegoo printer on %s:%s", ipOrHostname, port)
-            result:dict[str, Any] = {}
+            result:Dict[str, Any] = {}
             result["Event"] = threading.Event()
 
             def onWsOpen(ws:IWebSocketClient):

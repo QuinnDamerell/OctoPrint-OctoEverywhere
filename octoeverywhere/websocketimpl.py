@@ -5,12 +5,12 @@ import socket
 import time
 import threading
 import logging
-from typing import Any, Dict, List, Callable, Optional
+from typing import Any, Dict, List, Callable, Optional, Tuple
 
 import certifi
 import octowebsocket
 
-from octowebsocket import WebSocketApp, WebSocket
+from octowebsocket import WebSocketApp
 
 from .interfaces import WebSocketOpCode, IWebSocketClient
 from .buffer import Buffer, BufferOrNone
@@ -97,7 +97,7 @@ class Client(IWebSocketClient):
         # We want to hold all callbacks the client gave us as weak and not hold any strong refs to ourself in those callbacks, to prevent circular references that can lead to memory leaks.
         weakSelf = weakref.ref(self)
         weakOnWsOpen = WeakCallback(onWsOpen) if onWsOpen else None
-        def OnOpen(ws:WebSocket):
+        def OnOpen(ws:WebSocketApp):
             if weakOnWsOpen is None:
                 return
             strongSelf = weakSelf()
@@ -108,7 +108,7 @@ class Client(IWebSocketClient):
         # Note that the API says this only takes one arg, but after looking into the code
         # _get_close_args will try to send 3 args sometimes. There have been client errors showing that
         # sometimes it tried to send 3 when we only accepted 1.
-        def OnClosed(ws:WebSocket, code:Any, msg:Any):
+        def OnClosed(ws:WebSocketApp, code:Any, msg:Any):
             strongSelf = weakSelf()
             if strongSelf is None:
                 return
@@ -122,7 +122,7 @@ class Client(IWebSocketClient):
             strongSelf._FireCloseCallback() #pylint: disable=protected-access
 
         weakOnData = WeakCallback(onWsData) if onWsData else None
-        def OnData(ws:WebSocket, buffer:bytearray, msgType:int, msgFin:bool):
+        def OnData(ws:WebSocketApp, buffer:bytearray, msgType:int, msgFin:bool):
             # Note, we only fire on data when the msgFin is True!
             # OnData is called each time a chunk arrives and then when the full buffer is received.
             # To make things more simple, we only worry about the full buffer.
@@ -135,7 +135,7 @@ class Client(IWebSocketClient):
             if strongSelf is not None and strongOnData is not None:
                 strongOnData(strongSelf, Buffer(buffer), WebSocketOpCode.FromWsLibInt(msgType))
 
-        def OnError(ws:WebSocket, exception:Exception):
+        def OnError(ws:WebSocketApp, exception:Exception):
             # For this special case, call our function.
             strongSelf = weakSelf()
             if strongSelf is None:
@@ -216,7 +216,7 @@ class Client(IWebSocketClient):
             if ws is None:
                 return
             # Tune TCP behavior for lower-latency sends and better throughput on lossy links.
-            sockopt:List[tuple[int, int, int]] = [
+            sockopt:List[Tuple[int, int, int]] = [
                 (socket.IPPROTO_TCP, socket.TCP_NODELAY, 1),
                 (socket.SOL_SOCKET, socket.SO_SNDBUF, self.c_SocketSendBufferBytes),
                 (socket.SOL_SOCKET, socket.SO_RCVBUF, self.c_SocketReceiveBufferBytes),

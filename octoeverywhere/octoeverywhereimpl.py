@@ -51,7 +51,7 @@ class OctoEverywhere(IOctoEverywhereHost):
         self.IsCompanion = isCompanion
         self.IsDockerContainer = isDockerContainer
         self.ConProperties = conProperties
-        self.SecondaryServerCons:dict[str, threading.Thread] = {}
+        self.SecondaryServerCons:Dict[str, threading.Thread] = {}
         self.SecondaryServerConsLock = threading.Lock()
 
 

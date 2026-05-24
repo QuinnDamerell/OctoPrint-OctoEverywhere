@@ -100,7 +100,7 @@ class ElegooClient:
 
         # Setup the request response system.
         self.RequestLock = threading.Lock()
-        self.RequestPendingContexts:dict[str, MsgWaitingContext] = {}
+        self.RequestPendingContexts:Dict[str, MsgWaitingContext] = {}
 
         #
         # Websocket Vars

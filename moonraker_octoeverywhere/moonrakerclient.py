@@ -65,7 +65,7 @@ class MoonrakerClient(IMoonrakerClient):
         # Setup the json-rpc vars
         self.JsonRpcIdLock = threading.Lock()
         self.JsonRpcIdCounter = 0
-        self.JsonRpcWaitingContexts:dict[int, JsonRpcWaitingContext] = {}
+        self.JsonRpcWaitingContexts:Dict[int, JsonRpcWaitingContext] = {}
 
         # Setup the Moonraker compat helper object.
         cooldownThresholdTempC = self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
@@ -73,7 +73,7 @@ class MoonrakerClient(IMoonrakerClient):
 
         # Setup the non response message thread
         # See _NonResponseMsgQueueWorker to why this is needed.
-        self.NonResponseMsgQueue:queue.Queue[dict[str,Any]] = queue.Queue(20000)
+        self.NonResponseMsgQueue:queue.Queue[Dict[str, Any]] = queue.Queue(20000)
         self.NonResponseMsgThread = threading.Thread(target=self._NonResponseMsgQueueWorker)
         self.NonResponseMsgThread.start()
 
@@ -693,7 +693,7 @@ class MoonrakerClient(IMoonrakerClient):
     def _onWsData(self, ws:IWebSocketClient, msgBytes:Buffer, opCode:WebSocketOpCode) -> None:
         try:
             # Parse the incoming message.
-            msgObj:dict[str, Any] = json.loads(msgBytes.GetBytesLike())
+            msgObj:Dict[str, Any] = json.loads(msgBytes.GetBytesLike())
 
             # Get the method if there is one.
             method:Optional[str] = None

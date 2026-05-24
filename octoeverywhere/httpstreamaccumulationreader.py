@@ -2,7 +2,7 @@ import collections
 import logging
 import threading
 import time
-from typing import  Optional
+from typing import Deque, Optional
 
 import urllib3.exceptions
 
@@ -45,7 +45,7 @@ class HttpStreamAccumulationReader:
         self.MaxReturnBufferSizeBytes = maxReturnBufferSizeBytes
 
         # We use a list so we can efficiently append all of the pending buffers at once when they are being sent.
-        self.BufferList:collections.deque[bytes] = collections.deque()
+        self.BufferList:Deque[bytes] = collections.deque()
         self.BufferListPendingSize:int = 0
         self.BufferLock = threading.Lock()
         self.BufferDataReadyEvent = threading.Event()
@@ -143,7 +143,7 @@ class HttpStreamAccumulationReader:
 
         try:
             readCallStartTimeSec = time.time()
-            accumulatedBufferList:Optional[collections.deque[bytes]] = None
+            accumulatedBufferList:Optional[Deque[bytes]] = None
             accumulatedBufferListSizeBytes = 0
             mustReturnAccumulatedBuffers = False
             firstAccumulatedBufferTime = None
