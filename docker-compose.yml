@@ -3,18 +3,20 @@ services:
   octoeverywhere-connect:
     image: octoeverywhere/octoeverywhere:latest
     environment:
-        # Required: The mode of OctoEverywhere Companion you want use.
-        #   - bambu:      Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
+        # Required: The mode of the OctoEverywhere Companion plugin you want to use:
+        #   - bambu:      Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, X1, X2, H2, etc.
+        #   - prusalink:  Prusa 3D printers running PrusaLink or Prusa Connect.
+        #   - klipper:    Use this for Klipper / Moonraker based printers.
         #   - elegoo:     Elegoo Connect For Elegoo Centauri Carbon (original).
         #   - elegoo_cc2: Elegoo Connect For Elegoo Centauri Carbon 2.
-        #   - klipper:    Use this for Klipper / Moonraker based printers.
-        #   - prusalink:  Prusa 3D printers running Prusa Link or Prusa Connect.
         #
-        # Set this to the mode you want to use, and then uncomment the required settings for the mode bellow.
+        # Set this to the mode you want to use.
+        # YOU MUST ALSO UNCOMMENT THE REQUIRED SETTINGS FOR THE MODE BELLOW.
         - COMPANION_MODE=bambu
 
 
-        # Required for Bambu Connect
+        #
+        # Bambu Connect
         #
         #  https://octoeverywhere.com/s/access-code
         #- ACCESS_CODE=5285c831
@@ -26,13 +28,15 @@ services:
         #- PRINTER_IP=10.0.0.23
 
 
-        # Required for Elegoo Connect - Elegoo Centauri Carbon (original)
+        #
+        # Elegoo Connect - Elegoo Centauri Carbon (original)
         #
         #  Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
         #- PRINTER_IP=XXX.XXX.XXX.XXX
 
 
-        # Required for Elegoo Connect - Elegoo Centauri Carbon 2
+        #
+        # Elegoo Connect - Elegoo Centauri Carbon 2
         #
         #  Find using the printer's display or use https://octoeverywhere.com/s/cc2-ip
         #- PRINTER_IP=XXX.XXX.XXX.XXX
@@ -42,7 +46,8 @@ services:
         #- ACCESS_CODE=123456
 
 
-        # Required For Klipper / Moonraker
+        #
+        # Klipper / Moonraker
         #
         #  Required - The IP address of the Klipper/Moonraker/Webserver/Printer
         #- PRINTER_IP=XXX.XXX.XXX.XXX
@@ -57,12 +62,13 @@ services:
         #- WEBSERVER_PORT=80
 
 
-        # Required For Prusa Link
         #
-        #  Required - The IP address of your Prusa Link 3D printer
+        #  PrusaLink
+        #
+        #  Required - The IP address of your PrusaLink 3D printer
         #- PRINTER_IP=XXX.XXX.XXX.XXX
         #
-        #  Required - EITHER your Prusa Link username/password or API key.
+        #  Required - EITHER your PrusaLink username/password or API key.
         #
         #  Get Help -> https://octoeverywhere.com/s/prusa-link-password
         #- USERNAME=username
@@ -87,26 +93,26 @@ services:
       - ./data:/data
 
 
-
-
   #
-  # Add as many printers and printer types as you want!
+  # Add as many printers and modes as you want!
   #
   # octoeverywhere-connect-2:
   #   image: octoeverywhere/octoeverywhere:latest
   #   environment:
-  #       # Required: The mode of OctoEverywhere Companion you want use.
-  #       #   - bambu:   Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, and X1 series.
-  #       #   - elegoo:  Elegoo Connect - for Elegoo OS 3D printers such as the Elegoo Centauri & Elegoo Centauri Carbon.
+  #       # Required: The mode of the OctoEverywhere Companion plugin you want to use:
+  #       #   - bambu:      Bambu Connect - for Bambu Lab 3D printers such as the Bambu Lab A1, P1, X1, X2, H2, etc.
+  #       #   - prusalink:  Prusa 3D printers running PrusaLink or Prusa Connect.
+  #       #   - klipper:    Use this for Klipper / Moonraker based printers.
+  #       #   - elegoo:     Elegoo Connect For Elegoo Centauri Carbon (original).
   #       #   - elegoo_cc2: Elegoo Connect For Elegoo Centauri Carbon 2.
-  #       #   - klipper: Use this for Klipper / Moonraker based printers.
-  #       #   - prusalink: Prusa Link Connect for Prusa printers running Prusa Link.
   #       #
-  #       # Set this to the mode you want to use, and then uncomment the required settings for the mode bellow.
+  #       # Set this to the mode you want to use.
+  #       # YOU MUST ALSO UNCOMMENT THE REQUIRED SETTINGS FOR THE MODE BELLOW.
   #       - COMPANION_MODE=bambu
 
+
   #       #
-  #       # Required for Bambu Connect
+  #       # Bambu Connect
   #       #
   #       #  https://octoeverywhere.com/s/access-code
   #       #- ACCESS_CODE=5285c831
@@ -119,24 +125,25 @@ services:
 
 
   #       #
-  #       # Required for Elegoo Connect
+  #       # Elegoo Connect - Elegoo Centauri Carbon (original)
   #       #
   #       #  Find using the printer's display or use https://octoeverywhere.com/s/elegoo-ip
   #       #- PRINTER_IP=XXX.XXX.XXX.XXX
 
 
-  #      # Required for Elegoo Connect - Elegoo Centauri Carbon 2
-  #      #
-  #      #  Find using the printer's display or use https://octoeverywhere.com/s/cc2-ip
-  #      #- PRINTER_IP=XXX.XXX.XXX.XXX
-  #      #
-  #      #  Find using the printer's display or use https://octoeverywhere.com/s/cc2-access-code
-  #      #  If the access code is disabled on the printer, use the default value of '123456'.
-  #      #- ACCESS_CODE=123456
+  #       #
+  #       # Elegoo Connect - Elegoo Centauri Carbon 2
+  #       #
+  #       #  Find using the printer's display or use https://octoeverywhere.com/s/cc2-ip
+  #       #- PRINTER_IP=XXX.XXX.XXX.XXX
+  #       #
+  #       #  Find using the printer's display or use https://octoeverywhere.com/s/cc2-access-code
+  #       #  If the access code is disabled on the printer, use the default value of '123456'.
+  #       #- ACCESS_CODE=123456
 
 
   #       #
-  #       # Required For Klipper / Moonraker
+  #       # Klipper / Moonraker
   #       #
   #       #  Required - The IP address of the Klipper/Moonraker/Webserver/Printer
   #       #- PRINTER_IP=XXX.XXX.XXX.XXX
@@ -150,12 +157,14 @@ services:
   #       #  Optional - The port of frontend webserver. This defaults to 80 if not set.
   #       #- WEBSERVER_PORT=80
 
-  #       # Required For Prusa Link
+
   #       #
-  #       #  Required - The IP address of your Prusa Link 3D printer
+  #       #  PrusaLink
+  #       #
+  #       #  Required - The IP address of your PrusaLink 3D printer
   #       #- PRINTER_IP=XXX.XXX.XXX.XXX
   #       #
-  #       #  Required - EITHER your Prusa Link username/password or API key.
+  #       #  Required - EITHER your PrusaLink username/password or API key.
   #       #
   #       #  Get Help -> https://octoeverywhere.com/s/prusa-link-password
   #       #- USERNAME=username
@@ -166,6 +175,7 @@ services:
   #       #
   #       #  Optional - The Prusa Link port. This defaults to 80 if not set.
   #       #- PRUSALINK_PORT=80
+
 
   #       #
   #       # Optional Settings For All Modes

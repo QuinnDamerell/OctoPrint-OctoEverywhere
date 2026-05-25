@@ -3,6 +3,7 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 from octoeverywhere.mdns import MDns
+from octoeverywhere.mqttmux.tcpbroker import LocalTcpBrokerServer
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.telemetry import Telemetry
@@ -164,6 +165,9 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             # Setup and start the Bambu Client
             BambuClient.Init(self.Logger, self.Config, stateTranslator)
+
+            # If enabled in config, expose a local TCP MQTT broker that multiplexes through the same upstream connection the plugin uses.
+            LocalTcpBrokerServer.MaybeStartFromConfig(self.Logger, self.Config, BambuClient.Get().GetMux(), upstream_auth_check=BambuClient.Get().GetBrokerAuthCheck())
 
             # Create our MQTT websocket proxy provider.
             Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))

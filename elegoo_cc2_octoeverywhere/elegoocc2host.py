@@ -19,6 +19,7 @@ from octoeverywhere.interfaces import IHostCommandHandler, IPopUpInvoker, IState
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.mdns import MDns
+from octoeverywhere.mqttmux.tcpbroker import LocalTcpBrokerServer
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -116,6 +117,11 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             ElegooCc2FileManager.Init(self.Logger)
             ElegooCc2Client.Init(self.Logger, self.Config, printerId, pluginVersionStr, stateTranslator, ElegooCc2FileManager.Get())
 
+            # If enabled in config, expose a local TCP MQTT broker that multiplexes through the same upstream connection the plugin uses.
+            LocalTcpBrokerServer.MaybeStartFromConfig(
+                self.Logger, self.Config, ElegooCc2Client.Get().GetMux(),
+                upstream_auth_check=ElegooCc2Client.Get().GetBrokerAuthCheck(),
+            )
             Compat.SetMqttWebsocketProxyProviderBuilder(MqttWebsocketProxyProviderBuilder(self.Logger))
 
             # The Elegoo CC2 runs a HTTP server on 9001 for the websocket and web server on 8080 for the webcam stream.

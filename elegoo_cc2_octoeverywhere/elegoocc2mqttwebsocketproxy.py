@@ -1,26 +1,12 @@
 import logging
-from typing import Any, Callable, Dict, Optional
 
-from octoeverywhere.mqttwebsocketproxy import (
-    IMqttWebsocketProxyConnector,
-    MqttConnectionContext,
-    MqttWebsocketProxyProviderBuilder as CommonMqttWebsocketProxyProviderBuilder,
-)
-
-from .elegoocc2client import ElegooCc2Client
+from octoeverywhere.mqttmux.relayproxy import MqttRelayWebSocketProxyProviderBuilder
 
 
-class ElegooCc2MqttWebsocketProxyConnector(IMqttWebsocketProxyConnector):
+# Elegoo CC2's mux is registered under the constant key "elegoo-cc2" (see
+# ElegooCc2Client.__init__). Same name preservation pattern as the Bambu
+# relay builder above so the host code import path is unchanged.
+class MqttWebsocketProxyProviderBuilder(MqttRelayWebSocketProxyProviderBuilder):
 
-    def __init__(self, logger:logging.Logger) -> None:
-        self.Logger = logger
-
-
-    def GetConnectionContext(self, args:Optional[Dict[str, Any]], isClosed:Callable[[], bool]) -> Optional[MqttConnectionContext]:
-        return ElegooCc2Client.Get().GetMqttProxyConnectionContext(args, isClosed)
-
-
-class MqttWebsocketProxyProviderBuilder(CommonMqttWebsocketProxyProviderBuilder):
-
-    def __init__(self, logger:logging.Logger):
-        super().__init__(logger, ElegooCc2MqttWebsocketProxyConnector(logger))
+    def __init__(self, logger: logging.Logger) -> None:
+        super().__init__(logger, mux_key="elegoo-cc2")

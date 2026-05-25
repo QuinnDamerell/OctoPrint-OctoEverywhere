@@ -107,6 +107,18 @@ class Config:
     PrusaLinkPassword = "password"
     PrusaLinkApiKey = "api_key"
 
+    #
+    # MQTT multiplexer: shared upstream connection plus optional local TCP
+    # MQTT broker exposing the printer's broker on the LAN.
+    #
+    SectionMqtt = "mqtt"
+    MqttLocalBrokerEnabled = "enable"
+    MqttLocalBrokerBind = "bind_ip"
+    MqttLocalBrokerPort = "port"
+    MqttLocalBrokerRequireUpstreamAuth = "require_upstream_auth"
+    MqttLocalBrokerUsername = "username"
+    MqttLocalBrokerPassword = "password"
+
 
     # This allows us to add comments into our config.
     # The objects must have two parts, first, a string they target. If the string is found, the comment will be inserted above the target string. This can be a section or value.
@@ -138,6 +150,12 @@ class Config:
         { "Target": PrusaLinkUsername,  "Comment": "The Prusa Link username, Only used when auth_mode is 'password'."},
         { "Target": PrusaLinkPassword,  "Comment": "The Prusa Link password. Only used when auth_mode is 'password'. This is stored locally and never uploaded."},
         { "Target": PrusaLinkApiKey,  "Comment": "The Prusa Link API key. Only used when auth_mode is 'api_key'. See https://octoeverywhere.com/s/prusa-link-api-key for help."},
+        { "Target": MqttLocalBrokerEnabled,  "Comment": "If true, OctoEverywhere exposes a local MQTT broker server that muxes all MQTT clients down to one MQTT client connection to the 3D printer. Standards-compliant: any MQTT 3.1.1 client (mosquitto_pub/sub, Home Assistant, etc.) can connect."},
+        { "Target": MqttLocalBrokerBind,  "Comment": "Bind address for the local MQTT broker server. Use 127.0.0.1 to restrict to this machine, 0.0.0.0 to accept LAN connections."},
+        { "Target": MqttLocalBrokerPort,  "Comment": "TCP port for the local MQTT broker server. Standard MQTT is 1883."},
+        { "Target": MqttLocalBrokerRequireUpstreamAuth,  "Comment": "If true (default), the local MQTT broker server requires the same credentials as the 3D printer to connect. (for Bambu: 'bblp' + access code; for Elegoo: 'elegoo' + access code). Set to false to disable upstream-credential auth and use the static username/password in the MQTT config."},
+        { "Target": MqttLocalBrokerUsername,  "Comment": "Optional static username for local MQTT broker server auth. Only used when require_upstream_auth is false. Leave blank to allow anonymous connections (NOT recommended on a LAN)."},
+        { "Target": MqttLocalBrokerPassword,  "Comment": "Optional static password for local MQTT broker server auth. Only used when require_upstream_auth is false. Leave blank to allow anonymous connections (NOT recommended on a LAN)."},
     ]
 
 

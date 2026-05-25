@@ -5,12 +5,12 @@ OctoEverywhere's Companion Docker image works with: ✅
 - [OctoEverywhere Bambu Connect](https://octoeverywhere.com/bambu?source=github_readme_docker) - OctoEverywhere for Bambu Lab 3D printers.
 - [OctoEverywhere Elegoo Connect](https://octoeverywhere.com/elegoo-centauri-carbon?source=github_readme_docker) - OctoEverywhere for Elegoo Centauri Carbon (original) and Elegoo Centauri Carbon 2 3D printers.
 - [OctoEverywhere Klipper Companion](https://octoeverywhere.com/?source=github_readme_docker) - OctoEverywhere for Klipper 3D printers.
-- [OctoEverywhere Prusa Link](https://octoeverywhere.com/prusa-link?source=github_readme_docker) - OctoEverywhere for Prusa 3D printers running Prusa Link or Prusa Connect.
+- [OctoEverywhere PrusaLink](https://octoeverywhere.com/prusalink?source=github_readme_docker) - OctoEverywhere for Prusa 3D printers running PrusaLink or Prusa Connect.
 
 OctoEverywhere's Companion Docker image **does not work with:** ⛔
 
 - [OctoEverywhere For OctoPrint](https://octoeverywhere.com/?source=github_readme_docker) - Install the OctoEverywhere plugin directly in OctoPrint.
-- [OctoEverywhere For Klipper](https://octoeverywhere.com/?source=github_readme_docker) - If you can install OctoEverywhere on the same device running Klipper, it's the recommended setup. Otherwise use the OctoEverywhere Klipper Companion.
+- [OctoEverywhere For Klipper](https://octoeverywhere.com/?source=github_readme_docker) - If you can install OctoEverywhere on the same device running Klipper, it's the recommended setup. Otherwise, use the OctoEverywhere Klipper Companion.
 
 
 🤔 Confused? [Follow our step-by-step guide](https://octoeverywhere.com/getstarted?source=github_readme_docker_guide) to find the right version for your 3D printer!
@@ -21,13 +21,13 @@ Official Docker Compose: [GitHub Repo File](https://github.com/QuinnDamerell/Oct
 
 ## Required Image Setup Information
 
-There are five modes of the OctoEverywhere docker image depending on what 3D printer you're trying to use.
+There are five modes of the OctoEverywhere Docker image, depending on what 3D printer you're trying to use.
 
 - `COMPANION_MODE=bambu`      - Bambu Connect for Bambu Lab 3D printer.
-- `COMPANION_MODE=elegoo`     - Elegoo Connect for the Elegoo Centauri & Centauri Carbon (original).
-- `COMPANION_MODE=elegoo_cc2` - Elegoo Connect for the Elegoo Centauri Carbon 2.
 - `COMPANION_MODE=klipper`    - For Klipper / Moonraker based 3D printers.
 - `COMPANION_MODE=prusalink`  - Prusa Link for Prusa 3D printers running Prusa Link.
+- `COMPANION_MODE=elegoo`     - Elegoo Connect for the Elegoo Centauri & Centauri Carbon (original).
+- `COMPANION_MODE=elegoo_cc2` - Elegoo Connect for the Elegoo Centauri Carbon 2.
 
 Different companion modes need different printer information.
 
@@ -92,7 +92,7 @@ To use Prusa Link Connect, you need to get the following information.
 - Your Prusa Link IP address.
 - Your Prusa Link username and password, or your Prusa Link API key.
 
-For help finding the your Prusa Link API key, see https://octoeverywhere.com/s/prusa-link-api-key
+For help finding your Prusa Link API key, see https://octoeverywhere.com/s/prusa-link-api-key
 
 These values must be set as environment vars when you first run the container. Once the container is run, you don't need to include them again, unless you want to update the values.
 
@@ -103,11 +103,11 @@ These values must be set as environment vars when you first run the container. O
 
 ## Required Persistent Storage
 
-You must map the `/data` folder in your docker container to a directory on your computer so the plugin can write data that will remain between runs. Failure to do this will require relinking the plugin when the container is destroyed or updated.
+You must map the `/data` folder in your Docker container to a directory on your computer so the plugin can write data that will remain between runs. Failure to do this will require relinking the plugin when the container is destroyed or updated.
 
 ## Linking Your OctoEverywhere Companion
 
-Once the docker container is running, you need to look at the logs to find the linking URL.
+Once the Docker container is running, you need to look at the logs to find the linking URL.
 
 Docker Compose:
 `docker compose logs | grep https://octoeverywhere.com/getstarted`
@@ -119,7 +119,7 @@ Docker:
 
 ## Using Docker Compose
 
-Using docker compose is the easiest way to run the OctoEverywhere Companion is using docker image.
+Using docker compose is the easiest way to run the OctoEverywhere Companion is using Docker image.
 
 - Install [Docker and Docker Compose](https://docs.docker.com/compose/install/linux/)
 - Clone this repo
@@ -129,7 +129,7 @@ Using docker compose is the easiest way to run the OctoEverywhere Companion is u
 
 ## Using Docker
 
-Docker compose is a fancy wrapper to run docker containers. You can also run docker containers manually.
+Docker Compose is a fancy wrapper to run Docker containers. You can also run Docker containers manually.
 
 Use a command like this example, but update the required vars.
 
@@ -139,6 +139,6 @@ Follow the "Linking Your OctoEverywhere Companion" to link the plugin with your 
 
 ## Building The Image Locally
 
-You can build the docker image locally if you prefer, use the following command.
+You can build the Docker image locally if you prefer, use the following command.
 
 `docker build -t octoeverywhere .`

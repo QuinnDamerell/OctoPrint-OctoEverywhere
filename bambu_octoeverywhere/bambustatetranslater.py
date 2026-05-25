@@ -99,12 +99,14 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         # We want to finalize any current print.
         if bambuState.IsPrinting(True) is False:
             # See if there's a print info for the last print.
-            pi = PrintInfoManager.Get().GetPrintInfo(bambuState.GetPrintCookie())
-            if pi is not None:
-                # Check if the print info has a final duration set yet or not.
-                if pi.GetFinalPrintDurationSec() is None:
-                    # We know we aren't printing, so regardless of the non-printing state, set the final duration.
-                    pi.SetFinalPrintDurationSec(int(time.time()-pi.GetLocalPrintStartTimeSec()))
+            cookie = bambuState.GetPrintCookie()
+            if cookie is not None:
+                pi = PrintInfoManager.Get().GetPrintInfo(cookie)
+                if pi is not None:
+                    # Check if the print info has a final duration set yet or not.
+                    if pi.GetFinalPrintDurationSec() is None:
+                        # We know we aren't printing, so regardless of the non-printing state, set the final duration.
+                        pi.SetFinalPrintDurationSec(int(time.time()-pi.GetLocalPrintStartTimeSec()))
 
 
     def BambuOnStart(self, bambuState:BambuState) -> None:

@@ -318,7 +318,7 @@ class QuickCam(IQuickCam):
                     camImpl = QuickCam_Jmpeg(self.Logger)
                     # The elegoo webcam server doesn't like us to stream too long, so set a short-ish max time
                     # remember the client streams will not be effected, there will only be a small gap in the stream images.
-                    maxSingleStreamTimeSec = 60
+                    maxSingleStreamTimeSec = 120
                 else:
                     self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
                     return

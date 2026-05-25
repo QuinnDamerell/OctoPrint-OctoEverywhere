@@ -1,10 +1,9 @@
 import json
 import logging
 import random
-import socket
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
@@ -12,14 +11,26 @@ from linux_host.config import Config
 from linux_host.localwebapi import LocalWebApi
 
 from octoeverywhere.localip import LocalIpHelper
-from octoeverywhere.mqttwebsocketproxy import MqttConnectionContext
+from octoeverywhere.mqttmux.localclient import LocalPluginClient
+from octoeverywhere.mqttmux.mux import (
+    MqttConnectionContext as MuxConnectionContext,
+    MqttUpstreamMux,
+)
+from octoeverywhere.mqttmux.muxregistry import MqttMuxRegistry
+from octoeverywhere.mqttmux.types import ConnAckReturnCode, MqttMessage, SubToken
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.repeattimer import RepeatTimer
 from octoeverywhere.sentry import Sentry
 
-from .elegoocc2discovery import ElegooCc2Discovery
+from .elegoocc2discovery import ElegooCc2Discovery, ElegooCc2DiscoveryResult
 from .elegoocc2models import PrinterAttributes, PrinterState
 from .interfaces import IFileManager, IStateTranslator
+
+
+# Stable registry key for the mux. Each host process serves one Elegoo printer
+# today, but using a vendor-prefixed key (rather than the SN, which may be
+# unknown at startup) keeps lookups simple for the relay/local-broker code.
+_MUX_KEY = "elegoo-cc2"
 
 
 class ResponseMsg:
@@ -42,26 +53,20 @@ class ResponseMsg:
         if self.ErrorCode == ResponseMsg.ELEGOO_CMD_ERROR_GENERIC:
             self.ErrorStr = "Printer responded with a failed command result."
 
-
     def HasError(self) -> bool:
         return self.ErrorCode != 0
-
 
     def GetErrorCode(self) -> int:
         return self.ErrorCode
 
-
     def IsErrorCodeOeError(self) -> bool:
         return self.ErrorCode >= ResponseMsg.OE_ERROR_MIN and self.ErrorCode <= ResponseMsg.OE_ERROR_MAX
-
 
     def GetErrorStr(self) -> Optional[str]:
         return self.ErrorStr
 
-
     def GetLoggingErrorStr(self) -> str:
         return str(self.ErrorCode) + " - " + str(self.ErrorStr)
-
 
     def GetResult(self) -> Optional[Dict[str, Any]]:
         return self.Result
@@ -76,17 +81,14 @@ class MqttWaitingContext:
         self.ErrorCode:int = 0
         self.ErrorMessage:Optional[str] = None
 
-
     def GetEvent(self) -> threading.Event:
         return self.WaitEvent
-
 
     def SetResultAndEvent(self, result:Optional[Dict[str, Any]], errorCode:int=0, errorMessage:Optional[str]=None) -> None:
         self.Result = result
         self.ErrorCode = errorCode
         self.ErrorMessage = errorMessage
         self.WaitEvent.set()
-
 
     def SetSocketClosed(self) -> None:
         self.Result = None
@@ -105,15 +107,31 @@ class Cc2ConnectionContext:
 
 # Here's a really good overview of the elegoo centauri carbon 2 MQTT protocol
 # https://github.com/danielcherubini/elegoo-homeassistant/blob/main/docs/CC2_PROTOCOL.md
+#
+# As of the mqttmux refactor this class no longer owns a paho connection. It
+# constructs an MqttUpstreamMux for the Elegoo printer and attaches a
+# LocalPluginClient to drive the CC2-specific protocol on top:
+#   1. CONNECT to the broker (mux).
+#   2. Subscribe to elegoo/{SN}/{requestId}/register_response.
+#   3. Publish a register request to elegoo/{SN}/api_register.
+#   4. On register-OK, subscribe to api_status and api_response.
+#   5. Once both are SUBACK'd, the registration is finalized and the heartbeat
+#      ping/pong (PING -> PONG) keeps the link alive.
+#
+# All of this is driven by one worker thread per upstream connection; the
+# heartbeat runs continuously and is a no-op when not registered.
 class ElegooCc2Client:
 
     RequestTimeoutSec = 10.0
     RegistrationTimeoutSec = 10.0
+    PongTimeoutSec = 65.0
+    HeartbeatIntervalSec = 10.0
     DefaultAccessCode = "123456"
 
     _Instance:"ElegooCc2Client" = None #pyright: ignore[reportAssignmentType]
 
     MqttMessageDebugging = False
+
 
     @staticmethod
     def Init(logger:logging.Logger, config:Config, pluginId:str, pluginVersion:str, stateTranslator:IStateTranslator, fileManager:IFileManager) -> None:
@@ -133,37 +151,41 @@ class ElegooCc2Client:
         self.StateTranslator = stateTranslator
         self.FileManager = fileManager
 
+        # SendRequest correlation table (msgId -> waiter).
         self.RequestLock = threading.Lock()
         self.RequestPendingContexts:Dict[int, MqttWaitingContext] = {}
         self.NextRequestId = random.randint(1000, 100000)
 
-        self.Client:Optional[mqtt.Client] = None
-        self.MqttConnected = False
-        self.MqttRegistered = False
-        self.ConnectionFinalized = False
-        self.LastConnectionFailedDueToTooManyClients = False
-        self.SleepEvent = threading.Event()
+        # Connection / registration state. Guarded by StateLock unless noted.
+        self.StateLock = threading.Lock()
         self.CurrentConnectionContext:Optional[Cc2ConnectionContext] = None
         self.CurrentClientId:Optional[str] = None
         self.RegisterRequestId:Optional[str] = None
-        self.RegisterSubscribeMid:Optional[int] = None
-        self.StatusSubscribeMid:Optional[int] = None
-        self.ResponseSubscribeMid:Optional[int] = None
-        self.StatusSubscribed = False
-        self.ResponseSubscribed = False
+        self.ConnectionGeneration = 0
+        self.MqttRegistered = False
+        self.ConnectionFinalized = False
+        self.LastConnectionFailedDueToTooManyClients = False
+        self.LastPongTimeSec = 0.0
         self.WebsocketConnectionIp:Optional[str] = None
+        # Sub tokens held only while connected; cleared on disconnect so the
+        # mux's reconnect-replay doesn't re-issue subs against the old topic
+        # strings (which embed the now-stale client id).
+        self._register_response_token:Optional[SubToken] = None
+        self._status_token:Optional[SubToken] = None
+        self._response_token:Optional[SubToken] = None
+        # Backoff counters for the connection-context provider.
         self.ConsecutivelyFailedConnectionAttempts = 0
         self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
         self.HasDoneNetScanSincePluginStart = False
-        self.LastStatusId:Optional[int] = None
-        self.MissedStatusCounter = 0
-        self.LastPongTimeSec = 0.0
 
+        # Printer state. Touches happen on the report callback (paho thread).
         self.State:Optional[PrinterState] = None
         self.Attributes:Optional[PrinterAttributes] = None
         self.FullStatus:Dict[str, Any] = {}
-        self._CleanupStateOnDisconnect()
+        self.LastStatusId:Optional[int] = None
+        self.MissedStatusCounter = 0
 
+        # Required config.
         self.PortStr = config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, "1883")
         if self.PortStr is None:
             self.PortStr = "1883"
@@ -179,13 +201,35 @@ class ElegooCc2Client:
         OctoHttpRequest.SetLocalHttpProxyIsHttps(False)
         OctoHttpRequest.SetLocalHttpProxyPort(80)
 
-        t = threading.Thread(target=self._ClientWorker, name="ElegooCc2Client")
-        t.start()
+        # Build mux + local client.
+        # The mux is the one actual MQTT connection to the printer, all others share it.
+        self._mux = MqttUpstreamMux(
+            logger=logger,
+            printer_key=_MUX_KEY,
+            connection_context_provider=self._BuildConnectionContext,
+            subscribe_timeout_sec=15.0,
+            publish_timeout_sec=20.0,
+            backoff_min_sec=5.0,
+            backoff_max_sec=60.0,
+        )
+        MqttMuxRegistry.Register(_MUX_KEY, self._mux)
+
+        self.Client = LocalPluginClient(logger, self._mux)
+        self.Client.Start()
+        self.Client.OnConnected(self._OnUpstreamConnected)
+        self.Client.OnDisconnected(self._OnUpstreamDisconnected)
+
+        # Heartbeat ticks every 10s. It's idempotent when not registered, so
+        # we let it run for the lifetime of the process.
+        self._heartbeat = RepeatTimer(self.Logger, "ElegooCc2MqttHeartbeat", ElegooCc2Client.HeartbeatIntervalSec, self._HeartbeatTick)
+        self._heartbeat.start()
+
+        self._mux.Start()
 
 
     def GetState(self) -> Optional[PrinterState]:
         if self.State is None:
-            self.SleepEvent.set()
+            self._mux.WakeReconnect()
             return None
         return self.State
 
@@ -195,44 +239,44 @@ class ElegooCc2Client:
 
 
     def IsMqttConnected(self) -> bool:
-        if self.MqttRegistered is False:
-            self.SleepEvent.set()
-        return self.MqttRegistered
+        with self.StateLock:
+            registered = self.MqttRegistered
+        if not registered:
+            self._mux.WakeReconnect()
+        return registered
 
 
     def IsDisconnectDueToTooManyClients(self) -> bool:
         return self.LastConnectionFailedDueToTooManyClients
 
 
-    def GetMqttProxyConnectionContext(self, args:Optional[Dict[str, Any]], isClosed:Callable[[], bool]) -> Optional[MqttConnectionContext]:
-        connectionContext = self._WaitForCurrentConnectionContext(isClosed)
-        if connectionContext is None:
-            return None
+    # Exposes the shared MqttUpstreamMux so hosts can wire downstream surfaces
+    # (local TCP broker, etc.) against it directly.
+    def GetMux(self) -> MqttUpstreamMux:
+        return self._mux
 
-        clientId = self._GenerateClientId()
-        websocketPath = "/"
-        accessCode = connectionContext.AccessCode
-        if args is not None:
-            clientIdArg = args.get("client_id", args.get("clientId", None))
-            if isinstance(clientIdArg, str) and len(clientIdArg) > 0:
-                clientId = clientIdArg
-            accessCodeArg = args.get("access_code", args.get("password", None))
-            if isinstance(accessCodeArg, str) and len(accessCodeArg) > 0:
-                accessCode = accessCodeArg
-            websocketPathArg = args.get("websocket_path", args.get("path", None))
-            if isinstance(websocketPathArg, str) and len(websocketPathArg) > 0:
-                websocketPath = websocketPathArg
 
-        return MqttConnectionContext(
-            connectionContext.IpOrHostname,
-            "9001",
-            "elegoo",
-            accessCode,
-            clientId=clientId,
-            transport="websockets",
-            keepAliveSec=60,
-            websocketPath=websocketPath
-        )
+    # Returns an auth-check function the local TCP broker can use to verify
+    # incoming MQTT CONNECT credentials against whatever the printer currently
+    # requires (Elegoo CC2 always uses username "elegoo" + the access code).
+    # Reads the live state per CONNECT so a runtime access-code change is
+    # picked up without restarting the broker.
+    def GetBrokerAuthCheck(self) -> Callable[[Optional[str], Optional[bytes]], int]:
+        def _check(username: Optional[str], password: Optional[bytes]) -> int:
+            with self.StateLock:
+                ctx = self.CurrentConnectionContext
+                fallback_access_code = self.AccessCode
+            expected_access_code = ctx.AccessCode if ctx is not None else fallback_access_code
+            if expected_access_code is None:
+                # No credentials known yet; reject for safety.
+                return ConnAckReturnCode.NOT_AUTHORIZED
+            if username != "elegoo":
+                return ConnAckReturnCode.BAD_USERNAME_OR_PASSWORD
+            expected_pw_bytes = expected_access_code.encode("utf-8")
+            if password != expected_pw_bytes:
+                return ConnAckReturnCode.BAD_USERNAME_OR_PASSWORD
+            return ConnAckReturnCode.ACCEPTED
+        return _check
 
 
     def SendEnableWebcamCommand(self, waitForResponse:bool=True) -> ResponseMsg:
@@ -240,8 +284,8 @@ class ElegooCc2Client:
 
 
     def SendFrontendPopupMsg(self, title:str, text:str, msgType:str, actionText:Optional[str], actionLink:Optional[str], showForSec:int, onlyShowIfLoadedViaOeBool:bool) -> None:
-        # There is no local CC2 browser socket to inject into yet. Keep this as a no-op so the host popup
-        # interface remains compatible with the other printer hosts.
+        # There is no local CC2 browser socket to inject into yet. Keep this as
+        # a no-op so the host popup interface remains compatible.
         self.Logger.debug("Elegoo CC2 frontend popup requested: %s - %s", title, text)
 
 
@@ -249,8 +293,10 @@ class ElegooCc2Client:
         if params is None:
             params = {}
 
-        if self.MqttRegistered is False or self.Client is None:
-            self.SleepEvent.set()
+        with self.StateLock:
+            registered = self.MqttRegistered
+        if not registered:
+            self._mux.WakeReconnect()
             return ResponseMsg(None, ResponseMsg.OE_ERROR_MQTT_NOT_CONNECTED)
 
         requestId = self._GetNextRequestId()
@@ -261,270 +307,289 @@ class ElegooCc2Client:
                 self.RequestPendingContexts[requestId] = waitContext
 
         try:
-            obj = {
-                "id": requestId,
-                "method": method,
-                "params": params
-            }
-            if self._PublishRequest(obj) is False:
+            obj = {"id": requestId, "method": method, "params": params}
+            if not self._PublishToRequestTopic(obj):
                 return ResponseMsg(None, ResponseMsg.OE_ERROR_MQTT_NOT_CONNECTED)
-
-            if waitForResponse is False:
+            if not waitForResponse:
                 return ResponseMsg(None)
-
             if waitContext is None:
                 raise Exception("Missing wait context.")
             if timeoutSec is None:
                 timeoutSec = ElegooCc2Client.RequestTimeoutSec
             waitContext.GetEvent().wait(timeoutSec)
-
             if waitContext.ErrorCode != 0:
                 return ResponseMsg(waitContext.Result, waitContext.ErrorCode, waitContext.ErrorMessage)
             if waitContext.Result is None:
                 self.Logger.info(f"Elegoo CC2 client timeout while waiting for request. {requestId}")
                 return ResponseMsg(None, ResponseMsg.OE_ERROR_TIMEOUT)
             return ResponseMsg(waitContext.Result)
-
         except Exception as e:
             Sentry.OnException("Elegoo CC2 MQTT request failed to send.", e)
             return ResponseMsg(None, ResponseMsg.OE_ERROR_EXCEPTION, str(e))
         finally:
             if waitForResponse:
                 with self.RequestLock:
-                    if requestId in self.RequestPendingContexts:
-                        del self.RequestPendingContexts[requestId]
+                    self.RequestPendingContexts.pop(requestId, None)
 
 
-    def _ClientWorker(self) -> None:
-        isConnectAttemptFromEventBump = False
-        while True:
-            ipOrHostname:str = "None"
+    # Fired when the main MQTT mux connection to the printer is established.
+    def _OnUpstreamConnected(self) -> None:
+        self.Logger.info("Elegoo CC2 upstream connected, beginning registration.")
+        threading.Thread(target=self._RegistrationWorker, name="ElegooCc2Register", daemon=True).start()
+
+
+    # Fired when the main MQTT mux connection to the printer is lost (after all retries).
+    def _OnUpstreamDisconnected(self) -> None:
+        self.Logger.warning("Elegoo CC2 printer connection lost. We will try to reconnect in a few seconds.")
+        # Fail every pending command waiter so callers don't hang on the
+        # request-response correlation map.
+        with self.RequestLock:
+            for waiter in list(self.RequestPendingContexts.values()):
+                waiter.SetSocketClosed()
+        # Drop our subscription tokens so the mux's auto-replay-on-reconnect
+        # doesn't re-issue subs against the now-stale client id.
+        self._ClearPerConnectionState(was_registered_before=self._WasRegisteredAndReset())
+
+
+    def _WasRegisteredAndReset(self) -> bool:
+        with self.StateLock:
+            self.ConnectionGeneration += 1
+            was = self.MqttRegistered
+            self.MqttRegistered = False
+            self.ConnectionFinalized = False
+            return was
+
+
+    def _ClearPerConnectionState(self, was_registered_before:bool) -> None:
+        with self.StateLock:
+            tokens = [self._register_response_token, self._status_token, self._response_token]
+            self._register_response_token = None
+            self._status_token = None
+            self._response_token = None
+            self.RegisterRequestId = None
+            self.LastPongTimeSec = 0.0
+            self.LastStatusId = None
+            self.MissedStatusCounter = 0
+            self.State = None
+            self.Attributes = None
+            self.FullStatus = {}
+        for tok in tokens:
+            if tok is None:
+                continue
             try:
-                self.MqttConnected = False
-                self.MqttRegistered = False
-                self.ConnectionFinalized = False
-                self.RegisterRequestId = None
-                self.RegisterSubscribeMid = None
-                self.StatusSubscribeMid = None
-                self.ResponseSubscribeMid = None
-                self.StatusSubscribed = False
-                self.ResponseSubscribed = False
-
-                connectionContext = self._GetConnectionContextToTry(isConnectAttemptFromEventBump)
-                ipOrHostname = connectionContext.IpOrHostname
-                self.WebsocketConnectionIp = ipOrHostname
-                self.CurrentConnectionContext = connectionContext
-
-                LocalIpHelper.SetConnectionTargetIpOverride(ipOrHostname)
-                OctoHttpRequest.SetLocalHostAddress(ipOrHostname)
-
-                self.CurrentClientId = self._GenerateClientId()
-                self.Client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.CurrentClientId) #pyright: ignore[reportPrivateImportUsage]
-                self.Client.reconnect_delay_set(min_delay=1, max_delay=5)
-                self.Client.username_pw_set("elegoo", connectionContext.AccessCode)
-                self.Client.on_connect = self._OnConnect
-                self.Client.on_message = self._OnMessage
-                self.Client.on_disconnect = self._OnDisconnect
-                self.Client.on_subscribe = self._OnSubscribe
-                self.Client.on_log = self._OnLog
-
-                self.Logger.info(f"Trying to connect to Elegoo CC2 printer at {ipOrHostname}:{connectionContext.PortStr}...")
-                with RepeatTimer(self.Logger, "ElegooCc2MqttHeartbeat", 10.0, self._RepeatTimerHeartbeatTick) as t:
-                    t.start()
-                    self.Client.connect(ipOrHostname, int(connectionContext.PortStr), keepalive=30)
-                    self.Client.loop_forever()
+                self.Client.Unsubscribe(tok)
             except Exception as e:
-                if isinstance(e, ConnectionRefusedError):
-                    self.Logger.warning(f"Failed to connect to the Elegoo CC2 printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. {e}")
-                elif isinstance(e, TimeoutError):
-                    self.Logger.warning(f"Failed to connect to the Elegoo CC2 printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. {e}")
-                elif isinstance(e, OSError) and ("Network is unreachable" in str(e) or "No route to host" in str(e)):
-                    self.Logger.warning(f"Failed to connect to the Elegoo CC2 printer {ipOrHostname}:{self.PortStr}, we will retry in a bit. {e}")
-                elif isinstance(e, socket.timeout) and "timed out" in str(e):
-                    self.Logger.warning(f"Failed to connect to the Elegoo CC2 printer {ipOrHostname}:{self.PortStr} due to a timeout, we will retry in a bit. {e}")
-                else:
-                    if Sentry.IsCommonConnectionException(e):
-                        self.Logger.warning("Elegoo CC2 printer connection error: %s", str(e))
-                    else:
-                        Sentry.OnException(f"Failed to connect to the Elegoo CC2 printer {ipOrHostname}:{self.PortStr}. We will retry in a bit.", e)
-
+                self.Logger.debug("Elegoo CC2 unsubscribe on disconnect raised: %s", e)
+        try:
             LocalWebApi.Get().SetPrinterConnectionState(False)
-            sleepDelay = self.ConsecutivelyFailedConnectionAttempts
-            sleepDelay = min(sleepDelay, 6)
-            sleepDelaySec = 5.0 * sleepDelay
-            self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Elegoo CC2 printer.")
-            isConnectAttemptFromEventBump = self.SleepEvent.wait(sleepDelaySec)
-            self.SleepEvent.clear()
-
-
-    def _RepeatTimerHeartbeatTick(self) -> None:
-        if self.MqttRegistered is False:
-            return
-        try:
-            client = self.Client
-            if client is None:
-                return
-            if self.LastPongTimeSec > 0 and time.time() - self.LastPongTimeSec > 65:
-                self.Logger.warning("Elegoo CC2 heartbeat timed out, disconnecting.")
-                client.disconnect()
-                return
-            client.publish(self._GetRequestTopic(), json.dumps({"type": "PING"}))
         except Exception as e:
-            Sentry.OnException("Elegoo CC2 heartbeat failed.", e)
-            c = self.Client
-            if c is not None:
-                c.disconnect()
-
-
-    def _CleanupStateOnDisconnect(self) -> None:
-        self.State = None
-        self.Attributes = None
-        self.FullStatus = {}
-        self.MqttConnected = False
-        self.MqttRegistered = False
-        self.ConnectionFinalized = False
-        self.StatusSubscribed = False
-        self.ResponseSubscribed = False
-        self.LastStatusId = None
-        self.MissedStatusCounter = 0
-        self.LastPongTimeSec = 0.0
-
-
-    def _OnConnect(self, client:mqtt.Client, userdata:Any, flags:Any, reason_code:Any, properties:Any) -> None:
-        if reason_code.is_failure:
-            self.Logger.warning("Elegoo CC2 MQTT connection failed: %s", reason_code)
-            client.disconnect()
-            return
-
-        self.Logger.info("Connection to the Elegoo CC2 printer established. Registering client.")
-        self.MqttConnected = True
-        self.LastConnectionFailedDueToTooManyClients = False
-        if self.CurrentClientId is None:
-            self.CurrentClientId = self._GenerateClientId()
-        self.RegisterRequestId = f"{self.CurrentClientId}_req"
-
-        (result, mid) = client.subscribe(self._GetRegisterResponseTopic())
-        if result != mqtt.MQTT_ERR_SUCCESS or mid is None:
-            self.Logger.warning("Elegoo CC2 failed to subscribe to the register response topic. Result: %s", result)
-            client.disconnect()
-            return
-        self.RegisterSubscribeMid = mid
-
-
-    def _OnSubscribe(self, client:Any, userdata:Any, mid:Any, reason_code_list:List[mqtt.ReasonCode], properties:Any) -> None: #pyright: ignore[reportPrivateImportUsage]
+            self.Logger.debug("LocalWebApi notify (disconnect) failed: %s", e)
         try:
-            for r in reason_code_list:
-                if r.is_failure:
-                    self.Logger.error("Elegoo CC2 MQTT subscribe failed. Mid: %s Reason: %s", mid, r)
-                    c = self.Client
-                    if c is not None:
-                        c.disconnect()
+            self.StateTranslator.OnConnectionLost(was_registered_before)
+        except Exception as e:
+            Sentry.OnException("Elegoo CC2 StateTranslator.OnConnectionLost raised", e)
+
+
+    def _RegistrationWorker(self) -> None:
+        try:
+            with self.StateLock:
+                sn = self.SerialNumber
+                client_id = self.CurrentClientId
+                generation = self.ConnectionGeneration
+                if sn is None or client_id is None:
+                    # Couldn't have connected without these; if they're gone,
+                    # something tore us down between connect and now.
                     return
+            register_request_id = f"{client_id}_req"
+            with self.StateLock:
+                if generation != self.ConnectionGeneration:
+                    return
+                self.RegisterRequestId = register_request_id
+                # Clear stale "too many clients" flag; will be set again by the
+                # register-response handler if it's still the case.
+                self.LastConnectionFailedDueToTooManyClients = False
 
-            if self.RegisterSubscribeMid is not None and mid == self.RegisterSubscribeMid:
-                self._SendRegisterRequest()
+            register_response_topic = f"elegoo/{sn}/{register_request_id}/register_response"
+            register_topic = f"elegoo/{sn}/api_register"
+            # (Status and response topics are subscribed only after register
+            # succeeds; see _SubscribeToStatusAndResponseTopics.)
+
+            # 1) Subscribe to register_response BEFORE sending the register
+            #    request so we don't race the response.
+            tok_register = self.Client.Subscribe(
+                register_response_topic,
+                0,
+                lambda msg, gen=generation: self._OnRegisterResponseMessage(msg, gen),
+            )
+            if tok_register is None:
+                self.Logger.warning("Elegoo CC2 failed to subscribe to register response topic; forcing reconnect.")
+                self._mux.ForceReconnect()
+                return
+            with self.StateLock:
+                if generation != self.ConnectionGeneration:
+                    try:
+                        self.Client.Unsubscribe(tok_register)
+                    except Exception as e:
+                        self.Logger.debug("Elegoo CC2 stale register-response unsubscribe raised: %s", e)
+                    return
+                self._register_response_token = tok_register
+
+            # 2) Publish the register request.
+            register_payload = json.dumps({"client_id": client_id, "request_id": register_request_id})
+            if not self.Client.Publish(register_topic, register_payload, qos=0):
+                self.Logger.warning("Elegoo CC2 failed to publish the register request; forcing reconnect.")
+                self._mux.ForceReconnect()
                 return
 
-            if self.StatusSubscribeMid is not None and mid == self.StatusSubscribeMid:
-                self.StatusSubscribed = True
-            if self.ResponseSubscribeMid is not None and mid == self.ResponseSubscribeMid:
-                self.ResponseSubscribed = True
-
-            if self.MqttRegistered:
+            # 3) Wait for the register response by polling the per-connection
+            #    state. The callback flips MqttRegistered once status + response
+            #    subs are in place. Bound by RegistrationTimeoutSec.
+            deadline = time.time() + ElegooCc2Client.RegistrationTimeoutSec
+            registered = False
+            while time.time() < deadline:
+                with self.StateLock:
+                    if generation != self.ConnectionGeneration:
+                        return
+                    registered = self.MqttRegistered
+                    # If the response callback already disconnected us (e.g.
+                    # "too many clients") then ForceReconnect was called and
+                    # we should bail out.
+                    if not self._mux.IsUpstreamConnected():
+                        return
+                if registered:
+                    break
+                time.sleep(0.1)
+            if not registered:
+                self.Logger.warning("Elegoo CC2 registration timed out; forcing reconnect.")
+                self._mux.ForceReconnect()
                 return
 
-            if self.StatusSubscribed and self.ResponseSubscribed:
-                self.MqttRegistered = True
+            # 4) Registered. Request the printer's initial state.
+            with self.StateLock:
                 self.LastPongTimeSec = time.time()
                 self.ConsecutivelyFailedConnectionAttempts = 0
                 self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
+            try:
                 LocalWebApi.Get().SetPrinterConnectionState(True)
-                self.Logger.info("Elegoo CC2 MQTT client is registered and subscribed.")
-                self.SendRequest(1001, waitForResponse=False)
-                self.SendRequest(1002, waitForResponse=False)
+            except Exception as e:
+                self.Logger.debug("LocalWebApi notify (connected) failed: %s", e)
+            self.Logger.info("Elegoo CC2 MQTT client is registered and subscribed.")
+            self.SendRequest(1001, waitForResponse=False)
+            self.SendRequest(1002, waitForResponse=False)
+
         except Exception as e:
-            Sentry.OnException("Elegoo CC2 exception in _OnSubscribe.", e)
+            Sentry.OnException("Elegoo CC2 registration worker raised", e)
+            self._mux.ForceReconnect()
 
 
-    def _OnDisconnect(self, client:Any, userdata:Any, disconnect_flags:Any, reason_code:Any, properties:Any) -> None:
-        self.Logger.warning("Elegoo CC2 printer connection lost. We will try to reconnect in a few seconds.")
+    def _SubscribeToStatusAndResponseTopics(self, generation:int) -> None:
+        with self.StateLock:
+            if generation != self.ConnectionGeneration:
+                return
+            sn = self.SerialNumber
+            client_id = self.CurrentClientId
+            if sn is None or client_id is None:
+                return
+        status_topic = f"elegoo/{sn}/api_status"
+        response_topic = f"elegoo/{sn}/{client_id}/api_response"
 
-        with self.RequestLock:
-            for _, v in self.RequestPendingContexts.items():
-                v.SetSocketClosed()
-
-        wasFullyConnected = self.ConnectionFinalized
-        self._CleanupStateOnDisconnect()
-        self.StateTranslator.OnConnectionLost(wasFullyConnected)
-
-
-    def _OnLog(self, client:Any, userdata:Any, level:int, msg:str) -> None:
-        if level == mqtt.MQTT_LOG_ERR:
-            if "exception" in msg:
-                Sentry.OnException("Elegoo CC2 MQTT leaked exception.", Exception(msg))
+        status_tok = self.Client.Subscribe(
+            status_topic, 0,
+            lambda msg, gen=generation: self._OnStatusMessage(msg, gen),
+        )
+        if status_tok is None:
+            self.Logger.warning("Elegoo CC2 failed to subscribe to status topic; forcing reconnect.")
+            self._mux.ForceReconnect()
+            return
+        response_tok = self.Client.Subscribe(
+            response_topic, 0,
+            lambda msg, gen=generation: self._OnResponseMessage(msg, gen),
+        )
+        if response_tok is None:
+            self.Logger.warning("Elegoo CC2 failed to subscribe to response topic; forcing reconnect.")
+            try:
+                self.Client.Unsubscribe(status_tok)
+            except Exception as e:
+                self.Logger.debug("Elegoo CC2 status unsubscribe after response-sub failure raised: %s", e)
+            self._mux.ForceReconnect()
+            return
+        tokens:List[SubToken] = []
+        with self.StateLock:
+            if generation != self.ConnectionGeneration:
+                tokens = [status_tok, response_tok]
             else:
-                self.Logger.error(f"Elegoo CC2 MQTT log error: {msg}")
-        elif level == mqtt.MQTT_LOG_WARNING:
-            self.Logger.error(f"Elegoo CC2 MQTT log warn: {msg}")
+                tokens = []
+                self._status_token = status_tok
+                self._response_token = response_tok
+                self.MqttRegistered = True
+        for tok in tokens:
+            try:
+                self.Client.Unsubscribe(tok)
+            except Exception as e:
+                self.Logger.debug("Elegoo CC2 stale status/response unsubscribe raised: %s", e)
 
 
-    def _OnMessage(self, client:Any, userdata:Any, mqttMsg:mqtt.MQTTMessage) -> None:
+    def _OnRegisterResponseMessage(self, mqtt_msg: MqttMessage, generation:int) -> None:
         try:
-            msg = json.loads(mqttMsg.payload)
+            with self.StateLock:
+                if generation != self.ConnectionGeneration:
+                    return
+            msg = json.loads(mqtt_msg.payload)
             if msg is None:
-                raise Exception("Parsed json MQTT message returned None")
-
-            if ElegooCc2Client.MqttMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
-                self.Logger.debug("Incoming Elegoo CC2 Message [%s]:\r\n%s", mqttMsg.topic, json.dumps(msg, indent=3))
-
-            topic = mqttMsg.topic
-            if topic == self._GetRegisterResponseTopic():
-                self._HandleRegisterResponse(msg)
                 return
-            if topic == self._GetStatusTopic():
-                self._HandleStatusMessage(msg, True)
+            result = msg.get("result", None)
+            error_message = str(msg.get("error", "fail")).lower()
+            if error_message != "ok":
+                if "too many" in error_message:
+                    self.LastConnectionFailedDueToTooManyClients = True
+                    self.Logger.warning("Elegoo CC2 registration failed because too many clients are connected.")
+                else:
+                    self.Logger.error("Elegoo CC2 registration failed. Error: %s Result: %s", error_message, result)
+                self._mux.ForceReconnect()
                 return
-            if topic == self._GetResponseTopic():
-                self._HandleResponseMessage(msg)
-                return
+            # Spawn the status/response subscribe step on a separate worker so
+            # we don't block paho's loop thread (Subscribe blocks for SUBACK).
+            threading.Thread(target=self._SubscribeToStatusAndResponseTopics, args=(generation,),
+                             name="ElegooCc2PostRegister", daemon=True).start()
         except Exception as e:
-            Sentry.OnException(f"Failed to handle incoming Elegoo CC2 MQTT message. `{mqttMsg.payload}`", e)
+            Sentry.OnException("Elegoo CC2 register response handler raised", e)
+            self._mux.ForceReconnect()
 
 
-    def _HandleRegisterResponse(self, msg:Dict[str, Any]) -> None:
-        result = msg.get("result", None)
-        errorMessage = str(msg.get("error", "fail")).lower()
-        if errorMessage != "ok":
-            if "too many" in errorMessage:
-                self.LastConnectionFailedDueToTooManyClients = True
-                self.Logger.warning("Elegoo CC2 registration failed because too many clients are connected.")
-            else:
-                self.Logger.error("Elegoo CC2 registration failed. Error: %s Result: %s", errorMessage, result)
-            self._DisconnectClient()
-            return
+    def _OnStatusMessage(self, mqtt_msg: MqttMessage, generation:int) -> None:
+        try:
+            with self.StateLock:
+                if generation != self.ConnectionGeneration:
+                    return
+            msg = json.loads(mqtt_msg.payload)
+            if msg is None:
+                return
+            if ElegooCc2Client.MqttMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug("Incoming Elegoo CC2 Status:\r\n%s", json.dumps(msg, indent=3))
+            self._HandleStatusMessage(msg)
+        except Exception as e:
+            Sentry.OnException(f"Failed to handle Elegoo CC2 status message. `{mqtt_msg.payload!r}`", e)
 
-        client = self.Client
-        if client is None:
-            return
 
-        (statusResult, statusMid) = client.subscribe(self._GetStatusTopic())
-        if statusResult != mqtt.MQTT_ERR_SUCCESS or statusMid is None:
-            self.Logger.warning("Elegoo CC2 failed to subscribe to status topic. Result: %s", statusResult)
-            self._DisconnectClient()
-            return
-        self.StatusSubscribeMid = statusMid
-
-        (responseResult, responseMid) = client.subscribe(self._GetResponseTopic())
-        if responseResult != mqtt.MQTT_ERR_SUCCESS or responseMid is None:
-            self.Logger.warning("Elegoo CC2 failed to subscribe to response topic. Result: %s", responseResult)
-            self._DisconnectClient()
-            return
-        self.ResponseSubscribeMid = responseMid
+    def _OnResponseMessage(self, mqtt_msg: MqttMessage, generation:int) -> None:
+        try:
+            with self.StateLock:
+                if generation != self.ConnectionGeneration:
+                    return
+            msg = json.loads(mqtt_msg.payload)
+            if msg is None:
+                return
+            if ElegooCc2Client.MqttMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
+                self.Logger.debug("Incoming Elegoo CC2 Response:\r\n%s", json.dumps(msg, indent=3))
+            self._HandleResponseMessage(msg)
+        except Exception as e:
+            Sentry.OnException(f"Failed to handle Elegoo CC2 response message. `{mqtt_msg.payload!r}`", e)
 
 
     def _HandleResponseMessage(self, msg:Dict[str, Any]) -> None:
         if msg.get("type", None) == "PONG":
-            self.LastPongTimeSec = time.time()
+            with self.StateLock:
+                self.LastPongTimeSec = time.time()
             return
 
         method = msg.get("method", None)
@@ -542,32 +607,30 @@ class ElegooCc2Client:
         if msgId is None:
             return
         msgIdInt = int(msgId)
-
         with self.RequestLock:
             context = self.RequestPendingContexts.get(msgIdInt, None)
             if context is None:
                 return
-
             error = msg.get("error", None)
             if isinstance(error, dict):
-                context.SetResultAndEvent(resultObj, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(error))
-            elif resultObj is not None and int(resultObj.get("error_code", 0)) != 0:
+                context.SetResultAndEvent(resultObj if isinstance(resultObj, dict) else None, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(error))
+            elif isinstance(resultObj, dict) and int(resultObj.get("error_code", 0)) != 0:
                 context.SetResultAndEvent(resultObj, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(resultObj.get("error_msg", "Printer command failed.")))
             else:
                 context.SetResultAndEvent(resultObj if resultObj is not None else {})
 
 
-    def _HandleStatusMessage(self, msg:Dict[str, Any], isAsyncStatus:bool) -> None:
+    def _HandleStatusMessage(self, msg:Dict[str, Any]) -> None:
         method = msg.get("method", None)
         if method != 6000:
             return
-
         statusId = msg.get("status_id", msg.get("id", None))
         if statusId is not None:
             statusIdInt = int(statusId)
             if self.LastStatusId is not None and statusIdInt != self.LastStatusId + 1:
                 self.MissedStatusCounter += 1
-                self.Logger.debug("Elegoo CC2 missed a status update. Last: %s New: %s Missed Count: %s", self.LastStatusId, statusIdInt, self.MissedStatusCounter)
+                self.Logger.debug("Elegoo CC2 missed a status update. Last: %s New: %s Missed Count: %s",
+                                  self.LastStatusId, statusIdInt, self.MissedStatusCounter)
                 if self.MissedStatusCounter >= 5:
                     self.MissedStatusCounter = 0
                     self.Logger.info("Elegoo CC2 missed several status updates, requesting a full status sync.")
@@ -575,7 +638,6 @@ class ElegooCc2Client:
             else:
                 self.MissedStatusCounter = 0
             self.LastStatusId = statusIdInt
-
         resultObj = msg.get("result", None)
         if isinstance(resultObj, dict):
             self._HandleStatusResult(resultObj, False)
@@ -583,7 +645,6 @@ class ElegooCc2Client:
 
     def _HandleStatusResult(self, status:Dict[str, Any], isFirstFullSyncResponse:bool) -> None:
         self._DeepMerge(self.FullStatus, status)
-
         isFirstStateUpdate = self.State is None
         try:
             if self.State is None:
@@ -595,11 +656,9 @@ class ElegooCc2Client:
                 self.State.OnUpdate(self.FullStatus)
         except Exception as e:
             Sentry.OnException("Failed to update Elegoo CC2 printer state object", e)
-
         if self.State is None:
             self.Logger.warning("Elegoo CC2 client finalized but we don't have a state object.")
             return
-
         self.StateTranslator.OnStatusUpdate(self.State, isFirstFullSyncResponse or isFirstStateUpdate)
 
 
@@ -615,11 +674,11 @@ class ElegooCc2Client:
         except Exception as e:
             Sentry.OnException("Failed to update Elegoo CC2 printer attributes object", e)
 
-        if self.ConnectionFinalized is True:
-            return
-
-        self.ConnectionFinalized = True
-        wsConIp = self.WebsocketConnectionIp
+        with self.StateLock:
+            if self.ConnectionFinalized:
+                return
+            self.ConnectionFinalized = True
+            wsConIp = self.WebsocketConnectionIp
         if wsConIp is None:
             self.Logger.error("Elegoo CC2 client finalized but we don't have a connection IP.")
         else:
@@ -631,63 +690,57 @@ class ElegooCc2Client:
                 self.SerialNumber = self.Attributes.SerialNumber
                 self.Config.SetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, self.SerialNumber)
             elif self.SerialNumber != self.Attributes.SerialNumber:
-                self.Logger.error("Elegoo CC2 serial number mismatch. Expected: %s Got: %s", self.SerialNumber, self.Attributes.SerialNumber)
+                self.Logger.error("Elegoo CC2 serial number mismatch. Expected: %s Got: %s",
+                                  self.SerialNumber, self.Attributes.SerialNumber)
 
         self.FileManager.Sync()
         self.Logger.info("Elegoo CC2 client connection fully connected.")
 
 
-    def _PublishRequest(self, obj:Dict[str, Any]) -> bool:
+    def _PublishToRequestTopic(self, obj:Dict[str, Any]) -> bool:
         try:
-            client = self.Client
-            if client is None or not client.is_connected():
+            if not self.Client.IsConnected():
                 self.Logger.info("Failed to publish Elegoo CC2 command because we aren't connected.")
-                self.SleepEvent.set()
+                self._mux.WakeReconnect()
                 return False
-
+            sn = self.SerialNumber
+            client_id = self.CurrentClientId
+            if sn is None or client_id is None:
+                return False
             if ElegooCc2Client.MqttMessageDebugging and self.Logger.isEnabledFor(logging.DEBUG):
                 self.Logger.debug("Outgoing Elegoo CC2 Message:\r\n%s", json.dumps(obj, indent=3))
-
-            state = client.publish(self._GetRequestTopic(), json.dumps(obj))
-            state.wait_for_publish(10)
-            return True
+            return self.Client.Publish(f"elegoo/{sn}/{client_id}/api_request", json.dumps(obj), qos=0)
         except Exception as e:
             Sentry.OnException("Failed to publish message to Elegoo CC2 printer.", e)
-        return False
+            return False
 
 
-    def _SendRegisterRequest(self) -> None:
+    def _HeartbeatTick(self) -> None:
+        with self.StateLock:
+            registered = self.MqttRegistered
+            last_pong = self.LastPongTimeSec
+        if not registered:
+            return
         try:
-            client = self.Client
-            connectionContext = self.CurrentConnectionContext
-            clientId = self.CurrentClientId
-            if client is None or connectionContext is None or clientId is None:
-                self._DisconnectClient()
+            if last_pong > 0 and time.time() - last_pong > ElegooCc2Client.PongTimeoutSec:
+                self.Logger.warning("Elegoo CC2 heartbeat timed out, disconnecting.")
+                self._mux.ForceReconnect()
                 return
-
-            if self.RegisterRequestId is None:
-                self.RegisterRequestId = f"{clientId}_req"
-            msg = {
-                "client_id": clientId,
-                "request_id": self.RegisterRequestId
-            }
-            client.publish(self._GetRegisterTopic(), json.dumps(msg))
-            registerRequestId = self.RegisterRequestId
-
-            def timeoutThread() -> None:
-                time.sleep(ElegooCc2Client.RegistrationTimeoutSec)
-                if self.MqttConnected and self.MqttRegistered is False and self.RegisterRequestId == registerRequestId:
-                    self.Logger.warning("Elegoo CC2 registration timed out.")
-                    self._DisconnectClient()
-            threading.Thread(target=timeoutThread, name="ElegooCc2RegisterTimeout").start()
+            # Don't block on QoS-0 publish ack; if it fails the next tick
+            # picks up the missing PONG.
+            sn = self.SerialNumber
+            client_id = self.CurrentClientId
+            if sn is None or client_id is None:
+                return
+            self.Client.Publish(f"elegoo/{sn}/{client_id}/api_request",
+                                  json.dumps({"type": "PING"}), qos=0)
         except Exception as e:
-            Sentry.OnException("Elegoo CC2 failed to send register request.", e)
-            self._DisconnectClient()
+            Sentry.OnException("Elegoo CC2 heartbeat failed.", e)
+            self._mux.ForceReconnect()
 
 
     def _GetConnectionContextToTry(self, isConnectAttemptFromEventBump:bool) -> Cc2ConnectionContext:
         self.ConsecutivelyFailedConnectionAttempts += 1
-        self.ConsecutivelyFailedConnectionAttemptsSinceSearch += 1
 
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
         serialNumber = self.Config.GetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, self.SerialNumber)
@@ -696,8 +749,10 @@ class ElegooCc2Client:
             accessCode = ElegooCc2Client.DefaultAccessCode
         self.AccessCode = accessCode
 
+        # If we don't have the serial number, search for it now.
+        # Most setups don't pass this at first, so it's easier for the user, and then on first run we get and bind to it.
         if serialNumber is None or len(serialNumber) == 0:
-            discovery = None
+            discovery:Optional[ElegooCc2DiscoveryResult] = None
             if configIpOrHostname is not None and len(configIpOrHostname) > 0:
                 results = ElegooCc2Discovery.Discover(self.Logger, configIpOrHostname, timeoutSec=3.0)
                 if len(results) > 0:
@@ -714,31 +769,12 @@ class ElegooCc2Client:
             self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, discovery.Ip)
             self.Logger.info("Discovered Elegoo CC2 printer %s at %s.", serialNumber, discovery.Ip)
 
-        # If we have failed 3 times in a row and it's been more than a few times since the last search, search now.
-        if self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 3:
-            self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
-            self.Logger.info("Multiple failed connection attempts to Elegoo CC2 printer. Running discovery again...")
-            results = ElegooCc2Discovery.Discover(self.Logger, None, timeoutSec=3.0)
-            if serialNumber is None or len(serialNumber) == 0:
-                self.Logger.info(f"We found {len(results)} Elegoo CC2 printers on the network during discovery. But have no set serial number, so we can't auto rediscover.")
-            else:
-                foundMatchingSerial = False
-                for r in results:
-                    if r.SerialNumber == serialNumber:
-                        foundMatchingSerial = True
-                        self.Logger.info(f"We found the Elegoo CC2 printer with the correct serial number {serialNumber} at {r.Ip}. Updating config and trying to connect there.")
-                        configIpOrHostname = r.Ip
-                        self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, r.Ip)
-                        break
-                if not foundMatchingSerial:
-                    self.Logger.info(f"We found {len(results)} Elegoo CC2 printers on the network during discovery. But none had the correct serial number {serialNumber}.")
-
         if configIpOrHostname is None or len(configIpOrHostname) == 0:
             raise Exception("An IP address or hostname must be provided in the config for Elegoo CC2 Connect.")
-
-        self.SerialNumber = serialNumber
         if self.PortStr is None:
             raise Exception("A port must be provided in the config for Elegoo CC2 Connect.")
+
+        self.SerialNumber = serialNumber
         return Cc2ConnectionContext(configIpOrHostname, self.PortStr, serialNumber, accessCode)
 
 
@@ -746,12 +782,13 @@ class ElegooCc2Client:
         attempt = 0
         while isClosed() is False:
             attempt += 1
-            context = self.CurrentConnectionContext
+            with self.StateLock:
+                context = self.CurrentConnectionContext
             if context is not None:
                 return context
             if attempt > 10:
                 return None
-            self.SleepEvent.set()
+            self._mux.WakeReconnect()
             time.sleep(1.5 * attempt)
         return None
 
@@ -764,53 +801,6 @@ class ElegooCc2Client:
 
     def _GenerateClientId(self) -> str:
         return f"1_PC_{random.randint(1000, 9999)}"
-
-
-    def _GetRegisterTopic(self) -> str:
-        context = self.CurrentConnectionContext
-        if context is None:
-            raise Exception("No current Elegoo CC2 connection context.")
-        return f"elegoo/{context.SerialNumber}/api_register"
-
-
-    def _GetRegisterResponseTopic(self) -> str:
-        context = self.CurrentConnectionContext
-        requestId = self.RegisterRequestId
-        if context is None or requestId is None:
-            raise Exception("No current Elegoo CC2 connection context or registration request id.")
-        return f"elegoo/{context.SerialNumber}/{requestId}/register_response"
-
-
-    def _GetRequestTopic(self) -> str:
-        context = self.CurrentConnectionContext
-        clientId = self.CurrentClientId
-        if context is None or clientId is None:
-            raise Exception("No current Elegoo CC2 connection context or client id.")
-        return f"elegoo/{context.SerialNumber}/{clientId}/api_request"
-
-
-    def _GetResponseTopic(self) -> str:
-        context = self.CurrentConnectionContext
-        clientId = self.CurrentClientId
-        if context is None or clientId is None:
-            raise Exception("No current Elegoo CC2 connection context or client id.")
-        return f"elegoo/{context.SerialNumber}/{clientId}/api_response"
-
-
-    def _GetStatusTopic(self) -> str:
-        context = self.CurrentConnectionContext
-        if context is None:
-            raise Exception("No current Elegoo CC2 connection context.")
-        return f"elegoo/{context.SerialNumber}/api_status"
-
-
-    def _DisconnectClient(self) -> None:
-        c = self.Client
-        if c is not None:
-            try:
-                c.disconnect()
-            except Exception as e:
-                self.Logger.debug("Elegoo CC2 disconnect exception. %s", e)
 
 
     def _DeepMerge(self, destination:Dict[str, Any], source:Dict[str, Any]) -> None:

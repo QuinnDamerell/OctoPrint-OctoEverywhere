@@ -1,63 +1,32 @@
 import logging
-import time
-from typing import Any, Callable, Dict, Optional
 
-from octoeverywhere.mqttwebsocketproxy import (
-    IMqttWebsocketProxyConnector,
-    MqttConnectionContext,
-    MqttWebsocketProxyProviderBuilder as CommonMqttWebsocketProxyProviderBuilder,
-)
-
-from .bambuclient import BambuClient, ConnectionContext
+from octoeverywhere.mqttmux.relayproxy import MqttRelayWebSocketProxyProviderBuilder
 
 
-class BambuMqttWebsocketProxyConnector(IMqttWebsocketProxyConnector):
-
-    def __init__(self, logger:logging.Logger) -> None:
-        self.Logger = logger
-
-
-    def GetConnectionContext(self, args:Optional[Dict[str, Any]], isClosed:Callable[[], bool]) -> Optional[MqttConnectionContext]:
-        # Wait for a connection context. After the first successful connection, it will be set and then will always exist.
-        connectionContext:Optional[ConnectionContext] = None
-        attempt = 0
-        while isClosed() is False:
-            attempt += 1
-            if attempt > 10:
-                raise Exception("Bambu MQTT proxy timed out waiting for a connection context.")
-            connectionContext = BambuClient.Get().GetCurrentConnectionContext()
-            if connectionContext is not None:
-                break
-            time.sleep(1.5 * attempt)
-
-        if connectionContext is None:
-            return None
-
-        # Check if there are any arg overrides.
-        userName = connectionContext.UserName
-        accessToken = connectionContext.AccessToken
-        if args is not None:
-            userNameOverride = args.get("username", None)
-            accessCodeOverride = args.get("access_code", None)
-            if userNameOverride is not None or accessCodeOverride is not None:
-                self.Logger.info("Bambu MQTT proxy is using an user name or access code override. User: %s, Access Code: %s", userNameOverride, accessCodeOverride)
-            userName = userNameOverride if userNameOverride is not None else userName
-            accessToken = accessCodeOverride if accessCodeOverride is not None else accessToken
-
-        # We use TLS for both Bambu Cloud and local connections. Local printers use a self-signed certificate.
-        return MqttConnectionContext(
-            connectionContext.IpOrHostname,
-            connectionContext.Port,
-            userName,
-            accessToken,
-            useTls=True,
-            allowInvalidCert=not connectionContext.IsCloud,
-            keepAliveSec=5
-        )
+# Bambu's mux is registered in MqttMuxRegistry under the printer SN
+# (see BambuClient.__init__). The relay builder looks it up lazily so
+# import order doesn't matter.
+def _BambuMuxKeyFromConfig():  # noqa: D401 - small helper
+    # We avoid importing BambuClient here to dodge circular-import risks at
+    # plugin load. The relay builder accepts the key string and resolves it
+    # via the registry at connect time.
+    from .bambuclient import BambuClient  # pylint: disable=import-outside-toplevel
+    instance = BambuClient.Get()
+    if instance is None:
+        return None
+    return instance.PrinterSn
 
 
 # Keep this Bambu-local name so existing host code can import it unchanged.
-class MqttWebsocketProxyProviderBuilder(CommonMqttWebsocketProxyProviderBuilder):
+# Hosts construct this and hand it to Compat.SetMqttWebsocketProxyProviderBuilder.
+class MqttWebsocketProxyProviderBuilder(MqttRelayWebSocketProxyProviderBuilder):
 
-    def __init__(self, logger:logging.Logger):
-        super().__init__(logger, BambuMqttWebsocketProxyConnector(logger))
+    def __init__(self, logger: logging.Logger) -> None:
+        # The mux key is the printer SN; the BambuClient instance must have
+        # been constructed before any incoming relay connection.
+        key = _BambuMuxKeyFromConfig()
+        if key is None:
+            # Fall back to an empty key - the registry lookup will fail at
+            # connect time and the proxy will reject the relay connection.
+            key = ""
+        super().__init__(logger, mux_key=key)
