@@ -135,7 +135,7 @@ class Client(IWebSocketClient):
             if strongSelf is not None and strongOnData is not None:
                 strongOnData(strongSelf, Buffer(buffer), WebSocketOpCode.FromWsLibInt(msgType))
 
-        def OnError(ws:WebSocketApp, exception:Exception):
+        def OnError(ws:WebSocketApp, exception:Any):
             # For this special case, call our function.
             strongSelf = weakSelf()
             if strongSelf is None:

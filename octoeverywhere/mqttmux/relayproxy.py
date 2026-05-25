@@ -282,10 +282,9 @@ class MqttRelayWebSocketProxyProviderBuilder(ICommandWebsocketProviderBuilder):
     # builder before the mux registration finishes (it doesn't, in practice,
     # but lazy is more robust).
     # legacy_v1_enabled: gate for the v1 JSON-envelope coexistence path.
-    def __init__(self, logger: logging.Logger, mux_key: str, use_raw_mqtt_ws_transport: bool = True) -> None:
+    def __init__(self, logger: logging.Logger, mux_key: str) -> None:
         self._logger = logger
         self._mux_key = mux_key
-        self.use_raw_mqtt_ws_transport = use_raw_mqtt_ws_transport
 
 
     def GetCommandWebsocketProvider(self, args: Optional[Dict[str, Any]]) -> Optional[ICommandWebsocketProvider]:
@@ -293,4 +292,4 @@ class MqttRelayWebSocketProxyProviderBuilder(ICommandWebsocketProviderBuilder):
         if mux is None:
             self._logger.warning("MqttRelay builder: no mux registered for key=%r", self._mux_key)
             return None
-        return MqttRelayWebSocketProxyProvider(self._logger, mux, self.use_raw_mqtt_ws_transport, args)
+        return MqttRelayWebSocketProxyProvider(self._logger, mux, args)

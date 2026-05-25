@@ -98,7 +98,6 @@ class TestRoutingDetection(unittest.TestCase):
         hooks = _CapturingHooks()
         proxy = MqttRelayWebSocketProxy(
             logger=_silent_logger(), mux=mux, stream_id=1, peer_label="p",
-            legacy_v1_enabled=True,
             on_ws_open=hooks.OnOpen, on_ws_data=hooks.OnData,
             on_ws_close=hooks.OnClose, on_ws_error=hooks.OnError,
         )
@@ -124,7 +123,6 @@ class TestRoutingDetection(unittest.TestCase):
         hooks = _CapturingHooks()
         proxy = MqttRelayWebSocketProxy(
             logger=_silent_logger(), mux=mux, stream_id=2, peer_label="p",
-            legacy_v1_enabled=True,
             on_ws_open=hooks.OnOpen, on_ws_data=hooks.OnData,
             on_ws_close=hooks.OnClose, on_ws_error=hooks.OnError,
         )
@@ -147,30 +145,12 @@ class TestRoutingDetection(unittest.TestCase):
         proxy.Close()
         mux.Shutdown()
 
-    def test_v1_rejected_when_legacy_disabled(self):
-        mux, _ = _start_mux()
-        hooks = _CapturingHooks()
-        proxy = MqttRelayWebSocketProxy(
-            logger=_silent_logger(), mux=mux, stream_id=3, peer_label="p",
-            legacy_v1_enabled=False,
-            on_ws_open=hooks.OnOpen, on_ws_data=hooks.OnData,
-            on_ws_close=hooks.OnClose, on_ws_error=hooks.OnError,
-        )
-        proxy.RunAsync()
-        envelope = json.dumps({"Type": "subscribe", "Topic": "a"}).encode("utf-8")
-        proxy.Send(Buffer(envelope), isData=False)
-        # Should close without doing anything.
-        _wait_until(lambda: hooks.closed)
-        self.assertTrue(hooks.closed)
-        self.assertEqual(len(hooks.text_frames) + len(hooks.binary_frames), 0)
-        mux.Shutdown()
 
     def test_unrecognised_first_frame_closes(self):
         mux, _ = _start_mux()
         hooks = _CapturingHooks()
         proxy = MqttRelayWebSocketProxy(
             logger=_silent_logger(), mux=mux, stream_id=4, peer_label="p",
-            legacy_v1_enabled=True,
             on_ws_open=hooks.OnOpen, on_ws_data=hooks.OnData,
             on_ws_close=hooks.OnClose, on_ws_error=hooks.OnError,
         )
@@ -189,7 +169,6 @@ class TestV1PublishAndDelivery(unittest.TestCase):
         hooks = _CapturingHooks()
         proxy = MqttRelayWebSocketProxy(
             logger=_silent_logger(), mux=mux, stream_id=5, peer_label="p",
-            legacy_v1_enabled=True,
             on_ws_open=hooks.OnOpen, on_ws_data=hooks.OnData,
             on_ws_close=hooks.OnClose, on_ws_error=hooks.OnError,
         )
@@ -216,7 +195,6 @@ class TestV1PublishAndDelivery(unittest.TestCase):
         hooks = _CapturingHooks()
         proxy = MqttRelayWebSocketProxy(
             logger=_silent_logger(), mux=mux, stream_id=6, peer_label="p",
-            legacy_v1_enabled=True,
             on_ws_open=hooks.OnOpen, on_ws_data=hooks.OnData,
             on_ws_close=hooks.OnClose, on_ws_error=hooks.OnError,
         )

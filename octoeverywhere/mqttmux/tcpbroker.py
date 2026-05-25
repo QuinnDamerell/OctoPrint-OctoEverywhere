@@ -111,7 +111,10 @@ class LocalTcpBrokerServer:
             port = 1883
 
         # Setup auth.
+        # Always read all of the config options so they always get set to defaults in the config file.
         require_upstream = config.GetBool(Config.SectionMqtt, Config.MqttLocalBrokerRequireUpstreamAuth, True)
+        static_user = config.GetStr(Config.SectionMqtt, Config.MqttLocalBrokerUsername, None, keepInConfigIfNone=True)
+        static_pass = config.GetStr(Config.SectionMqtt, Config.MqttLocalBrokerPassword, None, keepInConfigIfNone=True)
         auth_check: Optional[AuthCheck] = None
         if require_upstream:
             if upstream_auth_check is None:
@@ -119,8 +122,6 @@ class LocalTcpBrokerServer:
             auth_check = upstream_auth_check
             logger.info("LocalTcpBrokerServer: requiring upstream credentials for downstream CONNECTs")
         else:
-            static_user = config.GetStr(Config.SectionMqtt, Config.MqttLocalBrokerUsername, None)
-            static_pass = config.GetStr(Config.SectionMqtt, Config.MqttLocalBrokerPassword, None)
             auth_check = StaticAuthCheck(static_user, static_pass)
             if auth_check is None:
                 logger.warning("LocalTcpBrokerServer: NO auth configured - the broker on %s:%s will accept any client",

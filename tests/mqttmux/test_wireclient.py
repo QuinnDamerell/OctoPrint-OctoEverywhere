@@ -272,6 +272,7 @@ class TestSubscribeFlow(unittest.TestCase):
         _wait_until(lambda: len(self.fake.subscribes) > 0)
         self.fake.FireSubAck(mid=1, granted_qos_list=[1])
         t.join(timeout=2.0)
+        _wait_until(lambda: len(self.wc.OutboundPackets()) > 0)
         packets = self.wc.OutboundPackets()
         self.assertEqual(len(packets), 1)
         self.assertIsInstance(packets[0], SubAckPacket)
@@ -299,6 +300,7 @@ class TestSubscribeFlow(unittest.TestCase):
         _wait_until(lambda: len(self.fake.subscribes) > 0)
         self.fake.FireSubAck(mid=1, granted_qos_list=[0])
         t.join(timeout=2.0)
+        _wait_until(lambda: len(self.wc.OutboundPackets()) > 0)
         self.wc.out_bytes.clear()
 
         # Then unsubscribe.
@@ -309,6 +311,7 @@ class TestSubscribeFlow(unittest.TestCase):
         _wait_until(lambda: len(self.fake.unsubscribes) > 0)
         self.fake.FireUnsubAck(mid=2)
         t.join(timeout=2.0)
+        _wait_until(lambda: len(self.wc.OutboundPackets()) > 0)
         packets = self.wc.OutboundPackets()
         self.assertEqual(len(packets), 1)
         self.assertIsInstance(packets[0], UnsubAckPacket)
@@ -402,6 +405,10 @@ class TestPublishFlow(unittest.TestCase):
         self.assertEqual(packets[0].qos, 0)
         # qos=0 publish has no packet_id.
         self.assertIsNone(packets[0].packet_id)
+
+    def test_puback_for_unknown_packet_id_closes(self):
+        self.wc.FeedBytes(EncodePacket(PubAckPacket(packet_id=99)))
+        self.assertTrue(self.wc.transport_closed)
 
 
 class TestUpstreamDisconnectClosesPeer(unittest.TestCase):

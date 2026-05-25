@@ -3,9 +3,7 @@ import logging
 import random
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
-
-import paho.mqtt.client as mqtt
+from typing import Any, Callable, Dict, List, Optional, cast
 
 from linux_host.config import Config
 from linux_host.localwebapi import LocalWebApi

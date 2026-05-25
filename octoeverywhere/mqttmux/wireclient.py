@@ -1,9 +1,10 @@
 import logging
+import queue
 import threading
 import time
 import uuid
 from abc import abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .mux import (
     IVirtualClient,
@@ -129,6 +130,14 @@ class WireVirtualClient(IVirtualClient):
         # the session.
         self._keepalive_thread: Optional[threading.Thread] = None
         self._keepalive_stop = threading.Event()
+
+        # SUBSCRIBE and UNSUBSCRIBE are processed on one ordered control
+        # worker. They can block on upstream SUBACK/UNSUBACK, so they stay off
+        # the reader thread, but MQTT requires the server to process them in
+        # packet order for a single client session.
+        self._control_queue: "queue.Queue[Tuple[str, int, Any]]" = queue.Queue()
+        self._control_worker_lock = threading.Lock()
+        self._control_worker_thread: Optional[threading.Thread] = None
 
 
     # ---- subclass hooks ----
@@ -298,6 +307,12 @@ class WireVirtualClient(IVirtualClient):
         self._connected = True
         # Attach to mux so we start receiving DeliverMessage callbacks.
         self._handle = self._mux.Attach(self)
+        if not self._mux.IsUpstreamConnected():
+            # The upstream can disconnect between the pre-CONNECT check and
+            # Attach(). If the disconnect callback already snapshotted handles,
+            # this new client would otherwise miss the forced close.
+            self._FatalClose()
+            return
         replaced = self._RegisterClientId(self._client_id)
         if replaced is not None:
             replaced._FatalClose()  # pylint: disable=protected-access
@@ -330,10 +345,7 @@ class WireVirtualClient(IVirtualClient):
         # immediately). Run on a worker so a slow upstream doesn't block our
         # reader from processing PINGREQ / DISCONNECT and tripping the
         # keepalive timer.
-        threading.Thread(
-            target=self._WorkerSubscribe, args=(pkt.packet_id, list(pkt.subscriptions)),
-            name=f"mqttmux-sub[{self._peer_label}]", daemon=True,
-        ).start()
+        self._EnqueueControlOp("sub", pkt.packet_id, list(pkt.subscriptions))
 
 
     def _WorkerSubscribe(self, packet_id: int, subscriptions: List[Tuple[str, int]]) -> None:
@@ -365,10 +377,7 @@ class WireVirtualClient(IVirtualClient):
     def _HandleUnsubscribe(self, pkt: UnsubscribePacket) -> None:
         if self._handle is None:
             raise ProtocolError("UNSUBSCRIBE before CONNECT")
-        threading.Thread(
-            target=self._WorkerUnsubscribe, args=(pkt.packet_id, list(pkt.filters)),
-            name=f"mqttmux-unsub[{self._peer_label}]", daemon=True,
-        ).start()
+        self._EnqueueControlOp("unsub", pkt.packet_id, list(pkt.filters))
 
 
     def _WorkerUnsubscribe(self, packet_id: int, filters: List[str]) -> None:
@@ -384,6 +393,42 @@ class WireVirtualClient(IVirtualClient):
         if self._closed:
             return
         self._SendPacket(UnsubAckPacket(packet_id=packet_id))
+
+
+    def _EnqueueControlOp(self, op: str, packet_id: int, payload: Any) -> None:
+        if self._closed:
+            return
+        with self._control_worker_lock:
+            if self._control_worker_thread is None or not self._control_worker_thread.is_alive():
+                self._control_worker_thread = threading.Thread(
+                    target=self._ControlWorkerLoop,
+                    name=f"mqttmux-ctl[{self._peer_label}]",
+                    daemon=True,
+                )
+                self._control_worker_thread.start()
+        self._control_queue.put((op, packet_id, payload))
+
+
+    def _ControlWorkerLoop(self) -> None:
+        while not self._closed:
+            try:
+                op, packet_id, payload = self._control_queue.get(timeout=0.5)
+            except queue.Empty:
+                with self._control_worker_lock:
+                    if self._control_queue.empty():
+                        self._control_worker_thread = None
+                        return
+                continue
+            try:
+                if op == "sub":
+                    self._WorkerSubscribe(packet_id, payload)
+                elif op == "unsub":
+                    self._WorkerUnsubscribe(packet_id, payload)
+                else:
+                    self._logger.warning("WireVirtualClient[%s] unknown control op=%s",
+                                         self._peer_label, op)
+            finally:
+                self._control_queue.task_done()
 
 
     # ---- inbound PUBLISH from peer (downstream -> upstream) ----
@@ -543,19 +588,30 @@ class WireVirtualClient(IVirtualClient):
 
     def _HandlePubAck(self, packet_id: int) -> None:
         with self._pending_outbound_lock:
+            if packet_id not in self._pending_qos1:
+                raise ProtocolError(f"PUBACK for unknown QoS1 pid={packet_id}")
             self._pending_qos1.pop(packet_id, None)
         self._outbound_pid_alloc.Free(packet_id)
 
 
     def _HandlePubRec(self, packet_id: int) -> None:
         with self._pending_outbound_lock:
-            self._pending_qos2_step1.pop(packet_id, None)
-            self._pending_qos2_step2[packet_id] = time.time()
+            if packet_id in self._pending_qos2_step2:
+                resend_pubrel = True
+            elif packet_id in self._pending_qos2_step1:
+                resend_pubrel = False
+            else:
+                raise ProtocolError(f"PUBREC for unknown QoS2 pid={packet_id}")
+            if not resend_pubrel:
+                self._pending_qos2_step1.pop(packet_id, None)
+                self._pending_qos2_step2[packet_id] = time.time()
         self._SendPacket(PubRelPacket(packet_id=packet_id))
 
 
     def _HandlePubComp(self, packet_id: int) -> None:
         with self._pending_outbound_lock:
+            if packet_id not in self._pending_qos2_step2:
+                raise ProtocolError(f"PUBCOMP for unknown QoS2 pid={packet_id}")
             self._pending_qos2_step2.pop(packet_id, None)
         self._outbound_pid_alloc.Free(packet_id)
 

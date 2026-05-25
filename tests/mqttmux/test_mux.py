@@ -41,6 +41,15 @@ def _make_mux(fake: FakePahoClient, *, initial_subs=None, ctx_provider=None) -> 
     )
 
 
+def _wait_until(predicate, timeout: float = 1.0, interval: float = 0.01) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(interval)
+    return False
+
+
 # A capturing IVirtualClient for direct mux tests (without going through
 # LocalPluginClient). Records connect/disconnect/messages.
 class _CaptureClient(IVirtualClient):
@@ -502,6 +511,52 @@ class TestMuxRetained(unittest.TestCase):
         self.assertEqual(len(c2.messages), 0)
         mux.Shutdown()
 
+    def test_cached_retained_topic_updates_from_live_publish(self):
+        mux, fake = self._start_mux()
+        c1 = _CaptureClient()
+        h1 = mux.Attach(c1)
+        def sub1():
+            mux.Subscribe(h1, "x", 0)
+        t = threading.Thread(target=sub1)
+        t.start()
+        _wait_until(lambda: len(fake.subscribes) > 0)
+        fake.FireSubAck(mid=1, granted_qos_list=[0])
+        t.join(timeout=1.0)
+
+        fake.FireMessage("x", b"old", qos=0, retain=True)
+        fake.FireMessage("x", b"new", qos=0, retain=False)
+
+        c2 = _CaptureClient()
+        h2 = mux.Attach(c2)
+        r = mux.Subscribe(h2, "x", 0)
+        self.assertEqual(r.granted_qos, 0)
+        self.assertEqual(len(c2.messages), 1)
+        self.assertEqual(c2.messages[0].payload, b"new")
+        self.assertTrue(c2.messages[0].retain)
+        mux.Shutdown()
+
+    def test_downstream_retained_publish_replays_to_later_subscriber(self):
+        mux, fake = self._start_mux()
+        publisher = _CaptureClient()
+        h_pub = mux.Attach(publisher)
+        result = mux.Publish(h_pub, "retained/topic", b"local-retained", qos=0, retain=True)
+        self.assertTrue(result.success)
+
+        subscriber = _CaptureClient()
+        h_sub = mux.Attach(subscriber)
+        def sub():
+            mux.Subscribe(h_sub, "retained/topic", 0)
+        t = threading.Thread(target=sub)
+        t.start()
+        _wait_until(lambda: len(fake.subscribes) > 0)
+        fake.FireSubAck(mid=fake._next_mid - 1, granted_qos_list=[0])
+        t.join(timeout=1.0)
+
+        self.assertEqual(len(subscriber.messages), 1)
+        self.assertEqual(subscriber.messages[0].payload, b"local-retained")
+        self.assertTrue(subscriber.messages[0].retain)
+        mux.Shutdown()
+
 
 class TestMuxReconnect(unittest.TestCase):
 
@@ -701,6 +756,34 @@ class TestLocalPluginClient(unittest.TestCase):
         fake.FireMessage("a", b"2", qos=0)
         # Callback should not be invoked again.
         self.assertEqual(len(received), 1)
+        mux.Shutdown()
+
+    def test_duplicate_local_subscriptions_unsubscribe_refcount_balanced(self):
+        fake = FakePahoClient()
+        mux = _make_mux(fake)
+        mux.Start()
+        _wait_until(lambda: fake.connect_called, timeout=2.0)
+        fake.FireConnect(0)
+        client = LocalPluginClient(_silent_logger(), mux)
+        client.Start()
+
+        token_holder = {}
+        def first_sub():
+            token_holder["t1"] = client.Subscribe("dup/topic", 0, lambda m: None)
+        t = threading.Thread(target=first_sub)
+        t.start()
+        _wait_until(lambda: len(fake.subscribes) == 1)
+        fake.FireSubAck(mid=1, granted_qos_list=[0])
+        t.join(timeout=1.0)
+        token_holder["t2"] = client.Subscribe("dup/topic", 0, lambda m: None)
+        self.assertIsNotNone(token_holder["t1"])
+        self.assertIsNotNone(token_holder["t2"])
+        self.assertEqual(len(fake.subscribes), 1)
+
+        client.Unsubscribe(token_holder["t1"])
+        self.assertEqual(len(fake.unsubscribes), 0)
+        client.Unsubscribe(token_holder["t2"])
+        self.assertEqual(fake.unsubscribes, ["dup/topic"])
         mux.Shutdown()
 
 

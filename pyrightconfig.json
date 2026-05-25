@@ -6,6 +6,7 @@
         "**/Proto",
         "**/.vscode",
         "**/debugprofiler.py",
+        "tests",
     ],
 
     // Set the version to the oldest we support, so we can catch issues.

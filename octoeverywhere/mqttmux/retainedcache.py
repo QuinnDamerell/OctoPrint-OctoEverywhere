@@ -47,12 +47,30 @@ class RetainedCache:
                 # Spec: zero-byte retained payload deletes any cached entry
                 # and is not itself stored.
                 return self._entries.pop(message.topic, None) is not None
-            self._entries[message.topic] = message
-            self._entries.move_to_end(message.topic)
-            # Enforce LRU bound.
-            while len(self._entries) > self._max_entries:
-                self._entries.popitem(last=False)
-            return True
+            return self._StoreLocked(message)
+
+
+    # Process a live PUBLISH that may be a retained update delivered to an
+    # already-existing upstream subscription. MQTT brokers clear RETAIN for
+    # those live deliveries, so we can only update topics we already know are
+    # retained.
+    def OnLivePublishForCachedTopic(self, message: MqttMessage) -> bool:
+        if message.retain:
+            return self.OnRetainedPublish(message)
+        with self._lock:
+            if message.topic not in self._entries:
+                return False
+            if len(message.payload) == 0:
+                return self._entries.pop(message.topic, None) is not None
+            retained_copy = MqttMessage(
+                topic=message.topic,
+                payload=message.payload,
+                qos=message.qos,
+                retain=True,
+                properties=message.properties,
+                packet_id=None,
+            )
+            return self._StoreLocked(retained_copy)
 
 
     # Returns all currently-cached retained messages whose topic matches the
@@ -80,3 +98,12 @@ class RetainedCache:
     def Size(self) -> int:
         with self._lock:
             return len(self._entries)
+
+
+    def _StoreLocked(self, message: MqttMessage) -> bool:
+        self._entries[message.topic] = message
+        self._entries.move_to_end(message.topic)
+        # Enforce LRU bound.
+        while len(self._entries) > self._max_entries:
+            self._entries.popitem(last=False)
+        return True

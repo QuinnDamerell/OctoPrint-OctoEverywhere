@@ -105,12 +105,11 @@ class LocalPluginClient(IVirtualClient):
         if entry is None:
             return False
         filter_, _, _ = entry
-        # Only call mux.Unsubscribe if this was the last local token for that
-        # filter - otherwise other local callbacks still want it.
-        with self._tokens_lock:
-            still_has_filter = any(f == filter_ for (f, _q, _cb) in self._tokens.values())
-        if not still_has_filter:
-            self._mux.Unsubscribe(self._handle, filter_)
+        # Every successful local token corresponds to one mux subscription
+        # entry. Remove exactly one entry so the mux's refcount stays balanced
+        # when the same local client subscribes to the same filter more than
+        # once with different callbacks.
+        self._mux.Unsubscribe(self._handle, filter_)
         return True
 
 

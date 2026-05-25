@@ -10,6 +10,7 @@ from paho.mqtt.enums import MQTTErrorCode
 
 from .retainedcache import RetainedCache
 from .subtable import SubscriptionTable
+from .topicmatch import TopicMatcher
 from .types import (
     MqttMessage,
     ProtocolLevel,
@@ -334,6 +335,8 @@ class MqttUpstreamMux:
                   subscription_identifier: Optional[int] = None) -> SubscribeResult:
         if handle.IsDetached():
             return SubscribeResult(granted_qos=SubAckReturnCode.FAILURE)
+        if not TopicMatcher.ValidateFilter(filter_) or qos < QoS.AT_MOST_ONCE or qos > QoS.EXACTLY_ONCE:
+            return SubscribeResult(granted_qos=SubAckReturnCode.FAILURE)
 
         # Serialize concurrent Subscribes for the same filter. Without this,
         # a second subscriber that lands while the first is still waiting on
@@ -344,10 +347,10 @@ class MqttUpstreamMux:
         while True:
             with self._pending_subs_lock:
                 in_flight = self._pending_subs_by_filter.get(filter_)
-                if in_flight is None or in_flight.event.is_set():
+                if in_flight is None:
                     break
                 wait_pending = in_flight
-            if not wait_pending.event.wait(timeout=self._subscribe_timeout_sec):
+            if not wait_pending.finalized_event.wait(timeout=self._subscribe_timeout_sec):
                 # Earlier in-flight subscribe timed out. Bail rather than
                 # pile up on top of it.
                 return SubscribeResult(granted_qos=SubAckReturnCode.FAILURE)
@@ -393,8 +396,6 @@ class MqttUpstreamMux:
             self._logger.warning("MqttMux SUBACK timeout for filter=%s mid=%s", filter_, mid)
             with self._pending_subs_lock:
                 self._pending_subs.pop(mid, None)
-                if self._pending_subs_by_filter.get(filter_) is pending:
-                    self._pending_subs_by_filter.pop(filter_, None)
             # Wake any other waiters so they don't sit on the deadline.
             pending.event.set()
             # Roll back the virtual subscription. The upstream broker may still
@@ -402,17 +403,17 @@ class MqttUpstreamMux:
             # the table those PUBLISHes won't be delivered to a client that saw
             # SUBACK failure.
             self._sub_table.Unsubscribe(handle.handle_id, filter_)
+            self._FinalizePendingSubscribe(filter_, pending)
             return SubscribeResult(granted_qos=SubAckReturnCode.FAILURE)
 
-        with self._pending_subs_lock:
-            if self._pending_subs_by_filter.get(filter_) is pending:
-                self._pending_subs_by_filter.pop(filter_, None)
         granted = pending.granted_qos
         if granted == SubAckReturnCode.FAILURE:
             self._sub_table.Unsubscribe(handle.handle_id, filter_)
+            self._FinalizePendingSubscribe(filter_, pending)
             return SubscribeResult(granted_qos=SubAckReturnCode.FAILURE)
         # Update the table to the actually-granted QoS.
         self._sub_table.UpdateGrantedQos(filter_, granted)
+        self._FinalizePendingSubscribe(filter_, pending)
         self._ReplayRetainedTo(handle, filter_, granted)
         return SubscribeResult(granted_qos=granted)
 
@@ -453,6 +454,8 @@ class MqttUpstreamMux:
                 qos: int = 0, retain: bool = False) -> PublishResult:
         if handle.IsDetached():
             return PublishResult(success=False)
+        if not TopicMatcher.ValidateTopicName(topic) or qos < QoS.AT_MOST_ONCE or qos > QoS.EXACTLY_ONCE:
+            return PublishResult(success=False)
         paho_client = self._GetConnectedClient()
         if paho_client is None:
             return PublishResult(success=False)
@@ -462,14 +465,20 @@ class MqttUpstreamMux:
             self._logger.error("MqttMux paho publish(%s) raised: %s", topic, e)
             return PublishResult(success=False)
         if qos == QoS.AT_MOST_ONCE:
-            return PublishResult(success=(info.rc == MQTTErrorCode.MQTT_ERR_SUCCESS), rc=info.rc)
+            success = info.rc == MQTTErrorCode.MQTT_ERR_SUCCESS
+            if success:
+                self._UpdateRetainedFromDownstreamPublish(topic, payload, qos, retain)
+            return PublishResult(success=success, rc=info.rc)
         # QoS > 0: block for the handshake.
         try:
             info.wait_for_publish(timeout=self._publish_timeout_sec)
         except Exception as e:
             self._logger.warning("MqttMux publish(%s) wait raised: %s", topic, e)
             return PublishResult(success=False, rc=info.rc)
-        return PublishResult(success=info.is_published(), rc=info.rc)
+        success = info.is_published()
+        if success:
+            self._UpdateRetainedFromDownstreamPublish(topic, payload, qos, retain)
+        return PublishResult(success=success, rc=info.rc)
 
 
     # Returns the active paho client iff we're currently connected, else None.
@@ -478,6 +487,13 @@ class MqttUpstreamMux:
             if not self._is_connected or self._client is None:
                 return None
             return self._client
+
+
+    def _FinalizePendingSubscribe(self, filter_: str, pending: "_PendingSubscribe") -> None:
+        with self._pending_subs_lock:
+            if self._pending_subs_by_filter.get(filter_) is pending:
+                self._pending_subs_by_filter.pop(filter_, None)
+        pending.finalized_event.set()
 
 
     def _SupervisorLoop(self) -> None:
@@ -639,9 +655,6 @@ class MqttUpstreamMux:
                 pending.granted_qos = SubAckReturnCode.FAILURE
                 pending.event.set()
             self._pending_subs.clear()
-            # Also clear the by-filter index so new Subscribes after the
-            # reconnect don't queue behind stale events from this connection.
-            self._pending_subs_by_filter.clear()
             for pending_u in self._pending_unsubs.values():
                 pending_u.event.set()
             self._pending_unsubs.clear()
@@ -679,6 +692,8 @@ class MqttUpstreamMux:
         # only sets retain=1 on the very first delivery to a new subscriber).
         if msg.retain:
             self._retained.OnRetainedPublish(msg)
+        else:
+            self._retained.OnLivePublishForCachedTopic(msg)
         # Snapshot the dispatch list, then deliver outside the table lock.
         matches = self._sub_table.GetMatchingSubscribers(topic)
         with self._state_lock:
@@ -771,13 +786,30 @@ class MqttUpstreamMux:
                 self._logger.error("Retained replay DeliverMessage raised: %s", e)
 
 
+    def _UpdateRetainedFromDownstreamPublish(self, topic: str, payload: bytes, qos: int, retain: bool) -> None:
+        if not retain:
+            return
+        self._retained.OnRetainedPublish(MqttMessage(
+            topic=topic,
+            payload=payload,
+            qos=qos,
+            retain=True,
+            packet_id=None,
+        ))
+
+
 # Internal: state for an in-flight Subscribe waiting on its SUBACK.
 class _PendingSubscribe:
-    __slots__ = ("filter_", "requested_qos", "event", "granted_qos")
+    __slots__ = ("filter_", "requested_qos", "event", "finalized_event", "granted_qos")
     def __init__(self, filter_: str, requested_qos: int) -> None:
         self.filter_ = filter_
         self.requested_qos = requested_qos
         self.event = threading.Event()
+        # Set by the issuing Subscribe call after it has updated or rolled
+        # back the subscription table. Other same-filter subscribers wait on
+        # this instead of the raw SUBACK event so they never re-evaluate
+        # against half-finalized state.
+        self.finalized_event = threading.Event()
         # int rather than SubAckReturnCode so callers can store either 0/1/2
         # for granted or 0x80 for failure without a type mismatch.
         self.granted_qos: int = int(SubAckReturnCode.FAILURE)
