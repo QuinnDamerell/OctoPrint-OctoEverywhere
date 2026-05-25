@@ -739,8 +739,10 @@ class ElegooCc2Client:
             self._mux.ForceReconnect()
 
 
-    def _GetConnectionContextToTry(self, isConnectAttemptFromEventBump:bool) -> Cc2ConnectionContext:
-        self.ConsecutivelyFailedConnectionAttempts += 1
+    def _BuildConnectionContext(self) -> MuxConnectionContext:
+        with self.StateLock:
+            self.ConsecutivelyFailedConnectionAttempts += 1
+            self.ConsecutivelyFailedConnectionAttemptsSinceSearch += 1
 
         configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
         serialNumber = self.Config.GetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, self.SerialNumber)
@@ -769,13 +771,61 @@ class ElegooCc2Client:
             self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, discovery.Ip)
             self.Logger.info("Discovered Elegoo CC2 printer %s at %s.", serialNumber, discovery.Ip)
 
+        # Now that we have all that we need, detect if we should do a search.
+        doSearch = False
+        with self.StateLock:
+            # If the plugin has just started and we are failing to connect, do a search quicker.
+            if self.HasDoneNetScanSincePluginStart is False and self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 1:
+                self.HasDoneNetScanSincePluginStart = True
+                doSearch = True
+            elif self.ConsecutivelyFailedConnectionAttemptsSinceSearch > 6:
+                doSearch = True
+        if doSearch:
+            self.Logger.info("Multiple failed connection attempts to Elegoo CC2 printer. Running discovery again...")
+            self.ConsecutivelyFailedConnectionAttemptsSinceSearch = 0
+            results = ElegooCc2Discovery.Discover(self.Logger, None, timeoutSec=3.0)
+            if serialNumber is None or len(serialNumber) == 0:
+                self.Logger.info(f"We found {len(results)} Elegoo CC2 printers on the network during discovery. But have no set serial number, so we can't auto rediscover.")
+            else:
+                for r in results:
+                    if r.SerialNumber == serialNumber:
+                        self.Logger.info(f"We found the Elegoo CC2 printer with the correct serial number {serialNumber} at {r.Ip}. Updating config and trying to connect there.")
+                        configIpOrHostname = r.Ip
+                        self.Config.SetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, r.Ip)
+                        break
+                else:
+                    self.Logger.info(f"We found {len(results)} Elegoo CC2 printers on the network during discovery. But none had the correct serial number {serialNumber}.")
+
         if configIpOrHostname is None or len(configIpOrHostname) == 0:
             raise Exception("An IP address or hostname must be provided in the config for Elegoo CC2 Connect.")
         if self.PortStr is None:
             raise Exception("A port must be provided in the config for Elegoo CC2 Connect.")
 
-        self.SerialNumber = serialNumber
-        return Cc2ConnectionContext(configIpOrHostname, self.PortStr, serialNumber, accessCode)
+        # Generate a fresh per-connection client id and cache state the
+        # registration handshake will use for topic construction.
+        client_id = self._GenerateClientId()
+        ctx = Cc2ConnectionContext(configIpOrHostname, self.PortStr, serialNumber, accessCode)
+        with self.StateLock:
+            self.SerialNumber = serialNumber
+            self.CurrentClientId = client_id
+            self.CurrentConnectionContext = ctx
+            self.WebsocketConnectionIp = configIpOrHostname
+            self.ConnectionGeneration += 1
+
+        LocalIpHelper.SetConnectionTargetIpOverride(configIpOrHostname)
+        OctoHttpRequest.SetLocalHostAddress(configIpOrHostname)
+        self.Logger.info(f"Trying to connect to Elegoo CC2 printer at {configIpOrHostname}:{self.PortStr}...")
+
+        return MuxConnectionContext(
+            host=configIpOrHostname,
+            port=int(self.PortStr),
+            username="elegoo",
+            password=accessCode,
+            client_id=client_id,
+            use_tls=False,
+            transport="tcp",
+            keep_alive_sec=30,
+        )
 
 
     def _WaitForCurrentConnectionContext(self, isClosed:Callable[[], bool]) -> Optional[Cc2ConnectionContext]:

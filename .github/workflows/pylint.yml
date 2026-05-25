@@ -61,3 +61,10 @@ jobs:
     - name: 🐶 Ruff
       run: |
         ruff check
+
+    - name: 🧪 Unit tests
+      # Discovers tests/**/test_*.py. The mqttmux suite drives the broker /
+      # multiplexer with a fake paho client and a real local TCP loopback, so
+      # it requires no network and runs identically on every Python version.
+      run: |
+        python -m unittest discover -s tests -v

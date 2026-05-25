@@ -98,7 +98,7 @@ class Config:
     #
     # Used only for Prusa Link Connect
     #
-    SectionPrusaLink = "prusa_link"
+    SectionPrusaLink = "prusalink"
     PrusaLinkDefaultPortStr = "80"
     PrusaLinkAuthMode = "auth_mode"
     PrusaLinkAuthModePassword = "password"
