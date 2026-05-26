@@ -22,11 +22,12 @@ def _BambuMuxKeyFromConfig():  # noqa: D401 - small helper
 class MqttWebsocketProxyProviderBuilder(MqttRelayWebSocketProxyProviderBuilder):
 
     def __init__(self, logger: logging.Logger) -> None:
-        # The mux key is the printer SN; the BambuClient instance must have
-        # been constructed before any incoming relay connection.
+        # Use a placeholder key; we override GetMuxKey to resolve lazily so
+        # the builder can be constructed before BambuClient.Init().
+        super().__init__(logger, mux_key="")
+
+    def GetMuxKey(self) -> str:
         key = _BambuMuxKeyFromConfig()
         if key is None:
-            # Fall back to an empty key - the registry lookup will fail at
-            # connect time and the proxy will reject the relay connection.
-            key = ""
-        super().__init__(logger, mux_key=key)
+            return ""
+        return key

@@ -98,6 +98,7 @@ class WireVirtualClient(IVirtualClient):
         bounded_size = max_packet_size if max_packet_size is not None else WireVirtualClient._DEFAULT_MAX_PACKET_BYTES
         self._decoder = MqttPacketDecoder(max_packet_size=bounded_size)
         self._send_lock = threading.RLock()
+        self._close_lock = threading.Lock()
 
         # Session state. None until CONNECT lands.
         self._connected = False
@@ -195,9 +196,10 @@ class WireVirtualClient(IVirtualClient):
     # Tell the wire client we're going away (peer closed transport, host is
     # shutting down, etc.). Detaches from mux. Idempotent.
     def OnPeerClosed(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
         self._keepalive_stop.set()
         self._DetachFromMux(publish_will=True)
 
@@ -231,7 +233,10 @@ class WireVirtualClient(IVirtualClient):
         elif isinstance(pkt, DisconnectPacket):
             # §3.14: clean DISCONNECT - do not publish the will.
             self._will = None
-            self._closed = True
+            with self._close_lock:
+                if self._closed:
+                    return
+                self._closed = True
             self._keepalive_stop.set()
             self._DetachFromMux(publish_will=False)
             self._CloseTransport()
@@ -399,6 +404,7 @@ class WireVirtualClient(IVirtualClient):
         if self._closed:
             return
         with self._control_worker_lock:
+            self._control_queue.put((op, packet_id, payload))
             if self._control_worker_thread is None or not self._control_worker_thread.is_alive():
                 self._control_worker_thread = threading.Thread(
                     target=self._ControlWorkerLoop,
@@ -406,7 +412,6 @@ class WireVirtualClient(IVirtualClient):
                     daemon=True,
                 )
                 self._control_worker_thread.start()
-        self._control_queue.put((op, packet_id, payload))
 
 
     def _ControlWorkerLoop(self) -> None:
@@ -488,9 +493,10 @@ class WireVirtualClient(IVirtualClient):
 
 
     def _WorkerPublishQos1(self, packet_id: int, topic: str, payload: bytes, retain: bool) -> None:
-        if self._handle is None:
+        handle = self._handle
+        if handle is None:
             return
-        result: PublishResult = self._mux.Publish(self._handle, topic, payload, qos=1, retain=retain)
+        result: PublishResult = self._mux.Publish(handle, topic, payload, qos=1, retain=retain)
         if not result.success:
             self._logger.warning("WireVirtualClient[%s] upstream PUBLISH QoS1 failed for topic=%s",
                                  self._peer_label, topic)
@@ -502,13 +508,14 @@ class WireVirtualClient(IVirtualClient):
 
 
     def _WorkerPublishQos2(self, packet_id: int, topic: str, payload: bytes, retain: bool) -> None:
-        if self._handle is None:
+        handle = self._handle
+        if handle is None:
             return
         # Forward to upstream. The PUBREC has already been sent inline by
         # _HandleInboundPublish; PUBCOMP will go out when the peer sends
         # PUBREL via _HandleInboundPubRel. Upstream success/failure is
         # decoupled from the local handshake.
-        result: PublishResult = self._mux.Publish(self._handle, topic, payload, qos=2, retain=retain)
+        result: PublishResult = self._mux.Publish(handle, topic, payload, qos=2, retain=retain)
         if not result.success:
             self._logger.warning("WireVirtualClient[%s] upstream PUBLISH QoS2 failed for topic=%s pid=%s",
                                  self._peer_label, topic, packet_id)
@@ -669,9 +676,10 @@ class WireVirtualClient(IVirtualClient):
 
 
     def _FatalClose(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
         self._keepalive_stop.set()
         self._DetachFromMux(publish_will=True)
         try:
@@ -681,7 +689,7 @@ class WireVirtualClient(IVirtualClient):
 
 
     def _RegisterClientId(self, client_id: str) -> Optional["WireVirtualClient"]:
-        key = (id(self._mux), client_id)
+        key = (self._mux.mux_id, client_id)
         with WireVirtualClient._client_id_registry_lock:
             previous = WireVirtualClient._client_id_registry.get(key)
             WireVirtualClient._client_id_registry[key] = self
@@ -695,7 +703,7 @@ class WireVirtualClient(IVirtualClient):
         client_id = self._registered_client_id
         if client_id is None:
             return
-        key = (id(self._mux), client_id)
+        key = (self._mux.mux_id, client_id)
         with WireVirtualClient._client_id_registry_lock:
             if WireVirtualClient._client_id_registry.get(key) is self:
                 WireVirtualClient._client_id_registry.pop(key, None)

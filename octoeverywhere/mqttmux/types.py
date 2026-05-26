@@ -161,6 +161,17 @@ class MatchResult:
     subscription_identifiers: List[int] = field(default_factory=list)
 
 
+def _CloneMessage(m: MqttMessage) -> MqttMessage:
+    return MqttMessage(
+        topic=m.topic,
+        payload=m.payload,
+        qos=m.qos,
+        retain=m.retain,
+        properties=dict(m.properties) if m.properties is not None else None,
+        packet_id=m.packet_id,
+    )
+
+
 # Spec-defined wire constants the codec and wire client both reference.
 MAX_PACKET_IDENTIFIER = 0xFFFF
 MAX_TOPIC_BYTES = 0xFFFF

@@ -1,3 +1,4 @@
+import itertools
 import logging
 import ssl
 import threading
@@ -130,6 +131,7 @@ class PublishResult:
 # The class is thread-safe; multiple virtual clients may call Publish/Subscribe
 # concurrently from any thread.
 class MqttUpstreamMux:
+    _next_mux_id = itertools.count(1)
 
     # connection_context_provider: zero-arg callable returning a fresh context.
     #   Called on every connect attempt so the vendor can update the IP after
@@ -162,6 +164,7 @@ class MqttUpstreamMux:
         self._backoff_min_sec = backoff_min_sec
         self._backoff_max_sec = backoff_max_sec
         self._client_factory = client_factory or mqtt.Client
+        self.mux_id: int = next(MqttUpstreamMux._next_mux_id)
 
         # Shared state - all touches under StateLock.
         self._state_lock = threading.RLock()
@@ -314,9 +317,10 @@ class MqttUpstreamMux:
             handle._MarkDetached()  # pylint: disable=protected-access  # mux owns the handle's lifetime
             now_empty = self._sub_table.DetachHandle(handle.handle_id)
             paho_client = self._client
+            is_connected = self._is_connected
         # Issue real upstream unsubscribes for any filter whose refcount hit
         # zero. We don't block on these acks - detach is fire-and-forget.
-        if paho_client is not None and self._is_connected:
+        if paho_client is not None and is_connected:
             for filter_ in now_empty:
                 try:
                     paho_client.unsubscribe(filter_)
@@ -560,23 +564,34 @@ class MqttUpstreamMux:
         client.on_log = self._OnPahoLog
         if ctx.use_tls:
             if ctx.allow_invalid_cert:
-                client.tls_set(tls_version=ssl.PROTOCOL_TLS, cert_reqs=ssl.CERT_NONE)  #pyright: ignore[reportUnknownMemberType]
+                tls_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                tls_ctx.check_hostname = False
+                tls_ctx.verify_mode = ssl.CERT_NONE
+                client.tls_set_context(tls_ctx)  #pyright: ignore[reportUnknownMemberType]
                 client.tls_insecure_set(True)
             else:
-                client.tls_set(tls_version=ssl.PROTOCOL_TLS)  #pyright: ignore[reportUnknownMemberType]
+                client.tls_set()  #pyright: ignore[reportUnknownMemberType]
         if transport == "websockets" and ctx.websocket_path is not None:
             client.ws_set_options(path=ctx.websocket_path)
         if ctx.username is not None or ctx.password is not None:
             client.username_pw_set(ctx.username, ctx.password)
-        # Install before connect so paho's loop_start finds it.
-        with self._state_lock:
-            self._client = client
         self._logger.info("MqttMux connecting to %s:%s (transport=%s)", ctx.host, ctx.port, transport)
         # connect() blocks for the TCP handshake but not for CONNACK; loop_start
         # spins up paho's network thread which then processes CONNACK and fires
         # on_connect.
-        client.connect(ctx.host, int(ctx.port), keepalive=ctx.keep_alive_sec)
-        client.loop_start()
+        try:
+            client.connect(ctx.host, int(ctx.port), keepalive=ctx.keep_alive_sec)
+            client.loop_start()
+        except Exception:
+            try:
+                client.loop_stop()
+            except Exception:
+                pass
+            raise
+        # Install only after connect + loop_start succeed so a failed attempt
+        # doesn't leave a half-initialized client visible to other threads.
+        with self._state_lock:
+            self._client = client
 
 
     def _IsActivePahoClient(self, client: Any) -> bool:
@@ -609,7 +624,9 @@ class MqttUpstreamMux:
         # are just held by the upstream to keep the stream flowing.
         for sub in initial_subs:
             try:
-                client.subscribe(sub.filter, qos=sub.qos)
+                result, _mid = client.subscribe(sub.filter, qos=sub.qos)
+                if result != MQTTErrorCode.MQTT_ERR_SUCCESS:
+                    self._logger.warning("MqttMux initial subscribe(%s) returned rc=%s", sub.filter, result)
             except Exception as e:
                 self._logger.warning("MqttMux initial subscribe(%s) failed: %s", sub.filter, e)
         # Replay every refcounted virtual-client subscription. We don't wait
@@ -618,7 +635,9 @@ class MqttUpstreamMux:
         # because reconnect tears down the connection that caller waited on.
         for filter_, qos in sub_table_snapshot:
             try:
-                client.subscribe(filter_, qos=qos)
+                result, _mid = client.subscribe(filter_, qos=qos)
+                if result != MQTTErrorCode.MQTT_ERR_SUCCESS:
+                    self._logger.warning("MqttMux replay subscribe(%s) returned rc=%s", filter_, result)
             except Exception as e:
                 self._logger.warning("MqttMux replay subscribe(%s) failed: %s", filter_, e)
         # Wipe the retained cache - on a fresh upstream connection any cached
@@ -658,6 +677,9 @@ class MqttUpstreamMux:
             for pending_u in self._pending_unsubs.values():
                 pending_u.event.set()
             self._pending_unsubs.clear()
+            for pending_f in self._pending_subs_by_filter.values():
+                pending_f.finalized_event.set()
+            self._pending_subs_by_filter.clear()
         if was_connected:
             if on_state is not None:
                 try:

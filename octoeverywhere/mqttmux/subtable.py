@@ -134,6 +134,7 @@ class SubscriptionTable:
             if len(entry.subscribers) == 0:
                 del self._entries[filter_]
                 return UnsubscribeOutcome(True, True)
+            entry.max_upstream_qos = max(s.qos for s in entry.subscribers)
             return UnsubscribeOutcome(False, True)
 
 

@@ -1,7 +1,6 @@
 import json
 import logging
 import threading
-import time
 from typing import Any, Callable, Dict, Optional
 
 from octoeverywhere.localip import LocalIpHelper
@@ -88,6 +87,7 @@ class BambuClient:
         self.ConnectionAttemptStateLock = threading.Lock()
         self.ConsecutivelyFailedConnectionAttempts = 0
         self.HasDoneNetScanSincePluginStart = False
+        self._context_sleep_event = threading.Event()
 
         # The subscribe-and-bad-creds detection state. Bambu printers silently
         # close the connection when the SN in the SUBSCRIBE topic is wrong, so
@@ -126,6 +126,7 @@ class BambuClient:
         if self.State is None:
             # Wake the supervisor if it's sleeping between attempts so the
             # user's status check causes a quick reconnect try.
+            self._context_sleep_event.set()
             self._mux.WakeReconnect()
             return None
         return self.State
@@ -195,6 +196,7 @@ class BambuClient:
                 self.Logger.debug("Outgoing Bambu Message:\r\n%s", json.dumps(msg, indent=3))
             if not self.Client.IsConnected():
                 self.Logger.info("Failed to publish command because we aren't connected.")
+                self._context_sleep_event.set()
                 self._mux.WakeReconnect()
                 return False
             return self.Client.Publish(f"device/{self.PrinterSn}/request", json.dumps(msg), qos=0)
@@ -440,7 +442,8 @@ class BambuClient:
             # cap, so reproduce the longer sleep here.
             with self.ConnectionAttemptStateLock:
                 failed = self.ConsecutivelyFailedConnectionAttempts
-            time.sleep(min(600.0 * failed, 3600.0))
+            self._context_sleep_event.wait(timeout=min(600.0 * failed, 3600.0))
+            self._context_sleep_event.clear()
             return None
         accessToken = accessTokenResult.AccessToken
         parsedUser = bCloud.GetUserNameFromAccessToken(accessToken)

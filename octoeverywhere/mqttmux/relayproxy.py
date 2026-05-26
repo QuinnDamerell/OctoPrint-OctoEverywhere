@@ -287,9 +287,14 @@ class MqttRelayWebSocketProxyProviderBuilder(ICommandWebsocketProviderBuilder):
         self._mux_key = mux_key
 
 
+    def GetMuxKey(self) -> str:
+        return self._mux_key
+
+
     def GetCommandWebsocketProvider(self, args: Optional[Dict[str, Any]]) -> Optional[ICommandWebsocketProvider]:
-        mux = MqttMuxRegistry.Get(self._mux_key)
+        key = self.GetMuxKey()
+        mux = MqttMuxRegistry.Get(key)
         if mux is None:
-            self._logger.warning("MqttRelay builder: no mux registered for key=%r", self._mux_key)
+            self._logger.warning("MqttRelay builder: no mux registered for key=%r", key)
             return None
         return MqttRelayWebSocketProxyProvider(self._logger, mux, args)

@@ -3,7 +3,7 @@ from collections import OrderedDict
 from typing import List, Optional
 
 from .topicmatch import TopicMatcher
-from .types import MqttMessage
+from .types import MqttMessage, _CloneMessage
 
 
 # LRU cache of upstream retained PUBLISH messages keyed by exact topic name.
@@ -73,18 +73,19 @@ class RetainedCache:
             return self._StoreLocked(retained_copy)
 
 
-    # Returns all currently-cached retained messages whose topic matches the
-    # given filter. The returned messages have retain=True set (callers may
-    # need to re-clone before sending if the underlying message is shared).
+    # Returns cloned copies of all currently-cached retained messages whose
+    # topic matches the given filter.
     def GetMatching(self, filter_: str) -> List[MqttMessage]:
         with self._lock:
-            return [m for topic, m in self._entries.items() if TopicMatcher.Matches(filter_, topic)]
+            return [_CloneMessage(m) for topic, m in self._entries.items() if TopicMatcher.Matches(filter_, topic)]
 
 
-    # Returns the cached retained message for a single exact topic, or None.
+    # Returns a cloned copy of the cached retained message for a single exact
+    # topic, or None.
     def Get(self, topic: str) -> Optional[MqttMessage]:
         with self._lock:
-            return self._entries.get(topic, None)
+            m = self._entries.get(topic, None)
+            return _CloneMessage(m) if m is not None else None
 
 
     # Wipes the cache entirely. Called on upstream reconnect; the printer's

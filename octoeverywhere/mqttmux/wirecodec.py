@@ -1,6 +1,6 @@
 import struct
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from .types import (
     MAX_PACKET_IDENTIFIER,
@@ -54,7 +54,7 @@ def _EncodeVarInt(value: int) -> bytes:
 
 # Returns (value, new_offset). Raises MalformedPacketException on overflow.
 # Returns (None, offset) when more bytes are needed.
-def _DecodeVarInt(buf: bytes, offset: int) -> Tuple[Optional[int], int]:
+def _DecodeVarInt(buf: "Union[bytes, bytearray]", offset: int) -> Tuple[Optional[int], int]:
     value = 0
     multiplier = 1
     pos = offset
@@ -90,6 +90,8 @@ def _DecodeUint16(buf: bytes, offset: int) -> Tuple[int, int]:
 # The spec forbids U+0000 and unmatched surrogates. We do a basic check;
 # stricter validation (control char ranges) can be layered above.
 def _EncodeString(value: str) -> bytes:
+    if "\x00" in value:
+        raise ValueError("UTF-8 string must not contain U+0000")
     encoded = value.encode("utf-8")
     if len(encoded) > MAX_TOPIC_BYTES:
         raise ValueError(f"UTF-8 string exceeds {MAX_TOPIC_BYTES} bytes")
@@ -333,6 +335,8 @@ def _EncodePublish(p: PublishPacket) -> bytes:
         raise ValueError("DUP must be 0 for QoS 0 PUBLISH")
     if p.qos > 0 and p.packet_id is None:
         raise ValueError("PUBLISH with QoS > 0 requires packet_id")
+    if p.qos > 0 and p.packet_id == 0:
+        raise ValueError("packet_id must not be 0")
     flags = 0
     if p.dup:
         flags |= 0x08
@@ -448,7 +452,7 @@ class MqttPacketDecoder:
         flags = first & 0x0F
 
         # Try to decode remaining length starting at offset 1.
-        remaining_length, header_end = _DecodeVarInt(bytes(self._buffer), 1)
+        remaining_length, header_end = _DecodeVarInt(self._buffer, 1)
         if remaining_length is None:
             return (None, 0)
 

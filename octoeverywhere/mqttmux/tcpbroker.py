@@ -1,4 +1,5 @@
 import logging
+import platform
 import socket
 import threading
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple
@@ -143,7 +144,10 @@ class LocalTcpBrokerServer:
             return
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if platform.system() == "Windows":
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # type: ignore[attr-defined]
+            else:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((self._bind, self._port))
             sock.listen(self._backlog)
         except Exception:
@@ -200,10 +204,15 @@ class LocalTcpBrokerServer:
             self._SpawnClient(client_sock, addr)
 
 
+    # Fallback recv timeout for clients that connect with MQTT keepalive=0
+    # (disabled). Without this, a peer that disappears without a FIN would
+    # leave the reader thread blocked on recv() forever.
+    _FALLBACK_RECV_TIMEOUT_SEC = 300.0
+
     def _SpawnClient(self, client_sock: socket.socket, addr: _PeerAddress) -> None:
         peer = f"{addr[0]}:{addr[1]}"
         try:
-            client_sock.settimeout(None)
+            client_sock.settimeout(self._FALLBACK_RECV_TIMEOUT_SEC)
         except Exception as e:
             self._logger.debug("LocalTcpBrokerServer settimeout raised: %s", e)
         client = TcpBrokerClient(self._logger, self._mux, peer, client_sock,
@@ -255,6 +264,18 @@ class TcpBrokerClient(WireVirtualClient):
             while not self._closed:
                 try:
                     data = self._socket.recv(4096)
+                except socket.timeout:
+                    if self._closed:
+                        return
+                    # For clients with MQTT keepalive > 0, the keepalive
+                    # watchdog in WireVirtualClient handles liveness. The
+                    # socket timeout is a fallback for keepalive=0 peers
+                    # that disappear without a FIN.
+                    if self._keep_alive_sec == 0:
+                        self._logger.info("TcpBrokerClient[%s] recv timeout (keepalive disabled); closing",
+                                          self._peer_label)
+                        return
+                    continue
                 except (ConnectionError, OSError) as e:
                     self._logger.debug("TcpBrokerClient[%s] recv raised: %s", self._peer_label, e)
                     return

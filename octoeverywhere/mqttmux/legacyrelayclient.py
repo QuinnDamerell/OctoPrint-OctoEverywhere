@@ -59,6 +59,7 @@ class LegacyJsonRelayClient(IVirtualClient):
         self._close_transport = close_transport
         self._handle: Optional[VirtualClientHandle] = None
         self._closed = False
+        self._close_lock = threading.Lock()
         self._send_lock = threading.Lock()
 
         # Attach immediately - the legacy protocol has no CONNECT handshake.
@@ -98,10 +99,11 @@ class LegacyJsonRelayClient(IVirtualClient):
 
 
     def OnPeerClosed(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        handle = self._handle
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            handle = self._handle
         self._handle = None
         if handle is not None:
             self._mux.Detach(handle)
@@ -129,6 +131,7 @@ class LegacyJsonRelayClient(IVirtualClient):
             payload_b64 = base64.b64encode(message.payload).decode("utf-8")
             envelope: Dict[str, Any] = {
                 "Type": "on_message",
+                "Topic": message.topic,
                 "Payload": payload_b64,
             }
             if message.packet_id is not None:
@@ -293,11 +296,12 @@ class LegacyJsonRelayClient(IVirtualClient):
 
 
     def _FatalClose(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        handle = self._handle
-        self._handle = None
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            handle = self._handle
+            self._handle = None
         if handle is not None:
             self._mux.Detach(handle)
         try:
