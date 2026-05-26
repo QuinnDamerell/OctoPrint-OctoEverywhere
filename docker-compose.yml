@@ -88,6 +88,25 @@ services:
         # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
         - TZ=America/New_York
 
+        #
+        # Optional Settings For the MQTT Relay Mux Broker Server
+        #
+        # For Bambu Lab and Elegoo printers, this will run an optional MQTT relay server.
+        # The MQTT relay will combine the connections of all clients to a single MQTT connection to the printer, allowing any number of clients to connect to the plugin without hitting connection limits on the printer.
+        - MQTT_RELAY_ENABLED=true
+        #
+        # If true, the MQTT relay will require clients to authenticate with the same credentials as the upstream printer connection.
+        - MQTT_RELAY_REQUIRE_UPSTREAM_AUTH=true
+        #
+        # If MQTT_RELAY_REQUIRE_UPSTREAM_AUTH is false, a static username and password can be set here for clients to authenticate to the MQTT relay.
+        #- MQTT_RELAY_USERNAME=
+        #- MQTT_RELAY_PASSWORD=
+
+    ports:
+      # If using the MQTT relay, you will need to forward 1883 to allow your MQTT clients to connect to the plugin.
+      # There must be a unique port for each instance of the plugin. The first port is the host port (which you can change) the second is the MQTT relay server port in the container.
+      - 1883:1883
+
     volumes:
       # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
       - ./data:/data
@@ -96,7 +115,7 @@ services:
   #
   # Add as many printers and modes as you want!
   #
-  # octoeverywhere-connect-2:
+  #  octoeverywhere-connect-2:
   #   image: octoeverywhere/octoeverywhere:latest
   #   environment:
   #       # Required: The mode of the OctoEverywhere Companion plugin you want to use:
@@ -183,6 +202,25 @@ services:
   #       # Set timezone to proper timezone for logs using standard timezones:
   #       # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List
   #       - TZ=America/New_York
+
+  #       #
+  #       # Optional Settings For the MQTT Relay Mux Broker Server
+  #       #
+  #       # For Bambu Lab and Elegoo printers, this will run an optional MQTT relay server.
+  #       # The MQTT relay will combine the connections of all clients to a single MQTT connection to the printer, allowing any number of clients to connect to the plugin without hitting connection limits on the printer.
+  #       - MQTT_RELAY_ENABLED=true
+  #       #
+  #       # If true, the MQTT relay will require clients to authenticate with the same credentials as the upstream printer connection.
+  #       - MQTT_RELAY_REQUIRE_UPSTREAM_AUTH=true
+  #       #
+  #       # If MQTT_RELAY_REQUIRE_UPSTREAM_AUTH is false, a static username and password can be set here for clients to authenticate to the MQTT relay.
+  #       #- MQTT_RELAY_USERNAME=
+  #       #- MQTT_RELAY_PASSWORD=
+
+  #   ports:
+  #     # If using the MQTT relay, you will need to forward 1883 to allow your MQTT clients to connect to the plugin.
+  #     # There must be a unique port for each instance of the plugin. The first port is the host port (which you can change) the second is the MQTT relay server port in the container.
+  #     - 1884:1883
 
   #   volumes:
   #     # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data

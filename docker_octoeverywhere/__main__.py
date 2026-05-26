@@ -16,6 +16,7 @@ from typing import Any, Optional
 # Unlike the other host, this host doesn't run the service, it invokes the bambu or companion host.
 #
 
+from docker_octoeverywhere.MQTTBootstrap import MQTTBootstrap
 from linux_host.startup import Startup
 from linux_host.config import Config
 
@@ -150,6 +151,10 @@ if __name__ == '__main__':
             PrusaLinkBootstrap.Bootstrap(logger, config)
         else:
             raise Exception(f"Invalid companion mode: {mode}")
+
+        # For the containers that support MQTT, bootstrap it's settings.
+        if mode in [CompanionMode.BambuConnect, CompanionMode.ElegooCc2Connect]:
+            MQTTBootstrap.Bootstrap(logger, config)
 
         # Create the rest of the required dirs based in the data dir, since it's persistent.
         localStoragePath = os.path.join(dataPath, "octoeverywhere-store")

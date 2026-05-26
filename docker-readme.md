@@ -101,6 +101,20 @@ These values must be set as environment vars when you first run the container. O
 - `PASSWORD=(password)`
 - `API_KEY=(api key)`
 
+## MQTT Relay Mux Broker Server
+
+For Bambu Lab and Elegoo 3D printers, the OctoEverywhere plugin can also host a MQTT broker server that will combine the connections of all clients to a single MQTT connection to the printer. This is very useful for 3D printers like the Bambu A1, Bambu P1, and Elegoo CC2 that have a maximum number of clients that can connect directly to the 3D printer.
+
+The MQTT relay will require the same auth credentials as the 3D printer by default. If you want to use a static username and password, set `MQTT_RELAY_REQUIRE_UPSTREAM_AUTH` to false and set a static username and password.
+
+- `MQTT_RELAY_ENABLED=true`
+- `MQTT_RELAY_PORT=1883`
+- `MQTT_RELAY_REQUIRE_UPSTREAM_AUTH=true`
+- `MQTT_RELAY_USERNAME=<str>`
+- `MQTT_RELAY_PASSWORD=<str>`
+
+
+
 ## Required Persistent Storage
 
 You must map the `/data` folder in your Docker container to a directory on your computer so the plugin can write data that will remain between runs. Failure to do this will require relinking the plugin when the container is destroyed or updated.
