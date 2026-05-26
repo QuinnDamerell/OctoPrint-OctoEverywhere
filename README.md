@@ -42,7 +42,6 @@ With a Trustpilot rating of **[4.9/5 stars](https://www.trustpilot.com/review/oc
 
 Any plugin mode that supports Docker can easily be setup with our [OctoEverywhere Plugin Manager For Windows](https://blog.octoeverywhere.com/octoeverywhere-plugin-manager-for-windows/?soruce=github_readme). It makes setup, maintenance, and updates of the OctoEverywhere plugin a breeze!
 
-
 ## OctoEverywhere Docker Container
 
 **🤔 Don't know which to choose?** Use our [Getting Started Guide](https://octoeverywhere.com/getstarted?source=github_readme_install_options_guide) for step-by-step help with plugin setup.
@@ -55,6 +54,16 @@ The OctoEverywhere Docker Container plugin can be use for:
 - [OctoEverywhere Klipper Companion](https://octoeverywhere.com/?source=github_readme_docker) - OctoEverywhere for Klipper 3D printers.
 
 Our Docker container can be run on Windows, Linux, Mac, or just about anywhere.
+
+## MQTT Relay Mux Broker Server
+
+The OctoEverywhere plugin can also host an MQTT broker server that combines all clients' connections into a single MQTT connection to the printer.
+
+This is very useful for 3D printers like the Bambu A1, Bambu P1, and Elegoo CC2 that have a maximum number of clients that can connect directly to them.
+
+The relay is built into the OctoEverywhere plugin, so once you have the plugin setup you're ready to go!
+
+[Learn More About The MQTT Relay Mux Server](https://octoeverywhere.com/s/mqtt-relay)
 
 ## Bugs & Feedback
 

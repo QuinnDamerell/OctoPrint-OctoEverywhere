@@ -145,7 +145,7 @@ class LocalTcpBrokerServer:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             if platform.system() == "Windows":
-                sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # type: ignore[attr-defined]
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)  # type: ignore[attr-defined] #pylint: disable=no-member
             else:
                 sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((self._bind, self._port))

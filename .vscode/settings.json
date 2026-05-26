@@ -81,6 +81,7 @@
         "elegoowebcamhelper",
         "elegoowebsocketmux",
         "esac",
+        "EXCLUSIVEADDRUSE",
         "faststart",
         "Fernet",
         "filamentchange",
