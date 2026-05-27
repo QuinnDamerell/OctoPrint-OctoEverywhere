@@ -1,11 +1,13 @@
 import logging
 import json
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from octoprint.plugin import PluginSettings
-from octoprint.webcams import ProvidedWebcam
-from octoprint.schema.webcam import Webcam, WebcamCompatibility
+
+if TYPE_CHECKING:
+    from octoprint.webcams import ProvidedWebcam
+    from octoprint.schema.webcam import Webcam, WebcamCompatibility
 
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.Webcam.webcamsettingitem import WebcamSettingItem
@@ -61,6 +63,7 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
 
         # A list of webcams we find.
         results:List[WebcamSettingItem] = []
+        hasModernWebcamApi = False
 
         # As of OctoPrint 1.9.0, the webcam logic moved to a plugin based system, where plugins can control and present the webcam config.
         # Due to that change, we can't just pull from the global settings, like we did in the past.
@@ -69,12 +72,13 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
             #pylint: disable=C0415
             from octoprint.util.version import is_octoprint_compatible
             if is_octoprint_compatible(">=1.9.0"):
+                hasModernWebcamApi = True
                 import octoprint.webcams
                 import octoprint.schema.webcam
                 # Get all webcams and try to find one we can use.
-                webcams:Dict[str, ProvidedWebcam] = octoprint.webcams.get_webcams() #pyright: ignore[reportUnknownMemberType]
+                webcams:Dict[str, "ProvidedWebcam"] = octoprint.webcams.get_webcams() #pyright: ignore[reportUnknownMemberType]
                 for webcamName, providerContainer in webcams.items():
-                    webcam:Webcam = providerContainer.config
+                    webcam:"Webcam" = providerContainer.config
                     # Log for debugging.
                     if self.Logger.isEnabledFor(logging.DEBUG):
                         self.Logger.debug(
@@ -103,7 +107,7 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
 
                     # The new webcam struct is unstructured, so that makes it hard for us to use.
                     # The compat object is optional, but it has all of the fields explicitly layout, so if it exits, use it.
-                    compat:Optional[WebcamCompatibility] = webcam.compat #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
+                    compat:Optional["WebcamCompatibility"] = webcam.compat #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
                     if compat is not None:
                         webSettingsItem.StreamUrl = compat.stream #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
                         webSettingsItem.SnapshotUrl = compat.snapshot #pyright: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownMemberType] these exist, idk why pyright doesn't know that.
@@ -158,24 +162,27 @@ class OctoPrintWebcamHelper(IWebcamPlatformHelper):
 
         # If we didn't get anything, try a fallback.
         if len(results) == 0:
-            # This is the logic for < 1.9.0 OctoPrint instances.
-            snapshotUrl:str = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            streamUrl:str = self.OctoPrintSettingsObject.global_get(["webcam", "stream"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            flipH:Optional[bool] = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            flipV:Optional[bool] = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            rotate90:Optional[bool] = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            # TODO - In OctoPrint 1.9 the webcam was moved to a plugin model, such that plugins can implement any kind of webcams they want.
-            # There's a backwards compat layer that should keep things like the old calls above working, but it only seems to work for `snapshot` and `stream`.
-            # So we will try to get the values from the `classicwebcam` plugin, which is the default OctoPrint plugin for webcams now.
-            #
-            # In the future, we should switch to the new `octoprint.webcams.get_webcams` static API in OctoPrint (just import it and call)
-            # To get a list of webcams and handle their properties. But that will only exist in 1.9+, so for now we don't bother.
-            if flipH is None:
+            snapshotUrl:Optional[str] = None
+            streamUrl:Optional[str] = None
+            flipH:Optional[bool] = None
+            flipV:Optional[bool] = None
+            rotate90:Optional[bool] = None
+
+            if hasModernWebcamApi:
+                # OctoPrint 1.9+ moved webcam settings to webcam provider plugins. Avoid the deprecated
+                # top-level webcam.* compatibility overlay when running against that newer model.
+                snapshotUrl = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "snapshot"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
+                streamUrl = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "stream"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
                 flipH = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "flipH"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            if flipV is None:
                 flipV = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "flipV"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
-            if rotate90 is None:
                 rotate90 = self.OctoPrintSettingsObject.global_get(["plugins", "classicwebcam", "rotate90"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
+            else:
+                # This is the logic for < 1.9.0 OctoPrint instances.
+                snapshotUrl = self.OctoPrintSettingsObject.global_get(["webcam", "snapshot"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
+                streamUrl = self.OctoPrintSettingsObject.global_get(["webcam", "stream"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
+                flipH = self.OctoPrintSettingsObject.global_get(["webcam", "flipH"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
+                flipV = self.OctoPrintSettingsObject.global_get(["webcam", "flipV"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
+                rotate90 = self.OctoPrintSettingsObject.global_get(["webcam", "rotate90"]) #pyright: ignore[reportUnknownMemberType] it doesn't know what this resolves to
 
             # These values must exist, so if they don't default them.
             # TODO - We could better guess at either of these URLs if one doesn't exist and the other does.

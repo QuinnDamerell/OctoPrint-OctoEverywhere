@@ -10,7 +10,6 @@ import flask
 import requests
 import octoprint.plugin
 from octoprint.printer import PrinterInterface
-from octoprint.util.comm import MachineCom
 from octoprint.access.users import User
 from octoprint.plugin import PluginSettings
 
@@ -351,7 +350,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
     #
     # Functions are for the gcode receive plugin hook
     #
-    def received_gcode(self, comm_instance:MachineCom, line:str, *args:Any, **kwargs:Any) -> str:
+    def received_gcode(self, comm_instance:Any, line:str, *args:Any, **kwargs:Any) -> str:
         # Blocking will block the printer commands from being handled so we can't block here!
 
         if line and self.NotificationHandler is not None:
@@ -379,7 +378,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # This can return a lot of different things, but we don't return anything.
-    def sent_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, *args:Any, **kwargs:Any) -> None:
+    def sent_gcode(self, comm_instance:Any, phase:str, cmd:str, cmd_type:str, gcode:str, *args:Any, **kwargs:Any) -> None:
         # Blocking will block the printer commands from being handled so we can't block here!
 
         # M600 is a filament change command.
@@ -415,7 +414,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # This can return a lot of different things, but we don't return anything.
-    def queuing_gcode(self, comm_instance:MachineCom, phase:str, cmd:str, cmd_type:str, gcode:str, subcode:Any=None, tags:Any=None, *args:Any, **kwargs:Any) -> None: # pylint: disable=keyword-arg-before-vararg
+    def queuing_gcode(self, comm_instance:Any, phase:str, cmd:str, cmd_type:str, gcode:str, subcode:Any=None, tags:Any=None, *args:Any, **kwargs:Any) -> None: # pylint: disable=keyword-arg-before-vararg
         # Make sure smart pause is setup, since this can be called really early on startup.
         smartPause = SmartPause.Get()
         if smartPause is None:
@@ -425,7 +424,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     # return: A 2-tuple in the form ``(prefix, postfix)``, 3-tuple in the form ``(prefix, postfix, variables)``, or None
-    def script_hook(self, comm_instance:MachineCom, script_type:str, script_name:str, *args:Any, **kwargs:Any) -> Optional[Union[Tuple[Optional[List[str]], Optional[List[str]]], Tuple[Optional[List[str]], Optional[List[str]], Optional[List[str]]]]]:
+    def script_hook(self, comm_instance:Any, script_type:str, script_name:str, *args:Any, **kwargs:Any) -> Optional[Union[Tuple[Optional[List[str]], Optional[List[str]]], Tuple[Optional[List[str]], Optional[List[str]], Optional[List[str]]]]]:
         # Make sure smart pause is setup, since this can be called really early on startup.
         smartPause = SmartPause.Get()
         if smartPause is None:
