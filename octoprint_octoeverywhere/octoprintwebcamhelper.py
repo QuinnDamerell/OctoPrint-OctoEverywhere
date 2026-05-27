@@ -5,15 +5,15 @@ from typing import Dict, List, Optional, TYPE_CHECKING
 
 from octoprint.plugin import PluginSettings
 
-if TYPE_CHECKING:
-    from octoprint.webcams import ProvidedWebcam
-    from octoprint.schema.webcam import Webcam, WebcamCompatibility
-
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.Webcam.webcamsettingitem import WebcamSettingItem
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.interfaces import IWebcamPlatformHelper
+
+if TYPE_CHECKING:
+    from octoprint.webcams import ProvidedWebcam
+    from octoprint.schema.webcam import Webcam, WebcamCompatibility
 
 # This class implements the webcam platform helper interface for OctoPrint.
 class OctoPrintWebcamHelper(IWebcamPlatformHelper):
