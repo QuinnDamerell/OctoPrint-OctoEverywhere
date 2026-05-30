@@ -823,12 +823,18 @@ class NotificationsHandler(INotificationHandler):
             # as well as getting a snapshot directly from a mjpeg stream if there's no snapshot URL.
             octoHttpResponse = WebcamHelper.Get().GetSnapshot()
 
-            # Check for a valid response.
-            if octoHttpResponse is None or octoHttpResponse.StatusCode != 200:
+            # Ensure we got something
+            if octoHttpResponse is None:
                 return None
 
+            # Grab the buffer now and let the rest of the response dispose.
+            snapshot:BufferOrNone = None
+            with octoHttpResponse:
+                if octoHttpResponse.StatusCode != 200:
+                    return None
+                snapshot = octoHttpResponse.FullBodyBuffer
+
             # GetSnapshot will always return the full result already read.
-            snapshot = octoHttpResponse.FullBodyBuffer
             if snapshot is None:
                 self.Logger.error("WebcamHelper.Get().GetSnapshot() returned a web response but no FullBodyBuffer")
                 return None
@@ -845,6 +851,7 @@ class NotificationsHandler(INotificationHandler):
             flipV = WebcamHelper.Get().GetWebcamFlipV()
             rotation = WebcamHelper.Get().GetWebcamRotation()
             if (rotation is not None and flipH is not None and flipV is not None and rotation != 0) or flipH or flipV or snapshotResizeParams is not None:
+                pilImage = None
                 try:
                     if Image is not None: #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
 
@@ -969,6 +976,12 @@ class NotificationsHandler(INotificationHandler):
                         self.Logger.info("Can't manipulate image because the Image lib can't figure out the image type.")
                     else:
                         Sentry.OnException("Failed to manipulate image for notifications", e)
+                finally:
+                    try:
+                        if pilImage is not None:
+                            pilImage.close() #pyright: ignore[reportUnknownMemberType]
+                    except Exception:
+                        pass
 
             # Ensure in the end, the snapshot is a reasonable size.
             if len(snapshot) > NotificationsHandler.MaxSnapshotFileSizeBytes:

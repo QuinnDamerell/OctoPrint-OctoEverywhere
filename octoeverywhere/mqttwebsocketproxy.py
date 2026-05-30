@@ -302,7 +302,7 @@ class MqttWebsocketProxy(IWebSocketClient):
             # Check if we are clear.
             with self.MidAckLock:
                 if self.IsMakingMidAckRequest is False:
-                    return self.MidAckMap.get(mid, None)
+                    return self.MidAckMap.pop(mid, None)
 
             # Wait for just a bit to see if we are clear to send.
             time.sleep(0.02 * attempt)

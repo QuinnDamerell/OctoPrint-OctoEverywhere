@@ -20,6 +20,8 @@ from ..debugprofiler import DebugProfiler, DebugProfilerFeatures
 #
 class OctoWebStream(threading.Thread, IWebStream):
 
+    c_MaxIncomingMessagesQueued = 16
+
     # Created when an open message is sent for a new web stream from the server.
     def __init__(self, group:Any=None, target:Any=None, name:Any=None, args:Any=(), kwargs:Any=None, verbose:Any=None) -> None:
         threading.Thread.__init__(self, group=group, target=target, name=name)
@@ -70,6 +72,19 @@ class OctoWebStream(threading.Thread, IWebStream):
             self.Close()
         else:
             # Otherwise, put the message into the queue, so the thread will pick it up.
+            # We can't let the queue grow without bound, but we also can't block this main thread forever.
+            # We do however want to add back pressure if the queue is too long.
+            attempt = 0
+            while True:
+                if self.MsgQueue.qsize() < OctoWebStream.c_MaxIncomingMessagesQueued:
+                    break
+                attempt += 1
+                if attempt > 20:
+                    self.Logger.warning("Web stream %s incoming message queue has %d messages queued, which is over the limit of %d and it didn't drain in time. Closing the stream.", self.Id, self.MsgQueue.qsize(), OctoWebStream.c_MaxIncomingMessagesQueued)
+                    self.Close()
+                    return
+                self.Logger.debug("Web stream is sleeping because the incoming message queue has %d messages queued, which is over the limit of %d. Attempt #%d.", self.MsgQueue.qsize(), OctoWebStream.c_MaxIncomingMessagesQueued, attempt)
+                time.sleep(0.1)
             self.MsgQueue.put(webStreamMsg)
 
 

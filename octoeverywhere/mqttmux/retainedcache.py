@@ -24,13 +24,17 @@ from .types import MqttMessage, _CloneMessage
 # retained topics. Default 1024 matches the plan; the mux passes the config.
 class RetainedCache:
 
-    def __init__(self, max_entries: int = 1024) -> None:
+    def __init__(self, max_entries: int = 1024, max_payload_bytes: int = 4 * 1024 * 1024) -> None:
         if max_entries < 1:
             raise ValueError("max_entries must be >= 1")
+        if max_payload_bytes < 1:
+            raise ValueError("max_payload_bytes must be >= 1")
         self._lock = threading.Lock()
         # OrderedDict for O(1) LRU update via move_to_end.
         self._entries: "OrderedDict[str, MqttMessage]" = OrderedDict()
         self._max_entries = max_entries
+        self._max_payload_bytes = max_payload_bytes
+        self._payload_bytes = 0
 
 
     # Process an inbound retained PUBLISH from upstream.
@@ -46,7 +50,11 @@ class RetainedCache:
             if len(message.payload) == 0:
                 # Spec: zero-byte retained payload deletes any cached entry
                 # and is not itself stored.
-                return self._entries.pop(message.topic, None) is not None
+                old = self._entries.pop(message.topic, None)
+                if old is not None:
+                    self._payload_bytes -= len(old.payload)
+                    return True
+                return False
             return self._StoreLocked(message)
 
 
@@ -61,7 +69,11 @@ class RetainedCache:
             if message.topic not in self._entries:
                 return False
             if len(message.payload) == 0:
-                return self._entries.pop(message.topic, None) is not None
+                old = self._entries.pop(message.topic, None)
+                if old is not None:
+                    self._payload_bytes -= len(old.payload)
+                    return True
+                return False
             retained_copy = MqttMessage(
                 topic=message.topic,
                 payload=message.payload,
@@ -94,6 +106,7 @@ class RetainedCache:
     def Clear(self) -> None:
         with self._lock:
             self._entries.clear()
+            self._payload_bytes = 0
 
 
     def Size(self) -> int:
@@ -102,9 +115,20 @@ class RetainedCache:
 
 
     def _StoreLocked(self, message: MqttMessage) -> bool:
+        message_payload_len = len(message.payload)
+        if message_payload_len > self._max_payload_bytes:
+            old = self._entries.pop(message.topic, None)
+            if old is not None:
+                self._payload_bytes -= len(old.payload)
+            return False
+        old = self._entries.get(message.topic, None)
+        if old is not None:
+            self._payload_bytes -= len(old.payload)
         self._entries[message.topic] = message
+        self._payload_bytes += message_payload_len
         self._entries.move_to_end(message.topic)
         # Enforce LRU bound.
-        while len(self._entries) > self._max_entries:
-            self._entries.popitem(last=False)
+        while len(self._entries) > self._max_entries or self._payload_bytes > self._max_payload_bytes:
+            _, evicted = self._entries.popitem(last=False)
+            self._payload_bytes -= len(evicted.payload)
         return True

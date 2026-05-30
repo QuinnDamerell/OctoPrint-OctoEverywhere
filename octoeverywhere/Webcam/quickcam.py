@@ -526,6 +526,8 @@ class QuickCam_WebSocket:
                 if self.HeaderBytesRead < len(self.HeaderBuffer):
                     continue
                 self.ExpectedImageSize = int.from_bytes(self.HeaderBuffer[0:3], byteorder='little')
+                if self.ExpectedImageSize <= 0 or self.ExpectedImageSize > WebcamUtil.c_MaxSnapshotFrameSizeBytes:
+                    raise Exception(f"QuickCam refused image size {self.ExpectedImageSize}; max is {WebcamUtil.c_MaxSnapshotFrameSizeBytes}")
                 self.ImageBuffer = bytearray(self.ExpectedImageSize)
                 self.ImageBytesRead = 0
                 self.HeaderBytesRead = 0

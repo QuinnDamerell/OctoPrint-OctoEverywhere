@@ -257,6 +257,8 @@ class Compression:
     # THIS MUST STAY IN SYNC WITH THE VERSION IN THE Dockerfile and the GitHub actions linter file.
     ZStandardPipPackageString = "zstandard>=0.21.0,<0.23.0"
     ZStandardMinCoreCountForInstall = 3
+    ZStandardMaxCompressorPoolSize = 4
+    ZStandardMaxDecompressorPoolSize = 4
 
     _Instance:"Compression" = None #pyright: ignore[reportAssignmentType]
 
@@ -282,6 +284,7 @@ class Compression:
         self.ZStandardDecompressorCreatedCount = 0
 
         # Determine the thread count we will allow zstandard to use.
+        # This can use a lot of ram and cpu, so we want to keep it low.
         # If there are 3 or less cores, we will only use one thread.
         # If there are 4 or more cores, we will use all but 2.
         self.ZStandardThreadCount = 1
@@ -289,7 +292,7 @@ class Compression:
         if cpuCores <= 3:
             self.ZStandardThreadCount = 1
         else:
-            self.ZStandardThreadCount = cpuCores - 2
+            self.ZStandardThreadCount = min(4, cpuCores - 2)
 
         # Always init the zstandard singleton, even if we aren't using zstandard.
         ZStandardDictionary.Init(logger)
@@ -309,16 +312,11 @@ class Compression:
             self.CanUseZStandardLib = True
             self.Logger.info(f"Compression is using zstandard with {self.ZStandardThreadCount} threads")
 
-            # Once the state is set, make a few compressors and decompressors so they are cached and ready to go.
+            # Once the state is set, make a compressor and decompressor so they are cached and ready to go.
             c = self.RentZStandardCompressor()
-            c2 = self.RentZStandardCompressor()
             self.ReturnZStandardCompressor(c)
-            self.ReturnZStandardCompressor(c2)
-
             d = self.RentZStandardDecompressor()
-            d2 = self.RentZStandardDecompressor()
             self.ReturnZStandardDecompressor(d)
-            self.ReturnZStandardDecompressor(d2)
         except Exception as e:
             self.Logger.info(f"Failed to load the zstandard lib, so we won't use it. Error: {e}")
 
@@ -389,6 +387,9 @@ class Compression:
         if compressor is None:
             return
         with self.ZStandardCompressorPoolLock:
+            if len(self.ZStandardCompressorPool) >= Compression.ZStandardMaxCompressorPoolSize:
+                self.Logger.debug("ZStandard compressor pool is full, dropping compressor")
+                return
             self.ZStandardCompressorPool.append(compressor)
 
 
@@ -421,6 +422,9 @@ class Compression:
         if decompressor is None:
             return
         with self.ZStandardDecompressorPoolLock:
+            if len(self.ZStandardDecompressorPool) >= Compression.ZStandardMaxDecompressorPoolSize:
+                self.Logger.debug("ZStandard decompressor pool is full, dropping decompressor")
+                return
             self.ZStandardDecompressorPool.append(decompressor)
 
 

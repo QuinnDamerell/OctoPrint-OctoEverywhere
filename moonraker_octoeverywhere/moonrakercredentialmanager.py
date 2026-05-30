@@ -62,24 +62,25 @@ class MoonrakerCredentialManager:
             result = OctoHttpRequest.MakeHttpCall(self.Logger, "/access/oneshot_token", PathTypes.Relative, "GET", headers)
             if result is None:
                 raise Exception("Failed to get the oneshot token from moonraker.")
-            if result.StatusCode != 200:
-                if result.StatusCode == 401:
-                    self.Logger.info("Failed to get the oneshot token from moonraker. Unauthorized. The API key is likely invalid.")
-                    return None
-                raise Exception("Failed to get the oneshot token from moonraker. "+str(result.StatusCode))
+            with result:
+                if result.StatusCode != 200:
+                    if result.StatusCode == 401:
+                        self.Logger.info("Failed to get the oneshot token from moonraker. Unauthorized. The API key is likely invalid.")
+                        return None
+                    raise Exception("Failed to get the oneshot token from moonraker. "+str(result.StatusCode))
 
-            # Read the response.
-            result.ReadAllContentFromStreamResponse(self.Logger)
-            buf = result.FullBodyBuffer
-            if buf is None:
-                raise Exception("Failed to get the oneshot token from moonraker. No content.")
+                # Read the response.
+                result.ReadAllContentFromStreamResponse(self.Logger, maxBodySizeBytes=64 * 1024)
+                buf = result.FullBodyBuffer
+                if buf is None:
+                    raise Exception("Failed to get the oneshot token from moonraker. No content.")
 
-            # Decode & parse the response.
-            jsonMsg = json.loads(buf.GetBytesLike().decode(encoding="utf-8"))
-            token = jsonMsg.get("result", None)
-            if token is None:
-                raise Exception("Failed to get the oneshot token from moonraker. No result.")
-            return str(token)
+                # Decode & parse the response.
+                jsonMsg = json.loads(buf.GetBytesLike().decode(encoding="utf-8"))
+                token = jsonMsg.get("result", None)
+                if token is None:
+                    raise Exception("Failed to get the oneshot token from moonraker. No result.")
+                return str(token)
         except Exception as e:
             Sentry.OnException("TryToGetOneshotToken failed to get the token.", e)
         return None

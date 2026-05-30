@@ -165,7 +165,7 @@ class HttpResult():
     # as long as the stream will go.
     # This function will not throw on failures, it will read as much as it can and then set the buffer.
     # On a complete failure, the buffer will be set to None, so that should be checked.
-    def ReadAllContentFromStreamResponse(self, logger:logging.Logger) -> None:
+    def ReadAllContentFromStreamResponse(self, logger:logging.Logger, maxBodySizeBytes:Optional[int]=None) -> None:
         # Ensure we have a stream to read.
         if self._requestLibResponseObj is None:
             raise Exception("ReadAllContentFromStreamResponse was called on a result with no request lib Response object.")
@@ -184,6 +184,9 @@ class HttpResult():
             contentLengthStr = self._requestLibResponseObj.headers.get("Content-Length", None)
             if contentLengthStr is not None:
                 contentLength = int(contentLengthStr)
+                if maxBodySizeBytes is not None and contentLength > maxBodySizeBytes:
+                    logger.warning("ReadAllContentFromStreamResponse refused to read %d bytes because the max is %d bytes.", contentLength, maxBodySizeBytes)
+                    return
                 if contentLength > 0:
                     contentBuffer = bytearray(contentLength)
                     # Read the full content length.
@@ -203,6 +206,7 @@ class HttpResult():
             # The default size is tuned to fit about one 1080 jpeg image.
             # Since this function is mostly used for snapshots, that's a good default.
             perReadSizeBytes = 490 * 1024
+            totalBytesRead = sum(len(p) for p in buffers)
 
             while True:
                 # Read data
@@ -210,15 +214,17 @@ class HttpResult():
 
                 # Check if we are done.
                 if buffer is None or len(buffer) == 0:
-                    # This is weird, but there can be lingering data in response.content, so add that if there is any.
-                    # See doBodyRead for more details.
-                    if len(self._requestLibResponseObj.content) > 0:
-                        buffers.append(self._requestLibResponseObj.content)
                     # Break out when we are done.
                     break
 
+                if maxBodySizeBytes is not None and totalBytesRead + len(buffer) > maxBodySizeBytes:
+                    logger.warning("ReadAllContentFromStreamResponse stopped reading because the body exceeded %d bytes.", maxBodySizeBytes)
+                    buffers = []
+                    return
+
                 # If we aren't done, append the buffer.
                 buffers.append(buffer.GetBytesLike())
+                totalBytesRead += len(buffer)
         except Exception as e:
             bufferLength = sum(len(p) for p in buffers)
             lengthStr = "[buffer is None]" if bufferLength == 0 else str(bufferLength)
@@ -235,6 +241,28 @@ class HttpResult():
         self.SetFullBodyBuffer(buffer)
 
 
+    # Creates a shallow replay copy of this result. FullBodyBuffer is shared, but response status and headers can be safely mutated by the caller.
+    # This is mostly used to transfer a response from the requests lib that might be holding a socket open to a result that's untied and just has the response body, headers, etc.
+    def CreateReplayCopy(self) -> "HttpResult":
+        result = HttpResult(self.StatusCode, CaseInsensitiveDict(self.Headers), self.Url, self.DidFallback)
+        if self.FullBodyBuffer is not None:
+            result.SetFullBodyBuffer(self.FullBodyBuffer, self.BodyBufferCompressionType, self.BodyBufferPreCompressSize)
+        return result
+
+
+    # This is the same as calling __exit__, but it can be called manually if not using a with statement.
+    # After this is called, the object should not be used anymore, as the body stream is closed and the full body buffer is cleared.
+    def Free(self, t:Any=None, v:Any=None, tb:Any=None) -> None:
+        # If we have a request lib response object, we should close it to free the underlying socket.
+        if self._requestLibResponseObj is not None:
+            self._requestLibResponseObj.__exit__(t, v, tb)
+        # If we have a custom body stream closed callback, we should call it to free the underlying stream.
+        if self._customBodyStreamClosedCallback is not None:
+            self._customBodyStreamClosedCallback()
+        # Clear the full body buffer to free memory.
+        self.ClearFullBodyBuffer()
+
+
     # We need to support the with keyword incase we have an actual Response object.
     def __enter__(self):
         if self._requestLibResponseObj is not None:
@@ -244,7 +272,4 @@ class HttpResult():
 
     # We need to support the with keyword incase we have an actual Response object.
     def __exit__(self, t:Any, v:Any, tb:Any):
-        if self._requestLibResponseObj is not None:
-            self._requestLibResponseObj.__exit__(t, v, tb)
-        if self._customBodyStreamClosedCallback is not None:
-            self._customBodyStreamClosedCallback()
+        self.Free(t, v, tb)

@@ -3,7 +3,6 @@ import threading
 import time
 from typing import Optional, Dict
 
-from octoeverywhere.buffer import Buffer
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.compat import Compat
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -49,6 +48,10 @@ class Slipstream(ISlipstreamHandler):
         "assets/iconfont/iconfont.css",
         "/assets/i18n/network-en.json"
     ]
+
+    MaxCacheFileSizeBytes = 20 * 1024 * 1024
+    MaxCachedBodySendBytes = 20 * 1024 * 1024
+    MaxTotalCacheBytes = 100 * 1024 * 1024
 
 
     @staticmethod
@@ -159,24 +162,27 @@ class Slipstream(ISlipstreamHandler):
         if indexResult is None:
             return
 
-        # We need to body string to process the index.
-        indexBodyStr = self._GetDecodedBody(indexResult)
-        if indexBodyStr is None:
-            return
+        indexBodyStr:Optional[str] = None
+        with indexResult:
 
-        # Add the index to the cache so it's ready now.
-        with self.Lock:
-            self.Cache[Slipstream.IndexCachePath] = indexResult
+            # We need to body string to process the index.
+            indexBodyStr = self._GetDecodedBody(indexResult)
+            if indexBodyStr is None:
+                return
 
-        # Set the result to None to make sure we don't use it anymore.
+            # Add the index to the cache so it's ready now.
+            self._TryStoreCacheResult(Slipstream.IndexCachePath, indexResult)
+
+        # Set this to None to ensure it's not used anymore.
         indexResult = None
 
         # Elegoo also often redirects to a sub page that's the index as well, so cache that too.
         resultRedirectIndex = self._GetCacheReadyOctoHttpResult(Slipstream.IndexRedirectCachePath)
         if resultRedirectIndex is not None:
             # Add it to our cache.
-            with self.Lock:
-                self.Cache[Slipstream.IndexRedirectCachePath] = resultRedirectIndex
+            with resultRedirectIndex:
+                self._TryStoreCacheResult(Slipstream.IndexRedirectCachePath, resultRedirectIndex)
+            resultRedirectIndex = None
 
         # Now process the index to see if there's more we should cache.
         # We explicitly look for known files in the index should reference that are large.
@@ -199,8 +205,8 @@ class Slipstream(ISlipstreamHandler):
                 continue
 
             # Add it to our cache.
-            with self.Lock:
-                self.Cache[fullPath] = result
+            with result:
+                self._TryStoreCacheResult(fullPath, result)
 
         # Finally, try to see if we can find any sub JS files.
         self._TryToFindSubJsFiles()
@@ -216,6 +222,7 @@ class Slipstream(ISlipstreamHandler):
     # On failure, returns None
     def _GetCacheReadyOctoHttpResult(self, url:str) -> HttpResultOrNone:
         success = False
+        octoHttpResult:HttpResultOrNone = None
         try:
             # Take the starting time.
             start = time.time()
@@ -246,6 +253,9 @@ class Slipstream(ISlipstreamHandler):
             if contentLength is None:
                 self.Logger.error("Slipstream failed to find content-length header in response for "+url)
                 return None
+            if contentLength > Slipstream.MaxCacheFileSizeBytes:
+                self.Logger.info("Slipstream refusing to cache %s because it is %d bytes and the max is %d bytes.", url, contentLength, Slipstream.MaxCacheFileSizeBytes)
+                return None
 
             # Set the cache header
             octoHttpResult.Headers["x-oe-slipstream-plugin"] = "1"
@@ -258,7 +268,7 @@ class Slipstream(ISlipstreamHandler):
             # This is actually a good idea, so the request connection doesn't hang around for a long time.
             buffer = None
             try:
-                octoHttpResult.ReadAllContentFromStreamResponse(self.Logger)
+                octoHttpResult.ReadAllContentFromStreamResponse(self.Logger, maxBodySizeBytes=Slipstream.MaxCacheFileSizeBytes)
                 buffer = octoHttpResult.FullBodyBuffer
             except Exception as e:
                 self.Logger.error("Slipstream failed to read index buffer for "+url+", e:"+str(e))
@@ -282,9 +292,15 @@ class Slipstream(ISlipstreamHandler):
                 compressionContext.SetTotalCompressedSizeOfData(len(buffer))
                 compressResult = Compression.Get().Compress(compressionContext, buffer)
                 buffer = compressResult.Bytes
+            if len(buffer) > Slipstream.MaxCachedBodySendBytes:
+                self.Logger.info("Slipstream refusing to cache %s because the compressed body is %d bytes and the max is %d bytes.", url, len(buffer), Slipstream.MaxCachedBodySendBytes)
+                return None
 
             # Set the buffer into the response so the http request logic can use it.
             octoHttpResult.SetFullBodyBuffer(buffer, compressResult.CompressionType, ogSize)
+
+            # We must create a copy, since we free the original octoHttpResult before we return.
+            cacheResult = octoHttpResult.CreateReplayCopy()
 
             requestDuration = compressStart - start
             compressDuration = time.time() - compressStart
@@ -292,11 +308,18 @@ class Slipstream(ISlipstreamHandler):
 
             # Return the result on success.
             success = True
-            return octoHttpResult
+            return cacheResult
 
         except Exception as e:
             self.Logger.error("Slipstream failed to cache url. url:"+url+" error:"+str(e))
         finally:
+            try:
+                # Always free the octoHttpResult if we created it, since it might have an open request stream that needs to be closed.
+                if octoHttpResult is not None:
+                    octoHttpResult.Free()
+                    octoHttpResult = None
+            except Exception:
+                pass
             # On all exits, if not successful, remove this entry from the cache so it doesn't get stale.
             if success is False:
                 self.RemoveCacheIfExists(url)
@@ -309,6 +332,31 @@ class Slipstream(ISlipstreamHandler):
                 del self.Cache[url]
 
 
+    def _TryStoreCacheResult(self, url:str, result:HttpResult) -> bool:
+        # Figure out how big this new result is.
+        bodySize = self._GetCachedBodySize(result)
+        if bodySize == 0:
+            return False
+        with self.Lock:
+            # Accumulate the current cache size EXCEPT this URL.
+            currentSize = 0
+            for key, value in self.Cache.items():
+                if key == url:
+                    continue
+                currentSize += self._GetCachedBodySize(value)
+            if currentSize + bodySize > Slipstream.MaxTotalCacheBytes:
+                self.Logger.info("Slipstream refusing to store %s because cache would grow to %d bytes; max is %d bytes.", url, currentSize + bodySize, Slipstream.MaxTotalCacheBytes)
+                return False
+            # Always cache a copy of the reply so it doesn't hang open any underlying request connections.
+            self.Cache[url] = result.CreateReplayCopy()
+        return True
+
+
+    def _GetCachedBodySize(self, result:HttpResult) -> int:
+        buffer = result.FullBodyBuffer
+        return 0 if buffer is None else len(buffer)
+
+
     def _GetDecodedBody(self, octoHttpResult:HttpResult) -> Optional[str]:
         # This isn't efficient, but since this is a background thread it's fine.
         # After we add it to the dict, we shouldn't mess with it at all.
@@ -317,15 +365,11 @@ class Slipstream(ISlipstreamHandler):
             self.Logger.error("Slipstream index got successfully but there's no body buffer?")
             return None
 
-        # Create a copy of the buffer
-        indexBodyBuffer = bytearray()
-        indexBodyBuffer[:] = fullBodyBuffer.Get()
-
         # It's no ideal that we need to de-compress this, but it's fine since we are in the background.
         bodyStr = None
         with CompressionContext(self.Logger) as compressionContext:
             # For decompression, we give the pre-compressed size and the compression type. The True indicates this it the only message, so it's all here.
-            indexBodyBytes = Compression.Get().Decompress(compressionContext, Buffer(indexBodyBuffer), octoHttpResult.BodyBufferPreCompressSize, True, octoHttpResult.BodyBufferCompressionType)
+            indexBodyBytes = Compression.Get().Decompress(compressionContext, fullBodyBuffer, octoHttpResult.BodyBufferPreCompressSize, True, octoHttpResult.BodyBufferCompressionType)
             bodyStr = indexBodyBytes.GetBytesLike().decode(encoding="utf-8")
         return bodyStr
 
@@ -409,8 +453,7 @@ class Slipstream(ISlipstreamHandler):
                 if result is None:
                     continue
                 # Add it to our cache.
-                with self.Lock:
-                    self.Cache[urlPath] = result
+                self._TryStoreCacheResult(urlPath, result)
 
         except Exception as e:
             self._DebugLog("Slipstream failed to parse runtime js file for sub js files. e:"+str(e))

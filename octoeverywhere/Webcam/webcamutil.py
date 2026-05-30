@@ -30,6 +30,7 @@ class WebcamUtil:
     c_JpegHeaderFixModeNone = 1
     c_JpegHeaderFixModeSetApp0Identifier = 2
     c_JpegHeaderFixModeInsertApp0 = 3
+    c_MaxSnapshotFrameSizeBytes = 8 * 1024 * 1024
 
     c_JfifApp0Header = bytes([
         0xFF, 0xE0, 0x00, 0x10,
@@ -125,6 +126,9 @@ class WebcamUtil:
                     logger.info("GetSnapshotFromStream - Failed, failed to find frame size.")
                 if contentType is None:
                     logger.info("GetSnapshotFromStream - Failed, failed to find the content type.")
+                return None
+            if frameSizeInt > WebcamUtil.c_MaxSnapshotFrameSizeBytes:
+                logger.warning("GetSnapshotFromStream - Refusing frame of %d bytes because the max is %d bytes.", frameSizeInt, WebcamUtil.c_MaxSnapshotFrameSizeBytes)
                 return None
 
             # Since we have to pass a bytearray into the Buffer class, we need to ensure the buffer is the exact size.

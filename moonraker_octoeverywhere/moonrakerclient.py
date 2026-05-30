@@ -42,6 +42,7 @@ class MoonrakerClient(IMoonrakerClient):
 
     # If enabled, this prints all of the websocket messages sent and received.
     WebSocketMessageDebugging = False
+    NonResponseMsgQueueMaxSize = 1000
 
     @staticmethod
     def Init(logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
@@ -73,7 +74,7 @@ class MoonrakerClient(IMoonrakerClient):
 
         # Setup the non response message thread
         # See _NonResponseMsgQueueWorker to why this is needed.
-        self.NonResponseMsgQueue:queue.Queue[Dict[str, Any]] = queue.Queue(20000)
+        self.NonResponseMsgQueue:queue.Queue[Dict[str, Any]] = queue.Queue(self.NonResponseMsgQueueMaxSize)
         self.NonResponseMsgThread = threading.Thread(target=self._NonResponseMsgQueueWorker)
         self.NonResponseMsgThread.start()
 
@@ -735,8 +736,10 @@ class MoonrakerClient(IMoonrakerClient):
             # The problem is if any of the code paths upstream from the non reply notification tried to issue a request/response
             # they would never get it, because this receive thread would be blocked.
             #
-            # If this queue is full, it will throw, but it has a huge capacity, so that would be bad.
-            self.NonResponseMsgQueue.put_nowait(msgObj)
+            try:
+                self.NonResponseMsgQueue.put_nowait(msgObj)
+            except queue.Full:
+                self.Logger.warning("Moonraker non-response message queue is full. Dropping message to avoid unbounded memory growth.")
 
         except Exception as e:
             Sentry.OnException("Exception while handing moonraker client websocket message.", e)

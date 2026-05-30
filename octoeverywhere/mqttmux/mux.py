@@ -151,6 +151,7 @@ class MqttUpstreamMux:
         subscribe_timeout_sec: float = 15.0,
         publish_timeout_sec: float = 20.0,
         retained_cache_max_entries: int = 1024,
+        retained_cache_max_payload_bytes: int = 4 * 1024 * 1024,
         client_factory: Optional[Callable[..., "mqtt.Client"]] = None,
         backoff_min_sec: float = 1.0,
         backoff_max_sec: float = 60.0,
@@ -171,7 +172,7 @@ class MqttUpstreamMux:
         self._handles: Dict[int, VirtualClientHandle] = {}
         self._next_handle_id = 1
         self._sub_table = SubscriptionTable()
-        self._retained = RetainedCache(max_entries=retained_cache_max_entries)
+        self._retained = RetainedCache(max_entries=retained_cache_max_entries, max_payload_bytes=retained_cache_max_payload_bytes)
         self._is_connected = False
         self._is_shutdown = False
         self._last_context: Optional[MqttConnectionContext] = None
