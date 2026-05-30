@@ -12,7 +12,7 @@ from .octohttprequest import PathTypes
 from .Webcam.webcamhelper import WebcamHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .Webcam.webcamsettingitem import WebcamSettingItem
-from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse, ICommandWebsocketProvider, ConnectionInfo
+from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse, ICommandWebsocketProvider
 
 from .Proto.HttpInitialContext import HttpInitialContext
 

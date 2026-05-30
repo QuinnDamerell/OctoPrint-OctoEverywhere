@@ -194,10 +194,10 @@ FEATURE_TEMPERATURE_CONTROL = 1 << 4
 
 
 class ConnectionInfo():
-    def __init__(self, localIp:Optional[str]=None, localPort:Optional[int]=None, accessToken:Optional[str]=None, serialNumber:Optional[str]=None, apiKey:Optional[str]=None, username:Optional[str]=None, password:Optional[str]=None):
+    def __init__(self, localIp:Optional[str]=None, localPort:Optional[int]=None, accessCode:Optional[str]=None, serialNumber:Optional[str]=None, apiKey:Optional[str]=None, username:Optional[str]=None, password:Optional[str]=None):
         self.LocalIp = localIp
         self.LocalPort = localPort
-        self.AccessToken = accessToken
+        self.AccessCode = accessCode
         self.SerialNumber = serialNumber
         self.ApiKey = apiKey
         self.Username = username
@@ -208,7 +208,7 @@ class ConnectionInfo():
         return {
             "LocalIp": self.LocalIp,
             "LocalPort": self.LocalPort,
-            "AccessToken": self.AccessToken,
+            "AccessCode": self.AccessCode,
             "SerialNumber": self.SerialNumber,
             "ApiKey": self.ApiKey,
             "Username": self.Username,
