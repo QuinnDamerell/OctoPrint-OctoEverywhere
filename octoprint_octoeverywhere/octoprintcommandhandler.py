@@ -1,8 +1,6 @@
 import logging
 from typing import Any, Dict, Optional, Union
 
-from linux_host.config import Config
-from octoeverywhere.localip import LocalIpHelper
 from octoprint import __version__
 from octoprint.printer import PrinterInterface
 
@@ -10,6 +8,7 @@ from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.interfaces import IPlatformCommandHandler, IOctoPrintPlugin, ConnectionInfo
 from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.localip import LocalIpHelper
 
 from .smartpause import SmartPause
 from .printerstateobject import PrinterStateObject
