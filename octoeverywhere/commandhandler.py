@@ -12,7 +12,7 @@ from .octohttprequest import PathTypes
 from .Webcam.webcamhelper import WebcamHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .Webcam.webcamsettingitem import WebcamSettingItem
-from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse, ICommandWebsocketProvider
+from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse, ICommandWebsocketProvider, ConnectionInfo
 
 from .Proto.HttpInitialContext import HttpInitialContext
 
@@ -117,6 +117,8 @@ class CommandHandler:
             return self.GetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
         elif commandPathLower.startswith("set-local-plugin-webcam-items"):
             return self.SetPluginLocalWebcamSettingsItems(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("get-connection-info"):
+            return self.GetConnectionInfo()
         elif commandPathLower.startswith("pause"):
             return self.Pause(jsonObj_CanBeNone)
         elif commandPathLower.startswith("resume"):
@@ -271,6 +273,22 @@ class CommandHandler:
             "ListWebcams" : webcamInfoCommandResponse.ResultDict
         }
         return CommandResponse.Success(responseObj)
+
+
+    # Must return a CommandResponse
+    def GetConnectionInfo(self) -> CommandResponse:
+        try:
+            if self.PlatformCommandHandler is None:
+                self.Logger.warning("GetConnectionInfo command has no PlatformCommandHandler")
+                return CommandResponse.Error(400, "No PlatformCommandHandler available")
+            else:
+                info = self.PlatformCommandHandler.GetConnectionInfo()
+                if info is None:
+                    return CommandResponse.Error(400, "Failed to get connection info")
+                return CommandResponse.Success(info.Serialize())
+        except Exception as e:
+            Sentry.OnExceptionNoSend("API command GetConnectionInfo failed", e)
+            return CommandResponse.Error(500, "Failed to get connection info")
 
 
     # Must return a CommandResponse

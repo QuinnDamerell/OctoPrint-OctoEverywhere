@@ -2,7 +2,8 @@ import logging
 from typing import Any, Dict, Optional, Union, List
 
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
-from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING
+from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, ConnectionInfo
+from linux_host.config import Config
 
 from .elegooclient import ElegooClient
 from .elegoomodels import PrinterState
@@ -14,8 +15,9 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     c_ChamberLightName = "chamber"
 
 
-    def __init__(self, logger:logging.Logger) -> None:
+    def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
+        self.Config = config
 
 
     # !! Platform Command Handler Interface Function !!
@@ -135,6 +137,15 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     def GetSupportedFeatureFlags(self) -> int:
         # These are all we support right now.
         return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Returns the current connection info from the config.
+    def GetConnectionInfo(self) -> ConnectionInfo:
+        return ConnectionInfo(
+            self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None),
+            self.Config.GetInt(Config.SectionCompanion, Config.CompanionKeyPort, None),
+        )
 
 
     # !! Platform Command Handler Interface Function !!

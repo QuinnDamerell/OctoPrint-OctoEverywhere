@@ -118,7 +118,7 @@ class PrusaLinkHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             self.NotificationHandler.SetBedCooldownThresholdTemp(self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault))
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
-            CommandHandler.Init(self.Logger, self.NotificationHandler, PrusaLinkCommandHandler(self.Logger), self)
+            CommandHandler.Init(self.Logger, self.NotificationHandler, PrusaLinkCommandHandler(self.Logger, self.Config), self)
 
             PrusaLinkClient.Init(self.Logger, self.Config, stateTranslator)
 

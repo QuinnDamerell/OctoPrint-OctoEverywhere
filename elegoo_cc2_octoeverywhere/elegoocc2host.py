@@ -112,7 +112,7 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             self.NotificationHandler.SetBedCooldownThresholdTemp(self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault))
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
-            CommandHandler.Init(self.Logger, self.NotificationHandler, ElegooCc2CommandHandler(self.Logger), self)
+            CommandHandler.Init(self.Logger, self.NotificationHandler, ElegooCc2CommandHandler(self.Logger, self.Config), self)
 
             ElegooCc2FileManager.Init(self.Logger)
             ElegooCc2Client.Init(self.Logger, self.Config, printerId, pluginVersionStr, stateTranslator, ElegooCc2FileManager.Get())

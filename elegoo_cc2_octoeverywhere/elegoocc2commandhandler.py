@@ -8,7 +8,9 @@ from octoeverywhere.interfaces import (
     FEATURE_LIGHT_CONTROL,
     FEATURE_TEMPERATURE_CONTROL,
     IPlatformCommandHandler,
+    ConnectionInfo
 )
+from linux_host.config import Config
 
 from .elegoocc2client import ElegooCc2Client
 from .elegoocc2filemanager import ElegooCc2FileManager
@@ -19,8 +21,9 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
     c_ChamberLightName = "chamber"
 
-    def __init__(self, logger:logging.Logger) -> None:
+    def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
+        self.Config = config
 
 
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
@@ -105,6 +108,15 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
     def GetSupportedFeatureFlags(self) -> int:
         return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING | FEATURE_AXIS_MOVEMENT | FEATURE_TEMPERATURE_CONTROL
+
+
+    def GetConnectionInfo(self) -> ConnectionInfo:
+        return ConnectionInfo(
+            self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None),
+            self.Config.GetInt(Config.SectionCompanion, Config.CompanionKeyPort, None),
+            self.Config.GetStr(Config.SectionElegoo, Config.ElegooCc2AccessCode, None),
+            self.Config.GetStr(Config.SectionElegoo, Config.ElegooCc2PrinterSn, None)
+        )
 
 
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:

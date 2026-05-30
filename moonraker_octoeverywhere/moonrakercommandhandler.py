@@ -3,7 +3,9 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL
+from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL
+from octoeverywhere.localip import LocalIpHelper
+from linux_host.config import Config
 
 from .moonrakerclient import MoonrakerClient
 from .smartpause import SmartPause
@@ -14,8 +16,9 @@ from .lightmanager import LightManager
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler(IPlatformCommandHandler):
 
-    def __init__(self, logger:logging.Logger) -> None:
+    def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
+        self.Config = config
 
 
     # !! Platform Command Handler Interface Function !!
@@ -200,6 +203,18 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     def GetSupportedFeatureFlags(self) -> int:
         # These are all we support right now.
         return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING | FEATURE_AXIS_MOVEMENT | FEATURE_EXTRUSION | FEATURE_TEMPERATURE_CONTROL
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Moonraker doesn't have serial number or access code fields in our config.
+    def GetConnectionInfo(self) -> ConnectionInfo:
+        # We get the port from the config or from the Moonraker config file, but for the local IP we always use the local IP helper.
+        # The IP in the config is sometimes local host, or whatever, and we need the actual device IP.
+        (_, port) = MoonrakerClient.Get().GetMoonrakerHostAndPortFromConfig()
+        return ConnectionInfo(
+            LocalIpHelper.TryToGetLocalIpOfConnectionTarget(),
+            port,
+        )
 
 
     # !! Platform Command Handler Interface Function !!

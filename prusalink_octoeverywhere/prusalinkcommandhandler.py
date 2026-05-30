@@ -2,7 +2,8 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.interfaces import IPlatformCommandHandler
+from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo
+from linux_host.config import Config
 
 from .prusalinkclient import PrusaLinkClient
 from .prusalinkmodels import PrinterState
@@ -10,8 +11,9 @@ from .prusalinkmodels import PrinterState
 
 class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
-    def __init__(self, logger:logging.Logger) -> None:
+    def __init__(self, logger:logging.Logger, config: Config) -> None:
         self.Logger = logger
+        self.Config = config
 
 
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
@@ -94,6 +96,23 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
     def GetSupportedFeatureFlags(self) -> int:
         return 0
+
+
+    def GetConnectionInfo(self) -> ConnectionInfo:
+        portStr = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyPort, Config.PrusaLinkDefaultPortStr)
+        portInt: Optional[int] = None
+        if portStr is not None:
+            try:
+                portInt = int(portStr)
+            except ValueError:
+                portInt = None
+        return ConnectionInfo(
+            localIp=self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None),
+            localPort=portInt,
+            apiKey=self.Config.GetStr(Config.SectionPrusaLink, Config.PrusaLinkApiKey, None),
+            username=self.Config.GetStr(Config.SectionPrusaLink, Config.PrusaLinkUsername, None),
+            password=self.Config.GetStr(Config.SectionPrusaLink, Config.PrusaLinkPassword, None),
+        )
 
 
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:

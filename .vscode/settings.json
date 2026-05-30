@@ -252,6 +252,7 @@
         "prusalink",
         "prusalinkclient",
         "prusalinkcommandhandler",
+        "prusalinkmodels",
         "prusalinkstatetranslater",
         "prusalinkwebcamhelper",
         "Pursa",

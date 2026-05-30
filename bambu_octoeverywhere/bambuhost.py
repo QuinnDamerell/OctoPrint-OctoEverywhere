@@ -158,7 +158,7 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
             # Setup the command handler
-            CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger), self)
+            CommandHandler.Init(self.Logger, self.NotificationHandler, BambuCommandHandler(self.Logger, self.Config), self)
 
             # Setup the cloud if it's setup in the config.
             BambuCloud.Init(self.Logger, self.Config)

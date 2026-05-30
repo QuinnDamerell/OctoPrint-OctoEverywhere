@@ -193,6 +193,29 @@ FEATURE_EXTRUSION     = 1 << 3
 FEATURE_TEMPERATURE_CONTROL = 1 << 4
 
 
+class ConnectionInfo():
+    def __init__(self, localIp:Optional[str]=None, localPort:Optional[int]=None, accessToken:Optional[str]=None, serialNumber:Optional[str]=None, apiKey:Optional[str]=None, username:Optional[str]=None, password:Optional[str]=None):
+        self.LocalIp = localIp
+        self.LocalPort = localPort
+        self.AccessToken = accessToken
+        self.SerialNumber = serialNumber
+        self.ApiKey = apiKey
+        self.Username = username
+        self.Password = password
+
+
+    def Serialize(self) -> Dict[str, Any]:
+        return {
+            "LocalIp": self.LocalIp,
+            "LocalPort": self.LocalPort,
+            "AccessToken": self.AccessToken,
+            "SerialNumber": self.SerialNumber,
+            "ApiKey": self.ApiKey,
+            "Username": self.Username,
+            "Password": self.Password,
+        }
+
+
 class IPlatformCommandHandler(ABC):
 
     # If the plugin is connected and in a good state, this should return the standard job status.
@@ -210,6 +233,12 @@ class IPlatformCommandHandler(ABC):
     # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
     @abstractmethod
     def GetSupportedFeatureFlags(self) -> int:
+        pass
+
+    # Returns the connection details known for this platform.
+    # Unsupported values should be returned as empty strings.
+    @abstractmethod
+    def GetConnectionInfo(self) -> ConnectionInfo:
         pass
 
     # This must check that the printer state is valid for the pause and the plugin is connected to the host.

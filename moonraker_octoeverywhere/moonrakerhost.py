@@ -210,7 +210,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             LightManager.Init(self.Logger)
 
             # Setup the command handler
-            CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger), self)
+            CommandHandler.Init(self.Logger, MoonrakerClient.Get().GetNotificationHandler(), MoonrakerCommandHandler(self.Logger, self.Config), self)
 
             # If we have a local dev server, set it in the notification handler.
             if DevLocalServerAddress_CanBeNone is not None:

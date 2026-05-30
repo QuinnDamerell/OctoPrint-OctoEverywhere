@@ -152,7 +152,7 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             stateTranslator.SetNotificationHandler(self.NotificationHandler)
 
             # Setup the command handler
-            CommandHandler.Init(self.Logger, self.NotificationHandler, ElegooCommandHandler(self.Logger), self)
+            CommandHandler.Init(self.Logger, self.NotificationHandler, ElegooCommandHandler(self.Logger, self.Config), self)
 
             # Since the Elegoo printers can only have a limited number of concurrent websockets, we mux them over or main connection.
             websocketMux = ElegooWebsocketMux(self.Logger)

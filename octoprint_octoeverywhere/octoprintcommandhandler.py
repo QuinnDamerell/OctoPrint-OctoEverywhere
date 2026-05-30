@@ -1,12 +1,15 @@
 import logging
 from typing import Any, Dict, Optional, Union
 
+from linux_host.config import Config
+from octoeverywhere.localip import LocalIpHelper
 from octoprint import __version__
 from octoprint.printer import PrinterInterface
 
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.interfaces import IPlatformCommandHandler, IOctoPrintPlugin
+from octoeverywhere.interfaces import IPlatformCommandHandler, IOctoPrintPlugin, ConnectionInfo
+from octoeverywhere.octohttprequest import OctoHttpRequest
 
 from .smartpause import SmartPause
 from .printerstateobject import PrinterStateObject
@@ -172,6 +175,15 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     def GetSupportedFeatureFlags(self) -> int:
         # We don't support any extra features right now.
         return 0
+
+
+    # !! Platform Command Handler Interface Function !!
+    def GetConnectionInfo(self) -> ConnectionInfo:
+        ip = LocalIpHelper.TryToGetLocalIpOfConnectionTarget()
+        return ConnectionInfo(
+            ip,
+            OctoHttpRequest.GetLocalOctoPrintPort()
+        )
 
 
     # !! Platform Command Handler Interface Function !!

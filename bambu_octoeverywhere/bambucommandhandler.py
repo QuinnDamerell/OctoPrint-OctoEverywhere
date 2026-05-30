@@ -3,7 +3,8 @@ from typing import Any, Dict, Union, Optional, List
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.printinfo import PrintInfoManager
-from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, IPlatformCommandHandler
+from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, IPlatformCommandHandler, ConnectionInfo
+from linux_host.config import Config
 
 from .bambuclient import BambuClient
 from .bambumodels import BambuPrintErrors
@@ -13,8 +14,9 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
     c_ChamberLightName = "chamber"
 
-    def __init__(self, logger: logging.Logger) -> None:
+    def __init__(self, logger: logging.Logger, config: Config) -> None:
         self.Logger = logger
+        self.Config = config
 
 
     # This map contains UI ready strings that map to a subset of sub-stages we can send which are more specific than the state.
@@ -237,6 +239,17 @@ class BambuCommandHandler(IPlatformCommandHandler):
     def GetSupportedFeatureFlags(self) -> int:
         # These are all we support right now.
         return 0 | FEATURE_LIGHT_CONTROL
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Returns the current connection info from the config.
+    def GetConnectionInfo(self) -> ConnectionInfo:
+        return ConnectionInfo(
+            self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None),
+            self.Config.GetInt(Config.SectionCompanion, Config.CompanionKeyPort, None),
+            self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None),
+            self.Config.GetStr(Config.SectionBambu, Config.BambuPrinterSn, None)
+        )
 
 
     # !! Platform Command Handler Interface Function !!
