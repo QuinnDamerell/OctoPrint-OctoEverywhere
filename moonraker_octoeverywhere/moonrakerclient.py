@@ -550,7 +550,6 @@ class MoonrakerClient(IMoonrakerClient):
     # After the websocket is open, we need to do this sequence to make sure the system is healthy and ready.
     def _AfterOpenReadyWaiter(self, targetWsObjRef:IWebSocketClient) -> None:
         logCounter = 0
-        self.Logger.info("Moonraker client waiting for klippy ready...")
         try:
             # Before we do anything, we need to identify ourselves.
             # This is also how we authorize ourself with the API key, if needed.
@@ -569,10 +568,7 @@ class MoonrakerClient(IMoonrakerClient):
             # since server.info will get the same error anyways. (timeouts, unauthorized, etc.)
             _ = self.SendJsonRpcRequest("server.connection.identify", params)
 
-            # Since sometimes the moonraker instances ins't connected to klippy, we still want to notify some systems
-            # When the websocket is established and we are authed, so they can use it.
-            self.ConnectionStatusHandler.OnMoonrakerWsOpenAndAuthed()
-
+            hasFiredWsOpenAndAuthed = False
             self.Logger.info("Moonraker client waiting for klippy ready...")
             while True:
                 # Ensure we are still using the active websocket. We use this to know if the websocket we are
@@ -610,6 +606,13 @@ class MoonrakerClient(IMoonrakerClient):
                         raise NoSentryReportException("Moonraker client failed to send klippy ready query message, there was no websocket.")
                     self.Logger.error("Moonraker client failed to send klippy ready query message. "+result.GetLoggingErrorStr())
                     raise Exception("Error returned from klippy state query. "+ str(result.GetLoggingErrorStr()))
+
+                # The very first time we successfully connect to and auth with moonraker, fire the callback.
+                # We always fire this even if klippy isn't ready, because we still want systems to know moonraker is now ready to use.
+                # Some systems will have moonraker ready but klippy might not be ready, like if the printer is offline.
+                if hasFiredWsOpenAndAuthed is False:
+                    hasFiredWsOpenAndAuthed = True
+                    self.ConnectionStatusHandler.OnMoonrakerWsOpenAndAuthed()
 
                 # Check for klippy state
                 resultObj = result.GetResult()
@@ -661,6 +664,7 @@ class MoonrakerClient(IMoonrakerClient):
             self.Logger.info("Successfully got a new API key from Moonraker.")
             self.MoonrakerApiKey = newApiKey
             return True
+        self.Logger.debug("Failed to get a new API key from Moonraker, trying to get a oneshot token...")
 
         # If we didn't get an new API key, try to get a oneshot token.
         # Note that we might already have an existing Moonraker API key, so we will include it in case.
@@ -682,14 +686,14 @@ class MoonrakerClient(IMoonrakerClient):
         with self.WebSocketLock:
             if self.WebSocket is None:
                 return
-            self.Logger.info("Moonraker client websocket shutdown called.")
+            self.Logger.debug("Moonraker client websocket shutdown called.")
             self.WebSocket.Close()
-            self.Logger.info("Moonraker client websocket shutdown complete.")
+            self.Logger.debug("Moonraker client websocket shutdown complete.")
 
 
     # Called when the websocket is opened.
     def _OnWsOpened(self, ws:IWebSocketClient) -> None:
-        self.Logger.info("Moonraker client websocket opened.")
+        self.Logger.debug("Moonraker client websocket opened.")
 
         # Set that the websocket is open.
         with self.WebSocketLock:

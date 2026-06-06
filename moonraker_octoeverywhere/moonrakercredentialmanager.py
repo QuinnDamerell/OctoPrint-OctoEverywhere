@@ -89,6 +89,7 @@ class MoonrakerCredentialManager:
     def TryToGetApiKey(self) -> Optional[str]:
         # If this is an companion plugin, we dont' have the moonraker config file nor can we access the UNIX socket.
         if self.IsCompanionMode:
+            self.Logger.debug("This is companion mode, so we can't access the moonraker config file or unix socket to get the API key.")
             return None
 
         # First, we need to find the unix socket to connect to
