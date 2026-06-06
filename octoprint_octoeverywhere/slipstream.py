@@ -150,11 +150,10 @@ class Slipstream(ISlipstreamHandler):
         # We have our path, check if it's in the map
         with self.Lock:
             if path in self.Cache:
-                # Note that this object can be updated!
-                # There's only once case right now, there's logic that will compare the cache header and convert the
-                # Object into a 304 response, which will strip some headers and the body buffer.
+                # We must make a copy of the returned object because the HTTP system will call free on it when it's done, which clears the buffer.
+                # This copy is a new HttpResult object, but it shares a pointer to the same buffer, so there's no much overhead.
                 self.Logger.debug("Slipstream returning cached content for %s", path)
-                return self.Cache[path]
+                return self.Cache[path].CreateReplayCopy()
 
         # Otherwise return cache miss.
         return None
