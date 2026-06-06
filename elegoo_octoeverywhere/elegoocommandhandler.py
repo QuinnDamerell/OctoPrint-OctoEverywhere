@@ -1,5 +1,6 @@
+import json
 import logging
-from typing import Any, Dict, Optional, Union, List
+from typing import Any, Dict, Optional, Union, List, cast
 
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, ConnectionInfo
@@ -226,3 +227,40 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     # Sets the temperature for bed, chamber, or tool.
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sends an Elegoo SDCP JSON command and returns the JSON response.
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        if transportType != "websocket":
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an Elegoo printer that uses the SDCP protocol over a websocket, so it only accepts send-command requests with transportType 'websocket'. The received transportType was '{transportType}'. Set 'transportType' to 'websocket' and put the SDCP command in 'request'. Example: {{\"transportType\": \"websocket\", \"request\": {{\"Cmd\": 1, \"Data\": {{}}}}}}.")
+
+        parsed = CommandHandler.ParseWebsocketSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        # Elegoo speaks SDCP, where the command identifier is an int Cmd and the payload is a Data object.
+        cmdId = parsed.Method
+        data = parsed.Params
+        # Support a raw native SDCP payload of the form {"Data": {"Cmd": ..., "Data": {...}}}, where the common parse
+        # surfaces the outer "Data" object as the params and no command identifier.
+        if cmdId is None and "Cmd" in data:
+            cmdId = data.get("Cmd", None)
+            nestedData = data.get("Data", {})
+            if not isinstance(nestedData, dict):
+                return CommandResponse.Error(400, f"This Elegoo SDCP command was given in the native nested form {{\"Data\": {{\"Cmd\": ..., \"Data\": {{...}}}}}}, but the inner 'Data' field must be a JSON object and a value of type '{type(nestedData).__name__}' was received. The inner 'Data' holds the command parameters, e.g. \"request\": {{\"Data\": {{\"Cmd\": 1, \"Data\": {{}}}}}}.")
+            data = cast(Dict[str, Any], nestedData)
+
+        if cmdId is None or not isinstance(cmdId, int) or isinstance(cmdId, bool):
+            return CommandResponse.Error(400, f"This Elegoo printer uses SDCP, which requires an integer command id. Provide it as 'Cmd' (or 'cmd') inside 'request', e.g. \"request\": {{\"Cmd\": 1, \"Data\": {{...}}}}, but no valid integer command id was found (received value: {json.dumps(cmdId, default=str)}).")
+
+        result = ElegooClient.Get().SendRequest(cmdId, data, timeoutSec=10.0)
+        if result.HasError():
+            if result.GetErrorCode() == result.OE_ERROR_WS_NOT_CONNECTED:
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            return CommandResponse.Error(400, result.GetLoggingErrorStr())
+
+        return CommandResponse.Success({
+            "type": "websocket",
+            "response": result.GetResult()
+        })

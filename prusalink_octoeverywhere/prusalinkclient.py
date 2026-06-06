@@ -244,18 +244,26 @@ class PrusaLinkClient:
         raise Exception(f"Prusa Link request returned non-object JSON. Path: {path}")
 
 
-    def _Request(self, method:str, path:str) -> requests.Response:
+    def SendHttpCommand(self, method:str, path:str, headers:Optional[Dict[str, str]], data:Optional[bytes], timeoutSec:Optional[float]) -> requests.Response:
+        return self._Request(method, path, headers=headers, data=data, timeoutSec=timeoutSec)
+
+
+    def _Request(self, method:str, path:str, headers:Optional[Dict[str, str]]=None, data:Optional[bytes]=None, timeoutSec:Optional[float]=None, allowRedirects:bool=False) -> requests.Response:
         context = self.CurrentConnectionContext
         if context is None:
             raise Exception("Prusa Link request was called with no connection context.")
         url = context.GetBaseUrl() + path
+        requestHeaders = {"Accept": "application/json"}
+        if headers is not None:
+            requestHeaders.update(headers)
         with self.SessionLock:
-            return self.Session.request(
+            return self.Session.request( #pyright: ignore[reportUnknownMemberType] requests session typing is incomplete.
                 method,
                 url,
-                headers={"Accept": "application/json"},
-                timeout=PrusaLinkClient.RequestTimeoutSec,
-                allow_redirects=False,
+                headers=requestHeaders,
+                data=data,
+                timeout=PrusaLinkClient.RequestTimeoutSec if timeoutSec is None else timeoutSec,
+                allow_redirects=allowRedirects,
                 verify=False,
             )
 

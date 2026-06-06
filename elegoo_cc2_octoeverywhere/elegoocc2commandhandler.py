@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, List, Optional, Union
 
@@ -191,3 +192,42 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         if result.HasError():
             return CommandResponse.Error(400, "Failed to send command to printer.")
         return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sends an Elegoo CC2 MQTT request and returns the matched MQTT response.
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        if transportType != "mqtt":
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an Elegoo Centauri (CC2) printer, which communicates over MQTT, so it only accepts send-command requests with transportType 'mqtt'. The received transportType was '{transportType}'. Set 'transportType' to 'mqtt' and put the command in 'request'. Example: {{\"transportType\": \"mqtt\", \"request\": {{\"method\": 1, \"params\": {{}}}}}}.")
+
+        parsed = CommandHandler.ParseMqttSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        # Elegoo CC2 uses an int method id and a params object.
+        method = parsed.Method
+        if method is None or not isinstance(method, int) or isinstance(method, bool):
+            return CommandResponse.Error(400, f"This Elegoo CC2 printer requires an integer 'method' id inside 'request', e.g. \"request\": {{\"method\": 1, \"params\": {{...}}}}, but the received method value was {json.dumps(method, default=str)}. The 'method' selects which CC2 command to run and must be a JSON integer.")
+
+        result = ElegooCc2Client.Get().SendRequest(method, parsed.Params, waitForResponse=True, timeoutSec=10.0)
+        if result.HasError():
+            if result.GetErrorCode() == result.OE_ERROR_MQTT_NOT_CONNECTED:
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            return CommandResponse.Error(400, result.GetLoggingErrorStr())
+
+        topics = ElegooCc2Client.Get().GetApiRequestResponseTopics()
+        return CommandResponse.Success({
+            "type": "mqtt",
+            "request": {
+                "topic": topics["RequestTopic"],
+                "payload": {
+                    "method": method,
+                    "params": parsed.Params,
+                },
+                "qos": 0,
+            },
+            "response": {
+                "topic": topics["ResponseTopic"],
+                "payload": result.GetResult(),
+            },
+        })

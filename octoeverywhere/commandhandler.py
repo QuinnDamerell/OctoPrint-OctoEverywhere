@@ -1,7 +1,8 @@
 import json
 import logging
+from dataclasses import dataclass
 from urllib.parse import unquote
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from .buffer import Buffer
 from .gadget import Gadget
@@ -15,6 +16,47 @@ from .Webcam.webcamsettingitem import WebcamSettingItem
 from .interfaces import INotificationHandler, IPlatformCommandHandler, IHostCommandHandler, CommandResponse, ICommandWebsocketProvider
 
 from .Proto.HttpInitialContext import HttpInitialContext
+
+
+#
+# Parsed send-command transport payloads.
+#
+# These are the typed results of the per-transport send-command parse helpers on CommandHandler.
+# Each platform calls the parse helper for the transport(s) it supports and then acts on the typed result.
+#
+
+# The result of parsing an "http" transport send-command payload.
+@dataclass
+class ParsedHttpSendCommand:
+    # The path to make the request to. Required.
+    Path:str
+    # The upper-cased HTTP method (defaults to GET).
+    Method:str
+    # The request headers (string keys and values). Empty if none were provided.
+    Headers:Dict[str, str]
+    # The serialized JSON body bytes, or None when no body should be sent (e.g. a GET with no request object).
+    BodyBytes:Optional[bytes]
+
+
+# The result of parsing a "websocket" transport send-command request.
+@dataclass
+class ParsedWebsocketSendCommand:
+    # The command identifier. For JSON-RPC platforms this is a method string; for SDCP-style platforms an int command id.
+    # The platform is responsible for validating this is the expected type. Can be None if the request didn't include one.
+    Method:Optional[Any]
+    # The params/data object sent with the command. Defaults to an empty dict.
+    Params:Dict[str, Any]
+
+
+# The result of parsing a "mqtt" transport send-command request.
+@dataclass
+class ParsedMqttSendCommand:
+    # An optional command identifier, for platforms that split a method/command id out of the request (e.g. Elegoo CC2).
+    Method:Optional[Any]
+    # The params object, for platforms that split params out of the request. Defaults to an empty dict.
+    Params:Dict[str, Any]
+    # The full raw request object, for platforms that send the request payload as-is (e.g. Bambu).
+    Request:Dict[str, Any]
 
 
 #
@@ -137,6 +179,8 @@ class CommandHandler:
             return self.Extrude(jsonObj_CanBeNone)
         elif commandPathLower.startswith("set-temp"):
             return self.SetTemp(jsonObj_CanBeNone)
+        elif commandPathLower.startswith("send-command"):
+            return self.SendCommand(jsonObj_CanBeNone)
         elif commandPathLower.startswith("rekey"):
             return self.Rekey()
         elif commandPathLower.startswith(CommandHandler.c_MqttWebsocketProxyCommand):
@@ -559,6 +603,25 @@ class CommandHandler:
         return self.PlatformCommandHandler.ExecuteSetTemp(bedC, chamberC, toolC, toolNumber)
 
 
+    def SendCommand(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        if jsonObjData is None:
+            return CommandResponse.Error(400, "The send-command request body was empty. Provide a single JSON object containing at least a 'transportType' (string) and a 'request' (object). Example: {\"transportType\": \"http\", \"path\": \"/api/version\", \"method\": \"GET\", \"request\": {}}.")
+        if not isinstance(jsonObjData, dict):
+            return CommandResponse.Error(400, f"The send-command request body must be a single JSON object, but a value of type '{type(jsonObjData).__name__}' was received. Send a JSON object with a 'transportType' (string) and a 'request' (object), e.g. {{\"transportType\": \"http\", \"path\": \"/api/version\", \"method\": \"GET\", \"request\": {{}}}}.")
+
+        transportType = jsonObjData.get("transportType", jsonObjData.get("TransportType", None))
+        if transportType is None or not isinstance(transportType, str) or len(transportType) == 0:
+            return CommandResponse.Error(400, f"The send-command request is missing the required 'transportType' field, or it was not a non-empty string (received value: {json.dumps(transportType, default=str)}). Set 'transportType' to one of 'http', 'websocket', or 'mqtt' to select how the command is delivered to the printer. The valid transport depends on the printer platform.")
+        if transportType not in {"http", "websocket", "mqtt"}:
+            return CommandResponse.Error(400, f"The send-command 'transportType' value '{transportType}' is not recognized. It must be exactly one of 'http', 'websocket', or 'mqtt' (lowercase). A given printer platform only supports one of these transports.")
+
+        requestObj = jsonObjData.get("request", jsonObjData.get("Request", None))
+        if requestObj is None or not isinstance(requestObj, dict):
+            return CommandResponse.Error(400, f"The send-command request is missing the required 'request' field, or it was not a JSON object (received value: {json.dumps(requestObj, default=str)}). 'request' must be a JSON object whose shape depends on 'transportType'. For 'http' it is the JSON request body (use {{}} for an empty body, with the HTTP options 'path'/'method'/'headers' set at the top level of the payload, not inside 'request'). For 'websocket' and 'mqtt' it holds the command itself (e.g. {{\"method\": ..., \"params\": {{...}}}}).")
+
+        return self.PlatformCommandHandler.ExecuteSendCommand(transportType, requestObj, jsonObjData)
+
+
 
     def Rekey(self) -> CommandResponse:
         self.Logger.warning("Rekey command received!")
@@ -746,3 +809,87 @@ class CommandHandler:
             except Exception as e:
                 Sentry.OnException("CommandHandler error while parsing webcam index.", e)
         return webcamIndex
+
+
+    #
+    # Common send-command transport parsers.
+    #
+    # CommandHandler.SendCommand has already pulled the common `transportType` and `request` fields out of the raw payload
+    # before calling the platform's ExecuteSendCommand(transportType, request, rawPayload). These helpers do the
+    # transport-specific parsing once, so every platform that speaks a given transport shares the same parsing and
+    # validation. Each returns a typed Parsed*SendCommand on success, or a CommandResponse error to return as-is.
+    #
+
+    # Parses an "http" transport payload. The HTTP transport options (path, method, headers, timeoutSec, allowRedirects)
+    # live at the payload root; the `request` object is the JSON body that gets sent.
+    @staticmethod
+    def ParseHttpSendCommand(rawPayload:Dict[str, Any], request:Dict[str, Any]) -> Union[ParsedHttpSendCommand, CommandResponse]:
+        path = rawPayload.get("path", rawPayload.get("Path", None))
+        if path is None or not isinstance(path, str) or len(path) == 0:
+            return CommandResponse.Error(400, f"For an 'http' send-command, the top-level 'path' field is required and must be a non-empty string, but the received value was {json.dumps(path, default=str)}. Note that for http the 'path', 'method', 'headers', 'timeoutSec', and 'allowRedirects' fields go at the top level of the payload (next to 'transportType'), while 'request' holds only the JSON request body. Example payload: {{\"transportType\": \"http\", \"path\": \"/api/printer\", \"method\": \"GET\", \"request\": {{}}}}.")
+        method = str(rawPayload.get("method", rawPayload.get("Method", "GET"))).upper()
+        if len(method) == 0:
+            return CommandResponse.Error(400, "For an 'http' send-command, the top-level 'method' field must be a non-empty string HTTP verb such as 'GET', 'POST', 'PUT', 'PATCH', or 'DELETE'. It is optional and defaults to 'GET' when omitted, but an empty string is not allowed.")
+        try:
+            headers = CommandHandler._ParseHeaders(rawPayload)
+        except Exception as e:
+            return CommandResponse.Error(400, str(e))
+
+        # Build the JSON body from the request object. We send a body for any non GET/HEAD method, or whenever a request
+        # object was provided. When we send a body and no content type was set, default to application/json.
+        bodyBytes:Optional[bytes] = None
+        if len(request) > 0 or method not in ("GET", "HEAD"):
+            if "Content-Type" not in headers and "content-type" not in headers:
+                headers["Content-Type"] = "application/json"
+            bodyBytes = json.dumps(request, default=str).encode("utf-8")
+
+        return ParsedHttpSendCommand(path, method, headers, bodyBytes)
+
+
+    # Parses a "websocket" transport request. We accept a command identifier as `method`/`cmd` and a params object as
+    # `params`/`data` (all case-insensitive). The platform validates the command identifier is the type it expects.
+    @staticmethod
+    def ParseWebsocketSendCommand(rawPayload:Dict[str, Any], request:Dict[str, Any]) -> Union[ParsedWebsocketSendCommand, CommandResponse]:
+        method = CommandHandler._FirstPresent(request, "method", "Method", "cmd", "Cmd")
+        params = CommandHandler._FirstPresent(request, "params", "Params", "data", "Data")
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            return CommandResponse.Error(400, f"For a 'websocket' send-command, the request's params object (provided as 'params', 'Params', 'data', or 'Data' inside 'request') must be a JSON object, but a value of type '{type(params).__name__}' was received. Provide the command arguments as a JSON object, e.g. \"request\": {{\"method\": \"printer.objects.query\", \"params\": {{...}}}}, or omit it entirely to send no arguments.")
+        return ParsedWebsocketSendCommand(method, cast(Dict[str, Any], params))
+
+
+    # Parses a "mqtt" transport request. We surface an optional command identifier (`method`/`cmd`) and params
+    # (`params`/`data`) for platforms that split them out, plus the full raw request for platforms that send it as-is.
+    @staticmethod
+    def ParseMqttSendCommand(rawPayload:Dict[str, Any], request:Dict[str, Any]) -> Union[ParsedMqttSendCommand, CommandResponse]:
+        method = CommandHandler._FirstPresent(request, "method", "Method", "cmd", "Cmd")
+        params = CommandHandler._FirstPresent(request, "params", "Params", "data", "Data")
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            return CommandResponse.Error(400, f"For an 'mqtt' send-command, the request's params object (provided as 'params', 'Params', 'data', or 'Data' inside 'request') must be a JSON object, but a value of type '{type(params).__name__}' was received. Provide the command arguments as a JSON object, e.g. \"request\": {{\"method\": 1, \"params\": {{...}}}}, or omit it entirely to send no arguments.")
+        return ParsedMqttSendCommand(method, cast(Dict[str, Any], params), request)
+
+
+    # Returns the value of the first of the given keys that exists in the dict, or None if none are present.
+    @staticmethod
+    def _FirstPresent(d:Dict[str, Any], *keys:str) -> Optional[Any]:
+        for k in keys:
+            if k in d:
+                return d[k]
+        return None
+
+
+    # Parses the optional 'headers' field (case-insensitive) into a string->string dict. Raises on a non-object value.
+    @staticmethod
+    def _ParseHeaders(rawPayload:Dict[str, Any]) -> Dict[str, str]:
+        headersRaw = rawPayload.get("headers", rawPayload.get("Headers", None))
+        if headersRaw is None:
+            return {}
+        if not isinstance(headersRaw, dict):
+            raise Exception(f"The optional top-level 'headers' field must be a JSON object mapping header names to values, but a value of type '{type(headersRaw).__name__}' was received. Example: \"headers\": {{\"Content-Type\": \"application/json\", \"X-Api-Key\": \"...\"}}. Omit the field entirely if no extra headers are needed.")
+        headers:Dict[str, str] = {}
+        for k, v in headersRaw.items():
+            headers[str(k)] = str(v)
+        return headers

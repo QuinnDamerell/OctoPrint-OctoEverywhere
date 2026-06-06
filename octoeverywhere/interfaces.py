@@ -295,6 +295,15 @@ class IPlatformCommandHandler(ABC):
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
         pass
 
+    # Sends a native JSON command payload to the printer's control system and returns the native JSON response.
+    # The common payload shape is:
+    #   {"transportType": "http|websocket|mqtt", "request": {...}, ...transport root args...}
+    # Type and request are required and pre-parsed out of the rawPayload.
+    # Platforms without a generic request/response control channel should return FeatureNotSupported.
+    @abstractmethod
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        pass
+
 
 class ILocalAuth(ABC):
 

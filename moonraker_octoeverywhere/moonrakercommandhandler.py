@@ -437,6 +437,36 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return CommandResponse.Success(None)
 
 
+    # !! Platform Command Handler Interface Function !!
+    # Sends a Moonraker JSON-RPC payload and returns the JSON-RPC result.
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        if transportType != "websocket":
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Moonraker (Klipper) printer, which only accepts send-command requests with transportType 'websocket'. The received transportType was '{transportType}'. Set 'transportType' to 'websocket' and put the Moonraker JSON-RPC call in 'request'. Example: {{\"transportType\": \"websocket\", \"request\": {{\"method\": \"printer.objects.query\", \"params\": {{\"objects\": {{\"toolhead\": null}}}}}}}}.")
+
+        parsed = CommandHandler.ParseWebsocketSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        # Moonraker speaks JSON-RPC, so the command identifier must be a method string.
+        method = parsed.Method
+        if method is None or not isinstance(method, str) or len(method) == 0:
+            return CommandResponse.Error(400, f"This Moonraker (Klipper) printer speaks JSON-RPC, so the 'request' object must include a non-empty string 'method' naming the JSON-RPC method to call (e.g. 'printer.objects.query', 'printer.gcode.script'), but the received method value was {json.dumps(method, default=str)}. Provide it as \"request\": {{\"method\": \"<json-rpc method>\", \"params\": {{...}}}}.")
+
+        result = MoonrakerClient.Get().SendJsonRpcRequest(method, parsed.Params, timeoutSec=10.0)
+        if result.HasError():
+            if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized")
+            return CommandResponse.Error(400, result.GetLoggingErrorStr())
+
+        response:Dict[str, Any] = {
+            "type": "websocket",
+            "response": result.GetSimpleResult() if result.IsSimpleResult() else result.GetResult()
+        }
+        return CommandResponse.Success(response)
+
+
     # Checks if the printer is connected and in the correct state (or states)
     # If everything checks out, returns None. Otherwise it returns a CommandResponse
     def _CheckIfConnectedAndForExpectedStates(self, stateArray:List[str]) -> Optional[CommandResponse]:

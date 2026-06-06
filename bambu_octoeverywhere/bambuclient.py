@@ -1,7 +1,8 @@
+import copy
 import json
 import logging
 import threading
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, cast
 
 from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.mqttmux.localclient import LocalPluginClient
@@ -44,6 +45,8 @@ class ConnectionContext:
 # The mux is registered in MqttMuxRegistry so the WS relay and the local TCP
 # broker (added in later steps) share this single upstream connection.
 class BambuClient:
+
+    RequestTimeoutSec = 10.0
 
     _Instance:"BambuClient" = None #pyright: ignore[reportAssignmentType]
 
@@ -98,6 +101,11 @@ class BambuClient:
         self.IsPendingSubscribe = False
         self.ReportSubToken:Optional[SubToken] = None
         self.ConnectionGeneration = 0
+
+        # Generic MQTT command request/response waiters, keyed by Bambu sequence_id.
+        self.RequestLock = threading.Lock()
+        self.RequestPendingContexts:Dict[str, "BambuMqttWaitingContext"] = {}
+        self.NextSendCommandSequenceId = 1000000000
 
         # Build the mux and the in-process client.
         # The mux is the core of the connection management and is shared with other surfaces.
@@ -209,6 +217,51 @@ class BambuClient:
                "led_mode": mode, "led_on_time": 500, "led_off_time": 500, "loop_times": 0, "interval_time": 0}})
 
 
+    def SendCommand(self, payload:Dict[str, Any], timeoutSec:Optional[float]=None) -> "BambuCommandResult":
+        try:
+            msg = copy.deepcopy(payload)
+            if not isinstance(msg, dict):
+                return BambuCommandResult(otherError="Payload must be a JSON object.")
+
+            sequenceId = self._FindSequenceId(msg)
+            if sequenceId is None:
+                sequenceId = self._GetNextSendCommandSequenceId()
+                if not self._SetSequenceIdIfMissing(msg, sequenceId):
+                    return BambuCommandResult(otherError="Payload must contain a top-level MQTT command object.")
+
+            waitContext = BambuMqttWaitingContext(sequenceId)
+            with self.RequestLock:
+                self.RequestPendingContexts[sequenceId] = waitContext
+
+            try:
+                requestTopic = f"device/{self.PrinterSn}/request"
+                if not self._Publish(msg):
+                    return BambuCommandResult(connected=False)
+
+                waitContext.GetEvent().wait(timeoutSec if timeoutSec is not None else BambuClient.RequestTimeoutSec)
+                if waitContext.Connected is False:
+                    return BambuCommandResult(connected=False)
+                response = waitContext.GetResult()
+                if response is None:
+                    return BambuCommandResult(timeout=True)
+
+                return BambuCommandResult(result={
+                    "request": {
+                        "topic": requestTopic,
+                        "payload": msg,
+                        "qos": 0,
+                    },
+                    "response": response,
+                })
+            finally:
+                with self.RequestLock:
+                    self.RequestPendingContexts.pop(sequenceId, None)
+
+        except Exception as e:
+            Sentry.OnException("Failed to send generic Bambu MQTT command.", e)
+            return BambuCommandResult(exception=e)
+
+
     def _Publish(self, msg:Dict[str, Any]) -> bool:
         try:
             if self.Logger.isEnabledFor(logging.DEBUG):
@@ -259,6 +312,9 @@ class BambuClient:
         else:
             self.LastConnectionFailedDueToAuth = False
             self.Logger.warning("Bambu printer connection lost. We will try to reconnect in a few seconds.")
+        with self.RequestLock:
+            for waiter in list(self.RequestPendingContexts.values()):
+                waiter.SetSocketClosed()
         # Clear cached printer state - it's now unknown.
         self.State = None
         self.Version = None
@@ -339,6 +395,8 @@ class BambuClient:
             if BambuClient._PrintMQTTMessages and self.Logger.isEnabledFor(logging.DEBUG):
                 self.Logger.debug("Incoming Bambu Message:\r\n%s", json.dumps(msg, indent=3))
 
+            self._HandlePendingCommandResponse(mqtt_msg.topic, msg)
+
             isFirstFullSyncResponse = False
             if "print" in msg:
                 printMsg = msg["print"]
@@ -382,6 +440,60 @@ class BambuClient:
         except Exception as e:
             Sentry.OnException(f"Failed to handle incoming mqtt message. `{mqtt_msg.payload!r}`", e)
 
+
+    def _HandlePendingCommandResponse(self, topic:str, msg:Dict[str, Any]) -> None:
+        sequenceIds:Dict[str, None] = {}
+        self._CollectSequenceIds(msg, sequenceIds)
+        if len(sequenceIds) == 0:
+            return
+        with self.RequestLock:
+            for sequenceId in sequenceIds:
+                context = self.RequestPendingContexts.get(sequenceId, None)
+                if context is not None:
+                    context.SetResultAndEvent({
+                        "topic": topic,
+                        "payload": msg,
+                    })
+                    return
+
+
+    def _CollectSequenceIds(self, obj:Any, sequenceIds:Dict[str, None]) -> None:
+        if isinstance(obj, dict):
+            objDict = cast(Dict[str, Any], obj)
+            sequenceId = objDict.get("sequence_id", None)
+            if sequenceId is not None:
+                sequenceIds[str(sequenceId)] = None
+            for value in objDict.values():
+                self._CollectSequenceIds(value, sequenceIds)
+        elif isinstance(obj, list):
+            for value in obj:
+                self._CollectSequenceIds(value, sequenceIds)
+
+
+    def _GetNextSendCommandSequenceId(self) -> str:
+        with self.RequestLock:
+            sequenceId = str(self.NextSendCommandSequenceId)
+            self.NextSendCommandSequenceId += 1
+            return sequenceId
+
+
+    def _FindSequenceId(self, msg:Dict[str, Any]) -> Optional[str]:
+        for value in msg.values():
+            if isinstance(value, dict):
+                valueDict = cast(Dict[str, Any], value)
+                sequenceId = valueDict.get("sequence_id", None)
+                if sequenceId is not None:
+                    return str(sequenceId)
+        return None
+
+
+    def _SetSequenceIdIfMissing(self, msg:Dict[str, Any], sequenceId:str) -> bool:
+        for value in msg.values():
+            if isinstance(value, dict):
+                valueDict = cast(Dict[str, Any], value)
+                valueDict["sequence_id"] = sequenceId
+                return True
+        return False
 
     # Called fresh on every connect attempt. Mirrors the legacy
     # _GetConnectionContextToTry logic, plus emits the OE-relay-compatible
@@ -525,6 +637,34 @@ class BambuClient:
         self.Logger.error("If they changed, run the OctoEverywhere installer again to update them or update your Docker configuration.")
         self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         self.Logger.error("")
+
+
+class BambuMqttWaitingContext:
+
+    def __init__(self, sequenceId:str) -> None:
+        self.SequenceId = sequenceId
+        self.WaitEvent = threading.Event()
+        self.Result:Optional[Dict[str, Any]] = None
+        self.Connected = True
+
+
+    def GetEvent(self) -> threading.Event:
+        return self.WaitEvent
+
+
+    def GetResult(self) -> Optional[Dict[str, Any]]:
+        return self.Result
+
+
+    def SetResultAndEvent(self, result:Dict[str, Any]) -> None:
+        self.Result = result
+        self.WaitEvent.set()
+
+
+    def SetSocketClosed(self) -> None:
+        self.Connected = False
+        self.Result = None
+        self.WaitEvent.set()
 
 
 # A class returned as the result of all ran commands. Kept here so the

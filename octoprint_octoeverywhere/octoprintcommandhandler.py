@@ -1,9 +1,12 @@
+import json
 import logging
 from typing import Any, Dict, Optional, Union
 
 from octoprint import __version__
 from octoprint.printer import PrinterInterface
 
+from octoeverywhere.buffer import Buffer
+from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.interfaces import IPlatformCommandHandler, IOctoPrintPlugin, ConnectionInfo
@@ -300,3 +303,65 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # Sets the temperature for bed, chamber, or tool.
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sends a native JSON command payload to the printer control system and returns the JSON response.
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        if transportType != "http":
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an OctoPrint printer, which only accepts send-command requests with transportType 'http'. The received transportType was '{transportType}'. Set 'transportType' to 'http', put the OctoPrint API path/method/headers at the top level of the payload, and put any JSON request body in 'request'. Example: {{\"transportType\": \"http\", \"path\": \"/api/version\", \"method\": \"GET\", \"request\": {{}}}}.")
+
+        parsed = CommandHandler.ParseHttpSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        # Add the local auth header so we can call back into OctoPrint's own APIs.
+        localAuth = Compat.GetLocalAuth()
+        if localAuth is not None:
+            localAuth.AddAuthHeader(parsed.Headers)
+
+        bodyBuffer:Optional[Buffer] = None
+        if parsed.BodyBytes is not None:
+            bodyBuffer = Buffer(parsed.BodyBytes)
+
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            parsed.Path,
+            OctoHttpRequest.GetPathType(parsed.Path),
+            parsed.Method,
+            parsed.Headers,
+            bodyBuffer,
+            allowRedirects=False,
+            timeoutSec=10.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+
+        try:
+            return CommandResponse.Success({
+                "type": "http",
+                "response": self._BuildHttpResponse(result)
+            })
+        finally:
+            result.Free()
+
+
+    def _BuildHttpResponse(self, result:Any) -> Dict[str, Any]:
+        result.ReadAllContentFromStreamResponse(self.Logger)
+        bodyBytes = b""
+        if result.FullBodyBuffer is not None:
+            bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+        bodyText = bodyBytes.decode("utf-8", errors="replace")
+        response:Dict[str, Any] = {
+            "statusCode": result.StatusCode,
+            "headers": dict(result.Headers),
+            "url": result.Url,
+            "body": bodyText,
+        }
+        if len(bodyText) > 0:
+            try:
+                response["bodyJson"] = json.loads(bodyText)
+            except Exception:
+                pass
+        return response
+

@@ -327,3 +327,28 @@ class BambuCommandHandler(IPlatformCommandHandler):
     # Sets the temperature for bed, chamber, or tool.
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sends a Bambu MQTT JSON payload and returns the matched MQTT JSON response.
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        if transportType != "mqtt":
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Bambu Lab printer, which communicates over MQTT, so it only accepts send-command requests with transportType 'mqtt'. The received transportType was '{transportType}'. Set 'transportType' to 'mqtt' and put the full MQTT JSON payload in 'request' (it is sent to the printer as-is). Example: {{\"transportType\": \"mqtt\", \"request\": {{\"pushing\": {{\"sequence_id\": \"0\", \"command\": \"pushall\"}}}}}}.")
+
+        parsed = CommandHandler.ParseMqttSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        # Bambu sends the request payload to the printer as-is over MQTT.
+        result = BambuClient.Get().SendCommand(parsed.Request, timeoutSec=10.0)
+        if result.HasError():
+            if result.Connected is False:
+                if BambuClient.Get().IsDisconnectDueToAuth():
+                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized")
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            return CommandResponse.Error(400, result.GetLoggingErrorStr())
+
+        responseObj:Dict[str, Any] = {"type": "mqtt"}
+        if result.Result is not None:
+            responseObj.update(result.Result)
+        return CommandResponse.Success(responseObj)

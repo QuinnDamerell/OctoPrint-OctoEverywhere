@@ -351,6 +351,21 @@ class ElegooCc2Client:
                     self.RequestPendingContexts.pop(requestId, None)
 
 
+    def GetApiRequestResponseTopics(self) -> Dict[str, Optional[str]]:
+        with self.StateLock:
+            sn = self.SerialNumber
+            client_id = self.CurrentClientId
+        request_topic = None
+        response_topic = None
+        if sn is not None and client_id is not None:
+            request_topic = f"elegoo/{sn}/{client_id}/api_request"
+            response_topic = f"elegoo/{sn}/{client_id}/api_response"
+        return {
+            "RequestTopic": request_topic,
+            "ResponseTopic": response_topic,
+        }
+
+
     # Fired when the main MQTT mux connection to the printer is established.
     def _OnUpstreamConnected(self) -> None:
         self.Logger.info("Elegoo CC2 upstream connected, beginning registration.")

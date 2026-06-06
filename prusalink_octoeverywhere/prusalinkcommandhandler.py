@@ -157,3 +157,41 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Not Supported")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Sends an HTTP request to PrusaLink and returns the HTTP response.
+    def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        if transportType != "http":
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a PrusaLink printer, which only accepts send-command requests with transportType 'http'. The received transportType was '{transportType}'. Set 'transportType' to 'http', put the PrusaLink API path/method/headers at the top level of the payload, and put any JSON request body in 'request'. Example: {{\"transportType\": \"http\", \"path\": \"/api/version\", \"method\": \"GET\", \"request\": {{}}}}.")
+
+        parsed = CommandHandler.ParseHttpSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        try:
+            response = PrusaLinkClient.Get().SendHttpCommand(parsed.Method, parsed.Path, parsed.Headers, parsed.BodyBytes, 10.0)
+        except Exception as e:
+            self.Logger.warning("PrusaLink send-command HTTP request failed. %s", e)
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+
+        return CommandResponse.Success({
+            "type": "http",
+            "response": self._BuildHttpResponse(response)
+        })
+
+
+    def _BuildHttpResponse(self, response:Any) -> Dict[str, Any]:
+        bodyText = response.text if response.text is not None else ""
+        responseObj:Dict[str, Any] = {
+            "statusCode": response.status_code,
+            "headers": dict(response.headers),
+            "url": response.url,
+            "body": bodyText,
+        }
+        if len(bodyText) > 0:
+            try:
+                responseObj["bodyJson"] = response.json()
+            except Exception:
+                pass
+        return responseObj
