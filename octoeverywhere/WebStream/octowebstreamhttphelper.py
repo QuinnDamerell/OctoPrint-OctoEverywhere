@@ -13,6 +13,7 @@ from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..Webcam.webcamhelper import WebcamHelper
 from ..commandhandler import CommandHandler
 from ..compression import Compression, CompressionContext
+from ..memorymanager import MemoryManager
 from ..sentry import Sentry
 from ..compat import Compat
 from ..Proto import HttpHeader
@@ -52,10 +53,6 @@ class MsgBuilderContext:
 # or by returning true from `IncomingServerMessage`
 #
 class OctoWebStreamHttpHelper:
-
-    # This is the max size anyone single message can be.
-    # This should stay in sync with the server size max.
-    c_MaxSingleChunkSizeBytes = int(4.5 * 1024.0 * 1024.0)
 
     # Called by the main socket thread so this should be quick!
     def __init__(self, streamId:int, logger:logging.Logger, webStream:IWebStream, webStreamOpenMsg:WebStreamMsg.WebStreamMsg, openedTime:float) -> None:
@@ -97,6 +94,7 @@ class OctoWebStreamHttpHelper:
         self.MultipartReadsPerSecond = 0
         self.MultipartReadsPerSecondCounter = 0
         self.MultipartReadTimestampSec = 0.0
+        self.MultipartFrameBytesRemaining = 0
 
         # In the open message, this value might exist, which would indicate
         # we know the full data size of the data that's being uploaded.
@@ -850,16 +848,8 @@ class OctoWebStreamHttpHelper:
                 contentLength:Optional[int],
                 responseHandlerContext:Optional[Any]
             ) -> Tuple[int, int, Optional[int]]:
-        # This is the max size each body read will be. Since we are making local calls, most of the time we will always get this full amount as long as theres more body to read.
-        # This size is a little under the max read buffer on the server, allowing the server to handle the buffers with no copies.
-        #
-        # 3/24/24 - We did a lot of direct download testing to tweak this buffer size and the server read size, these were the best values able to hit about 223mbps.
-        # With the current values, the majority of the time is spent sending the data on the websocket.
-        #
-        # But NOTE! This size is the actual size that will be allocated for the read buffer (in the stream class) and then the buffer is sliced by how much
-        # is read. So we can't make this value too large, or we will be allocating big buffers.
-        # This is 490kb
-        defaultBodyReadSizeBytes = 490 * 1024
+        # This is the max size each body read will be.
+        defaultBodyReadSizeBytes = MemoryManager.OctoWebStreamHttpHelper_DefaultBodyReadSizeBytes
 
         # If we are going to compress this read, use a higher number. Since most of what we compress is text,
         # and that text usually compresses down to 25% of the og size, we use a x2 multiplier as a balance
@@ -870,8 +860,8 @@ class OctoWebStreamHttpHelper:
         # Finally check if we know the content length of the request. If we do, we will set the buffer to be exactly that value.
         # This is a lot more efficient, because we only allocate a buffer the exact size we need for the request.
         # But we want to limit the max size of the buffer, so we don't allocate a huge buffer for a large request.
-        if contentLength is not None and contentLength < defaultBodyReadSizeBytes:
-            defaultBodyReadSizeBytes = contentLength
+        if contentLength is not None:
+            defaultBodyReadSizeBytes = min(defaultBodyReadSizeBytes, contentLength)
 
         # Some requests like snapshot requests will already have a fully read body. In this case we use the existing body buffer instead of reading from the body.
         # Important! If the NeedsRelease flag is set we must release the buffer after we are done so the underlying buffer can be used on the next pass.
@@ -908,22 +898,30 @@ class OctoWebStreamHttpHelper:
                             # This does need to be small, because we want reading this min time period back to back, we are reading a chunk, doing all of the send logic, and then spinning back to here.
                             # So if we set this at exactly 16.6 for a 60fps stream, for example, we will fall behind.
                             # So we set the accumulation time to 10ms, which should be small enough to not cause issues.
-                            self.HttpStreamAccumulationReader = HttpStreamAccumulationReader(self.Logger, self.Id, httpResult, accumulationTimeSec=0.010, maxReturnBufferSizeBytes=self.c_MaxSingleChunkSizeBytes)
+                            self.HttpStreamAccumulationReader = HttpStreamAccumulationReader(
+                                self.Logger,
+                                self.Id,
+                                httpResult,
+                                accumulationTimeSec=0.010,
+                            )
                         finalDataBuffer = self.HttpStreamAccumulationReader.Read()
                     else:
                         # If there is no boundary string, but we know the content length, it's safe to just read.
                         # This will block until either the full defaultBodyReadSizeBytes is read or the full request has been received.
                         # If this returns None, we hit a read timeout or the stream is done, so we are done.
 
-                        # If this request will be handled by the a response handler, we need to load the full body into one buffer.
                         if responseHandlerContext:
+                            # If this request will be handled by the a response handler, we need to load the full body into one buffer.
                             # We have to be careful with the size, because on some platforms (like the K1) whatever size we pass it will try to allocate
                             # into one buffer. If we know the context length, us it. Otherwise, set something that's reasonably large.
                             if contentLength is not None:
-                                defaultBodyReadSizeBytes = contentLength
+                                # We know the server will not accept a message larger than this, so we need to blow up now.
+                                if contentLength > MemoryManager.Global_MaxSingleChunkSizeBytes:
+                                    self.Logger.error(f"The content length of this request is larger than the max single chunk size. cl:{contentLength}, max:{MemoryManager.Global_MaxSingleChunkSizeBytes}. This might cause issues since we have to read it all into one buffer for the response handler. We will set the read buffer to the max single chunk size, but this might cause out of memory issues on low end devices.")
+                                    raise Exception("The content length of this request is larger than the max single chunk size, which is not supported for requests that use the response handler. cl:"+str(contentLength)+", max:"+str(MemoryManager.Global_MaxSingleChunkSizeBytes))
+                                defaultBodyReadSizeBytes = min(contentLength, MemoryManager.Global_MaxSingleChunkSizeBytes)
                             else:
-                                # Use a 2mb buffer.
-                                defaultBodyReadSizeBytes = 1024 * 1024 * 2
+                                defaultBodyReadSizeBytes = MemoryManager.Global_MaxSingleChunkSizeBytes
 
                         # Use the temp body buffer to read into, this is reused across reads to avoid multiple allocations.
                         # This reads into the temp body buffer, so we need to set finalDataBufferCreationSize to slice it.
@@ -1004,8 +1002,8 @@ class OctoWebStreamHttpHelper:
             builderContext.CreateBuilder(finalDataBufferSizeBytes)
 
             # Warn if the total buffer size is too big. Add the 1kb for headers and other flatbuffer overhead.
-            if finalDataBufferSizeBytes > self.c_MaxSingleChunkSizeBytes - 1024:
-                self.Logger.warning(self.getLogMsgPrefix() + " is creating a flatbuffer message with a very large data buffer size of "+str(finalDataBufferSizeBytes)+" bytes. This is larger than the recommended max single chunk size of "+str(self.c_MaxSingleChunkSizeBytes)+" bytes. This will cause a disconnect.")
+            if finalDataBufferSizeBytes > MemoryManager.Global_MaxSingleChunkSizeBytes - 1024:
+                self.Logger.warning(self.getLogMsgPrefix() + " is creating a flatbuffer message with a very large data buffer size of "+str(finalDataBufferSizeBytes)+" bytes. This is larger than the recommended max single chunk size of "+str(MemoryManager.Global_MaxSingleChunkSizeBytes)+" bytes. This will cause a disconnect.")
 
             builder = builderContext.Builder
             if builder is None:
@@ -1028,6 +1026,24 @@ class OctoWebStreamHttpHelper:
         frameSize = 0
         headerSize = 0
         foundContentLength = False
+
+        # If a previous call returned in the middle of a large multipart frame, continue reading only a bounded slice of that same frame.
+        if self.MultipartFrameBytesRemaining > 0:
+            # Compute how much to read.
+            readSize = min(self.MultipartFrameBytesRemaining, MemoryManager.OctoWebStreamHttpHelper_MaxMultipartReadSizeBytes)
+            tempBufferByteArray = self._EnsureBodyReadTempBufferSize(readSize).ForceAsByteArray()
+
+            # Read however much we can.
+            dataReadSize = self.doBodyReadInto(httpResult, tempBufferByteArray, 0, readSize)
+            if dataReadSize <= 0:
+                return 0
+
+            # Handle the result.
+            self.MultipartFrameBytesRemaining -= dataReadSize
+            if self.MultipartFrameBytesRemaining <= 0:
+                self.MultipartFrameBytesRemaining = 0
+                self._OnMultipartFrameReadComplete()
+            return dataReadSize
 
         # If the temp array isn't setup, do it now.
         tempBufferByteArray = self._EnsureBodyReadTempBufferSize(10*1024).ForceAsByteArray()
@@ -1127,31 +1143,49 @@ class OctoWebStreamHttpHelper:
 
         # We have a content-length!
         # Compute how much more we need to read.
-        toRead = (frameSize + headerSize) - tempBufferFilledSize
+        totalFrameSize = frameSize + headerSize
+        toRead = totalFrameSize - tempBufferFilledSize
         if toRead < 0:
             # Oops. This means we read into the next chunk.
-            # TODO - we could update this logic to correct itself by appending this chunk data
-            # on the next chunk, but as it stands it won't work.
+            # TODO - we could update this logic to correct itself by appending this chunk data on the next chunk, but as it stands it won't work.
             # So just put the stream into the no content-length mode and return what we read.
             self.Logger.error(self.getLogMsgPrefix()+ " http stream to read size is less than 0. FrameSize:"+str(frameSize) + " HeaderSize:"+str(headerSize) + " Read:"+str(tempBufferFilledSize))
             self.ChunkedBodyHasNoContentLengthHeaders = True
             return tempBufferFilledSize
 
-        # Read the remainder of the chunk.
+        # Read the reset of the frame up to the limit of OctoWebStreamHttpHelper_MaxMultipartReadSizeBytes
         if toRead > 0:
-            tempBufferByteArray = self._EnsureBodyReadTempBufferSize(tempBufferFilledSize + toRead).ForceAsByteArray()
-            dataReadSize = self.doBodyReadInto(httpResult, tempBufferByteArray, tempBufferFilledSize, toRead)
+            remainingRoomThisRead = max(0, MemoryManager.OctoWebStreamHttpHelper_MaxMultipartReadSizeBytes - tempBufferFilledSize)
+            dataReadTargetSize = min(toRead, remainingRoomThisRead)
+            if dataReadTargetSize > 0:
+                tempBufferByteArray = self._EnsureBodyReadTempBufferSize(tempBufferFilledSize + dataReadTargetSize).ForceAsByteArray()
+                dataReadSize = self.doBodyReadInto(httpResult, tempBufferByteArray, tempBufferFilledSize, dataReadTargetSize)
 
-            # If we hit the end of the body, return how much we read already.
-            if dataReadSize == 0:
+                # If we hit the end of the body, return how much we read already.
+                if dataReadSize == 0:
+                    return tempBufferFilledSize
+
+                # Warn if we didn't read all that we requested for this bounded read.
+                if dataReadSize != dataReadTargetSize:
+                    self.Logger.warning(self.getLogMsgPrefix()+" while reading a boundary chunk, doBodyRead didn't return the full size we requested.")
+
+                tempBufferFilledSize += dataReadSize
+                toRead -= dataReadSize
+
+            self.MultipartFrameBytesRemaining = max(0, toRead)
+
+            # If we still have bytes remaining, return what we have read so far, and we will read the rest on the next call.
+            if self.MultipartFrameBytesRemaining > 0:
                 return tempBufferFilledSize
 
-            # Warn if twe didn't read it all
-            if dataReadSize != toRead:
-                self.Logger.warning(self.getLogMsgPrefix()+" while reading a boundary chunk, doBodyRead didn't return the full size we requested.")
+        # If we didn't have more bytes to read, we read the entire frame into the temp buffer, so we can do the multipart frame read complete logic.
+        self._OnMultipartFrameReadComplete()
 
-            tempBufferFilledSize += dataReadSize
+        # Finally, return how much we put into the temp buffer!
+        return tempBufferFilledSize
 
+
+    def _OnMultipartFrameReadComplete(self) -> None:
         # Update our read rate. This is a metric we send along in the stream if the it's a multipart stream, to know how fast we are reading it.
         # Basically for webcams streamed via http, it's the frame rate.
         nowSec = time.time()
@@ -1174,9 +1208,6 @@ class OctoWebStreamHttpHelper:
 
         # Now increment our counter, to account for the frame we just processed.
         self.MissingBoundaryWarningCounter += 1
-
-        # Finally, return how much we put into the temp buffer!
-        return tempBufferFilledSize
 
 
     # Ensures the temp body buffer is sized correctly and returns it.

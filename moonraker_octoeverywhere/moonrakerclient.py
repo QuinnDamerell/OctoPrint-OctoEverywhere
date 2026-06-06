@@ -658,7 +658,7 @@ class MoonrakerClient(IMoonrakerClient):
         # For some systems we need auth for the websocket, but no auth for the oneshot token API, which makes no sense.
         # But if that's the case, we try to get a one_shot token.
         self.OneshotToken = MoonrakerCredentialManager.Get().TryToGetOneshotToken(self.MoonrakerApiKey)
-        if self.OneshotToken is None:
+        if self.OneshotToken is not None:
             # If we got a one shot token, use it.
             self.Logger.info("Successfully got a new oneshot token from Moonraker.")
             return True

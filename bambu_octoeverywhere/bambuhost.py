@@ -2,18 +2,12 @@ import logging
 import traceback
 from typing import Any, Dict, List, Optional
 
-from octoeverywhere.mdns import MDns
 from octoeverywhere.mqttmux.tcpbroker import LocalTcpBrokerServer
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.deviceid import DeviceId
-from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
-from octoeverywhere.compression import Compression
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.pingpong import PingPong
-from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
@@ -107,25 +101,11 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             if DevLocalServerAddress_CanBeNone is not None:
                 self.Logger.warning("~~~ Using Local Dev Server Address: %s ~~~", DevLocalServerAddress_CanBeNone)
 
-            # Init Sentry, but it won't report since we are in dev mode.
-            Telemetry.Init(self.Logger)
-            if DevLocalServerAddress_CanBeNone is not None:
-                Telemetry.SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
-
-            # Init compression
-            Compression.Init(self.Logger, localStorageDir)
-
-            # Init the mdns client
-            MDns.Init(self.Logger, localStorageDir)
+            # Init all of the common host stuff.
+            HostCommon.Init(self.Logger, printerId, localStorageDir, DevLocalServerAddress_CanBeNone)
 
             # Init the local web api. This will only start a thread if it's setup to run in the config.
             LocalWebApi.Init(self.Logger, printerId, self.Config)
-
-            # Init device id
-            DeviceId.Init(self.Logger)
-
-            # Setup the print info manager.
-            PrintInfoManager.Init(self.Logger, localStorageDir)
 
             # But we still want to set the "local OctoPrint port" to 80, because that's the default port it will try for relative URLs.
             # Relative URLs for Bambu only come from the alternative webcam streaming system, which the user might be trying to access a webcam stream from this device.
@@ -140,11 +120,6 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
             if configIpOrHostname is not None:
                 LocalIpHelper.SetConnectionTargetIpOverride(configIpOrHostname)
-
-            # Init the ping pong helper.
-            PingPong.Init(self.Logger, localStorageDir, printerId)
-            if DevLocalServerAddress_CanBeNone is not None:
-                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the webcam helper
             webcamHelper = BambuWebcamHelper(self.Logger, self.Config)

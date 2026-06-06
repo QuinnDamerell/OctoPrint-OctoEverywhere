@@ -17,18 +17,12 @@ from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.notificationshandler import NotificationsHandler
-from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.compression import Compression
-from octoeverywhere.telemetry import Telemetry
-from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.mdns import MDns
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.commandhandler import CommandHandler
-from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
 from octoeverywhere.interfaces import IPopUpInvoker, IHostCommandHandler, IOctoPrintPlugin, IStateChangeHandler
 
@@ -192,9 +186,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             self._plugin_version, #pyright: ignore[reportArgumentType]
             "octoprint", isDevMode=False, canEnableProfiling=False, filterExceptionsByPackage=True)
 
-        # Setup our telemetry class.
-        Telemetry.Init(self.Logger)
-
         #
         # Due to settings bugs in OctoPrint, as much of the generated values saved into settings should be set here as possible.
         # For more details, see SaveToSettingsIfUpdated()
@@ -207,11 +198,11 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Ensure the plugin version is updated in the settings for the frontend.
         self.EnsurePluginVersionSet()
 
+        # Setup HostCommon, this will setup a lot of the core singletons and things we need for the plugin to run.
+        HostCommon.Init(self.Logger, printerId, self.get_plugin_data_folder())
+
         # Set the printer id to Sentry.
         Sentry.SetPrinterId(printerId)
-
-        # Setup compression
-        Compression.Init(self.Logger, self.get_plugin_data_folder())
 
         # Init the static local auth helper
         LocalAuth.Init(self.Logger,
@@ -222,18 +213,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
                         OctoPrintWebcamHelper(self.Logger,
                                                 self._settings) #pyright: ignore[reportArgumentType]
                         , self.get_plugin_data_folder())
-
-        # Init the ping helper
-        PingPong.Init(self.Logger, self.get_plugin_data_folder(), printerId)
-
-        # Init the mdns helper
-        MDns.Init(self.Logger, self.get_plugin_data_folder())
-
-        # Init device id
-        DeviceId.Init(self.Logger)
-
-        # Init the print info manager.
-        PrintInfoManager.Init(self.Logger, self.get_plugin_data_folder())
 
         # Since OctoPrint doesn't type this, we redefine it typed.
         octoPrintPrinterObj:PrinterInterface = self._printer #pyright: ignore[reportAssignmentType]

@@ -43,6 +43,14 @@ class QuickCamStreamTypes(Enum):
 # This is a helper class that manages active instances of QuickCam and allows all requests for the same URL to share a common stream.
 class QuickCamManager:
 
+    # Used by some systems to limit the FPS to the webcam server. We need to make sure it stays common so we don't strip it from the QuickCam URL.
+    # This value must stay lower case!
+    c_FpsGetParam = "fps"
+
+    # Used on some platforms when we know the stream is jmpeg, we add this to the URL so we can identify it easily.
+    c_JMpegExtension = ".mjpg"
+
+
     _Instance:"QuickCamManager" = None #pyright: ignore[reportAssignmentType]
 
     @staticmethod
@@ -127,7 +135,7 @@ class QuickCamManager:
     # Returns a QuickCam instances for this url. If auth is required, the auth should be added to the URL in the http:// style. Ex rtsp://username:password@hostname...
     # The QuickCam class will be shared across multiple instances, it's thread safe.
     def _GetOrCreate(self, url:str) -> "QuickCam":
-        url = QuickCamManager._NormalizeQuickCamUrl(url)
+        url = self._NormalizeQuickCamUrl(url)
 
         with self.QuickCamMapLock:
             # If it already exists, get it and return it.
@@ -141,8 +149,7 @@ class QuickCamManager:
             return qc
 
 
-    @staticmethod
-    def _NormalizeQuickCamUrl(url:str) -> str:
+    def _NormalizeQuickCamUrl(self, url:str) -> str:
         # Strip cache-busting query params while preserving action=stream style URLs.
         if url.find("?") == -1:
             return url
@@ -150,8 +157,13 @@ class QuickCamManager:
         parts = urlsplit(url)
         actionParams:List[Tuple[str, str]] = []
         for name, value in parse_qsl(parts.query, keep_blank_values=True):
-            if name.lower() == "action":
+            nameLower = name.lower()
+            # Important! We need to keep some params around so they don't get lost when trying to control the server!
+            if nameLower == "action" or nameLower == QuickCamManager.c_FpsGetParam:
                 actionParams.append((name, value))
+            else:
+                self.Logger.debug("Stripping _NormalizeQuickCamUrl query param %s from QuickCam URL for normalization.", name)
+
 
         query = urlencode(actionParams)
         return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
@@ -168,7 +180,7 @@ class QuickCam(IQuickCam):
 
     # The amount of time the capture thread will stay connected before it will close.
     # Whenever an image is accessed, the time is reset.
-    c_CaptureThreadTimeoutSec = 60
+    c_CaptureThreadTimeoutSec = 5
 
     # How often the stall out monitor will check for a stall.
     c_StallMonitorThreadCheckIntervalSec = 5
@@ -205,6 +217,10 @@ class QuickCam(IQuickCam):
             return QuickCamStreamTypes.WebSocket
         # This is a protocol handler we use internally to indicate a stream is a JMPEG stream.
         if url.startswith(QuickCam.JMPEGProtocol) or url.startswith(QuickCam.JMPEGProtocolSecure):
+            return QuickCamStreamTypes.JMPEG
+        # Look for common jmpeg indicators to detect jmpeg streams.
+        # If we can be confident this is a jmpeg stream, it's better for us to handle it via QuickCam than falling back to a raw http stream.
+        if url.find("action=stream") != -1 or url.find(QuickCamManager.c_JMpegExtension) != -1:
             return QuickCamStreamTypes.JMPEG
         return QuickCamStreamTypes.NotSupported
 
@@ -318,7 +334,7 @@ class QuickCam(IQuickCam):
                     camImpl = QuickCam_Jmpeg(self.Logger)
                     # The elegoo webcam server doesn't like us to stream too long, so set a short-ish max time
                     # remember the client streams will not be effected, there will only be a small gap in the stream images.
-                    maxSingleStreamTimeSec = 120
+                    maxSingleStreamTimeSec = 30
                 else:
                     self.Logger.error("Quick cam tried to start a capture thread with an unsupported type. "+self.Url)
                     return

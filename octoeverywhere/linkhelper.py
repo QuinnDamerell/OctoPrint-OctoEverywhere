@@ -190,9 +190,9 @@ class LinkHelper:
         logger.warning("     %s", LinkHelper.GetAddPrinterUrl(printerId))
         logger.warning("")
         logger.warning("")
-        logger.warning("          -- Or use your phone to scan this QR code --                  ")
         # Print the QR code to the console.
         LinkHelper.PrintLinkUrlQrCodeToConsole(logger, printerId, source)
+        logger.warning("")
         logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         logger.warning("")

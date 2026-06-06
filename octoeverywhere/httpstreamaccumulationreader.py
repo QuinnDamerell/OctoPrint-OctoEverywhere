@@ -9,6 +9,7 @@ import urllib3.exceptions
 from .buffer import Buffer, BufferOrNone
 from .httpresult import HttpResult
 from .sentry import Sentry
+from .memorymanager import MemoryManager
 
 
 # This class can be used to read any Request.Response object stream, no matter the content type.
@@ -26,14 +27,9 @@ from .sentry import Sentry
 #
 class HttpStreamAccumulationReader:
 
-    # This is the max size of the pending buffer list. If the pending buffer list exceeds this size, the read thread will block until it goes back down.
-    # This is to prevent memory issues if the producer is producing data faster than the consumer can consume it.
-    # We need to make sure we think about low memory devices, where we don't want to eat RAM.
-    c_MaxPendingBufferSizeBytes = 10 * 1024 * 1024 # 10 MB.
-
     # After being constructed the reading starts immediately.
     # This class must be disposed of properly to stop the read thread.
-    def __init__(self, logger:logging.Logger, streamId:int, httpResult:HttpResult, accumulationTimeSec:float, maxReturnBufferSizeBytes:Optional[int]=None):
+    def __init__(self, logger:logging.Logger, streamId:int, httpResult:HttpResult, accumulationTimeSec:float, maxReturnBufferSizeBytes:Optional[int]=None, maxPendingBufferSizeBytes:Optional[int]=None):
         self.Logger = logger
         self.StreamId = streamId
         self.HttpResult = httpResult
@@ -41,8 +37,12 @@ class HttpStreamAccumulationReader:
 
         # We need this max size to ensure the read loop doesn't read a buffer that's too large for the read call to return.
         if maxReturnBufferSizeBytes is None:
-            maxReturnBufferSizeBytes = 10 * 1024 * 1024 # 10 MB
+            maxReturnBufferSizeBytes = MemoryManager.HttpStreamAccumulationReader_MaxReturnBufferSizeBytes
+        if maxReturnBufferSizeBytes > MemoryManager.Global_MaxSingleChunkSizeBytes:
+            self.Logger.error(f"{self.getLogMsgPrefix()} maxReturnBufferSizeBytes of {maxReturnBufferSizeBytes} bytes is larger than the global max single chunk size of {MemoryManager.Global_MaxSingleChunkSizeBytes} bytes. This may cause issues. Setting it to the global max.")
+            maxReturnBufferSizeBytes = MemoryManager.Global_MaxSingleChunkSizeBytes
         self.MaxReturnBufferSizeBytes = maxReturnBufferSizeBytes
+        self.MaxPendingBufferSizeBytes = maxPendingBufferSizeBytes if maxPendingBufferSizeBytes is not None else MemoryManager.HttpStreamAccumulationReader_MaxPendingBufferSizeBytes
 
         # We use a list so we can efficiently append all of the pending buffers at once when they are being sent.
         self.BufferList:Deque[bytes] = collections.deque()
@@ -177,7 +177,7 @@ class HttpStreamAccumulationReader:
                         # There are buffers to read!
 
                         # If the pending size + our accumulated size is under the max, take them all.
-                        if accumulatedBufferListSizeBytes + self.BufferListPendingSize < self.MaxReturnBufferSizeBytes:
+                        if accumulatedBufferListSizeBytes + self.BufferListPendingSize <= self.MaxReturnBufferSizeBytes:
                             if accumulatedBufferList is None:
                                 accumulatedBufferList = self.BufferList
                             else:
@@ -380,9 +380,9 @@ class HttpStreamAccumulationReader:
                     # We must also bound this pending buffer size so it doesn't eat memory just accumulating buffers that can't be sent.
                     # We use an event-based approach: the consumer signals BackpressureRelievedEvent when it drains data,
                     # allowing the producer to resume immediately instead of sleeping a fixed duration.
-                    while self.IsClosed is False and self.BufferListPendingSize > self.c_MaxPendingBufferSizeBytes:
+                    while self.IsClosed is False and self.BufferListPendingSize > self.MaxPendingBufferSizeBytes:
                         if self.Logger.isEnabledFor(logging.DEBUG):
-                            self.Logger.debug(f"{self.getLogMsgPrefix()} Pending buffer size of {self.BufferListPendingSize/1024.0/1024.0} MB exceeds the max of {self.c_MaxPendingBufferSizeBytes/1024.0/1024.0} MB. Waiting for consumer to drain buffer." )
+                            self.Logger.debug(f"{self.getLogMsgPrefix()} Pending buffer size of {self.BufferListPendingSize/1024.0/1024.0} MB exceeds the max of {self.MaxPendingBufferSizeBytes/1024.0/1024.0} MB. Waiting for consumer to drain buffer." )
                         self.BackpressureRelievedEvent.clear()
                         self.BufferLock.release()
                         self.BackpressureRelievedEvent.wait(timeout=0.5)

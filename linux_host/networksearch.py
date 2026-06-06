@@ -6,6 +6,7 @@ import random
 import string
 import socket
 import logging
+import subprocess
 import threading
 from typing import Any, Callable, Dict, List, Optional
 
@@ -562,8 +563,8 @@ class NetworkSearch:
     def IsLowResourceDevice() -> bool:
         try:
             # This only works on Linux
-            result = os.popen('free -t -m').readlines()
-            line = result[1]
+            result = subprocess.run(["free", "-t", "-m"], check=False, capture_output=True, text=True)
+            line = result.stdout.splitlines()[1]
             parts = line.split()
             totalRamMb = int(parts[1])
             # If the total memory is less than 1Gb, we consider this a low resource device.

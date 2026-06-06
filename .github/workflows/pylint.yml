@@ -3,8 +3,7 @@ name: Python Lint & Type Check
 on:
   push:
     branches:
-      - master
-      - lint
+      - '**'
   pull_request:
 
 permissions:
@@ -12,6 +11,9 @@ permissions:
 
 jobs:
   build:
+    # Run for master, PRs targeting master, or branches Quinn pushes.
+    if: github.actor == 'QuinnDamerell' || github.ref == 'refs/heads/master' || (github.event_name == 'pull_request' && github.base_ref == 'master')
+
     # We must limit the OS to ubuntu-22.04 instead of the default ubuntu-latest, to keep PY3.7 available.
     runs-on: ubuntu-22.04
     strategy:

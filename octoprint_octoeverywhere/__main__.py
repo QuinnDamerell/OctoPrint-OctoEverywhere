@@ -9,16 +9,10 @@ from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.commandhandler import CommandHandler
-from octoeverywhere.pingpong import PingPong
 from octoeverywhere.httpsessions import HttpSessions
-from octoeverywhere.compression import Compression
-from octoeverywhere.telemetry import Telemetry
-from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.mdns import MDns
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.Proto.ServerHost import ServerHost
-from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.compat import Compat
 from octoeverywhere.interfaces import IPrinterStateReporter, IPopUpInvoker, IStateChangeHandler
 from octoeverywhere.hostcommon import HostCommon
@@ -186,19 +180,9 @@ if __name__ == '__main__':
     # Init Sentry, but it won't report since we are in dev mode.
     Sentry.SetLogger(logger)
     Sentry.Setup("0.0.0", "dev", True, False)
-    Telemetry.Init(logger)
-    if LocalServerAddress is not None:
-        Telemetry.SetServerProtocolAndDomain("http://"+LocalServerAddress)
 
-    # Setup compression
-    Compression.Init(logger, PluginFilePathRoot)
-
-    # Init the mdns client
-    MDns.Init(logger, PluginFilePathRoot)
-    #MDns.Get().Test()
-
-    # Init device id
-    DeviceId.Init(logger)
+    # Setup HostCommon, this will setup a lot of the core singletons and things we need for the plugin to run.
+    HostCommon.Init(logger, PrinterId, PluginFilePathRoot, LocalServerAddress)
 
     # This is a tool to help track stuck or leaked threads.
     #threadDebugger = ThreadDebug()
@@ -222,15 +206,6 @@ if __name__ == '__main__':
         OctoHttpRequest.SetLocalOctoPrintPort(OctoPrintPort)
     if LocalServerAddress is not None:
         OctoEverywhereWsUri = "ws://"+LocalServerAddress+"/"+HostCommon.c_OctoEverywhereOctoClientEndpointBase
-
-    # Init the ping pong helper.
-    PingPong.Init(logger, PluginFilePathRoot, PrinterId)
-    # If we are using a local dev connection, disable this or it will overwrite.
-    if LocalServerAddress is not None:
-        PingPong.Get().DisablePrimaryOverride()
-
-    # Setup the print info manager before the notification manager
-    PrintInfoManager.Init(logger, PluginFilePathRoot)
 
     # Setup the notification handler.
     NotificationHandlerInstance = NotificationsHandler(logger, MockPrinterStateObject(logger))

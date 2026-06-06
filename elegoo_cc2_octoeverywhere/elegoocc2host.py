@@ -11,23 +11,17 @@ from linux_host.version import Version
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.compat import Compat
-from octoeverywhere.compression import Compression
-from octoeverywhere.deviceid import DeviceId
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.interfaces import IHostCommandHandler, IPopUpInvoker, IStateChangeHandler
 from octoeverywhere.linkhelper import LinkHelper
 from octoeverywhere.localip import LocalIpHelper
-from octoeverywhere.mdns import MDns
 from octoeverywhere.mqttmux.tcpbroker import LocalTcpBrokerServer
 from octoeverywhere.notificationshandler import NotificationsHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
-from octoeverywhere.pingpong import PingPong
-from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.telemetry import Telemetry
 
 from .elegoocc2client import ElegooCc2Client
 from .elegoocc2commandhandler import ElegooCc2CommandHandler
@@ -85,23 +79,13 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
             if DevLocalServerAddress_CanBeNone is not None:
                 self.Logger.warning("~~~ Using Local Dev Server Address: %s ~~~", DevLocalServerAddress_CanBeNone)
 
-            Telemetry.Init(self.Logger)
-            if DevLocalServerAddress_CanBeNone is not None:
-                Telemetry.SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
+            HostCommon.Init(self.Logger, printerId, localStorageDir, DevLocalServerAddress_CanBeNone)
 
-            Compression.Init(self.Logger, localStorageDir)
-            MDns.Init(self.Logger, localStorageDir)
             LocalWebApi.Init(self.Logger, printerId, self.Config)
-            DeviceId.Init(self.Logger)
-            PrintInfoManager.Init(self.Logger, localStorageDir)
 
             configIpOrHostname = self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None)
             if configIpOrHostname is not None:
                 LocalIpHelper.SetConnectionTargetIpOverride(configIpOrHostname)
-
-            PingPong.Init(self.Logger, localStorageDir, printerId)
-            if DevLocalServerAddress_CanBeNone is not None:
-                PingPong.Get().DisablePrimaryOverride()
 
             webcamHelper = ElegooCc2WebcamHelper(self.Logger, self.Config)
             WebcamHelper.Init(self.Logger, webcamHelper, localStorageDir)

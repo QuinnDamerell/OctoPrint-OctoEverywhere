@@ -2,18 +2,12 @@ import logging
 import traceback
 from typing import Any, Dict, List, Optional
 
-from octoeverywhere.mdns import MDns
 from octoeverywhere.sentry import Sentry
-from octoeverywhere.deviceid import DeviceId
-from octoeverywhere.pingpong import PingPong
-from octoeverywhere.telemetry import Telemetry
 from octoeverywhere.hostcommon import HostCommon
 from octoeverywhere.linkhelper import LinkHelper
-from octoeverywhere.compression import Compression
 from octoeverywhere.memorydebug import MemoryDebug
 from octoeverywhere.httpsessions import HttpSessions
 from octoeverywhere.Webcam.webcamhelper import WebcamHelper
-from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.octoeverywhereimpl import OctoEverywhere
 from octoeverywhere.octohttprequest import OctoHttpRequest
@@ -133,31 +127,14 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             if DevLocalServerAddress_CanBeNone is not None:
                 self.Logger.warning("~~~ Using Local Dev Server Address: %s ~~~", DevLocalServerAddress_CanBeNone)
 
-            # Init Sentry, but it won't report since we are in dev mode.
-            Telemetry.Init(self.Logger)
-            if DevLocalServerAddress_CanBeNone is not None:
-                Telemetry.SetServerProtocolAndDomain("http://"+DevLocalServerAddress_CanBeNone)
-
-            # Enable to enable memory debugging
-            # self.MemoryDebugger = MemoryDebug(self.Logger)
-
-            # Init compression
-            Compression.Init(self.Logger, localStorageDir)
-
-            # Init the mdns client
-            MDns.Init(self.Logger, localStorageDir)
+            # Init the common host stuff, this will setup a lot of the core singletons and things we need for the plugin to run.
+            HostCommon.Init(self.Logger, printerId, localStorageDir, DevLocalServerAddress_CanBeNone)
 
             # Init the local web api. This will only start a thread if it's setup to run in the config.
             LocalWebApi.Init(self.Logger, printerId, self.Config)
 
-            # Init device id
-            DeviceId.Init(self.Logger)
-
             # Allow the UI injector to run and do it's thing.
             UiInjector.Init(self.Logger, repoRoot)
-
-            # Setup the print info manager
-            PrintInfoManager.Init(self.Logger, localStorageDir)
 
             # Setup the database helper
             self.MoonrakerDatabase = MoonrakerDatabase(self.Logger, printerId, pluginVersionStr)
@@ -185,11 +162,6 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
                     raise Exception("Failed to read companion config file.")
                 OctoHttpRequest.SetLocalHostAddress(ipOrHostnameStr)
                 LocalIpHelper.SetConnectionTargetIpOverride(ipOrHostnameStr)
-
-            # Init the ping pong helper.
-            PingPong.Init(self.Logger, localStorageDir, printerId)
-            if DevLocalServerAddress_CanBeNone is not None:
-                PingPong.Get().DisablePrimaryOverride()
 
             # Setup the snapshot helper
             self.MoonrakerWebcamHelper = MoonrakerWebcamHelper(self.Logger, self.Config)

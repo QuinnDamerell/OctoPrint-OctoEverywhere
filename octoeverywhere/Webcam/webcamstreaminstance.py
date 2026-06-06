@@ -6,6 +6,7 @@ from typing import Optional
 from ..interfaces import IQuickCam
 from ..buffer import Buffer, BufferOrNone
 from ..httpresult import HttpResult, HttpResultOrNone
+from ..memorymanager import MemoryManager
 
 
 # Stream Instance is a class that is created per web stream to handle streaming QuickCam images into the http stream.
@@ -29,6 +30,7 @@ class WebcamStreamInstance:
         self.StreamOpenTimeSec = time.time()
         self.ImageReadyEvent = threading.Event()
         self.AwaitingImage:BufferOrNone = None
+        self.PendingBodyBuffer:BufferOrNone = None
 
 
     # This will attempt to start a stream of the webcam.
@@ -64,6 +66,10 @@ class WebcamStreamInstance:
     def _CustomBodyStreamRead(self) -> Optional[Buffer]:
         try:
             while True:
+                # If the previous read had to split a large frame, return the remainder before checking for a new image.
+                if self.PendingBodyBuffer is not None:
+                    return self._GetNextBodyChunk(self.PendingBodyBuffer)
+
                 # See if we can capture an image. There might already be a new image we don't even have to wait for.
                 capturedImage = self.AwaitingImage
                 if capturedImage is not None:
@@ -82,7 +88,7 @@ class WebcamStreamInstance:
                         self.IsFirstSend = False
                         if self.Logger.isEnabledFor(logging.DEBUG):
                             self.Logger.debug("QuickCam took %s seconds from octostream stream open to first image sent.", round(time.time() - self.StreamOpenTimeSec, 3))
-                    return imageChunkBuffer
+                    return self._GetNextBodyChunk(imageChunkBuffer)
 
                 # If we didn't get an image, wait on the event for a new one.
                 if self.ImageReadyEvent.wait(timeout=60.0) is False:
@@ -94,10 +100,23 @@ class WebcamStreamInstance:
             return None
 
 
+    def _GetNextBodyChunk(self, bodyBuffer:Buffer) -> Buffer:
+        maxChunkSizeBytes = MemoryManager.QuickCam_MaxStreamChunkSizeBytes
+        if len(bodyBuffer) <= maxChunkSizeBytes:
+            self.PendingBodyBuffer = None
+            return bodyBuffer
+
+        self.Logger.debug("WebcamStreamInstance splitting body buffer into chunks. Total size: %d, max chunk size: %d. This is done to avoid allocating large buffers on low end devices.", len(bodyBuffer), maxChunkSizeBytes)
+        bodyBytes = bodyBuffer.ForceAsBytes()
+        self.PendingBodyBuffer = Buffer(bodyBytes[maxChunkSizeBytes:])
+        return Buffer(bodyBytes[:maxChunkSizeBytes])
+
+
     # Define a callback for when the http stream is closed.
     def _CustomBodyStreamClosed(self) -> None:
         # It's important this is called so the stream will be detached!
         self.QuickCam.DetachImageStreamCallback(self._NewImageCallback)
+        self.PendingBodyBuffer = None
         WebcamStreamInstance._ClearSharedFrameCache()
 
 
