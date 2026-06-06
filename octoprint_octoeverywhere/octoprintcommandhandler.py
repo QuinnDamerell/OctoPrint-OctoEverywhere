@@ -364,4 +364,3 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             except Exception:
                 pass
         return response
-

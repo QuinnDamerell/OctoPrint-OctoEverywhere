@@ -10,6 +10,7 @@ from .sentry import Sentry
 from .compat import Compat
 from .httpresult import HttpResult
 from .octohttprequest import PathTypes
+from .WebStream.uploadbody import UploadBody, UploadBodyOrNone
 from .Webcam.webcamhelper import WebcamHelper
 from .octostreammsgbuilder import OctoStreamMsgBuilder
 from .Webcam.webcamsettingitem import WebcamSettingItem
@@ -655,7 +656,7 @@ class CommandHandler:
     # Note! It's very important that the OctoHttpResult has all of the properties the generic system expects! For example,
     # it must have the FullBodyBuffer (similar to the snapshot helper) and a valid response object JUST LIKE the requests lib would return.
     #
-    def HandleCommand(self, httpInitialContext:HttpInitialContext, postBody:Optional[Buffer]) -> HttpResult:
+    def HandleCommand(self, httpInitialContext:HttpInitialContext, postBody:UploadBody) -> HttpResult:
         # Parse the command path and the optional json args.
         commandPath:str = ""
         commandPathLower:str = ""
@@ -740,7 +741,7 @@ class CommandHandler:
 
 
     # A helper to parse the context and json args. Throws if it fails!
-    def _GetPathAndJsonArgs(self, httpInitialContext:HttpInitialContext, postBody:Optional[Buffer]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+    def _GetPathAndJsonArgs(self, httpInitialContext:HttpInitialContext, postBody:UploadBodyOrNone) -> Tuple[str, str, Optional[Dict[str, Any]]]:
         # Get the command path.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
         if path is None:
@@ -756,7 +757,9 @@ class CommandHandler:
 
         # Parse the POST body if there is one.
         if postBody is not None:
-            jsonObj = json.loads(postBody.GetBytesLike())
+            bodyBuffer = postBody.GetBodyAsBuffer()
+            if bodyBuffer is not None:
+                jsonObj = json.loads(bodyBuffer.GetBytesLike())
 
         # If there is no json object, try for get args.
         if jsonObj is None:

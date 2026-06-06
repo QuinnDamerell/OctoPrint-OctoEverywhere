@@ -1,0 +1,414 @@
+from enum import Enum
+import logging
+import os
+import threading
+import zlib
+import tempfile
+from typing import Any, BinaryIO, List, Optional, Union
+
+from ..memorymanager import MemoryManager
+from ..Proto.DataCompression import DataCompression
+from ..buffer import Buffer, BufferOrNone, ByteLike
+from ..compression import Compression, CompressionContext
+
+UploadBodyBufferOrNone = Union[BufferOrNone, "UploadBody"]
+UploadBodyOrNone = Union[None, "UploadBody"]
+BufferedReaderBytesOrNone = Union[BinaryIO, ByteLike, None]
+
+
+class _UploadChunk:
+    def __init__(self, offset:int, sizeBytes:int, originalSizeBytes:int, compressionType:int, isLastMessage:bool, memoryBuffer:Optional[Buffer]=None) -> None:
+        self.Offset = offset
+        self.SizeBytes = sizeBytes
+        self.OriginalSizeBytes = originalSizeBytes
+        self.CompressionType = compressionType
+        self.IsLastMessage = isLastMessage
+        self.MemoryBuffer = memoryBuffer
+
+
+# Returned from OpenForRequest to keep the lifetime of the file opened.
+class UploadBodyReadContext:
+    def __init__(self, logger:Any, buffer:Optional[Buffer], filePath:Optional[str]) -> None:
+        self.Logger = logger
+        self.Buffer = buffer
+        self.FilePath = filePath
+        self.File:Optional[BinaryIO] = None
+
+    def GetData(self) -> BufferedReaderBytesOrNone:
+        if self.Buffer is not None:
+            self.Logger.debug("UploadBodyReadContext is using in-memory buffer for request data.")
+            return self.Buffer.GetBytesLike()
+        if self.FilePath is not None:
+            if self.File is not None:
+                return self.File
+            self.Logger.debug("UploadBodyReadContext is opening file for request data. path:%s", str(self.FilePath))
+            self.File = open(self.FilePath, "rb")  #pylint: disable=consider-using-with
+            return self.File
+        raise Exception("UploadBodyReadContext was opened with no buffer or file.")
+
+
+    def SeekToStart(self) -> None:
+        if self.File is not None:
+            self.File.seek(0)
+
+
+    def Close(self) -> None:
+        self.Logger.debug("UploadBodyReadContext closed.")
+        if self.File is not None:
+            self.File.close()
+            self.File = None
+
+
+    def __enter__(self) -> BufferedReaderBytesOrNone:
+        return self.GetData()
+
+
+    def __exit__(self, t:Any, v:Any, tb:Any) -> None:
+        self.Close()
+
+
+class UploadBodyState(Enum):
+    Building = 1
+    Finalizing = 2
+    Finalized = 3
+    CleanedUp = 4
+
+
+class UploadBody:
+    # Disk copy/decompression chunk size. Keep this bounded independently of the HTTP read sizes.
+    c_FileCopyBufferSizeBytes = 1024 * 1024
+
+
+    def __init__(self, logger:Any, streamId:int, knownFullUploadSizeBytes:Optional[int], compressionContext:CompressionContext, maxInMemoryBodyBytes:Optional[int]=None) -> None:
+        self.Logger = logger
+        self.StreamId = streamId
+        self.KnownFullUploadSizeBytes = knownFullUploadSizeBytes
+        self.CompressionContext = compressionContext
+        self.MaxInMemoryBodyBytes = maxInMemoryBodyBytes if maxInMemoryBodyBytes is not None else MemoryManager.OctoWebStreamHttpHelper_MaxUploadBufferSizeBytes
+
+        self._lock = threading.Lock()
+        self._state = UploadBodyState.Building
+        self.UploadBytesReceivedSoFar = 0
+        self._chunks:List[_UploadChunk] = []
+        self._usingFile = False
+        self._hasCompressedChunks = False
+        self._bodyBuffer:Optional[Buffer] = None
+        self._bodyFilePath:Optional[str] = None
+
+        self._rawUploadFile:Optional[BinaryIO] = None
+        self._rawUploadFilePath:Optional[str] = None
+
+        if self.KnownFullUploadSizeBytes is not None and self.KnownFullUploadSizeBytes > self.MaxInMemoryBodyBytes:
+            self._SwitchToFile("known upload size exceeds in-memory limit")
+
+
+    @property
+    def IsUsingFile(self) -> bool:
+        return self._usingFile
+
+
+    @property
+    def HasData(self) -> bool:
+        return self.UploadBytesReceivedSoFar > 0
+
+
+    def AppendMessage(self, webStreamMsg:Any) -> None:
+        if self._state != UploadBodyState.Building:
+            raise Exception("OctoWebStreamUploadBody tried to append after finalize.")
+
+        rawDataLen = webStreamMsg.DataLength()
+        if rawDataLen <= 0:
+            self._Warn("is waiting on upload data but got a message with no data.")
+            return
+
+        compressionType = webStreamMsg.DataCompression()
+        originalSizeBytes = rawDataLen
+        if compressionType != DataCompression.None_:
+            originalSizeBytes = int(webStreamMsg.OriginalDataSize())
+            if originalSizeBytes <= 0:
+                raise Exception("Compressed upload message had no original data size.")
+            self._hasCompressedChunks = True
+
+        projectedUploadBytes = self.UploadBytesReceivedSoFar + originalSizeBytes
+        if self.KnownFullUploadSizeBytes is not None and projectedUploadBytes > self.KnownFullUploadSizeBytes:
+            self._Warn("received more bytes than it was expecting for the upload. thisMsg:"+str(originalSizeBytes)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullUploadSizeBytes))
+            raise Exception("Too many bytes received for http upload buffer")
+
+        if self._usingFile is False and projectedUploadBytes > self.MaxInMemoryBodyBytes:
+            self._SwitchToFile("upload exceeded in-memory limit")
+
+        rawData = Buffer(webStreamMsg.DataAsByteArray())
+        if self._usingFile:
+            self._AppendRawDataToFile(rawData, originalSizeBytes, compressionType, webStreamMsg.IsDataTransmissionDone())
+        else:
+            self._chunks.append(_UploadChunk(0, rawDataLen, originalSizeBytes, compressionType, webStreamMsg.IsDataTransmissionDone(), rawData))
+
+        self.UploadBytesReceivedSoFar = projectedUploadBytes
+        self._Debug("received upload data chunk. using file: %s; bytes in this msg: %s; total received so far: %s; known full size: %s", str(self._usingFile), originalSizeBytes, self.UploadBytesReceivedSoFar, self.KnownFullUploadSizeBytes)
+
+
+    def Finalize(self) -> None:
+        needsCleanup = False
+        try:
+            with self._lock:
+                if self._state != UploadBodyState.Building:
+                    return
+
+                if self.KnownFullUploadSizeBytes is not None and self.UploadBytesReceivedSoFar != self.KnownFullUploadSizeBytes:
+                    raise Exception("Http request tried to execute, but we haven't gotten all of the upload payload. Total:"+str(self.KnownFullUploadSizeBytes)+"; rec so far:"+str(self.UploadBytesReceivedSoFar))
+
+                if self.UploadBytesReceivedSoFar == 0:
+                    self._state = UploadBodyState.Finalized
+                    return
+
+                self._state = UploadBodyState.Finalizing
+
+            self._Debug("UploadBody doing a finalize with data. Total bytes received: %d, chunks: %d", self.UploadBytesReceivedSoFar, len(self._chunks))
+            if self._usingFile:
+                self._FinalizeFileBody()
+            else:
+                self._FinalizeMemoryBody()
+
+            with self._lock:
+                if self._state == UploadBodyState.CleanedUp:
+                    needsCleanup = True
+                else:
+                    self._state = UploadBodyState.Finalized
+        except Exception:
+            with self._lock:
+                if self._state == UploadBodyState.CleanedUp:
+                    needsCleanup = True
+                elif self._state == UploadBodyState.Finalizing:
+                    self._state = UploadBodyState.Building
+            if needsCleanup:
+                self._CleanupStorage()
+            raise
+
+        if needsCleanup:
+            self._CleanupStorage()
+
+
+    def OpenForRequest(self) -> UploadBodyReadContext:
+        if self._state != UploadBodyState.Finalized:
+            raise Exception("OctoWebStreamUploadBody is not in a finalized state before opening it for a request.")
+        return UploadBodyReadContext(self.Logger, self._bodyBuffer, self._bodyFilePath)
+
+
+    def GetBodyAsBuffer(self) -> Optional[Buffer]:
+        if self._state != UploadBodyState.Finalized:
+            raise Exception("OctoWebStreamUploadBody is not in a finalized state before getting the body buffer.")
+        if self.UploadBytesReceivedSoFar == 0:
+            return None
+        if self._bodyFilePath is not None:
+            with open(self._bodyFilePath, "rb") as f:
+                return Buffer(f.read())
+        return self._bodyBuffer
+
+
+    def Cleanup(self) -> None:
+        with self._lock:
+            if self._state == UploadBodyState.CleanedUp:
+                return
+            cleanupNow = self._state != UploadBodyState.Finalizing
+            self._state = UploadBodyState.CleanedUp
+
+        if cleanupNow is False:
+            return
+        self._CleanupStorage()
+
+
+    def _CleanupStorage(self) -> None:
+        if self.HasData is True:
+            self._Debug("UploadBody cleaning up. Total bytes received: %d, chunks: %d", self.UploadBytesReceivedSoFar, len(self._chunks))
+
+        if self._rawUploadFile is not None:
+            self._rawUploadFile.close()
+            self._rawUploadFile = None
+
+        self._DeleteFileIfExists(self._rawUploadFilePath)
+        if self._bodyFilePath != self._rawUploadFilePath:
+            self._DeleteFileIfExists(self._bodyFilePath)
+
+        self._rawUploadFilePath = None
+        self._bodyFilePath = None
+        self._bodyBuffer = None
+        self._chunks = []
+
+
+    def _AppendRawDataToFile(self, rawData:Buffer, originalSizeBytes:int, compressionType:int, isLastMessage:bool) -> None:
+        if self._rawUploadFile is None:
+            raise Exception("OctoWebStreamUploadBody tried to write to a raw upload file before it was opened.")
+        offset = self._rawUploadFile.tell()
+        data = rawData.Get()
+        self._rawUploadFile.write(data)
+        self._chunks.append(_UploadChunk(offset, len(rawData), originalSizeBytes, compressionType, isLastMessage))
+
+
+    def _FinalizeMemoryBody(self) -> None:
+        if len(self._chunks) == 0:
+            self._bodyBuffer = None
+            return
+
+        if self._hasCompressedChunks is False:
+            if len(self._chunks) == 1:
+                self._Debug("UploadBody has a single in-memory chunk with no compression, so we can use it directly without copying.")
+                self._bodyBuffer = self._chunks[0].MemoryBuffer
+                return
+
+            target = bytearray(self.UploadBytesReceivedSoFar)
+            writeOffset = 0
+            for chunk in self._chunks:
+                if chunk.MemoryBuffer is None:
+                    raise Exception("OctoWebStreamUploadBody memory chunk was missing its buffer.")
+                chunkData = chunk.MemoryBuffer.Get()
+                target[writeOffset:writeOffset+len(chunk.MemoryBuffer)] = chunkData
+                writeOffset += len(chunk.MemoryBuffer)
+            self._bodyBuffer = Buffer(target)
+            self._Debug("UploadBody had multiple in-memory chunks with no compression, so we concatenated them into a single buffer. chunks: %d; total bytes: %d", len(self._chunks), self.UploadBytesReceivedSoFar)
+            return
+
+        target = bytearray(self.UploadBytesReceivedSoFar)
+        writeOffset = 0
+        for chunk in self._chunks:
+            if chunk.MemoryBuffer is None:
+                raise Exception("OctoWebStreamUploadBody memory chunk was missing its buffer.")
+            data = self._GetDecompressedChunk(chunk, chunk.MemoryBuffer)
+            target[writeOffset:writeOffset+len(data)] = data.Get()
+            writeOffset += len(data)
+
+        if writeOffset != self.UploadBytesReceivedSoFar:
+            raise Exception("OctoWebStreamUploadBody decompressed memory size mismatch. expected:"+str(self.UploadBytesReceivedSoFar)+"; actual:"+str(writeOffset))
+        self._Debug("UploadBody had multiple in-memory chunks with compression, so we decompressed and concatenated them into a single buffer. chunks: %d; total bytes: %d", len(self._chunks), self.UploadBytesReceivedSoFar)
+        self._bodyBuffer = Buffer(target)
+
+
+    def _FinalizeFileBody(self) -> None:
+        if self._rawUploadFile is None or self._rawUploadFilePath is None:
+            raise Exception("OctoWebStreamUploadBody file finalize called without a raw upload file.")
+
+        self._rawUploadFile.flush()
+        self._rawUploadFile.close()
+        self._rawUploadFile = None
+
+        if self._hasCompressedChunks is False:
+            self._bodyFilePath = self._rawUploadFilePath
+            self._Debug("UploadBody had no compression, so we can use the raw upload file directly. path: %s", str(self._bodyFilePath))
+            return
+
+        finalFile = self._CreateTempFile()
+        finalFilePath = finalFile.name
+        totalWritten = 0
+        try:
+            with open(self._rawUploadFilePath, "rb") as rawFile:
+                for chunk in self._chunks:
+                    rawFile.seek(chunk.Offset)
+                    if chunk.CompressionType == DataCompression.None_:
+                        totalWritten += self._CopyBytes(rawFile, finalFile, chunk.SizeBytes)
+                        continue
+
+                    rawBytes = rawFile.read(chunk.SizeBytes)
+                    if len(rawBytes) != chunk.SizeBytes:
+                        raise Exception("OctoWebStreamUploadBody failed to read the full compressed upload chunk from disk.")
+                    data = self._GetDecompressedChunk(chunk, Buffer(rawBytes))
+                    finalFile.write(data.Get())
+                    totalWritten += len(data)
+            finalFile.flush()
+        finally:
+            finalFile.close()
+
+        if totalWritten != self.UploadBytesReceivedSoFar:
+            self._DeleteFileIfExists(finalFilePath)
+            raise Exception("OctoWebStreamUploadBody decompressed file size mismatch. expected:"+str(self.UploadBytesReceivedSoFar)+"; actual:"+str(totalWritten))
+
+        self._Debug("UploadBody had compressed chunks, so we decompressed them into a final file. chunks: %d; total bytes: %d; final path: %s", len(self._chunks), self.UploadBytesReceivedSoFar, str(finalFilePath))
+        self._bodyFilePath = finalFilePath
+
+
+    def _GetDecompressedChunk(self, chunk:_UploadChunk, rawData:Buffer) -> Buffer:
+        if chunk.CompressionType == DataCompression.None_:
+            return rawData
+        if chunk.CompressionType == DataCompression.Zlib:
+            return Buffer(zlib.decompress(rawData.Get()))
+        if chunk.CompressionType == DataCompression.ZStandard:
+            return Compression.Get().Decompress(self.CompressionContext, rawData, chunk.OriginalSizeBytes, chunk.IsLastMessage, chunk.CompressionType)
+        raise Exception("Unknown upload data compression type: " + str(chunk.CompressionType))
+
+
+    def _CopyBytes(self, source:BinaryIO, target:BinaryIO, bytesToCopy:int) -> int:
+        bytesRemaining = bytesToCopy
+        totalCopied = 0
+        while bytesRemaining > 0:
+            readSize = min(bytesRemaining, UploadBody.c_FileCopyBufferSizeBytes)
+            data = source.read(readSize)
+            if len(data) == 0:
+                raise Exception("OctoWebStreamUploadBody hit EOF while copying upload data.")
+            target.write(data)
+            bytesRemaining -= len(data)
+            totalCopied += len(data)
+        return totalCopied
+
+
+    def _SwitchToFile(self, reason:str) -> None:
+        if self._usingFile:
+            return
+
+        rawUploadFile = self._CreateTempFile()
+        self._rawUploadFile = rawUploadFile
+        self._rawUploadFilePath = rawUploadFile.name
+        for chunk in self._chunks:
+            if chunk.MemoryBuffer is None:
+                raise Exception("OctoWebStreamUploadBody tried to spill a memory chunk with no buffer.")
+            chunk.Offset = rawUploadFile.tell()
+            rawUploadFile.write(chunk.MemoryBuffer.Get())
+            chunk.MemoryBuffer = None
+
+        self._usingFile = True
+        self._Info("switched upload buffering to disk because " + reason + ". limit:"+str(self.MaxInMemoryBodyBytes)+"; received:"+str(self.UploadBytesReceivedSoFar)+"; known:"+str(self.KnownFullUploadSizeBytes))
+
+
+    def _CreateTempFile(self) -> Any:
+        tempDir = None
+        try:
+            compression = Compression.Get()
+            if compression is not None:
+                tempDir = compression.LocalFileStoragePath
+        except Exception:
+            tempDir = None
+
+        if tempDir is not None:
+            tempDir = os.path.join(tempDir, "octowebstream_uploads")
+            os.makedirs(tempDir, exist_ok=True)
+
+        return tempfile.NamedTemporaryFile(prefix="oe-upload-", suffix=".tmp", dir=tempDir, mode="w+b", delete=False)
+
+
+    def _DeleteFileIfExists(self, filePath:Optional[str]) -> None:
+        if filePath is None:
+            return
+        try:
+            if os.path.exists(filePath):
+                os.remove(filePath)
+        except Exception as e:
+            self._Warn("failed to delete upload temp file. path:"+str(filePath)+" error:"+str(e))
+
+
+    def _LogPrefix(self) -> str:
+        return "Web Stream http - upload body - ["+str(self.StreamId)+"]"
+
+
+    def _Debug(self, message:str, *args:Any) -> None:
+        if self.Logger.isEnabledFor(logging.DEBUG) is False:
+            return
+        self.Logger.debug(self._LogPrefix() + " " + message, *args)
+
+
+    def _Info(self, message:str, *args:Any) -> None:
+        if self.Logger.isEnabledFor(logging.INFO) is False:
+            return
+        self.Logger.info(self._LogPrefix() + " " + message, *args)
+
+
+    def _Warn(self, message:str, *args:Any) -> None:
+        if self.Logger.isEnabledFor(logging.WARNING) is False:
+            return
+        self.Logger.warning(self._LogPrefix() + " " + message, *args)

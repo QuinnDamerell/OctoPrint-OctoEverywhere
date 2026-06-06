@@ -10,7 +10,7 @@ from ..octohttprequest import OctoHttpRequest
 from ..interfaces import IWebcamPlatformHelper
 from .webcamsettingitem import WebcamSettingItem
 from ..httpresult import HttpResult, HttpResultOrNone
-from ..buffer import Buffer
+from ..WebStream.uploadbody import UploadBody
 
 from ..Proto.HttpInitialContext import HttpInitialContext
 
@@ -113,7 +113,7 @@ class WebcamHelper:
     # Called by the OctoWebStreamHelper when a Oracle snapshot or webcam stream request is detected.
     # It's important that this function returns a OctoHttpRequest that's very similar to what the default MakeHttpCall function
     # returns, to ensure the rest of the octostream http logic can handle the response.
-    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext:HttpInitialContext, method:str, sendHeaders:Dict[str, str], uploadBuffer:Optional[Buffer]) -> HttpResultOrNone:
+    def MakeSnapshotOrWebcamStreamRequest(self, httpInitialContext:HttpInitialContext, method:str, sendHeaders:Dict[str, str], uploadBuffer:UploadBody) -> HttpResultOrNone:
         cameraIndexOpt = self.GetOracleRequestCameraIndex(sendHeaders)
         if self.IsSnapshotOracleRequest(sendHeaders):
             return self.GetSnapshot(cameraIndexOpt)

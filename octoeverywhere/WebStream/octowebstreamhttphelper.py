@@ -6,6 +6,7 @@ import requests
 import urllib3
 import octoflatbuffers
 
+from .uploadbody import UploadBody
 from .octoheaderimpl import HeaderHelper
 from .octoheaderimpl import BaseProtocol
 from ..octohttprequest import OctoHttpRequest
@@ -74,11 +75,6 @@ class OctoWebStreamHttpHelper:
         self.IsUsingFullBodyBuffer = False
         self.IsUsingCustomBodyStreamCallbacks = False
 
-        # If this doesn't not equal None, it means we know how much data to expect.
-        self.KnownFullStreamUploadSizeBytes:Optional[int] = None
-        self.UploadBytesReceivedSoFar:int = 0
-        self.UploadBuffer:Optional[Buffer] = None
-
         # This is our fallback reader for body streams that have unknown lengths.
         # If this is not None, we are doing the unknown body read. Then the rest of the body reads must use this same system.
         self.HttpStreamAccumulationReader:Optional[HttpStreamAccumulationReader] = None
@@ -100,9 +96,10 @@ class OctoWebStreamHttpHelper:
         # we know the full data size of the data that's being uploaded.
         # If it doesn't exist, either there is no upload payload or we don't
         # know how large the payload is.
-        fullStreamUploadSize = webStreamOpenMsg.FullStreamDataSize()
-        if fullStreamUploadSize > 0:
-            self.KnownFullStreamUploadSizeBytes = fullStreamUploadSize
+        fullStreamUploadSize:Optional[int] = int(webStreamOpenMsg.FullStreamDataSize())
+        if fullStreamUploadSize <= 0:
+            fullStreamUploadSize = None
+        self.UploadBody = UploadBody(self.Logger, self.Id, fullStreamUploadSize, self.CompressionContext)
 
 
     # When close is called, all http operations should be shutdown.
@@ -117,6 +114,9 @@ class OctoWebStreamHttpHelper:
         if self.HttpStreamAccumulationReader is not None:
             self.HttpStreamAccumulationReader.CloseAsync()
 
+        # Ensure the upload body is cleaned up.
+        self.UploadBody.Cleanup()
+
 
     # Called when a new message has arrived for this stream from the server.
     # This function should throw on critical errors, that will reset the connection.
@@ -130,13 +130,13 @@ class OctoWebStreamHttpHelper:
         # If this message has data, put it into our buffer.
         if webStreamMsg.DataLength() > 0:
             # Copy this upload data from the message.
-            self.copyUploadDataFromMsg(webStreamMsg)
+            self.UploadBody.AppendMessage(webStreamMsg)
 
         # If the data is done flag is set, that indicates that
         # the full upload buffer has been transmitted.
         if webStreamMsg.IsDataTransmissionDone():
             # If we didn't know the upload size, we need to finalize it now
-            self.finalizeUnknownUploadSizeIfNeeded()
+            self.UploadBody.Finalize()
 
             # Do the request. This will block this thread until it's done and the entire response is sent.
             # We want to make sure we destroy the compression context after this returns, no matter what.
@@ -159,83 +159,86 @@ class OctoWebStreamHttpHelper:
     #     generate an error.
     def executeHttpRequest(self) -> None:
         requestExecutionStart = time.time()
+        try:
+            # Validate
+            if self.WebStreamOpenMsg is None:
+                raise Exception("ExecuteHttpRequest but there is no open message")
+            # Make sure if there was a defined upload size, we have all of the data.
+            if self.UploadBody.KnownFullUploadSizeBytes is not None:
+                if self.UploadBody.UploadBytesReceivedSoFar != self.UploadBody.KnownFullUploadSizeBytes:
+                    raise Exception("Http request tried to execute, but we haven't gotten all of the upload payload. Total:"+str(self.UploadBody.KnownFullUploadSizeBytes)+"; rec so far:"+str(self.UploadBody.UploadBytesReceivedSoFar))
 
-        # Validate
-        if self.WebStreamOpenMsg is None:
-            raise Exception("ExecuteHttpRequest but there is no open message")
-        # Make sure if there was a defined upload size, we have all of the data.
-        if self.KnownFullStreamUploadSizeBytes is not None:
-            if self.UploadBytesReceivedSoFar != self.KnownFullStreamUploadSizeBytes:
-                raise Exception("Http request tried to execute, but we haven't gotten all of the upload payload. Total:"+str(self.KnownFullStreamUploadSizeBytes)+"; rec so far:"+str(self.UploadBytesReceivedSoFar))
+            # Get the initial context
+            httpInitialContext = self.WebStreamOpenMsg.HttpInitialContext()
+            if httpInitialContext is None:
+                self.Logger.error(self.getLogMsgPrefix()+ " request open message had no initial context.")
+                raise Exception("Http request open message had no initial context")
 
-        # Get the initial context
-        httpInitialContext = self.WebStreamOpenMsg.HttpInitialContext()
-        if httpInitialContext is None:
-            self.Logger.error(self.getLogMsgPrefix()+ " request open message had no initial context.")
-            raise Exception("Http request open message had no initial context")
+            # Setup the headers
+            sendHeaders = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext, BaseProtocol.Http)
 
-        # Setup the headers
-        sendHeaders = HeaderHelper.GatherRequestHeaders(self.Logger, httpInitialContext, BaseProtocol.Http)
+            # Figure out if this is a special OctoEverywhere Auth call.
+            isOeAuthCall = httpInitialContext.UseOctoeverywhereAuth() == OeAuthAllowed.OeAuthAllowed.Allow
+            localAuthHelper = Compat.GetLocalAuth()
+            if isOeAuthCall and localAuthHelper is not None:
+                # If so and this platform supports local auth, add the auth header.
+                localAuthHelper.AddAuthHeader(sendHeaders)
 
-        # Figure out if this is a special OctoEverywhere Auth call.
-        isOeAuthCall = httpInitialContext.UseOctoeverywhereAuth() == OeAuthAllowed.OeAuthAllowed.Allow
-        localAuthHelper = Compat.GetLocalAuth()
-        if isOeAuthCall and localAuthHelper is not None:
-            # If so and this platform supports local auth, add the auth header.
-            localAuthHelper.AddAuthHeader(sendHeaders)
+            # Find the method
+            method = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Method())
+            if method is None:
+                self.Logger.error(self.getLogMsgPrefix()+" request had a None method type.")
+                raise Exception("Http request had a None method type")
 
-        # Find the method
-        method = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Method())
-        if method is None:
-            self.Logger.error(self.getLogMsgPrefix()+" request had a None method type.")
-            raise Exception("Http request had a None method type")
+            # Before we make the request, make sure we shouldn't defer for a high pri request
+            self.checkForDelayIfNotHighPri()
 
-        # Before we make the request, make sure we shouldn't defer for a high pri request
-        self.checkForDelayIfNotHighPri()
+            # Before we handle the request, see if this is a webcam stream request we need to handle specially.
+            relayWebcamStreamDetector = Compat.GetRelayWebcamStreamDetector()
+            if relayWebcamStreamDetector is not None:
+                relativeOrAbsolutePath = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
+                if relativeOrAbsolutePath is None:
+                    raise Exception("Http request had a None path when trying to detect a webcam stream.")
+                # If needed, this will update the send headers to make it look like an oracle stream or snapshot request.
+                relayWebcamStreamDetector.OnIncomingRelayRequest(relativeOrAbsolutePath, sendHeaders)
 
-        # Before we handle the request, see if this is a webcam stream request we need to handle specially.
-        relayWebcamStreamDetector = Compat.GetRelayWebcamStreamDetector()
-        if relayWebcamStreamDetector is not None:
-            relativeOrAbsolutePath = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
-            if relativeOrAbsolutePath is None:
-                raise Exception("Http request had a None path when trying to detect a webcam stream.")
-            # If needed, this will update the send headers to make it look like an oracle stream or snapshot request.
-            relayWebcamStreamDetector.OnIncomingRelayRequest(relativeOrAbsolutePath, sendHeaders)
-
-        # Check for some special case requests before we handle the request as normal.
-        #
-        # 1) An oracle snapshot or webcam stream request. In this case the WebCamHelper class will handle the request.
-        # 2) If the request is a OctoStreamCommand, the CommandHandler will handle the request.
-        # 3) Finally, check if the request is cached in Slipstream.
-        octoHttpResult:HttpResultOrNone = None
-        isFromCache = False
-        if WebcamHelper.Get().IsSnapshotOrWebcamStreamOracleRequest(sendHeaders):
-            octoHttpResult = WebcamHelper.Get().MakeSnapshotOrWebcamStreamRequest(httpInitialContext, method, sendHeaders, self.UploadBuffer)
-        # If this is a special command for OctoEverywhere, we handle it differently.
-        elif CommandHandler.Get().IsCommandRequest(httpInitialContext):
-            # This HandleCommand wil return a mock  OctoHttpResult, including a full mock response object.
-            octoHttpResult = CommandHandler.Get().HandleCommand(httpInitialContext, self.UploadBuffer)
-        else:
-            # This is a normal web request, first ensure they are allowed.
-            # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
-            if OctoHttpRequest.GetDisableHttpRelay() and httpInitialContext.PathType() != PathTypes.Absolute:
-                self.Logger.warning("OctoWebStreamHttpHelper got a request but the http relay is disabled.")
-                self.WebStream.SetClosedDueToFailedRequestConnection()
-                self.WebStream.Close()
-                return
-
-            # For all web requests, check our in memory read-to-go cache.
-            # If available, this will return the object. On a miss it will return None
-            slipstream = Compat.GetSlipstream()
-            if slipstream is not None:
-                octoHttpResult = slipstream.GetCachedOctoHttpResult(httpInitialContext)
-
-            # Check if we got a cache hit.
-            if octoHttpResult is not None:
-                isFromCache = True
+            # Check for some special case requests before we handle the request as normal.
+            #
+            # 1) An oracle snapshot or webcam stream request. In this case the WebCamHelper class will handle the request.
+            # 2) If the request is a OctoStreamCommand, the CommandHandler will handle the request.
+            # 3) Finally, check if the request is cached in Slipstream.
+            octoHttpResult:HttpResultOrNone = None
+            isFromCache = False
+            if WebcamHelper.Get().IsSnapshotOrWebcamStreamOracleRequest(sendHeaders):
+                octoHttpResult = WebcamHelper.Get().MakeSnapshotOrWebcamStreamRequest(httpInitialContext, method, sendHeaders, self.UploadBody)
+            # If this is a special command for OctoEverywhere, we handle it differently.
+            elif CommandHandler.Get().IsCommandRequest(httpInitialContext):
+                # This HandleCommand wil return a mock  OctoHttpResult, including a full mock response object.
+                octoHttpResult = CommandHandler.Get().HandleCommand(httpInitialContext, self.UploadBody)
             else:
-                # If we don't have a valid result yet, do the normal http path.
-                octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBuffer)
+                # This is a normal web request, first ensure they are allowed.
+                # Note we must always allow absolute paths, since these can be services like Spoolman or OctoFarm.
+                if OctoHttpRequest.GetDisableHttpRelay() and httpInitialContext.PathType() != PathTypes.Absolute:
+                    self.Logger.warning("OctoWebStreamHttpHelper got a request but the http relay is disabled.")
+                    self.WebStream.SetClosedDueToFailedRequestConnection()
+                    self.WebStream.Close()
+                    return
+
+                # For all web requests, check our in memory read-to-go cache.
+                # If available, this will return the object. On a miss it will return None
+                slipstream = Compat.GetSlipstream()
+                if slipstream is not None:
+                    octoHttpResult = slipstream.GetCachedOctoHttpResult(httpInitialContext)
+
+                # Check if we got a cache hit.
+                if octoHttpResult is not None:
+                    isFromCache = True
+                else:
+                    # If we don't have a valid result yet, do the normal http path.
+                    octoHttpResult = OctoHttpRequest.MakeHttpCallOctoStreamHelper(self.Logger, httpInitialContext, method, sendHeaders, self.UploadBody)
+        finally:
+            # Ensure the upload body is always cleaned up after the request is done.
+            self.UploadBody.Cleanup()
 
 
         # If None is returned, it failed.
@@ -623,102 +626,6 @@ class OctoWebStreamHttpHelper:
             # py samples in the flatbuffer repo.
             builder.PrependUOffsetTRelative(offset) #pyright: ignore[reportUnknownMemberType]
         return builder.EndVector() #pyright: ignore[reportUnknownMemberType]
-
-
-    def finalizeUnknownUploadSizeIfNeeded(self) -> None:
-        # Check if we are in the state where we have an upload buffer, but don't know the size.
-        # If we don't know the full upload buffer size, the UploadBuffer will be larger the actual size
-        # since we allocate extra room on it to try to reduce allocations.
-        # Note we only do this if the final size is unknown. If the final size is known but doesn't
-        # match how much we have, that's an error that will be thrown later.
-        if self.UploadBuffer is not None and self.KnownFullStreamUploadSizeBytes is None:
-            # Trim the buffer to the final size that we received.
-            # This will do a copy and set the copy as the upload buffer.
-            if len(self.UploadBuffer) != self.UploadBytesReceivedSoFar:
-                self.UploadBuffer = Buffer(self.UploadBuffer.Get()[0:self.UploadBytesReceivedSoFar])
-
-
-    def copyUploadDataFromMsg(self, webStreamMsg:WebStreamMsg.WebStreamMsg) -> None:
-        # Check how much data this message has in it.
-        # This size is the size of the full buffer, which is decompressed size if the data is compressed.
-        thisMessageDataLen = webStreamMsg.DataLength()
-        if thisMessageDataLen <= 0:
-            self.Logger.warning(self.getLogMsgPrefix() + " is waiting on upload data but got a message with no data. ")
-            return
-
-        # Most uploads have very small payloads that come in single messages.
-        # In that case we don't need to allocate a buffer to build up the data
-        # and instead we will shortcut using the data buffer that this message is
-        # already using
-        # IF we don't have a buffer and we know the full size and this message is the full size
-        # just use this buffer.
-        if self.UploadBuffer is None and self.KnownFullStreamUploadSizeBytes is not None and self.KnownFullStreamUploadSizeBytes == thisMessageDataLen:
-            # This is the only message with data, just use it's buffer.
-            buff = self.decompressBufferIfNeeded(webStreamMsg)
-            self.UploadBuffer = buff
-            self.UploadBytesReceivedSoFar = len(self.UploadBuffer)
-            # Done!
-            return
-
-        # NOTE: We can't do this! Since we try to compress all of the things right now, for already compressed things it will add a little overhead!
-        # The full upload size will be the same size as we expect, but the compression will make the payload larger.
-        # If we know the upload size, make sure this doesn't exceeded it.
-        # if self.KnownFullStreamUploadSizeBytes is not None and thisMessageDataLen + self.UploadBytesReceivedSoFar > self.KnownFullStreamUploadSizeBytes:
-        #     self.Logger.warning(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(thisMessageDataLen)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
-
-        # Make sure the array has been allocated and it's still large enough.
-        if self.UploadBuffer is None or thisMessageDataLen + self.UploadBytesReceivedSoFar > len(self.UploadBuffer):
-            newBufferSizeBytes = 0
-            if self.KnownFullStreamUploadSizeBytes is not None:
-                # We know exactly how much to allocate
-                newBufferSizeBytes = self.KnownFullStreamUploadSizeBytes
-            else:
-                # Use exponential growth to minimize reallocations for large uploads.
-                # At least double the previous allocation, with a minimum of 64KB headroom.
-                neededSize = thisMessageDataLen + self.UploadBytesReceivedSoFar
-                currentSize = len(self.UploadBuffer) if self.UploadBuffer is not None else 0
-                newBufferSizeBytes = max(neededSize + 64 * 1024, currentSize * 2)
-
-            # If there's a buffer, grab it since we need to copy it over
-            oldBuffer = self.UploadBuffer
-
-            # Allocate the new buffer
-            self.UploadBuffer = Buffer(bytearray(newBufferSizeBytes))
-
-            # Copy over anything that existed before
-            if oldBuffer is not None:
-                # This will copy the old buffer into the front of the new buffer.
-                # The underlying buffer should already be a bytearray, since we just set it.
-                self.UploadBuffer.ForceAsByteArray()[0:len(oldBuffer)] = oldBuffer
-
-        # We are ready to copy the new data now.
-        # Get a slice of the buffer to avoid a the copy, since we copy on the next step anyways.
-        buf = self.decompressBufferIfNeeded(webStreamMsg)
-
-        # Now that we have the original size of the body back, check to make sure it's not too much.
-        if self.KnownFullStreamUploadSizeBytes is not None and len(buf) + self.UploadBytesReceivedSoFar > self.KnownFullStreamUploadSizeBytes:
-            self.Logger.warning(self.getLogMsgPrefix() + " received more bytes than it was expecting for the upload. thisMsg:"+str(len(buf))+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullStreamUploadSizeBytes))
-            raise Exception("Too many bytes received for http upload buffer")
-
-        # Append the data into the main buffer.
-        pos = self.UploadBytesReceivedSoFar
-
-        # Force the underlying buffer to be a bytearray and copy.
-        ba = self.UploadBuffer.ForceAsByteArray()
-        ba[pos:pos+len(buf)] = buf
-        self.UploadBytesReceivedSoFar += len(buf)
-
-
-    # A helper, given a web stream message returns it's data buffer, decompressed if needed.
-    def decompressBufferIfNeeded(self, webStreamMsg:WebStreamMsg.WebStreamMsg) -> Buffer:
-        # Get the compression type.
-        compressionType = webStreamMsg.DataCompression()
-        dataByteArray:bytearray = webStreamMsg.DataAsByteArray() #pyright: ignore[reportAssignmentType]
-        dataBuffer = Buffer(dataByteArray)
-        if compressionType is DataCompression.DataCompression.None_:
-            return dataBuffer
-        # It's compressed, decompress it.
-        return Compression.Get().Decompress(self.CompressionContext, dataBuffer, webStreamMsg.OriginalDataSize(), webStreamMsg.IsDataTransmissionDone(), compressionType)
 
 
     def checkForNotModifiedCacheAndUpdateResponseIfSo(self, sentHeaders:Dict[str, str], httpResult:HttpResult) -> None:

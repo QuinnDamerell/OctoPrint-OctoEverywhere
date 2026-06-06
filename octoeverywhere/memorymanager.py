@@ -43,6 +43,10 @@ class MemoryManager:
     # MUST BE LESS THAN OR EQUAL TO Global_MaxSingleChunkSizeBytes
     OctoWebStreamHttpHelper_MaxMultipartReadSizeBytes = 3 * MB
 
+    # This is the max upload body size we will build in memory before OctoWebStreamHttpHelper switches to a file-backed body.
+    # This can be larger than Global_MaxSingleChunkSizeBytes because it's not sent as one websocket message.
+    OctoWebStreamHttpHelper_MaxUploadBufferSizeBytes = 32 * MB
+
     # This is the largest chunk we will return for a single quickcam stream frame.
     # MUST BE LESS THAN OR EQUAL TO Global_MaxSingleChunkSizeBytes
     QuickCam_MaxStreamChunkSizeBytes = 3 * MB
@@ -71,16 +75,18 @@ class MemoryManager:
                 return
             totalGb = totalBytes / MemoryManager.GB
             freeGb = freeBytes / MemoryManager.GB
-            self.Logger.info(f"MemoryManager - System memory: total: {totalGb:.2f}GB, free: {freeGb:.2f}GB")
 
             # We default to lower limits, so if the memory isn't above the higher thresholds, we just return.
             if totalGb < 2 or freeGb < 1:
+                self.Logger.info(f"MemoryManager - System memory: total: {totalGb:.2f}GB, free: {freeGb:.2f}GB - Low memory device, using lower limits.")
                 return
+            self.Logger.info(f"MemoryManager - System memory: total: {totalGb:.2f}GB, free: {freeGb:.2f}GB - Setting higher limits for better performance.")
 
             # Set the higher limits.
             MemoryManager.HttpStreamAccumulationReader_MaxPendingBufferSizeBytes = 10 * MemoryManager.MB
             MemoryManager.OctoWebStreamHttpHelper_DefaultBodyReadSizeBytes = 2 * MemoryManager.MB
             MemoryManager.OctoWebStreamHttpHelper_MaxMultipartReadSizeBytes = MemoryManager.Global_MaxSingleChunkSizeBytes
+            MemoryManager.OctoWebStreamHttpHelper_MaxUploadBufferSizeBytes = 128 * MemoryManager.MB
             MemoryManager.QuickCam_MaxStreamChunkSizeBytes = MemoryManager.Global_MaxSingleChunkSizeBytes
         except Exception as e:
             self.Logger.warning(f"MemoryManager failed to read system memory info during initialization. {e}")
