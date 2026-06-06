@@ -68,6 +68,7 @@ class BambuClient:
         self.State:Optional[BambuState] = None
         self.Version:Optional[BambuVersion] = None
         self.HasDoneFirstFullStateSync = False
+        self.LastConnectionFailedDueToAuth = False
 
         # Pull required configs.
         self.Config = config
@@ -134,6 +135,24 @@ class BambuClient:
 
     def GetVersion(self) -> Optional[BambuVersion]:
         return self.Version
+
+
+    def IsDisconnectDueToAuth(self) -> bool:
+        if self.LastConnectionFailedDueToAuth:
+            return True
+        reason_code = self._mux.GetLastConnectRefusedReasonCode()
+        if reason_code in (
+            ConnAckReturnCode.BAD_USERNAME_OR_PASSWORD,
+            ConnAckReturnCode.NOT_AUTHORIZED,
+            0x86, # MQTT 5 Bad User Name or Password
+            0x87, # MQTT 5 Not authorized
+        ):
+            return True
+        reason_str = self._mux.GetLastConnectRefusedReasonString()
+        if reason_str is None:
+            return False
+        reason_str = reason_str.lower()
+        return "not authorized" in reason_str or "bad user" in reason_str or "bad username" in reason_str
 
 
     # Returned for the existing mqttwebsocketproxy.py to consume. Step 5 will
@@ -235,8 +254,10 @@ class BambuClient:
             except Exception as e:
                 self.Logger.debug("Bambu report unsubscribe on disconnect raised: %s", e)
         if was_pending:
+            self.LastConnectionFailedDueToAuth = True
             self._LogBadCredentialsHelp()
         else:
+            self.LastConnectionFailedDueToAuth = False
             self.Logger.warning("Bambu printer connection lost. We will try to reconnect in a few seconds.")
         # Clear cached printer state - it's now unknown.
         self.State = None
@@ -275,6 +296,7 @@ class BambuClient:
             self.ReportSubToken = token
         # 2) Subscribe succeeded -> SN and access code are valid. Notify and
         #    request a full state sync.
+        self.LastConnectionFailedDueToAuth = False
         try:
             LocalWebApi.Get().SetPrinterConnectionState(True)
         except Exception as e:
@@ -412,6 +434,7 @@ class BambuClient:
             accessCode = self.LanAccessCode
         else:
             self.Logger.error("Missing access code in _BuildLocalConnectionContext, can't connect to the printer.")
+            self.LastConnectionFailedDueToAuth = True
         # Cache the legacy public shape so callers can still read it.
         self._SetCurrentPublicCtx(ConnectionContext(False, ipOrHostname, self.PortStr, "bblp", accessCode))
         # Local printers use self-signed certs.
@@ -450,6 +473,7 @@ class BambuClient:
         if parsedUser is None:
             self.Logger.error("Failed to parse the access token, can't connect to the printer.")
             return None
+        self.LastConnectionFailedDueToAuth = False
         host = bCloud.GetMqttHostname()
         self._SetCurrentPublicCtx(ConnectionContext(True, host, self.PortStr, parsedUser, accessToken))
         self.Logger.info("Trying to connect to printer via Bambu Cloud at %s...", host)
@@ -471,6 +495,11 @@ class BambuClient:
 
 
     def _LogBambuCloudLoginFailure(self, status:LoginStatus) -> None:
+        self.LastConnectionFailedDueToAuth = status in (
+            LoginStatus.BadUserNameOrPassword,
+            LoginStatus.TwoFactorAuthEnabled,
+            LoginStatus.EmailCodeRequired,
+        )
         self.Logger.error("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         self.Logger.error("                                                     Failed To Log Into Bambu Cloud")
         if status == LoginStatus.BadUserNameOrPassword:

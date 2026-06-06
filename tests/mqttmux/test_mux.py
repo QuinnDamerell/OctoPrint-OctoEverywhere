@@ -86,6 +86,25 @@ class TestMuxLifecycle(unittest.TestCase):
         self.assertIs(client.connected[0], handle)
         mux.Shutdown()
 
+    def test_connect_refusal_reason_is_recorded_and_cleared_on_success(self):
+        fake = FakePahoClient()
+        mux = _make_mux(fake)
+        mux.Start()
+        deadline = time.time() + 2.0
+        while not fake.connect_called and time.time() < deadline:
+            time.sleep(0.01)
+
+        fake.FireConnect(5)
+        self.assertFalse(mux.IsUpstreamConnected())
+        self.assertEqual(mux.GetLastConnectRefusedReasonCode(), 5)
+        self.assertEqual(mux.GetLastConnectRefusedReasonString(), "5")
+
+        fake.FireConnect(0)
+        self.assertTrue(mux.IsUpstreamConnected())
+        self.assertIsNone(mux.GetLastConnectRefusedReasonCode())
+        self.assertIsNone(mux.GetLastConnectRefusedReasonString())
+        mux.Shutdown()
+
     def test_attach_after_connect_fires_immediately(self):
         fake = FakePahoClient()
         mux = _make_mux(fake)

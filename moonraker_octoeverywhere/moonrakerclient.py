@@ -82,6 +82,7 @@ class MoonrakerClient(IMoonrakerClient):
         # This is found and set when we try to connect and we fail due to an unauthed socket.
         # It can also be set by the user in the config.
         self.MoonrakerApiKey = self.Config.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, keepInConfigIfNone=True)
+        self.LastConnectionFailedDueToAuth = False
         # Same idea, but sometimes we need to get the oneshot_token to access the system.
         # This code is only valid for 5 seconds, so it will be retrieved when we need it.
         self.OneshotToken:Optional[str] = None
@@ -108,6 +109,10 @@ class MoonrakerClient(IMoonrakerClient):
 
     def GetIsKlippyReady(self) -> bool:
         return self.WebSocketKlippyReady
+
+
+    def IsDisconnectDueToAuth(self) -> bool:
+        return self.LastConnectionFailedDueToAuth
 
 
     # Actually starts the client running, trying to connect the websocket and such.
@@ -583,17 +588,21 @@ class MoonrakerClient(IMoonrakerClient):
                 # Check for error
                 if result.HasError():
                     # Check if the error is Unauthorized, in which case we need to try to get credentials.
-                    if result.ErrorCode == -32602 or result.ErrorStr == "Unauthorized":
+                    error_str = result.ErrorStr.lower() if result.ErrorStr is not None else ""
+                    if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED or error_str == "unauthorized":
                         if self._TryToGetWebsocketAuth():
+                            self.LastConnectionFailedDueToAuth = False
                             # On success, shut down the websocket so we do the reconnect logic.
                             self.Logger.info("Successfully got the API key, restarting the websocket to try again using it.")
                             self._RestartWebsocket()
                             return
                         # Since we know we will keep failing, sleep for a while to avoid spamming the logs and so the user sees this error.
+                        self.LastConnectionFailedDueToAuth = True
                         self.Logger.error("!!!! Moonraker auth is required, so you must re-run the OctoEverywhere installer or generate an API key in Mainsail or Fluidd and set it the octoeverywhere.conf. The octoeverywhere.conf config file can be found in /data for docker or ~/.octoeverywhere*/ for CLI installs")
                         time.sleep(10)
                         raise Exception("Websocket unauthorized.")
 
+                    self.LastConnectionFailedDueToAuth = False
                     # Handle the timeout without throwing, since this happens sometimes when the system is down.
                     if result.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
                         raise NoSentryReportException("Moonraker client failed to send klippy ready query message, it hit a timeout.")
@@ -604,6 +613,7 @@ class MoonrakerClient(IMoonrakerClient):
 
                 # Check for klippy state
                 resultObj = result.GetResult()
+                self.LastConnectionFailedDueToAuth = False
                 if "klippy_state" not in resultObj:
                     self.Logger.error("Moonraker client got a klippy ready query response, but there was no klippy_state? "+json.dumps(resultObj))
                     raise Exception("No klippy_state found in result object. "+ str(result.GetLoggingErrorStr()))
@@ -780,11 +790,19 @@ class MoonrakerClient(IMoonrakerClient):
     def _onWsError(self, ws:IWebSocketClient, exception:Exception) -> None:
         if Sentry.IsCommonConnectionException(exception):
             # Don't bother logging, this just means there's no server to connect to.
+            self.LastConnectionFailedDueToAuth = False
             return
         if isinstance(exception, octowebsocket.WebSocketBadStatusException) and "Handshake status" in str(exception):
+            msg = str(exception).lower()
+            if "401" in msg or "403" in msg or "unauthorized" in msg or "forbidden" in msg:
+                self.LastConnectionFailedDueToAuth = True
+                self.Logger.error("Moonraker websocket handshake failed due to authorization. %s", exception)
+                return
             # This is moonraker specific, we sometimes see stuff like "Handshake status 502 Bad Gateway"
+            self.LastConnectionFailedDueToAuth = False
             self.Logger.info(f"Failed to connect to moonraker due to bad gateway stats. {exception}")
             return
+        self.LastConnectionFailedDueToAuth = False
         Sentry.OnException("Exception raised from moonraker client websocket connection. The connection will be closed.", exception)
 
 

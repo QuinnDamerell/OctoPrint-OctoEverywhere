@@ -163,6 +163,7 @@ class ElegooCc2Client:
         self.MqttRegistered = False
         self.ConnectionFinalized = False
         self.LastConnectionFailedDueToTooManyClients = False
+        self.LastConnectionFailedDueToAuth = False
         self.LastPongTimeSec = 0.0
         self.WebsocketConnectionIp:Optional[str] = None
         # Sub tokens held only while connected; cleared on disconnect so the
@@ -246,6 +247,26 @@ class ElegooCc2Client:
 
     def IsDisconnectDueToTooManyClients(self) -> bool:
         return self.LastConnectionFailedDueToTooManyClients
+
+
+    def IsDisconnectDueToAuth(self) -> bool:
+        with self.StateLock:
+            last_auth_failure = self.LastConnectionFailedDueToAuth
+        if last_auth_failure:
+            return True
+        reason_code = self._mux.GetLastConnectRefusedReasonCode()
+        if reason_code in (
+            ConnAckReturnCode.BAD_USERNAME_OR_PASSWORD,
+            ConnAckReturnCode.NOT_AUTHORIZED,
+            0x86, # MQTT 5 Bad User Name or Password
+            0x87, # MQTT 5 Not authorized
+        ):
+            return True
+        reason_str = self._mux.GetLastConnectRefusedReasonString()
+        if reason_str is None:
+            return False
+        reason_str = reason_str.lower()
+        return "not authorized" in reason_str or "bad user" in reason_str or "bad username" in reason_str
 
 
     # Exposes the shared MqttUpstreamMux so hosts can wire downstream surfaces
@@ -520,6 +541,7 @@ class ElegooCc2Client:
                 self._status_token = status_tok
                 self._response_token = response_tok
                 self.MqttRegistered = True
+                self.LastConnectionFailedDueToAuth = False
         for tok in tokens:
             try:
                 self.Client.Unsubscribe(tok)
@@ -540,8 +562,10 @@ class ElegooCc2Client:
             if error_message != "ok":
                 if "too many" in error_message:
                     self.LastConnectionFailedDueToTooManyClients = True
+                    self.LastConnectionFailedDueToAuth = False
                     self.Logger.warning("Elegoo CC2 registration failed because too many clients are connected.")
                 else:
+                    self.LastConnectionFailedDueToAuth = "auth" in error_message or "access" in error_message
                     self.Logger.error("Elegoo CC2 registration failed. Error: %s Result: %s", error_message, result)
                 self._mux.ForceReconnect()
                 return

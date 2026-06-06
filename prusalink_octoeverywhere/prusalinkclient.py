@@ -63,6 +63,7 @@ class PrusaLinkClient:
         self.SleepEvent = threading.Event()
         self.Connected = False
         self.ConnectionFinalized = False
+        self.LastConnectionFailedDueToAuth = False
         self.CurrentConnectionContext:Optional[PrusaLinkConnectionContext] = None
         self.State:Optional[PrinterState] = None
         self.Version:Optional[Dict[str, Any]] = None
@@ -97,6 +98,12 @@ class PrusaLinkClient:
         if self.Connected is False:
             self.SleepEvent.set()
         return self.Connected
+
+
+    def IsDisconnectDueToAuth(self) -> bool:
+        if self.Connected is False:
+            self.SleepEvent.set()
+        return self.LastConnectionFailedDueToAuth
 
 
     def SendPause(self) -> bool:
@@ -160,6 +167,7 @@ class PrusaLinkClient:
                 self.Logger.info("Prusa Link version info: %s", self._GetVersionString())
 
                 self._PollStatus(isFirstFullSyncResponse=True)
+                self.LastConnectionFailedDueToAuth = False
                 self.Connected = True
                 self.ConnectionFinalized = True
                 self.ConsecutivelyFailedConnectionAttempts = 0
@@ -172,10 +180,13 @@ class PrusaLinkClient:
                         self.SleepEvent.clear()
             except Exception as e:
                 if isinstance(e, PrusaLinkAuthException):
+                    self.LastConnectionFailedDueToAuth = True
                     self.Logger.error("Prusa Link authentication failed. Check the Prusa Link username/password or API key in the config.")
                 elif Sentry.IsCommonConnectionException(e):
+                    self.LastConnectionFailedDueToAuth = False
                     self.Logger.warning("Prusa Link printer connection error: %s", str(e))
                 else:
+                    self.LastConnectionFailedDueToAuth = False
                     Sentry.OnException(f"Failed to connect to the Prusa Link printer {ipOrHostname}. We will retry in a bit.", e)
 
             wasFullyConnected = self.ConnectionFinalized

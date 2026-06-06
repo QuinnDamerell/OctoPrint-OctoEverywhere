@@ -19,6 +19,8 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         printerState = PrusaLinkClient.Get().GetState()
         if printerState is None:
+            if PrusaLinkClient.Get().IsDisconnectDueToAuth():
+                return CommandHandler.c_CommandError_LostAuth
             return None
 
         (state, subState_CanBeNone) = printerState.GetCurrentStatus()

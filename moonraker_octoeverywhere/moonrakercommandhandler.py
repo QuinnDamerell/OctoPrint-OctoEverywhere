@@ -55,6 +55,9 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         # Validate
         if result.HasError():
             self.Logger.error("MoonrakerCommandHandler failed GetCurrentJobStatus() query. "+result.GetLoggingErrorStr())
+            errorStr = result.ErrorStr.lower() if result.ErrorStr is not None else ""
+            if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED or errorStr == "unauthorized" or MoonrakerClient.Get().IsDisconnectDueToAuth():
+                return CommandHandler.c_CommandError_LostAuth
             return None
 
         # Get the result.

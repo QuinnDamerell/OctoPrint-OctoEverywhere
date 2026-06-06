@@ -29,6 +29,8 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
         printerState = ElegooCc2Client.Get().GetState()
         if printerState is None:
+            if ElegooCc2Client.Get().IsDisconnectDueToAuth():
+                return CommandHandler.c_CommandError_LostAuth
             if ElegooCc2Client.Get().IsDisconnectDueToTooManyClients():
                 return CommandHandler.c_CommandError_CantConnectTooManyClients
             return None

@@ -69,6 +69,8 @@ class CommandHandler:
     c_CommandError_CantConnectTooManyClients = 787
     # Used when a feature is not supported on the current platform.
     c_CommandError_FeatureNotSupported = 788
+    # Used when we know we can't connect to the printer because we dont have valid auth
+    c_CommandError_LostAuth = 789
 
 
     _Instance:"CommandHandler" = None #pyright: ignore[reportAssignmentType]

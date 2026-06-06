@@ -176,6 +176,8 @@ class MqttUpstreamMux:
         self._is_connected = False
         self._is_shutdown = False
         self._last_context: Optional[MqttConnectionContext] = None
+        self._last_connect_refused_reason_code: Optional[int] = None
+        self._last_connect_refused_reason_str: Optional[str] = None
 
         # paho client + reconnect wakeup signal.
         self._client: Optional[mqtt.Client] = None
@@ -278,6 +280,16 @@ class MqttUpstreamMux:
     def GetLastConnectionContext(self) -> Optional[MqttConnectionContext]:
         with self._state_lock:
             return self._last_context
+
+
+    def GetLastConnectRefusedReasonCode(self) -> Optional[int]:
+        with self._state_lock:
+            return self._last_connect_refused_reason_code
+
+
+    def GetLastConnectRefusedReasonString(self) -> Optional[str]:
+        with self._state_lock:
+            return self._last_connect_refused_reason_str
 
 
     def SetConnectionStateChangedCallback(self, cb: Callable[[bool], None]) -> None:
@@ -535,6 +547,8 @@ class MqttUpstreamMux:
         ctx = self._context_provider()
         with self._state_lock:
             self._last_context = ctx
+            self._last_connect_refused_reason_code = None
+            self._last_connect_refused_reason_str = None
         transport = ctx.transport
         if transport not in ("tcp", "websockets"):
             raise ValueError(f"MqttMux unsupported transport: {transport}")
@@ -600,15 +614,31 @@ class MqttUpstreamMux:
             return self._client is client and not self._is_shutdown
 
 
+    @staticmethod
+    def _GetReasonCodeValue(reason_code: Any) -> Optional[int]:
+        if reason_code is None:
+            return None
+        try:
+            return int(getattr(reason_code, "value", reason_code))
+        except (TypeError, ValueError):
+            return None
+
+
     def _OnPahoConnect(self, client: Any, userdata: Any, flags: Any, reason_code: Any, properties: Any) -> None:
         if not self._IsActivePahoClient(client):
             return
         try:
-            if reason_code is not None and getattr(reason_code, "is_failure", False):
+            reason_value = self._GetReasonCodeValue(reason_code)
+            is_failure = bool(getattr(reason_code, "is_failure", False))
+            if is_failure is False and reason_value is not None:
+                is_failure = reason_value != 0
+            if reason_code is not None and is_failure:
                 self._logger.warning("MqttMux upstream connect refused: %s", reason_code)
                 # Signal supervisor to retry; mark disconnected.
                 with self._state_lock:
                     self._is_connected = False
+                    self._last_connect_refused_reason_code = reason_value
+                    self._last_connect_refused_reason_str = str(reason_code)
                 self._disconnect_event.set()
                 return
         except AttributeError:
@@ -616,6 +646,8 @@ class MqttUpstreamMux:
         self._logger.info("MqttMux upstream connected")
         with self._state_lock:
             self._is_connected = True
+            self._last_connect_refused_reason_code = None
+            self._last_connect_refused_reason_str = None
             handles_snapshot = list(self._handles.values())
             initial_subs = list(self._initial_subs)
             sub_table_snapshot = self._sub_table.SnapshotFilters()

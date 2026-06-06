@@ -80,6 +80,8 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
         # If the state is None, we are disconnected.
         if bambuState is None:
+            if BambuClient.Get().IsDisconnectDueToAuth():
+                return CommandHandler.c_CommandError_LostAuth
             # Returning None will be a "connection lost" state.
             return None
 

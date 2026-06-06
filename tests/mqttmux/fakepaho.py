@@ -18,6 +18,9 @@ class FakeReasonCode:
         self.value = value
         self.is_failure = value not in (0, 1, 2)
 
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 class FakePublishInfo:
     def __init__(self, mid: int, rc: int = MQTTErrorCode.MQTT_ERR_SUCCESS,
