@@ -468,6 +468,10 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
         return result
 
 
+    def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoprint.log", CommandHandler.c_FileGetPluginLogsCommand, "octoprint.log", args)
+
+
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
         if errorStr is not None or parsedPath is None:

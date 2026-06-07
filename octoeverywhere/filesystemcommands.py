@@ -1,6 +1,8 @@
 import json
+import logging
+import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from .buffer import Buffer
@@ -28,6 +30,7 @@ class VirtualFilePath:
 class FileSystemCommandHelper:
     c_VirtualGcodeRoot = "gcode"
     c_ErrorMaxChars = 240
+    c_FileReadChunkSizeBytes = 512 * 1024
 
 
     @staticmethod
@@ -91,6 +94,27 @@ class FileSystemCommandHelper:
 
 
     @staticmethod
+    def ParseTailLineCountArg(args:Optional[Dict[str, Any]]) -> Tuple[Optional[int], Optional[str]]:
+        if args is None:
+            return (None, None)
+        value = FileSystemCommandHelper.GetFirstArg(args, "tailLines", "taillines", "tail_lines", "tail-lines", "lines")
+        if value is None:
+            return (None, None)
+        if isinstance(value, bool):
+            return (None, "Invalid tailLines value. Use a non-negative integer.")
+        valueStr = str(value).strip()
+        if len(valueStr) == 0:
+            return (None, "Invalid tailLines value. Use a non-negative integer.")
+        try:
+            lineCount = int(valueStr)
+        except Exception:
+            return (None, "Invalid tailLines value. Use a non-negative integer.")
+        if lineCount < 0:
+            return (None, "Invalid tailLines value. Use a non-negative integer.")
+        return (lineCount, None)
+
+
+    @staticmethod
     def EncodeRelativePathForUrl(relativePath:str) -> str:
         return quote(relativePath, safe="/")
 
@@ -133,6 +157,158 @@ class FileSystemCommandHelper:
         if statusCode >= 100 and statusCode <= 599:
             return statusCode
         return 400
+
+
+    @staticmethod
+    def BuildFileResult(logger:Any, filePath:Optional[str], url:str, downloadFileName:Optional[str]=None, tailLineCount:Optional[int]=None) -> HttpResult:
+        if filePath is None or len(str(filePath)) == 0:
+            return FileSystemCommandHelper.BuildRawError(404, "Plugin log file was not found.", url)
+        if os.path.isfile(filePath) is False:
+            return FileSystemCommandHelper.BuildRawError(404, "Plugin log file was not found.", url)
+
+        try:
+            fileObj:BinaryIO = open(filePath, "rb") #pylint: disable=consider-using-with
+            fileSizeBytes = os.fstat(fileObj.fileno()).st_size
+            startOffset = FileSystemCommandHelper._GetTailStartOffset(fileObj, fileSizeBytes, tailLineCount)
+            fileObj.seek(startOffset)
+        except Exception as e:
+            try:
+                fileObj.close() #pyright: ignore[reportPossiblyUnboundVariable]
+            except Exception:
+                pass
+            return FileSystemCommandHelper.BuildRawError(500, "Failed to open plugin log file: " + str(e), url)
+
+        bytesRemaining = fileSizeBytes - startOffset
+
+        def readLogChunk() -> Optional[Buffer]:
+            nonlocal bytesRemaining
+            if bytesRemaining <= 0:
+                return None
+            data = fileObj.read(min(FileSystemCommandHelper.c_FileReadChunkSizeBytes, bytesRemaining))
+            if len(data) == 0:
+                return None
+            bytesRemaining -= len(data)
+            return Buffer(data)
+
+        def closeLogFile() -> None:
+            try:
+                fileObj.close()
+            except Exception as e:
+                try:
+                    logger.warning("Failed to close plugin log file stream. %s", str(e))
+                except Exception:
+                    pass
+
+        if downloadFileName is None or len(downloadFileName) == 0:
+            downloadFileName = os.path.basename(filePath)
+        headers = {
+            "Content-Type": "text/plain; charset=utf-8",
+            "Content-Length": str(bytesRemaining),
+            "Content-Disposition": "attachment; filename=\"" + FileSystemCommandHelper._HeaderQuote(downloadFileName) + "\"",
+        }
+        return HttpResult(200, headers, url, False, customBodyStreamCallback=readLogChunk, customBodyStreamClosedCallback=closeLogFile)
+
+
+    @staticmethod
+    def FindLogFilePathFromLogger(logger:Any, preferredFileName:Optional[str]=None) -> Optional[str]:
+        candidates:List[str] = []
+        for handler in FileSystemCommandHelper._GetLoggerHandlers(logger):
+            filePath = getattr(handler, "baseFilename", None)
+            if filePath is None:
+                continue
+            filePathStr = str(filePath)
+            if os.path.isfile(filePathStr) is False:
+                continue
+            if preferredFileName is not None and os.path.basename(filePathStr).lower() == preferredFileName.lower():
+                return filePathStr
+            candidates.append(filePathStr)
+        if len(candidates) > 0:
+            return candidates[0]
+        return None
+
+
+    @staticmethod
+    def BuildLogFileResultFromLogger(logger:Any, preferredFileName:Optional[str], url:str, downloadFileName:Optional[str]=None, args:Optional[Dict[str, Any]]=None) -> HttpResult:
+        tailLineCount, tailLineError = FileSystemCommandHelper.ParseTailLineCountArg(args)
+        if tailLineError is not None:
+            return FileSystemCommandHelper.BuildRawError(400, tailLineError, url)
+        filePath = FileSystemCommandHelper.FindLogFilePathFromLogger(logger, preferredFileName)
+        return FileSystemCommandHelper.BuildFileResult(logger, filePath, url, downloadFileName, tailLineCount)
+
+
+    @staticmethod
+    def _GetLoggerHandlers(logger:Any) -> List[Any]:
+        handlers:List[Any] = []
+        seenHandlerIds = set()
+        seenLoggerIds = set()
+
+        def addLoggerHandlers(loggerObj:Any) -> None:
+            cur = loggerObj
+            while cur is not None:
+                curId = id(cur)
+                if curId in seenLoggerIds:
+                    break
+                seenLoggerIds.add(curId)
+                for handler in getattr(cur, "handlers", []):
+                    handlerId = id(handler)
+                    if handlerId in seenHandlerIds:
+                        continue
+                    seenHandlerIds.add(handlerId)
+                    handlers.append(handler)
+                if getattr(cur, "propagate", True) is False:
+                    break
+                cur = getattr(cur, "parent", None)
+
+        if logger is not None:
+            addLoggerHandlers(logger)
+
+        rootLogger = logging.getLogger()
+        addLoggerHandlers(rootLogger)
+
+        for loggerObj in logging.Logger.manager.loggerDict.values():
+            if isinstance(loggerObj, logging.Logger):
+                addLoggerHandlers(loggerObj)
+        return handlers
+
+
+    @staticmethod
+    def _GetTailStartOffset(fileObj:BinaryIO, fileSizeBytes:int, tailLineCount:Optional[int]) -> int:
+        if tailLineCount is None:
+            return 0
+        if tailLineCount <= 0:
+            return fileSizeBytes
+        if fileSizeBytes <= 0:
+            return 0
+
+        scanEndOffset = fileSizeBytes
+        fileObj.seek(fileSizeBytes - 1)
+        if fileObj.read(1) == b"\n":
+            scanEndOffset -= 1
+        if scanEndOffset <= 0:
+            return 0
+
+        linesFound = 0
+        position = scanEndOffset
+        while position > 0:
+            readSize = min(FileSystemCommandHelper.c_FileReadChunkSizeBytes, position)
+            position -= readSize
+            fileObj.seek(position)
+            chunk = fileObj.read(readSize)
+            searchEnd = len(chunk)
+            while searchEnd > 0:
+                newlineIndex = chunk.rfind(b"\n", 0, searchEnd)
+                if newlineIndex == -1:
+                    break
+                linesFound += 1
+                if linesFound >= tailLineCount:
+                    return position + newlineIndex + 1
+                searchEnd = newlineIndex
+        return 0
+
+
+    @staticmethod
+    def _HeaderQuote(value:str) -> str:
+        return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", "")
 
 
     @staticmethod

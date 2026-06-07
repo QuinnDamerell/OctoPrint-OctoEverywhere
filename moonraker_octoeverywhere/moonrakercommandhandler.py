@@ -595,6 +595,10 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return result
 
 
+    def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+
+
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
         if errorStr is not None or parsedPath is None:

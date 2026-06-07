@@ -92,6 +92,7 @@ class CommandHandler:
     c_FilesUploadCommand = "files-upload"
     c_FilesDownloadCommand = "files-download"
     c_FilesDeleteCommand = "files-delete"
+    c_FileGetPluginLogsCommand = "file-get-plugin-logs"
 
     # For webcam calls, this is an optional GET arg that will be an int of the webcam index.
     # The webcam index is the index of the webcam in the list-webcam response.
@@ -160,6 +161,10 @@ class CommandHandler:
             if self.PlatformCommandHandler is None:
                 return FileSystemCommandHelper.BuildRawError(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesDownloadCommand), CommandHandler.c_FilesDownloadCommand)
             return self.PlatformCommandHandler.ExecuteFileDownload(jsonObj)
+        if commandPathLower.startswith(CommandHandler.c_FileGetPluginLogsCommand):
+            if self.PlatformCommandHandler is None:
+                return FileSystemCommandHelper.BuildRawError(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FileGetPluginLogsCommand), CommandHandler.c_FileGetPluginLogsCommand)
+            return self.PlatformCommandHandler.ExecuteGetPluginLogs(jsonObj)
         # If we didn't match, return None, so the ProcessCommand handler is called.
         return None
 
@@ -701,7 +706,7 @@ class CommandHandler:
             # There are some very special commands where the body is data, so for those we don't try to
             # parse the json args. But remember those take args via GET parameters.
             postBodyForJsonArgs:Optional[UploadBody] = None
-            if commandPathLower.startswith(CommandHandler.c_FilesUploadCommand) is False and commandPathLower.startswith(CommandHandler.c_FilesDownloadCommand) is False:
+            if commandPathLower.startswith(CommandHandler.c_FilesUploadCommand) is False and commandPathLower.startswith(CommandHandler.c_FilesDownloadCommand) is False and commandPathLower.startswith(CommandHandler.c_FileGetPluginLogsCommand) is False:
                 postBodyForJsonArgs = postBody
             # We always call this, if there's no upload body it will parse the args from get params.
             jsonObj = self._GetJsonArgs(commandPath, postBodyForJsonArgs)

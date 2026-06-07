@@ -281,5 +281,9 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo"), CommandHandler.c_FilesDownloadCommand)
 
 
+    def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+
+
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo"))

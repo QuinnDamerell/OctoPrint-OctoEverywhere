@@ -322,6 +322,11 @@ class IPlatformCommandHandler(ABC):
     def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
         pass
 
+    # Downloads the plugin log file as raw text.
+    @abstractmethod
+    def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        pass
+
     # Deletes a file. Args are provided by GET parameters.
     @abstractmethod
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
