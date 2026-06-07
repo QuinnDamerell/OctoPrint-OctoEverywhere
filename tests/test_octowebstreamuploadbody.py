@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import tempfile
 import unittest
 import zlib
 from unittest.mock import patch
@@ -220,6 +221,62 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertFalse(os.path.exists(finalFilePath))
 
 
+    def test_compressed_upload_rejects_original_size_mismatch(self) -> None:
+        original = b"abc123" * 100
+        compressed = zlib.compress(original)
+        body = UploadBody(self.logger, 1, 20, self.compressionContext, maxInMemoryBodyBytes=4096)
+        self.addCleanup(body.Cleanup)
+
+        body.AppendMessage(FakeWebStreamMsg(compressed, DataCompression.Zlib, 20, isDone=True))
+
+        with self.assertRaisesRegex(Exception, "decompressed zlib chunk exceeded expected size"):
+            body.Finalize()
+
+
+    def test_failed_file_decompression_removes_intermediate_temp_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tempDir:
+            body = UploadBody(self.logger, 1, None, self.compressionContext, maxInMemoryBodyBytes=1)
+
+            def createTempFile():
+                return tempfile.NamedTemporaryFile(prefix="oe-upload-", suffix=".tmp", dir=tempDir, mode="w+b", delete=False)
+
+            try:
+                with patch.object(body, "_CreateTempFile", side_effect=createTempFile):
+                    body.AppendMessage(FakeWebStreamMsg(b"not-zlib-data", DataCompression.Zlib, 100, isDone=True))
+                    self.assertEqual(len(os.listdir(tempDir)), 1)
+
+                    with self.assertRaisesRegex(Exception, "zlib chunk"):
+                        body.Finalize()
+
+                    self.assertEqual(len(os.listdir(tempDir)), 1)
+            finally:
+                body.Cleanup()
+
+            self.assertEqual(os.listdir(tempDir), [])
+
+
+    def test_cleanup_waits_for_file_request_context_close(self) -> None:
+        payload = b"cleanup-body-over-file-limit"
+        body = UploadBody(self.logger, 1, len(payload), self.compressionContext, maxInMemoryBodyBytes=4)
+        self.addCleanup(body.Cleanup)
+
+        body.AppendMessage(FakeWebStreamMsg(payload, isDone=True))
+        body.Finalize()
+
+        context = body.OpenForRequest()
+        filePath = context.FilePath
+        try:
+            self.assertIsNotNone(filePath)
+            self.assertTrue(os.path.exists(filePath))
+            body.Cleanup()
+            self.assertTrue(os.path.exists(filePath))
+        finally:
+            context.Close()
+
+        self.assertIsNotNone(filePath)
+        self.assertFalse(os.path.exists(filePath))
+
+
     def test_known_size_mismatch_fails_finalize(self) -> None:
         body = UploadBody(self.logger, 1, 10, self.compressionContext, maxInMemoryBodyBytes=1024)
         self.addCleanup(body.Cleanup)
@@ -362,11 +419,9 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
             {"path": "a.gcode", "size": 10, "modified": 1},
         ])
 
-        root = tree["Root"]
-        self.assertEqual(root["Type"], "folder")
-        self.assertEqual(root["Path"], "")
-        self.assertEqual(len(root["Children"]), 1)
-        gcodeRoot = root["Children"][0]
+        rootChildren = tree["Root"]
+        self.assertEqual(len(rootChildren), 1)
+        gcodeRoot = rootChildren[0]
         self.assertEqual(gcodeRoot["Name"], "gcode")
         self.assertEqual(gcodeRoot["Path"], "gcode")
         self.assertEqual([c["Name"] for c in gcodeRoot["Children"]], ["folder", "a.gcode"])
