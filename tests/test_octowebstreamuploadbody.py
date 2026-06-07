@@ -1,12 +1,15 @@
+import json
 import logging
 import os
 import unittest
 import zlib
 from unittest.mock import patch
 
-from octoeverywhere.WebStream.uploadbody import UploadBody
+from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.compression import CompressionContext
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder
+from octoeverywhere.interfaces import CommandResponse
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.DataCompression import DataCompression
 from octoeverywhere.Proto.PathTypes import PathTypes
@@ -92,6 +95,24 @@ class RecordingSession:
             "verify": verify,
         })
         return self.Responses.pop(0)
+
+
+class FakeFileCommandPlatform:
+    def __init__(self) -> None:
+        self.Args = None
+        self.UsedFileBackedUploadBody = False
+        self.BodyBytes = b""
+
+
+    def ExecuteFileUpload(self, args, uploadBody):
+        self.Args = args
+        self.UsedFileBackedUploadBody = uploadBody.IsUsingFile
+        with uploadBody.OpenForRequest() as requestBody:
+            self.BodyBytes = requestBody.read() if hasattr(requestBody, "read") else bytes(requestBody)
+        return CommandResponse.Success({
+            "ok": True,
+            "size": len(self.BodyBytes)
+        })
 
 
 class TestOctoWebStreamUploadBody(unittest.TestCase):
@@ -284,6 +305,88 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertIsNotNone(jsonObj)
         self.assertEqual(jsonObj["transportType"], "http")
         self.assertEqual(jsonObj["path"], "/api/version")
+
+
+    def test_raw_file_upload_command_does_not_parse_body_as_json(self) -> None:
+        payload = b"\x00raw-gcode-body-not-json"
+        body = UploadBody(self.logger, 1, len(payload), self.compressionContext, maxInMemoryBodyBytes=4)
+        self.addCleanup(body.Cleanup)
+        body.AppendMessage(FakeWebStreamMsg(payload, isDone=True))
+        body.Finalize()
+        self.assertTrue(body.IsUsingFile)
+
+        platform = FakeFileCommandPlatform()
+        handler = CommandHandler(self.logger, None, platform, None)
+        context = FakeHttpInitialContext(CommandHandler.c_CommandHandlerPathPrefix + CommandHandler.c_FilesUploadCommand + "?path=gcode/folder/test.gcode&print=true")
+
+        result = handler.HandleCommand(context, body)
+
+        self.assertEqual(result.StatusCode, 200)
+        self.assertIsNotNone(result.FullBodyBuffer)
+        responseObj = json.loads(result.FullBodyBuffer.GetBytesLike().decode("utf-8"))
+        self.assertEqual(responseObj["Status"], 200)
+        self.assertTrue(responseObj["Result"]["ok"])
+        self.assertEqual(responseObj["Result"]["size"], len(payload))
+        self.assertEqual(platform.Args["path"], "gcode/folder/test.gcode")
+        self.assertEqual(platform.Args["print"], "true")
+        self.assertTrue(platform.UsedFileBackedUploadBody)
+        self.assertEqual(platform.BodyBytes, payload)
+
+
+    def test_multipart_form_upload_body_streams_file_backed_upload(self) -> None:
+        payload = b"G1 X1 Y1\n" * 4
+        body = UploadBody(self.logger, 1, len(payload), self.compressionContext, maxInMemoryBodyBytes=4)
+        self.addCleanup(body.Cleanup)
+        body.AppendMessage(FakeWebStreamMsg(payload, isDone=True))
+        body.Finalize()
+        self.assertTrue(body.IsUsingFile)
+
+        multipart = MultipartFormUploadBody(self.logger, body, "test.gcode", {"path": "folder"}, boundary="boundary-test")
+        context = multipart.OpenForRequest()
+        try:
+            reader = context.GetData()
+            data = reader.read(11) + reader.read(7) + reader.read()
+        finally:
+            context.Close()
+
+        self.assertEqual(len(data), multipart.GetContentLength())
+        self.assertIn(b'Content-Disposition: form-data; name="path"', data)
+        self.assertIn(b'Content-Disposition: form-data; name="file"; filename="test.gcode"', data)
+        self.assertIn(payload, data)
+        self.assertTrue(data.endswith(b"\r\n--boundary-test--\r\n"))
+
+
+    def test_file_tree_builder_creates_virtual_gcode_root(self) -> None:
+        tree = FileSystemTreeBuilder.FromMoonrakerFileList([
+            {"path": "folder/b.gcode", "size": 20, "modified": 2},
+            {"path": "a.gcode", "size": 10, "modified": 1},
+        ])
+
+        root = tree["Root"]
+        self.assertEqual(root["Type"], "folder")
+        self.assertEqual(root["Path"], "")
+        self.assertEqual(len(root["Children"]), 1)
+        gcodeRoot = root["Children"][0]
+        self.assertEqual(gcodeRoot["Name"], "gcode")
+        self.assertEqual(gcodeRoot["Path"], "gcode")
+        self.assertEqual([c["Name"] for c in gcodeRoot["Children"]], ["folder", "a.gcode"])
+        folder = gcodeRoot["Children"][0]
+        self.assertEqual(folder["Children"][0]["Path"], "gcode/folder/b.gcode")
+        self.assertEqual(folder["Children"][0]["SizeBytes"], 20)
+
+
+    def test_file_path_errors_are_short_and_actionable(self) -> None:
+        _, missingError = FileSystemCommandHelper.ParsePathArg(None)
+        self.assertEqual(missingError, "Missing path. Add query parameter 'path=gcode/<file>'.")
+
+        _, rootError = FileSystemCommandHelper.ParsePathArg({"path": "models/test.gcode"})
+        self.assertEqual(rootError, "Unsupported path root 'models'. Use 'path=gcode/<file>'.")
+
+        errorResult = FileSystemCommandHelper.BuildRawError(400, "line one\n" + ("x" * 500), CommandHandler.c_FilesUploadCommand)
+        self.assertIsNotNone(errorResult.FullBodyBuffer)
+        errorObj = json.loads(errorResult.FullBodyBuffer.GetBytesLike().decode("utf-8"))
+        self.assertLessEqual(len(errorObj["Error"]), FileSystemCommandHelper.c_ErrorMaxChars)
+        self.assertNotIn("\n", errorObj["Error"])
 
 
 if __name__ == "__main__":

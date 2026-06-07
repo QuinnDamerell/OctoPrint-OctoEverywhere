@@ -2,7 +2,10 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper
+from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo
+from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
 
 from .prusalinkclient import PrusaLinkClient
@@ -179,6 +182,22 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
             "type": "http",
             "response": self._BuildHttpResponse(response)
         })
+
+
+    def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("PrusaLink"))
+
+
+    def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("PrusaLink"))
+
+
+    def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("PrusaLink"), CommandHandler.c_FilesDownloadCommand)
+
+
+    def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("PrusaLink"))
 
 
     def _BuildHttpResponse(self, response:Any) -> Dict[str, Any]:

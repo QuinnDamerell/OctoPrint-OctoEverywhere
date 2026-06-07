@@ -3,8 +3,12 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder
+from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL
 from octoeverywhere.localip import LocalIpHelper
+from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
 from linux_host.config import Config
 
 from .moonrakerclient import MoonrakerClient
@@ -467,6 +471,164 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return CommandResponse.Success(response)
 
 
+    def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        path = "/server/files/list?root=gcodes"
+        headers:Dict[str, str] = {}
+        self._AddMoonrakerAuth(headers)
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            path,
+            OctoHttpRequest.GetPathType(path),
+            "GET",
+            headers,
+            timeoutSec=60.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", "file-list"))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", "file-list"))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("Moonraker", "file-list", result.StatusCode, bodyBytes))
+
+            try:
+                responseObj = json.loads(bodyBytes.decode("utf-8"))
+            except Exception:
+                return CommandResponse.Error(502, FileSystemCommandHelper.InvalidJsonResponseError("Moonraker", "file-list"))
+            fileList:Any = responseObj
+            if isinstance(responseObj, dict) and "result" in responseObj:
+                fileList = responseObj["result"]
+            if not isinstance(fileList, list):
+                fileList = []
+            return CommandResponse.Success(FileSystemTreeBuilder.FromMoonrakerFileList(fileList))
+        finally:
+            result.Free()
+
+
+    def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+        if uploadBody.HasData is False:
+            return CommandResponse.Error(400, FileSystemCommandHelper.EmptyUploadBodyError())
+
+        fileName, parentPath = parsedPath.FileNameAndParent()
+        fields:Dict[str, str] = {
+            "root": "gcodes"
+        }
+        if len(parentPath) > 0:
+            fields["path"] = parentPath
+        if FileSystemCommandHelper.GetBoolArg(args, "print"):
+            fields["print"] = "true"
+        checksum = FileSystemCommandHelper.GetFirstArg(args or {}, "checksum")
+        if checksum is not None and len(str(checksum)) > 0:
+            fields["checksum"] = str(checksum)
+
+        multipartBody = MultipartFormUploadBody(self.Logger, uploadBody, fileName, fields)
+        headers = {
+            "Content-Type": multipartBody.GetContentType(),
+            "Content-Length": str(multipartBody.GetContentLength()),
+        }
+        self._AddMoonrakerAuth(headers)
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            "/server/files/upload",
+            OctoHttpRequest.GetPathType("/server/files/upload"),
+            "POST",
+            headers,
+            multipartBody, #pyright: ignore[reportArgumentType]
+            allowRedirects=False,
+            timeoutSec=1800.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", CommandHandler.c_FilesUploadCommand))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_FilesUploadCommand))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("Moonraker", CommandHandler.c_FilesUploadCommand, result.StatusCode, bodyBytes))
+            return FileSystemCommandHelper.BuildFileUploadSuccess("Moonraker", parsedPath, uploadBody.UploadBytesReceivedSoFar, result.StatusCode, bodyBytes, fields)
+        finally:
+            result.Free()
+
+
+    def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(), CommandHandler.c_FilesDownloadCommand)
+
+        headers:Dict[str, str] = {}
+        self._AddMoonrakerAuth(headers)
+        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        downloadPath = "/server/files/gcodes/" + relativePath
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            downloadPath,
+            OctoHttpRequest.GetPathType(downloadPath),
+            "GET",
+            headers,
+            timeoutSec=1800.0
+        )
+        if result is None:
+            return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", CommandHandler.c_FilesDownloadCommand), CommandHandler.c_FilesDownloadCommand)
+        if result.StatusCode < 200 or result.StatusCode >= 300:
+            try:
+                result.ReadAllContentFromStreamResponse(self.Logger)
+                bodyBytes = b""
+                if result.FullBodyBuffer is not None:
+                    bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+                if result.StatusCode == 401 or result.StatusCode == 403:
+                    return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_FilesDownloadCommand), CommandHandler.c_FilesDownloadCommand)
+                return FileSystemCommandHelper.BuildRawError(result.StatusCode, FileSystemCommandHelper.BackendHttpError("Moonraker", CommandHandler.c_FilesDownloadCommand, result.StatusCode, bodyBytes), CommandHandler.c_FilesDownloadCommand)
+            finally:
+                result.Free()
+        return result
+
+
+    def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        headers:Dict[str, str] = {}
+        self._AddMoonrakerAuth(headers)
+        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        deletePath = "/server/files/gcodes/" + relativePath
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            deletePath,
+            OctoHttpRequest.GetPathType(deletePath),
+            "DELETE",
+            headers,
+            timeoutSec=60.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", CommandHandler.c_FilesDeleteCommand))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_FilesDeleteCommand))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("Moonraker", CommandHandler.c_FilesDeleteCommand, result.StatusCode, bodyBytes))
+            return FileSystemCommandHelper.BuildFileDeleteSuccess("Moonraker", parsedPath, result.StatusCode, bodyBytes)
+        finally:
+            result.Free()
+
+
     # Checks if the printer is connected and in the correct state (or states)
     # If everything checks out, returns None. Otherwise it returns a CommandResponse
     def _CheckIfConnectedAndForExpectedStates(self, stateArray:List[str]) -> Optional[CommandResponse]:
@@ -494,3 +656,9 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         self.Logger.warning("Command failed, printer "+state+" not the expected states.")
         return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Wrong State")
+
+
+    def _AddMoonrakerAuth(self, headers:Dict[str, str]) -> None:
+        apiKey = MoonrakerClient.Get().MoonrakerApiKey
+        if apiKey is not None and len(apiKey) > 0:
+            headers["X-Api-Key"] = apiKey

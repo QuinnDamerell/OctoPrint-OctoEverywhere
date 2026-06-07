@@ -7,10 +7,13 @@ from octoprint.printer import PrinterInterface
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.compat import Compat
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder
+from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.interfaces import IPlatformCommandHandler, IOctoPrintPlugin, ConnectionInfo
 from octoeverywhere.octohttprequest import OctoHttpRequest
+from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
 from octoeverywhere.localip import LocalIpHelper
 
 from .smartpause import SmartPause
@@ -346,6 +349,159 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             result.Free()
 
 
+    def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        # Make the request for all files.
+        headers:Dict[str, str] = {}
+        self._AddOctoPrintLocalAuth(headers)
+        path = "/api/files/local?recursive=true"
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            path,
+            OctoHttpRequest.GetPathType(path),
+            "GET",
+            headers,
+            timeoutSec=20.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", "file-list"))
+
+        # Read and parse the result.
+        with result:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", "file-list", result.StatusCode, bodyBytes))
+            try:
+                responseObj = json.loads(bodyBytes.decode("utf-8"))
+            except Exception:
+                return CommandResponse.Error(502, FileSystemCommandHelper.InvalidJsonResponseError("OctoPrint", "file-list"))
+            if not isinstance(responseObj, dict):
+                return CommandResponse.Error(502, "file-list failed on OctoPrint: response JSON was not an object.")
+            files = responseObj.get("files", [])
+            if not isinstance(files, list):
+                files = []
+            return CommandResponse.Success(FileSystemTreeBuilder.FromOctoPrintFileList(files))
+
+
+    def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+        if uploadBody.HasData is False:
+            return CommandResponse.Error(400, FileSystemCommandHelper.EmptyUploadBodyError())
+
+        fileName, parentPath = parsedPath.FileNameAndParent()
+        fields:Dict[str, str] = {}
+        if len(parentPath) > 0:
+            fields["path"] = parentPath
+        if FileSystemCommandHelper.GetBoolArg(args, "select"):
+            fields["select"] = "true"
+        if FileSystemCommandHelper.GetBoolArg(args, "print"):
+            fields["print"] = "true"
+
+        multipartBody = MultipartFormUploadBody(self.Logger, uploadBody, fileName, fields)
+        headers = {
+            "Content-Type": multipartBody.GetContentType(),
+            "Content-Length": str(multipartBody.GetContentLength()),
+        }
+        self._AddOctoPrintLocalAuth(headers)
+        api = "/api/files/local"
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            api,
+            OctoHttpRequest.GetPathType(api),
+            "POST",
+            headers,
+            multipartBody, #pyright: ignore[reportArgumentType]
+            allowRedirects=False,
+            timeoutSec=1800.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", CommandHandler.c_FilesUploadCommand))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_FilesUploadCommand))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_FilesUploadCommand, result.StatusCode, bodyBytes))
+            return FileSystemCommandHelper.BuildFileUploadSuccess("OctoPrint", parsedPath, uploadBody.UploadBytesReceivedSoFar, result.StatusCode, bodyBytes, fields)
+        finally:
+            result.Free()
+
+
+    def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(), CommandHandler.c_FilesDownloadCommand)
+
+        headers:Dict[str, str] = {}
+        self._AddOctoPrintLocalAuth(headers)
+        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        downloadPath = "/downloads/files/local/" + relativePath
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            downloadPath,
+            OctoHttpRequest.GetPathType(downloadPath),
+            "GET",
+            headers,
+            timeoutSec=1800.0
+        )
+        if result is None:
+            return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", CommandHandler.c_FilesDownloadCommand), CommandHandler.c_FilesDownloadCommand)
+        if result.StatusCode < 200 or result.StatusCode >= 300:
+            try:
+                result.ReadAllContentFromStreamResponse(self.Logger)
+                bodyBytes = b""
+                if result.FullBodyBuffer is not None:
+                    bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+                if result.StatusCode == 401 or result.StatusCode == 403:
+                    return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_FilesDownloadCommand), CommandHandler.c_FilesDownloadCommand)
+                return FileSystemCommandHelper.BuildRawError(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_FilesDownloadCommand, result.StatusCode, bodyBytes), CommandHandler.c_FilesDownloadCommand)
+            finally:
+                result.Free()
+        return result
+
+
+    def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        headers:Dict[str, str] = {}
+        self._AddOctoPrintLocalAuth(headers)
+        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        deletePath = "/api/files/local/" + relativePath
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            deletePath,
+            OctoHttpRequest.GetPathType(deletePath),
+            "DELETE",
+            headers,
+            timeoutSec=60.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", CommandHandler.c_FilesDeleteCommand))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_FilesDeleteCommand))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_FilesDeleteCommand, result.StatusCode, bodyBytes))
+            return FileSystemCommandHelper.BuildFileDeleteSuccess("OctoPrint", parsedPath, result.StatusCode, bodyBytes)
+        finally:
+            result.Free()
+
+
     def _BuildHttpResponse(self, result:Any) -> Dict[str, Any]:
         result.ReadAllContentFromStreamResponse(self.Logger)
         bodyBytes = b""
@@ -364,3 +520,9 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             except Exception:
                 pass
         return response
+
+
+    def _AddOctoPrintLocalAuth(self, headers:Dict[str, str]) -> None:
+        localAuth = Compat.GetLocalAuth()
+        if localAuth is not None:
+            localAuth.AddAuthHeader(headers)

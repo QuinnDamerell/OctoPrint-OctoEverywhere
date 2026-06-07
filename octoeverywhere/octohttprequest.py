@@ -1,6 +1,6 @@
 import platform
 import logging
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 
 from .mdns import MDns
 from .buffer import Buffer
@@ -9,7 +9,7 @@ from .localip import LocalIpHelper
 from .httpresult import HttpResult
 from .httpsessions import HttpSessions
 from .octostreammsgbuilder import OctoStreamMsgBuilder
-from .WebStream.uploadbody import UploadBody, UploadBodyBufferOrNone, UploadBodyReadContext, BufferedReaderBytesOrNone
+from .WebStream.uploadbody import MultipartFormUploadBody, MultipartFormUploadBodyReadContext, MultipartFormUploadBodyReader, UploadBody, UploadBodyReadContext, UploadTypesBufferOrNone, BufferedReaderBytesOrNone
 
 
 from .Proto.PathTypes import PathTypes
@@ -83,7 +83,7 @@ class OctoHttpRequest:
     # The main point of this function is to abstract away the logic around relative paths, absolute URLs, and the fallback logic
     # we use for different ports. See the comments in the function for details.
     @staticmethod
-    def MakeHttpCallOctoStreamHelper(logger:logging.Logger, httpInitialContext:HttpInitialContext, method:str, headers:Dict[str, str], data:UploadBodyBufferOrNone=None) -> Optional[HttpResult]:
+    def MakeHttpCallOctoStreamHelper(logger:logging.Logger, httpInitialContext:HttpInitialContext, method:str, headers:Dict[str, str], data:UploadTypesBufferOrNone=None) -> Optional[HttpResult]:
         # Get the vars we need from the octostream initial context.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
         if path is None:
@@ -99,7 +99,7 @@ class OctoHttpRequest:
     # The X-Forwarded-Host header will tell the OctoPrint server the correct place to set the location redirect header.
     # However, for calls that aren't proxy calls, things like local snapshot requests and such, we want to allow redirects to be more robust.
     @staticmethod
-    def MakeHttpCall(logger:logging.Logger, pathOrUrl:str, pathOrUrlType:int, method:str, headers:Optional[Dict[str, str]]=None, data:UploadBodyBufferOrNone=None, allowRedirects:bool=False, timeoutSec:Optional[float]=None) -> Optional[HttpResult]:
+    def MakeHttpCall(logger:logging.Logger, pathOrUrl:str, pathOrUrlType:int, method:str, headers:Optional[Dict[str, str]]=None, data:UploadTypesBufferOrNone=None, allowRedirects:bool=False, timeoutSec:Optional[float]=None) -> Optional[HttpResult]:
         # First of all, we need to figure out what the URL is. There are two options
         #
         # 1) Absolute URLs
@@ -312,21 +312,23 @@ class OctoHttpRequest:
 
     # This function should always return a AttemptResult object.
     @staticmethod
-    def MakeHttpCallAttempt(logger:logging.Logger, attemptName:str, method:str, url:str, headers:Optional[Dict[str,str]], data:UploadBodyBufferOrNone, mainResult:Optional[HttpResult], isFallback:bool, nextFallbackUrl:Optional[str], allowRedirects:bool=False, timeoutSec:Optional[float]=None) -> AttemptResult:
+    def MakeHttpCallAttempt(logger:logging.Logger, attemptName:str, method:str, url:str, headers:Optional[Dict[str,str]], data:UploadTypesBufferOrNone, mainResult:Optional[HttpResult], isFallback:bool, nextFallbackUrl:Optional[str], allowRedirects:bool=False, timeoutSec:Optional[float]=None) -> AttemptResult:
 
         # Prepare the body, if there is one.
-        scopedBodyContext:Optional[UploadBodyReadContext] = None
-        requestBodyDataObject:BufferedReaderBytesOrNone = None
+        scopedBodyContext:Optional[Union[UploadBodyReadContext, MultipartFormUploadBodyReadContext]] = None
+        requestBodyDataObject:Union[BufferedReaderBytesOrNone, MultipartFormUploadBodyReader] = None
         if data is not None:
             if isinstance(data, Buffer):
                 # If we were passed a buffer, use it directly. We don't own it, so we don't clean it up.
                 requestBodyDataObject = data.GetBytesLike()
             elif isinstance(data, UploadBody):
-                # If we have a UploadBody, first see if there's any data in it. If not, we just pass None
+                # If we have a UploadBody, first see if there's any data in it. If not, we just pass None.
                 if data.HasData:
-                    # If there is data, we need to get the scoped context and the data object to use, which can be bytes or a file stream.
                     scopedBodyContext = data.OpenForRequest()
                     requestBodyDataObject = scopedBodyContext.GetData()
+            elif isinstance(data, MultipartFormUploadBody):
+                scopedBodyContext = data.OpenForRequest()
+                requestBodyDataObject = scopedBodyContext.GetData()
 
         # Now if we have a scope, enter it and do the work.
         response = None

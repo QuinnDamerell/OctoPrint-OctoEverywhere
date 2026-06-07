@@ -1,6 +1,6 @@
 from enum import Enum
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, Optional, Tuple, Union, Dict
+from typing import Any, Callable, List, Optional, Tuple, Union, Dict, TYPE_CHECKING
 
 from .buffer import Buffer, BufferOrNone, ByteLikeOrMemoryView
 from .httpresult import HttpResult, HttpResultOrNone
@@ -8,6 +8,9 @@ from .snapshotresizeparams import SnapshotResizeParams
 from .Webcam.webcamsettingitem import WebcamSettingItem
 
 from .Proto.HttpInitialContext import HttpInitialContext
+
+if TYPE_CHECKING:
+    from .WebStream.uploadbody import UploadBody
 
 #
 # Common Objects
@@ -302,6 +305,26 @@ class IPlatformCommandHandler(ABC):
     # Platforms without a generic request/response control channel should return FeatureNotSupported.
     @abstractmethod
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
+        pass
+
+    # Lists the virtual file system tree available through command handlers.
+    @abstractmethod
+    def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        pass
+
+    # Uploads a file. Args are provided by GET parameters, and uploadBody is the raw request body.
+    @abstractmethod
+    def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:"UploadBody") -> CommandResponse:
+        pass
+
+    # Downloads a file. Args are provided by GET parameters and the response body is the raw file body.
+    @abstractmethod
+    def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        pass
+
+    # Deletes a file. Args are provided by GET parameters.
+    @abstractmethod
+    def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         pass
 
 

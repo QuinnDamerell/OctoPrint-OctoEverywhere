@@ -2,8 +2,11 @@ import logging
 from typing import Any, Dict, Union, Optional, List
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper
+from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, IPlatformCommandHandler, ConnectionInfo
+from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
 
 from .bambuclient import BambuClient
@@ -335,12 +338,8 @@ class BambuCommandHandler(IPlatformCommandHandler):
         if transportType != "mqtt":
             return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Bambu Lab printer, which communicates over MQTT, so it only accepts send-command requests with transportType 'mqtt'. The received transportType was '{transportType}'. Set 'transportType' to 'mqtt' and put the full MQTT JSON payload in 'request' (it is sent to the printer as-is). Example: {{\"transportType\": \"mqtt\", \"request\": {{\"pushing\": {{\"sequence_id\": \"0\", \"command\": \"pushall\"}}}}}}.")
 
-        parsed = CommandHandler.ParseMqttSendCommand(rawPayload, request)
-        if isinstance(parsed, CommandResponse):
-            return parsed
-
         # Bambu sends the request payload to the printer as-is over MQTT.
-        result = BambuClient.Get().SendCommand(parsed.Request, timeoutSec=10.0)
+        result = BambuClient.Get().SendCommand(request, timeoutSec=10.0)
         if result.HasError():
             if result.Connected is False:
                 if BambuClient.Get().IsDisconnectDueToAuth():
@@ -348,7 +347,23 @@ class BambuCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
             return CommandResponse.Error(400, result.GetLoggingErrorStr())
 
-        responseObj:Dict[str, Any] = {"type": "mqtt"}
-        if result.Result is not None:
-            responseObj.update(result.Result)
-        return CommandResponse.Success(responseObj)
+        return CommandResponse.Success({
+            "type": "mqtt",
+            "response": result.Result,
+        })
+
+
+    def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"))
+
+
+    def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"))
+
+
+    def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"), CommandHandler.c_FilesDownloadCommand)
+
+
+    def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"))

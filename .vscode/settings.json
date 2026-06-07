@@ -87,6 +87,7 @@
         "filamentchange",
         "filemanager",
         "filemetadatacache",
+        "filesystemcommands",
         "finalsnap",
         "firewalled",
         "firstlayerdone",

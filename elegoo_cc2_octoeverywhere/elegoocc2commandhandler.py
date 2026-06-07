@@ -3,6 +3,8 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper
+from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.interfaces import (
     FEATURE_AXIS_MOVEMENT,
     FEATURE_HOMING,
@@ -11,6 +13,7 @@ from octoeverywhere.interfaces import (
     IPlatformCommandHandler,
     ConnectionInfo
 )
+from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
 
 from .elegoocc2client import ElegooCc2Client
@@ -231,3 +234,19 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
                 "payload": result.GetResult(),
             },
         })
+
+
+    def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2"))
+
+
+    def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2"))
+
+
+    def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
+        return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2"), CommandHandler.c_FilesDownloadCommand)
+
+
+    def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2"))

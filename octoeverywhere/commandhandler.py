@@ -1,7 +1,7 @@
 import json
 import logging
 from dataclasses import dataclass
-from urllib.parse import unquote
+from urllib.parse import parse_qsl
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from .buffer import Buffer
@@ -9,6 +9,7 @@ from .gadget import Gadget
 from .sentry import Sentry
 from .compat import Compat
 from .httpresult import HttpResult
+from .filesystemcommands import FileSystemCommandHelper
 from .octohttprequest import PathTypes
 from .WebStream.uploadbody import UploadBody, UploadBodyOrNone
 from .Webcam.webcamhelper import WebcamHelper
@@ -86,6 +87,12 @@ class CommandHandler:
     # This is a special command that allows the a websocket to be created to proxy MQTT messages.
     c_MqttWebsocketProxyCommand = "proxy/mqtt"
 
+    # File system commands that have some special body logic.
+    c_FilesListCommand = "files-list"
+    c_FilesUploadCommand = "files-upload"
+    c_FilesDownloadCommand = "files-download"
+    c_FilesDeleteCommand = "files-delete"
+
     # For webcam calls, this is an optional GET arg that will be an int of the webcam index.
     # The webcam index is the index of the webcam in the list-webcam response.
     c_WebcamIndexGetKey = "index"
@@ -136,13 +143,23 @@ class CommandHandler:
         self.HostCommandHandler = hostCommandHandler
 
 
-    # Processes special commands that return a raw HttpResult instead of a command result.
-    def ProcessRawCommand(self, commandPathLower:str, jsonObj:Optional[Dict[str, Any]]) -> Optional[HttpResult]:
+    # Processes special commands that need raw body handling or return raw HTTP data.
+    def ProcessRawCommand(self, commandPathLower:str, jsonObj:Optional[Dict[str, Any]], uploadBody:UploadBodyOrNone=None) -> Union[HttpResult, CommandResponse, None]:
         if commandPathLower.startswith("webcam/"):
             if commandPathLower.startswith("webcam/snapshot"):
                 return WebcamHelper.Get().GetSnapshot(self._GetWebcamCamIndex(jsonObj))
             elif commandPathLower.startswith("webcam/stream"):
                 return WebcamHelper.Get().GetWebcamStream(self._GetWebcamCamIndex(jsonObj))
+        if commandPathLower.startswith(CommandHandler.c_FilesUploadCommand):
+            if self.PlatformCommandHandler is None:
+                return CommandResponse.Error(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesUploadCommand))
+            if uploadBody is None:
+                return CommandResponse.Error(400, FileSystemCommandHelper.MissingUploadBodyError())
+            return self.PlatformCommandHandler.ExecuteFileUpload(jsonObj, uploadBody)
+        if commandPathLower.startswith(CommandHandler.c_FilesDownloadCommand):
+            if self.PlatformCommandHandler is None:
+                return FileSystemCommandHelper.BuildRawError(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesDownloadCommand), CommandHandler.c_FilesDownloadCommand)
+            return self.PlatformCommandHandler.ExecuteFileDownload(jsonObj)
         # If we didn't match, return None, so the ProcessCommand handler is called.
         return None
 
@@ -182,6 +199,10 @@ class CommandHandler:
             return self.SetTemp(jsonObj_CanBeNone)
         elif commandPathLower.startswith("send-command"):
             return self.SendCommand(jsonObj_CanBeNone)
+        elif commandPathLower.startswith(CommandHandler.c_FilesListCommand):
+            return self.FileList(jsonObj_CanBeNone)
+        elif commandPathLower.startswith(CommandHandler.c_FilesDeleteCommand):
+            return self.FileDelete(jsonObj_CanBeNone)
         elif commandPathLower.startswith("rekey"):
             return self.Rekey()
         elif commandPathLower.startswith(CommandHandler.c_MqttWebsocketProxyCommand):
@@ -623,6 +644,18 @@ class CommandHandler:
         return self.PlatformCommandHandler.ExecuteSendCommand(transportType, requestObj, jsonObjData)
 
 
+    def FileList(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        if self.PlatformCommandHandler is None:
+            return CommandResponse.Error(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesListCommand))
+        return self.PlatformCommandHandler.ExecuteFileList(jsonObjData)
+
+
+    def FileDelete(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        if self.PlatformCommandHandler is None:
+            return CommandResponse.Error(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesDeleteCommand))
+        return self.PlatformCommandHandler.ExecuteFileDelete(jsonObjData)
+
+
 
     def Rekey(self) -> CommandResponse:
         self.Logger.warning("Rekey command received!")
@@ -664,26 +697,36 @@ class CommandHandler:
         responseObj:Optional[CommandResponse] = None
         try:
             # Get the command path and json args, the json object can be null if there are no args.
-            commandPath, commandPathLower, jsonObj = self._GetPathAndJsonArgs(httpInitialContext, postBody)
+            commandPath, commandPathLower = self._GetCommandPath(httpInitialContext)
+            # There are some very special commands where the body is data, so for those we don't try to
+            # parse the json args. But remember those take args via GET parameters.
+            postBodyForJsonArgs:Optional[UploadBody] = None
+            if commandPathLower.startswith(CommandHandler.c_FilesUploadCommand) is False and commandPathLower.startswith(CommandHandler.c_FilesDownloadCommand) is False:
+                postBodyForJsonArgs = postBody
+            # We always call this, if there's no upload body it will parse the args from get params.
+            jsonObj = self._GetJsonArgs(commandPath, postBodyForJsonArgs)
         except Exception as e:
             Sentry.OnException("CommandHandler error while parsing command args.", e)
             responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ArgParseFailure, str(e))
 
         # If the args parse was successful, try to handle the command.
         if responseObj is None:
-            # For some commands, they will create their own HttpResult and return it like snapshot or webcam streams.
-            # But these are only special commands, most commands should use the command response.
+            # Some commands need raw-body handling before normal command dispatch; a few also return raw HttpResult data.
             try:
                 # If a result was returned, it was handled.
-                result = self.ProcessRawCommand(commandPathLower, jsonObj)
-                if result is not None:
+                result = self.ProcessRawCommand(commandPathLower, jsonObj, postBody)
+                if isinstance(result, HttpResult):
                     return result
+                if isinstance(result, CommandResponse):
+                    responseObj = result
             except Exception as e:
                 Sentry.OnException("CommandHandler error while handling raw command.", e)
+                responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.ExceptionError(commandPathLower, e))
 
+        if responseObj is None:
             # Otherwise, handle our wrapped API commands
             try:
-                responseObj = self.ProcessCommand(commandPath, jsonObj)
+                responseObj = self.ProcessCommand(commandPathLower, jsonObj)
             except Exception as e:
                 Sentry.OnException("CommandHandler error while handling command.", e)
                 responseObj = CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, str(e))
@@ -742,6 +785,12 @@ class CommandHandler:
 
     # A helper to parse the context and json args. Throws if it fails!
     def _GetPathAndJsonArgs(self, httpInitialContext:HttpInitialContext, postBody:UploadBodyOrNone) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+        commandPath, commandPathLower = self._GetCommandPath(httpInitialContext)
+        jsonObj = self._GetJsonArgs(commandPath, postBody)
+        return (commandPath, commandPathLower, jsonObj)
+
+
+    def _GetCommandPath(self, httpInitialContext:HttpInitialContext) -> Tuple[str, str]:
         # Get the command path.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
         if path is None:
@@ -750,7 +799,10 @@ class CommandHandler:
         # Everything after our prefix is part of the command path
         commandPath = path[len(CommandHandler.c_CommandHandlerPathPrefix):]
         commandPathLower = commandPath.lower()
+        return (commandPath, commandPathLower)
 
+
+    def _GetJsonArgs(self, commandPath:str, postBody:UploadBodyOrNone) -> Optional[Dict[str, Any]]:
         # Parse the args. Args are optional, it depends on the command.
         # Note some of these commands can also be GET requests, so we need to handle that.
         jsonObj:Optional[Dict[str, Any]] = None
@@ -766,7 +818,7 @@ class CommandHandler:
             # This will return None if there are no args.
             # Use the cased version of the string, so get args keep the correct case.
             jsonObj = self._ParseGetArgsAsJson(commandPath)
-        return (commandPath, commandPathLower,  jsonObj)
+        return jsonObj
 
 
     # If there are GET args, this will parse them into a json object where all values as strings
@@ -776,23 +828,11 @@ class CommandHandler:
         if "?" not in commandPath:
             return None
         try:
-            args = commandPath.split("?")[1]
-            # Split on & to get the args.
-            args = args.split("&")
-            # Parse each arg and add it to the jsonObj.
             jsonObj:Dict[str, str] = {}
-            for i in args:
-                # Split on = to get the key and value.
-                keyValue = i.split("=")
-                if len(keyValue) != 2:
-                    self.Logger.warning("CommandHandler failed to parse args, invalid key value pair: " + i)
-                    continue
-                else:
-                    # Ensure the key is always lower case, but don't mess with the value, things like passwords might need to be case sensitive.
-                    key = (str(keyValue[0])).lower()
-                    # The value needs to be URL escaped, so we need to decode it.
-                    value = unquote(str(keyValue[1]))
-                    jsonObj[key] = value
+            query = commandPath.split("?", 1)[1]
+            for key, value in parse_qsl(query, keep_blank_values=True):
+                # Ensure the key is always lower case, but don't mess with the value; things like passwords might need to be case sensitive.
+                jsonObj[str(key).lower()] = value
             return jsonObj
         except Exception as e:
             Sentry.OnException("CommandHandler error while parsing GET command args.", e)

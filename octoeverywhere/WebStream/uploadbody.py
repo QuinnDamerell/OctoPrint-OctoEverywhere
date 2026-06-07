@@ -2,18 +2,213 @@ from enum import Enum
 import logging
 import os
 import threading
+import uuid
 import zlib
 import tempfile
-from typing import Any, BinaryIO, List, Optional, Union
+from urllib.parse import quote
+from typing import Any, BinaryIO, Dict, List, Optional, Union
 
 from ..memorymanager import MemoryManager
 from ..Proto.DataCompression import DataCompression
 from ..buffer import Buffer, BufferOrNone, ByteLike
 from ..compression import Compression, CompressionContext
 
-UploadBodyBufferOrNone = Union[BufferOrNone, "UploadBody"]
 UploadBodyOrNone = Union[None, "UploadBody"]
+UploadBodyBufferOrNone = Union[BufferOrNone, "UploadBody"]
+UploadTypesOrNone = Union[None, "UploadBody", "MultipartFormUploadBody"]
+UploadTypesBufferOrNone = Union[BufferOrNone, "UploadBody", "MultipartFormUploadBody"]
 BufferedReaderBytesOrNone = Union[BinaryIO, ByteLike, None]
+
+
+class MultipartFormUploadBodyReadContext:
+    def __init__(self, logger:Any, uploadBody:"UploadBody", prefix:bytes, suffix:bytes) -> None:
+        self.Logger = logger
+        self.UploadBody = uploadBody
+        self.Prefix = prefix
+        self.Suffix = suffix
+        self.UploadBodyContext:Optional[UploadBodyReadContext] = None
+        self.Reader:Optional[MultipartFormUploadBodyReader] = None
+
+
+    def GetData(self) -> "MultipartFormUploadBodyReader":
+        if self.Reader is not None:
+            return self.Reader
+        self.UploadBodyContext = self.UploadBody.OpenForRequest()
+        uploadData = self.UploadBodyContext.GetData()
+        if uploadData is None:
+            raise Exception("files-upload body stream is empty after opening upload data.")
+        self.Reader = MultipartFormUploadBodyReader(self.Prefix, uploadData, self.Suffix)
+        return self.Reader
+
+
+    def SeekToStart(self) -> None:
+        if self.UploadBodyContext is not None:
+            self.UploadBodyContext.SeekToStart()
+        if self.Reader is not None:
+            self.Reader.SeekToStart()
+
+
+    def Close(self) -> None:
+        self.Logger.debug("MultipartFormUploadBodyReadContext closed.")
+        if self.UploadBodyContext is not None:
+            self.UploadBodyContext.Close()
+            self.UploadBodyContext = None
+        self.Reader = None
+
+
+    def __enter__(self) -> "MultipartFormUploadBodyReader":
+        return self.GetData()
+
+
+    def __exit__(self, t:Any, v:Any, tb:Any) -> None:
+        self.Close()
+
+
+class MultipartFormUploadBodyReader:
+    def __init__(self, prefix:bytes, uploadData:Union[BinaryIO, ByteLike], suffix:bytes) -> None:
+        self._prefix = prefix
+        self._uploadData = uploadData
+        self._suffix = suffix
+        self._position = 0
+        self._prefixOffset = 0
+        self._uploadBytesRead = 0
+        self._suffixOffset = 0
+
+
+    def read(self, size:Optional[int]=-1) -> bytes:
+        if size is None or size < 0:
+            chunks:List[bytes] = []
+            while True:
+                chunk = self.read(1024 * 1024)
+                if len(chunk) == 0:
+                    break
+                chunks.append(chunk)
+            return b"".join(chunks)
+
+        if size == 0:
+            return b""
+
+        chunks = []
+        bytesRemaining = size
+        while bytesRemaining > 0:
+            chunk = self._ReadNextChunk(bytesRemaining)
+            if len(chunk) == 0:
+                break
+            chunks.append(chunk)
+            bytesRemaining -= len(chunk)
+            self._position += len(chunk)
+        if len(chunks) == 0:
+            return b""
+        if len(chunks) == 1:
+            return chunks[0]
+        return b"".join(chunks)
+
+
+    def tell(self) -> int:
+        return self._position
+
+
+    def SeekToStart(self) -> None:
+        self._position = 0
+        self._prefixOffset = 0
+        self._uploadBytesRead = 0
+        self._suffixOffset = 0
+        seekFunc = getattr(self._uploadData, "seek", None)
+        if callable(seekFunc):
+            seekFunc(0)
+
+
+    def _ReadNextChunk(self, maxBytes:int) -> bytes:
+        if self._prefixOffset < len(self._prefix):
+            end = min(len(self._prefix), self._prefixOffset + maxBytes)
+            chunk = self._prefix[self._prefixOffset:end]
+            self._prefixOffset = end
+            return chunk
+
+        if isinstance(self._uploadData, (bytes, bytearray)):
+            if self._uploadBytesRead < len(self._uploadData):
+                end = min(len(self._uploadData), self._uploadBytesRead + maxBytes)
+                chunk = bytes(self._uploadData[self._uploadBytesRead:end])
+                self._uploadBytesRead = end
+                return chunk
+        else:
+            chunk = self._uploadData.read(maxBytes)
+            if chunk is not None and len(chunk) > 0:
+                self._uploadBytesRead += len(chunk)
+                return chunk
+
+        if self._suffixOffset < len(self._suffix):
+            end = min(len(self._suffix), self._suffixOffset + maxBytes)
+            chunk = self._suffix[self._suffixOffset:end]
+            self._suffixOffset = end
+            return chunk
+
+        return b""
+
+
+class MultipartFormUploadBody:
+    def __init__(self, logger:Any, uploadBody:"UploadBody", fileName:str, fields:Optional[Dict[str, str]]=None, fileFieldName:str="file", fileContentType:str="application/octet-stream", boundary:Optional[str]=None) -> None:
+        self.Logger = logger
+        self.UploadBody = uploadBody
+        self.FileName = fileName
+        self.Fields = fields if fields is not None else {}
+        self.FileFieldName = fileFieldName
+        self.FileContentType = fileContentType
+        self.Boundary = boundary if boundary is not None else "oe-upload-" + uuid.uuid4().hex
+        self._prefix = self._BuildPrefix()
+        self._suffix = ("\r\n--" + self.Boundary + "--\r\n").encode("utf-8")
+        self.ContentLength = len(self._prefix) + self.UploadBody.UploadBytesReceivedSoFar + len(self._suffix)
+
+
+    def GetContentType(self) -> str:
+        return "multipart/form-data; boundary=" + self.Boundary
+
+
+    def GetContentLength(self) -> int:
+        return self.ContentLength
+
+
+    def OpenForRequest(self) -> MultipartFormUploadBodyReadContext:
+        return MultipartFormUploadBodyReadContext(self.Logger, self.UploadBody, self._prefix, self._suffix)
+
+
+    def _BuildPrefix(self) -> bytes:
+        parts:List[bytes] = []
+        for key, value in self.Fields.items():
+            parts.append(("--" + self.Boundary + "\r\n").encode("utf-8"))
+            parts.append(self._BuildContentDisposition(key).encode("utf-8"))
+            parts.append(b"\r\n\r\n")
+            parts.append(str(value).encode("utf-8"))
+            parts.append(b"\r\n")
+
+        parts.append(("--" + self.Boundary + "\r\n").encode("utf-8"))
+        parts.append(self._BuildContentDisposition(self.FileFieldName, self.FileName).encode("utf-8"))
+        parts.append(("\r\nContent-Type: " + self.FileContentType + "\r\n\r\n").encode("utf-8"))
+        return b"".join(parts)
+
+
+    def _BuildContentDisposition(self, name:str, fileName:Optional[str]=None) -> str:
+        safeName = self._HeaderQuote(name)
+        if fileName is None:
+            return f'Content-Disposition: form-data; name="{safeName}"'
+        fallbackFileName = self._HeaderQuote(self._AsciiFallback(fileName))
+        encodedFileName = quote(fileName.encode("utf-8"))
+        return f'Content-Disposition: form-data; name="{safeName}"; filename="{fallbackFileName}"; filename*=utf-8\'\'{encodedFileName}'
+
+
+    def _HeaderQuote(self, value:str) -> str:
+        return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", "")
+
+
+    def _AsciiFallback(self, value:str) -> str:
+        chars:List[str] = []
+        for ch in value:
+            if ord(ch) >= 32 and ord(ch) < 127 and ch not in {'"', "\\"}:
+                chars.append(ch)
+            else:
+                chars.append("_")
+        fallback = "".join(chars)
+        return fallback if len(fallback) > 0 else "upload.gcode"
 
 
 class _UploadChunk:
