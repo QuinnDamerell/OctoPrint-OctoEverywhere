@@ -1,4 +1,5 @@
 import importlib.util
+import ftplib
 import json
 import logging
 import os
@@ -137,6 +138,195 @@ class FakeUploadHttpResult:
 
     def Free(self) -> None:
         self.FreeCalled = True
+
+
+class FakeBambuFtpServer:
+    def __init__(self) -> None:
+        self.Dirs = {""}
+        self.Files = {}
+        self.Connections = []
+
+
+    def CreateClient(self):
+        client = FakeBambuFtpClient(self)
+        self.Connections.append(client)
+        return client
+
+
+class FakeBambuFtpClient:
+    def __init__(self, server:FakeBambuFtpServer) -> None:
+        self.Server = server
+        self.Closed = False
+        self.Passive = None
+
+
+    def set_pasv(self, passive:bool) -> None:
+        self.Passive = passive
+
+
+    def connect(self, host, port, timeout=None) -> None:
+        self.Host = host
+        self.Port = port
+        self.Timeout = timeout
+
+
+    def login(self, user, passwd) -> None:
+        self.User = user
+        self.Password = passwd
+        if passwd == "bad":
+            raise ftplib.error_perm("530 Login incorrect.")
+
+
+    def prot_p(self):
+        return "200 Protection set to Private"
+
+
+    def retrlines(self, command, callback) -> str:
+        path = ""
+        if command.startswith("LIST "):
+            path = command[5:].strip("/")
+        if path not in self.Server.Dirs:
+            raise ftplib.error_perm("550 Directory not found.")
+        for name, isDir, size in self._ListChildren(path):
+            mode = "drwxr-xr-x" if isDir else "-rw-r--r--"
+            callback(f"{mode} 1 owner group {size} Jan 02 2025 {name}")
+        return "226 Directory send OK."
+
+
+    def storbinary(self, command, reader, blocksize=8192):
+        path = command[5:].strip("/")
+        payload = bytearray()
+        while True:
+            chunk = reader.read(blocksize)
+            if chunk is None or len(chunk) == 0:
+                break
+            payload.extend(chunk)
+        parent = self._Parent(path)
+        if parent not in self.Server.Dirs:
+            raise ftplib.error_perm("550 Directory not found.")
+        self.Server.Files[path] = bytes(payload)
+        return "226 Transfer complete."
+
+
+    def retrbinary(self, command, callback, blocksize=8192):
+        path = command[5:].strip("/")
+        if path not in self.Server.Files:
+            raise ftplib.error_perm("550 File not found.")
+        data = self.Server.Files[path]
+        for offset in range(0, len(data), blocksize):
+            callback(data[offset:offset + blocksize])
+        return "226 Transfer complete."
+
+
+    def delete(self, path):
+        path = path.strip("/")
+        if path not in self.Server.Files:
+            raise ftplib.error_perm("550 File not found.")
+        del self.Server.Files[path]
+        return "250 Delete operation successful."
+
+
+    def mkd(self, path):
+        path = path.strip("/")
+        if path in self.Server.Dirs:
+            raise ftplib.error_perm("550 Directory already exists.")
+        parent = self._Parent(path)
+        if parent not in self.Server.Dirs:
+            raise ftplib.error_perm("550 Parent not found.")
+        self.Server.Dirs.add(path)
+        return path
+
+
+    def size(self, path):
+        path = path.strip("/")
+        if path not in self.Server.Files:
+            raise ftplib.error_perm("550 File not found.")
+        return len(self.Server.Files[path])
+
+
+    def quit(self) -> None:
+        self.Closed = True
+
+
+    def close(self) -> None:
+        self.Closed = True
+
+
+    def _ListChildren(self, path):
+        prefix = "" if len(path) == 0 else path.rstrip("/") + "/"
+        seen = {}
+        for directory in self.Server.Dirs:
+            if len(directory) == 0 or not directory.startswith(prefix):
+                continue
+            remainder = directory[len(prefix):]
+            if len(remainder) == 0 or "/" in remainder:
+                continue
+            seen[remainder] = (True, 0)
+        for filePath, data in self.Server.Files.items():
+            if not filePath.startswith(prefix):
+                continue
+            remainder = filePath[len(prefix):]
+            if len(remainder) == 0 or "/" in remainder:
+                continue
+            seen[remainder] = (False, len(data))
+        return [(name, isDir, size) for name, (isDir, size) in sorted(seen.items())]
+
+
+    def _Parent(self, path):
+        slash = path.rfind("/")
+        if slash == -1:
+            return ""
+        return path[:slash]
+
+
+class FakeBambuCommandResult:
+    def __init__(self, result=None, connected=True, timeout=False) -> None:
+        self.Result = result
+        self.Connected = connected
+        self.Timeout = timeout
+        self.OtherError = None
+        self.Ex = None
+
+
+    def HasError(self) -> bool:
+        return self.Result is None or self.Connected is False or self.Timeout is True
+
+
+    def GetLoggingErrorStr(self) -> str:
+        return "fake error"
+
+
+class FakeBambuClientForCommands:
+    def __init__(self) -> None:
+        self.Commands = []
+
+
+    def SendCommand(self, payload, timeoutSec=None, waitForResponse=True):
+        self.Commands.append({
+            "payload": payload,
+            "timeoutSec": timeoutSec,
+            "waitForResponse": waitForResponse,
+        })
+        return FakeBambuCommandResult({
+            "request": {
+                "topic": "device/sn/request",
+                "payload": payload,
+                "qos": 0,
+            },
+            "response": {
+                "topic": "device/sn/report",
+                "payload": {
+                    "print": {
+                        "command": payload["print"]["command"],
+                        "result": "success",
+                    }
+                },
+            },
+        })
+
+
+    def IsDisconnectDueToAuth(self) -> bool:
+        return False
 
 
 def LoadPlatformCommandHandlerModule(packageName:str, moduleName:str):
@@ -710,6 +900,101 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertNotIn("refs", opFile)
 
 
+    def test_bambu_file_list_uses_ftps_tree_and_filters_printable_files(self) -> None:
+        module = self._LoadBambuCommandHandlerModule()
+        ftpServer = FakeBambuFtpServer()
+        ftpServer.Dirs.update({"cache", "cache/sub", "image"})
+        ftpServer.Files["root.3mf"] = b"root"
+        ftpServer.Files["cache/test.gcode.3mf"] = b"123"
+        ftpServer.Files["cache/sub/raw.gcode"] = b"abcde"
+        ftpServer.Files["cache/notes.txt"] = b"not printable"
+        ftpServer.Files["image/preview.jpg"] = b"not listed"
+
+        def managerFactory():
+            return module.BambuFileManager(self.logger, "192.168.1.40", "123456", ftpFactory=ftpServer.CreateClient)
+
+        handler = module.BambuCommandHandler(self.logger, None, fileManagerFactory=managerFactory)
+        response = handler.ExecuteFileList(None)
+
+        self.assertEqual(response.StatusCode, 200)
+        fileNodes = self._FlattenFileTree(response.ResultDict)
+        virtualPaths = sorted([f["VirtualPath"] for f in fileNodes])
+        self.assertEqual(virtualPaths, [
+            "gcode/cache/sub/raw.gcode",
+            "gcode/cache/test.gcode.3mf",
+            "gcode/root.3mf",
+        ])
+        cacheFile = next(f for f in fileNodes if f["VirtualPath"] == "gcode/cache/test.gcode.3mf")
+        self.assertEqual(cacheFile["PlatformPath"], "cache/test.gcode.3mf")
+        self.assertEqual(cacheFile["FtpPath"], "cache/test.gcode.3mf")
+        self.assertEqual(cacheFile["SizeBytes"], 3)
+        self.assertTrue(all(c.Passive for c in ftpServer.Connections))
+
+
+    def test_bambu_file_upload_download_and_delete_use_ftps(self) -> None:
+        module = self._LoadBambuCommandHandlerModule()
+        ftpServer = FakeBambuFtpServer()
+        uploadPayload = b"G1 X1 Y1\n"
+
+        def managerFactory():
+            return module.BambuFileManager(self.logger, "192.168.1.40", "123456", ftpFactory=ftpServer.CreateClient)
+
+        handler = module.BambuCommandHandler(self.logger, None, fileManagerFactory=managerFactory)
+        uploadBody = self._BuildFinalizedUploadBody(uploadPayload)
+        uploadResponse = handler.ExecuteFileUpload({"Path": "gcode/cache/new file.gcode.3mf"}, uploadBody)
+
+        self.assertEqual(uploadResponse.StatusCode, 200)
+        self.assertEqual(ftpServer.Files["cache/new file.gcode.3mf"], uploadPayload)
+        self.assertIn("cache", ftpServer.Dirs)
+        self.assertEqual(uploadResponse.ResultDict["VirtualPath"], "gcode/cache/new file.gcode.3mf")
+        self.assertEqual(uploadResponse.ResultDict["PlatformPath"], "cache/new file.gcode.3mf")
+
+        downloadResult = handler.ExecuteFileDownload({"Path": "gcode/cache/new file.gcode.3mf"})
+        self.assertEqual(downloadResult.StatusCode, 200)
+        self.assertEqual(downloadResult.Headers["Content-Length"], str(len(uploadPayload)))
+        downloaded = self._ReadCustomStream(downloadResult)
+        self.assertEqual(downloaded, uploadPayload)
+
+        deleteResponse = handler.ExecuteFileDelete({"Path": "gcode/cache/new file.gcode.3mf"})
+        self.assertEqual(deleteResponse.StatusCode, 200)
+        self.assertNotIn("cache/new file.gcode.3mf", ftpServer.Files)
+        self.assertEqual(deleteResponse.ResultDict["PlatformPath"], "cache/new file.gcode.3mf")
+
+
+    def test_bambu_file_upload_with_print_starts_project_file(self) -> None:
+        module = self._LoadBambuCommandHandlerModule()
+        ftpServer = FakeBambuFtpServer()
+        fakeClient = FakeBambuClientForCommands()
+
+        def managerFactory():
+            return module.BambuFileManager(self.logger, "192.168.1.40", "123456", ftpFactory=ftpServer.CreateClient)
+
+        handler = module.BambuCommandHandler(self.logger, None, fileManagerFactory=managerFactory)
+        uploadBody = self._BuildFinalizedUploadBody(b"3mf bytes")
+        with patch.object(module.BambuClient, "Get", return_value=fakeClient):
+            response = handler.ExecuteFileUpload({
+                "Path": "gcode/folder/my file.gcode.3mf",
+                "Print": "true",
+                "Plate": "2",
+                "UseAms": "true",
+                "AmsMapping": "[0, -1]",
+                "FlowCali": "true",
+            }, uploadBody)
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertTrue(response.ResultDict["PrintStarted"])
+        self.assertEqual(ftpServer.Files["folder/my file.gcode.3mf"], b"3mf bytes")
+        self.assertEqual(len(fakeClient.Commands), 1)
+        printPayload = fakeClient.Commands[0]["payload"]["print"]
+        self.assertEqual(printPayload["command"], "project_file")
+        self.assertEqual(printPayload["param"], "Metadata/plate_2.gcode")
+        self.assertEqual(printPayload["url"], "ftp:///folder/my%20file.gcode.3mf")
+        self.assertEqual(printPayload["subtask_name"], "my file")
+        self.assertTrue(printPayload["use_ams"])
+        self.assertEqual(printPayload["ams_mapping"], [0, -1])
+        self.assertTrue(printPayload["flow_cali"])
+
+
     def test_file_path_errors_are_short_and_actionable(self) -> None:
         _, missingError = FileSystemCommandHelper.ParsePathArg(None)
         self.assertEqual(missingError, "Missing Path. Provide a file path like 'gcode/<file>'.")
@@ -722,6 +1007,53 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         errorObj = json.loads(errorResult.FullBodyBuffer.GetBytesLike().decode("utf-8"))
         self.assertLessEqual(len(errorObj["Error"]), FileSystemCommandHelper.c_ErrorMaxChars)
         self.assertNotIn("\n", errorObj["Error"])
+
+
+    def _FlattenFileTree(self, tree):
+        result = []
+
+        def visit(node):
+            if node.get("Type") == "file":
+                result.append(node)
+                return
+            for child in node.get("Children", []):
+                visit(child)
+
+        for root in tree["Root"]:
+            visit(root)
+        return result
+
+
+    def _LoadBambuCommandHandlerModule(self):
+        aliasPackageName = "_tests_bambu_octoeverywhere"
+        sys.modules.pop(aliasPackageName + ".bambucommandhandler", None)
+        bambuClientModule = types.ModuleType(aliasPackageName + ".bambuclient")
+
+        class StubBambuClient:
+            @staticmethod
+            def Get():
+                return None
+
+        bambuClientModule.BambuClient = StubBambuClient
+        sys.modules[aliasPackageName + ".bambuclient"] = bambuClientModule
+        return LoadPlatformCommandHandlerModule("bambu_octoeverywhere", "bambucommandhandler")
+
+
+    def _ReadCustomStream(self, result) -> bytes:
+        chunks = []
+        callback = result.GetCustomBodyStreamCallback
+        self.assertIsNotNone(callback)
+        try:
+            while True:
+                chunk = callback()
+                if chunk is None:
+                    break
+                chunks.append(bytes(chunk.GetBytesLike()))
+        finally:
+            closeCallback = result.GetCustomBodyStreamClosedCallback
+            self.assertIsNotNone(closeCallback)
+            closeCallback()
+        return b"".join(chunks)
 
 
 if __name__ == "__main__":

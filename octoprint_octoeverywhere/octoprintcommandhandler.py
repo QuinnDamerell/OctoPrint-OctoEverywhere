@@ -396,10 +396,6 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
         fields:Dict[str, str] = {}
         if len(parentPath) > 0:
             fields["path"] = parentPath
-        if FileSystemCommandHelper.GetBoolArg(args, "select"):
-            fields["select"] = "true"
-        if FileSystemCommandHelper.GetBoolArg(args, "print"):
-            fields["print"] = "true"
 
         multipartBody = MultipartFormUploadBody(self.Logger, uploadBody, fileName, fields)
         headers = {

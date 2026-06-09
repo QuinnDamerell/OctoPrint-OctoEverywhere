@@ -532,11 +532,6 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         }
         if len(parentPath) > 0:
             fields["path"] = parentPath
-        if FileSystemCommandHelper.GetBoolArg(args, "print"):
-            fields["print"] = "true"
-        checksum = FileSystemCommandHelper.GetFirstArg(args or {}, "checksum")
-        if checksum is not None and len(str(checksum)) > 0:
-            fields["checksum"] = str(checksum)
 
         multipartBody = MultipartFormUploadBody(self.Logger, uploadBody, fileName, fields)
         headers = {

@@ -1,8 +1,11 @@
+import json
 import logging
-from typing import Any, Dict, Union, Optional, List
+import os
+from typing import Any, BinaryIO, Callable, Dict, Union, Optional, List
 
+from octoeverywhere.buffer import Buffer
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.filesystemcommands import FileSystemCommandHelper
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, VirtualFileSystemTree
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.printinfo import PrintInfoManager
 from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, IPlatformCommandHandler, ConnectionInfo
@@ -10,6 +13,7 @@ from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
 
 from .bambuclient import BambuClient
+from .bambufilemanager import BambuFileManager, BambuFtpsError
 from .bambumodels import BambuPrintErrors
 
 # This class implements the Platform Command Handler Interface
@@ -17,9 +21,10 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
     c_ChamberLightName = "chamber"
 
-    def __init__(self, logger: logging.Logger, config: Config) -> None:
+    def __init__(self, logger: logging.Logger, config: Config, fileManagerFactory:Optional[Callable[[], BambuFileManager]]=None) -> None:
         self.Logger = logger
         self.Config = config
+        self.FileManagerFactory = fileManagerFactory
 
 
     # This map contains UI ready strings that map to a subset of sub-stages we can send which are more specific than the state.
@@ -377,15 +382,53 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
-        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"))
+        try:
+            fileInfos = self._GetFileManager().ListPrintableFiles()
+            tree = VirtualFileSystemTree()
+            for fileInfo in fileInfos:
+                tree.AddFile(
+                    FileSystemCommandHelper.c_VirtualGcodeRoot + "/" + fileInfo.Path,
+                    fileInfo.Path,
+                    fileInfo.SizeBytes,
+                    fileInfo.ModifiedTimeSec,
+                )
+            return CommandResponse.Success(tree.Serialize())
+        except BambuFtpsError as e:
+            return self._BuildFileCommandErrorResponse(CommandHandler.c_FilesListCommand, e)
+        except Exception as e:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.ExceptionError(CommandHandler.c_FilesListCommand, e))
 
 
     def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
-        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"))
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+        if uploadBody.HasData is False:
+            return CommandResponse.Error(400, FileSystemCommandHelper.EmptyUploadBodyError())
+
+        try:
+            ftpResponse = self._GetFileManager().UploadFile(parsedPath.RelativePath, uploadBody)
+            response = FileSystemCommandHelper.BuildFileUploadSuccess(parsedPath, parsedPath.RelativePath, uploadBody.UploadBytesReceivedSoFar, str(ftpResponse).encode("utf-8"))
+            return response
+        except BambuFtpsError as e:
+            return self._BuildFileCommandErrorResponse(CommandHandler.c_FilesUploadCommand, e)
+        except Exception as e:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.ExceptionError(CommandHandler.c_FilesUploadCommand, e))
 
 
     def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"), CommandHandler.c_FilesDownloadCommand)
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(), CommandHandler.c_FilesDownloadCommand)
+
+        try:
+            tempPath, fileSizeBytes = self._GetFileManager().DownloadFileToTemp(parsedPath.RelativePath)
+            fileName, _ = parsedPath.FileNameAndParent()
+            return self._BuildDownloadedFileResult(tempPath, fileSizeBytes, fileName)
+        except BambuFtpsError as e:
+            return self._BuildFileCommandRawError(CommandHandler.c_FilesDownloadCommand, e)
+        except Exception as e:
+            return FileSystemCommandHelper.BuildRawError(CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.ExceptionError(CommandHandler.c_FilesDownloadCommand, e), CommandHandler.c_FilesDownloadCommand)
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
@@ -393,4 +436,129 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
-        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Bambu"))
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        try:
+            ftpResponse = self._GetFileManager().DeleteFile(parsedPath.RelativePath)
+            return FileSystemCommandHelper.BuildFileDeleteSuccess(parsedPath, parsedPath.RelativePath, str(ftpResponse).encode("utf-8"))
+        except BambuFtpsError as e:
+            return self._BuildFileCommandErrorResponse(CommandHandler.c_FilesDeleteCommand, e)
+        except Exception as e:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.ExceptionError(CommandHandler.c_FilesDeleteCommand, e))
+
+
+    def _GetFileManager(self) -> BambuFileManager:
+        if self.FileManagerFactory is not None:
+            return self.FileManagerFactory()
+        return BambuFileManager(
+            self.Logger,
+            self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None),
+            self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
+        )
+
+
+    def _BuildDownloadedFileResult(self, tempPath:str, fileSizeBytes:int, downloadFileName:str) -> HttpResult:
+        try:
+            fileObj:BinaryIO = open(tempPath, "rb") #pylint: disable=consider-using-with
+        except Exception as e:
+            self._DeleteTempFile(tempPath)
+            return FileSystemCommandHelper.BuildRawError(500, "Failed to open downloaded Bambu file: " + str(e), CommandHandler.c_FilesDownloadCommand)
+
+        bytesRemaining = fileSizeBytes
+
+        def readChunk() -> Optional[Buffer]:
+            nonlocal bytesRemaining
+            if bytesRemaining <= 0:
+                return None
+            data = fileObj.read(min(bytesRemaining, BambuFileManager.c_DownloadBlockSizeBytes))
+            if len(data) == 0:
+                return None
+            bytesRemaining -= len(data)
+            return Buffer(data)
+
+        def closeFile() -> None:
+            try:
+                fileObj.close()
+            except Exception as e:
+                self.Logger.warning("Failed to close Bambu download temp file. %s", str(e))
+            self._DeleteTempFile(tempPath)
+
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(fileSizeBytes),
+            "Content-Disposition": "attachment; filename=\"" + self._HeaderQuote(downloadFileName) + "\"",
+        }
+        return HttpResult(200, headers, CommandHandler.c_FilesDownloadCommand, False, customBodyStreamCallback=readChunk, customBodyStreamClosedCallback=closeFile)
+
+
+    def _BuildFileCommandErrorResponse(self, commandName:str, error:BambuFtpsError) -> CommandResponse:
+        statusCode, message = self._MapFileCommandError(commandName, error)
+        return CommandResponse.Error(statusCode, message)
+
+
+    def _BuildFileCommandRawError(self, commandName:str, error:BambuFtpsError) -> HttpResult:
+        statusCode, message = self._MapFileCommandError(commandName, error)
+        return FileSystemCommandHelper.BuildRawError(statusCode, message, commandName)
+
+
+    def _MapFileCommandError(self, commandName:str, error:BambuFtpsError) -> Any:
+        if error.IsInvalidPath:
+            return (400, FileSystemCommandHelper.InvalidPathError())
+        if error.IsAuthError:
+            return (CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Bambu", commandName))
+        if error.IsConnectionError:
+            return (CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Bambu", commandName))
+        if error.IsNotFound:
+            return (404, f"{commandName} failed on Bambu: file was not found.")
+        return (CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.CleanErrorForApi(error.Message))
+
+
+    def _GetBoolArg(self, args:Optional[Dict[str, Any]], defaultValue:bool, *keys:str) -> bool:
+        if args is None:
+            return defaultValue
+        value = FileSystemCommandHelper.GetFirstArg(args, *keys)
+        if value is None:
+            return defaultValue
+        if isinstance(value, bool):
+            return value
+        valueStr = str(value).lower().strip()
+        return valueStr == "true" or valueStr == "1" or valueStr == "yes"
+
+
+    def _GetIntArg(self, args:Optional[Dict[str, Any]], defaultValue:int, *keys:str) -> int:
+        if args is None:
+            return defaultValue
+        value = FileSystemCommandHelper.GetFirstArg(args, *keys)
+        if value is None:
+            return defaultValue
+        try:
+            return int(str(value).strip())
+        except Exception:
+            return defaultValue
+
+
+    def _RemoveKnownBambuExtension(self, fileName:str) -> str:
+        lower = fileName.lower()
+        if lower.endswith(".gcode.3mf"):
+            return fileName[:-10]
+        if lower.endswith(".3mf"):
+            return fileName[:-4]
+        if lower.endswith(".gcode"):
+            return fileName[:-6]
+        if lower.endswith(".bgcode"):
+            return fileName[:-7]
+        return fileName
+
+
+    def _HeaderQuote(self, value:str) -> str:
+        return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\r", "").replace("\n", "")
+
+
+    def _DeleteTempFile(self, tempPath:str) -> None:
+        try:
+            if os.path.exists(tempPath):
+                os.remove(tempPath)
+        except Exception as e:
+            self.Logger.warning("Failed to delete Bambu download temp file %s. %s", tempPath, str(e))
