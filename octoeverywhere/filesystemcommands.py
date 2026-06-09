@@ -1,8 +1,9 @@
+import base64
 import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, BinaryIO, Dict, List, Optional, Tuple
+from typing import Any, BinaryIO, Dict, List, Optional, Set, Tuple
 from urllib.parse import quote
 
 from .buffer import Buffer
@@ -59,7 +60,7 @@ class FileSystemCommandHelper:
 
         root = parts[0].lower()
         if root != FileSystemCommandHelper.c_VirtualGcodeRoot:
-            return (None, f"Unsupported path root '{parts[0]}'. Use 'path=gcode/<file>'.")
+            return (None, f"Unsupported path root '{parts[0]}'. Use 'gcode/<file>'.")
 
         relativePath = "/".join(parts[1:])
         if len(relativePath) == 0:
@@ -239,8 +240,8 @@ class FileSystemCommandHelper:
     @staticmethod
     def _GetLoggerHandlers(logger:Any) -> List[Any]:
         handlers:List[Any] = []
-        seenHandlerIds = set()
-        seenLoggerIds = set()
+        seenHandlerIds:Set[int] = set()
+        seenLoggerIds:Set[int] = set()
 
         def addLoggerHandlers(loggerObj:Any) -> None:
             cur = loggerObj
@@ -313,12 +314,12 @@ class FileSystemCommandHelper:
 
     @staticmethod
     def MissingPathError() -> str:
-        return "Missing path. Add query parameter 'path=gcode/<file>'."
+        return "Missing Path. Provide a file path like 'gcode/<file>'."
 
 
     @staticmethod
     def InvalidPathError() -> str:
-        return "Invalid path. Use 'gcode/<file>' without '.', '..', empty segments, or a trailing slash."
+        return "Invalid Path. Use 'gcode/<file>' without '.', '..', empty segments, or a trailing slash."
 
 
     @staticmethod
@@ -328,17 +329,17 @@ class FileSystemCommandHelper:
 
     @staticmethod
     def MissingUploadBodyError() -> str:
-        return "files-upload requires raw file bytes in the request body."
+        return "files/upload requires raw file bytes in the request body."
 
 
     @staticmethod
     def EmptyUploadBodyError() -> str:
-        return "files-upload received an empty body. Send raw file bytes."
+        return "files/upload received an empty body. Send raw file bytes."
 
 
     @staticmethod
     def UnsupportedPlatformError(platformName:str) -> str:
-        return f"File commands are unsupported on {platformName}. Use OctoPrint or Moonraker for files-list, files-upload, files-download, and files-delete."
+        return f"File commands are unsupported on {platformName}. Use OctoPrint or Moonraker for files/list, files/upload, files/download, and files/delete."
 
 
     @staticmethod
@@ -371,20 +372,12 @@ class FileSystemCommandHelper:
 
 
     @staticmethod
-    def BuildFileUploadSuccess(platformName:str, parsedPath:VirtualFilePath, uploadSizeBytes:int, printerStatusCode:int, bodyBytes:bytes, requestFields:Dict[str, str]) -> CommandResponse:
-        fileName, parentPath = parsedPath.FileNameAndParent()
+    def BuildFileUploadSuccess(parsedPath:VirtualFilePath, platformPath:str, uploadSizeBytes:int, bodyBytes:bytes) -> CommandResponse:
         result:Dict[str, Any] = {
-            "Platform": platformName,
-            "Path": parsedPath.FullPath(),
-            "Root": parsedPath.Root,
-            "RelativePath": parsedPath.RelativePath,
-            "ParentPath": parentPath,
-            "FileName": fileName,
+            "VirtualPath": parsedPath.FullPath(),
+            "PlatformPath": platformPath,
             "SizeBytes": uploadSizeBytes,
-            "PrinterResponseStatusCode": printerStatusCode,
         }
-        if len(requestFields) > 0:
-            result["RequestFields"] = dict(requestFields)
         printerResponse = FileSystemCommandHelper._DecodeSuccessBody(bodyBytes)
         if printerResponse is not None:
             result["PrinterResponse"] = printerResponse
@@ -392,16 +385,10 @@ class FileSystemCommandHelper:
 
 
     @staticmethod
-    def BuildFileDeleteSuccess(platformName:str, parsedPath:VirtualFilePath, printerStatusCode:int, bodyBytes:bytes) -> CommandResponse:
-        fileName, parentPath = parsedPath.FileNameAndParent()
+    def BuildFileDeleteSuccess(parsedPath:VirtualFilePath, platformPath:str, bodyBytes:bytes) -> CommandResponse:
         result:Dict[str, Any] = {
-            "Platform": platformName,
-            "Path": parsedPath.FullPath(),
-            "Root": parsedPath.Root,
-            "RelativePath": parsedPath.RelativePath,
-            "ParentPath": parentPath,
-            "FileName": fileName,
-            "PrinterResponseStatusCode": printerStatusCode,
+            "VirtualPath": parsedPath.FullPath(),
+            "PlatformPath": platformPath,
         }
         printerResponse = FileSystemCommandHelper._DecodeSuccessBody(bodyBytes)
         if printerResponse is not None:
@@ -470,17 +457,54 @@ class FileSystemCommandHelper:
         return ""
 
 
+    @staticmethod
+    def BuildHttpResponseBody(response:Dict[str, Any], bodyBytes:bytes) -> None:
+        # Always define the defaults.
+        response["BodySizeBytes"] = 0
+        response["BodyAsText"] = None
+        response["BodyAsJson"] = None
+        response["BodyAsBase64"] = None
+
+        # Ensure we have anything.
+        if bodyBytes is None or len(bodyBytes) == 0:
+            return
+
+        # Always set the length.
+        response["BodySizeBytes"] = len(bodyBytes)
+
+        # We only want to send the body once to cut down on the size.
+        # We will try to send json -> text -> bytes, in that order.
+        # We must always start by decoding the bytes to text.
+        bodyText:Optional[str] = None
+        try:
+            bodyText = bodyBytes.decode("utf-8")
+        except Exception:
+            pass
+        if bodyText is not None:
+            try:
+                # If we have text, try to decode json first.
+                response["BodyAsJson"] = json.loads(bodyText)
+                return
+            except Exception:
+                pass
+            # If the json decoding fails, send the text.
+            response["BodyAsText"] = bodyText
+            return
+        # Finally, if we can't decode text, send the bytes as base64.
+        response["BodyAsBase64"] = base64.b64encode(bodyBytes).decode("ascii")
+
+
 class VirtualFileSystemTree:
     def __init__(self) -> None:
         self.Root:Dict[str, Any] = {
             "Type": "folder",
             "Name": "",
-            "Path": "",
+            "VirtualPath": "",
             "Children": [
                 {
                     "Type": "folder",
                     "Name": FileSystemCommandHelper.c_VirtualGcodeRoot,
-                    "Path": FileSystemCommandHelper.c_VirtualGcodeRoot,
+                    "VirtualPath": FileSystemCommandHelper.c_VirtualGcodeRoot,
                     "Children": []
                 }
             ]
@@ -504,7 +528,7 @@ class VirtualFileSystemTree:
         folder = {
             "Type": "folder",
             "Name": name,
-            "Path": virtualPath,
+            "VirtualPath": virtualPath,
             "Children": []
         }
         if metadata is not None and len(metadata) > 0:
@@ -514,7 +538,13 @@ class VirtualFileSystemTree:
         return folder
 
 
-    def AddFile(self, virtualPath:str, metadata:Optional[Dict[str, Any]]=None) -> None:
+    def AddFile(self,
+                virtualPath:str,
+                platformPath:str,
+                sizeBytes:Optional[int]=None,
+                modifiedTimeSec:Optional[float]=None,
+                permissions:Optional[str]=None,
+                metadata:Optional[Dict[str, Any]]=None) -> None:
         virtualPath = self._NormalizeVirtualPath(virtualPath)
         parentPath, name = self._SplitParent(virtualPath)
         parent = self.AddFolder(parentPath)
@@ -522,7 +552,11 @@ class VirtualFileSystemTree:
         item:Dict[str, Any] = {
             "Type": "file",
             "Name": name,
-            "Path": virtualPath,
+            "VirtualPath": virtualPath,
+            "PlatformPath": platformPath,
+            "SizeBytes": sizeBytes,
+            "ModifiedTimeSec": int(modifiedTimeSec) if modifiedTimeSec is not None else None,
+            "Permissions": permissions,
         }
         if metadata is not None:
             for key, value in metadata.items():
@@ -572,16 +606,20 @@ class FileSystemTreeBuilder:
         for item in fileList:
             if not isinstance(item, dict):
                 continue
+            # Get the required basic info
             relativePath = item.get("path", None)
             if relativePath is None or len(str(relativePath)) == 0:
                 continue
-            metadata:Dict[str, Any] = {
-                "SizeBytes": item.get("size", None),
-                "ModifiedTimeSec": item.get("modified", None),
-                "Permissions": item.get("permissions", None),
-                "Metadata": item,
-            }
-            tree.AddFile(FileSystemCommandHelper.c_VirtualGcodeRoot + "/" + str(relativePath).replace("\\", "/"), metadata)
+            relativePath = str(relativePath).replace("\\", "/")
+            sizeBytes = item.get("size", None)
+            modifiedTimeSec = item.get("modified", None)
+            permissions = item.get("permissions", None)
+
+            # Send the rest of the item as metadata, but remove anything we already set.
+            for key in ("path", "size", "modified", "permissions"):
+                item.pop(key, None)
+
+            tree.AddFile(FileSystemCommandHelper.c_VirtualGcodeRoot + "/" + relativePath,  relativePath, sizeBytes, modifiedTimeSec, permissions, item)
         return tree.Serialize()
 
 
@@ -603,25 +641,35 @@ class FileSystemTreeBuilder:
         itemType = str(item.get("type", "")).lower()
         children = item.get("children", None)
         isFolder = itemType == "folder" or isinstance(children, list)
-        virtualPath = FileSystemCommandHelper.c_VirtualGcodeRoot + "/" + str(itemPath).replace("\\", "/").strip("/")
-        metadata:Dict[str, Any] = {
-            "SizeBytes": item.get("size", None),
-            "ModifiedTimeSec": item.get("date", None),
-            "Hash": item.get("hash", None),
-            "Origin": item.get("origin", None),
-            "TypePath": item.get("typePath", None),
-            "Refs": item.get("refs", None),
-            "GcodeAnalysis": item.get("gcodeAnalysis", None),
-            "Print": item.get("print", None),
-            "Metadata": item,
-        }
+        platformPath = str(itemPath).replace("\\", "/").strip("/")
+        virtualPath = FileSystemCommandHelper.c_VirtualGcodeRoot + "/" + platformPath
 
+        # Handle folders
         if isFolder:
-            tree.AddFolder(virtualPath, metadata)
+            tree.AddFolder(virtualPath)
             if isinstance(children, list):
                 for child in children:
                     if isinstance(child, dict):
                         FileSystemTreeBuilder._AddOctoPrintItem(tree, child)
             return
 
-        tree.AddFile(virtualPath, metadata)
+        # Handle files.
+        # Get the required basic info
+        sizeBytes = item.get("size", None)
+        modifiedTimeSec = item.get("date", None)
+        permissions = item.get("permissions", None)
+
+        # Only send a subset of the extra data as metadata, because there can be a ton.
+        metadata = {}
+        metadataKeys = {
+            "hash": "Hash",
+            "origin": "Origin",
+            "display": "Display",
+        }
+        for key in item.keys():
+            keyLower = str(key).lower()
+            if keyLower in metadataKeys:
+                metadata[metadataKeys[keyLower]] = item[key]
+
+        # Add the file.
+        tree.AddFile(virtualPath, platformPath, sizeBytes, modifiedTimeSec, permissions, metadata)

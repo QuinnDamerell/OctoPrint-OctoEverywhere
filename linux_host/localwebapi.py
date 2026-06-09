@@ -84,6 +84,10 @@ class LocalWebApi:
                 self.Logger.debug("Web Server Started %s:%s", self.HostName, self.HttpPort)
                 webServer.serve_forever()
             except Exception as e:
+                # If we get address already in use, we log it and return because there's nothing we can do.
+                if str(e).find("Address already in use") >= 0:
+                    self.Logger.error("The web server port is already in use. Make sure no other instance of the plugin is running and that no other application is using the port "+str(self.HttpPort)+". You can change the port used with the `local_web_api_port` value in the OctoEverywhere config file.")
+                    return
                 self.Logger.error("Web server exception. "+str(e))
 
             # If we fail, close it.

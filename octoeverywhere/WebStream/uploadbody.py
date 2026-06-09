@@ -37,7 +37,7 @@ class MultipartFormUploadBodyReadContext:
         uploadData = self.UploadBodyContext.GetData()
         if uploadData is None:
             raise Exception("files-upload body stream is empty after opening upload data.")
-        self.Reader = MultipartFormUploadBodyReader(self.Prefix, uploadData, self.Suffix)
+        self.Reader = MultipartFormUploadBodyReader(self.Prefix, uploadData, self.Suffix, self.UploadBody.UploadBytesReceivedSoFar)
         return self.Reader
 
 
@@ -65,14 +65,23 @@ class MultipartFormUploadBodyReadContext:
 
 
 class MultipartFormUploadBodyReader:
-    def __init__(self, prefix:bytes, uploadData:Union[BinaryIO, ByteLike], suffix:bytes) -> None:
+    def __init__(self, prefix:bytes, uploadData:Union[BinaryIO, ByteLike], suffix:bytes, uploadDataLen:int) -> None:
         self._prefix = prefix
         self._uploadData = uploadData
         self._suffix = suffix
+        self._uploadDataLen = uploadDataLen
         self._position = 0
         self._prefixOffset = 0
         self._uploadBytesRead = 0
         self._suffixOffset = 0
+
+
+    # Reports the full multipart body length (prefix + upload + suffix). This lets requests/urllib3 derive the
+    # Content-Length directly from the body object via super_len(), so the upload stays correctly framed even on
+    # the 431 retry path, which re-sends the request with no caller-supplied headers (and thus no Content-Length).
+    # super_len() subtracts tell() from this value, so we always return the full length here.
+    def __len__(self) -> int:
+        return len(self._prefix) + self._uploadDataLen + len(self._suffix)
 
 
     def read(self, size:Optional[int]=-1) -> bytes:
@@ -311,6 +320,9 @@ class UploadBody:
         self._rawUploadFile:Optional[BinaryIO] = None
         self._rawUploadFilePath:Optional[str] = None
         self._activeReadContextCount = 0
+        # Tracks an in-progress AppendMessage() so a concurrent Cleanup() (which can be called from the socket
+        # close path on a different thread) defers tearing down the storage we're actively writing to.
+        self._activeAppendCount = 0
 
         if self.KnownFullUploadSizeBytes is not None and self.KnownFullUploadSizeBytes > self.MaxInMemoryBodyBytes:
             self._SwitchToFile("known upload size exceeds in-memory limit")
@@ -327,6 +339,10 @@ class UploadBody:
 
 
     def AppendMessage(self, webStreamMsg:Any) -> None:
+        if self._state == UploadBodyState.CleanedUp:
+            # The stream was cleaned up (e.g. closed mid-upload) while data was still arriving. Drop it quietly.
+            self._Debug("ignoring upload data because the body was already cleaned up.")
+            return
         if self._state != UploadBodyState.Building:
             raise Exception("OctoWebStreamUploadBody tried to append after finalize.")
 
@@ -348,17 +364,41 @@ class UploadBody:
             self._Warn("received more bytes than it was expecting for the upload. thisMsg:"+str(originalSizeBytes)+"; so far:"+str(self.UploadBytesReceivedSoFar) + "; expected:"+str(self.KnownFullUploadSizeBytes))
             raise Exception("Too many bytes received for http upload buffer")
 
-        if self._usingFile is False and projectedUploadBytes > self.MaxInMemoryBodyBytes:
-            self._SwitchToFile("upload exceeded in-memory limit")
-
         rawData = Buffer(webStreamMsg.DataAsByteArray())
-        if self._usingFile:
-            self._AppendRawDataToFile(rawData, originalSizeBytes, compressionType, webStreamMsg.IsDataTransmissionDone())
-        else:
-            self._chunks.append(_UploadChunk(0, rawDataLen, originalSizeBytes, compressionType, webStreamMsg.IsDataTransmissionDone(), rawData))
 
-        self.UploadBytesReceivedSoFar = projectedUploadBytes
-        self._Debug("received upload data chunk. using file: %s; bytes in this msg: %s; total received so far: %s; known full size: %s", str(self._usingFile), originalSizeBytes, self.UploadBytesReceivedSoFar, self.KnownFullUploadSizeBytes)
+        # Mark an append as in-progress under the lock so a concurrent Cleanup() (which can be called from the
+        # socket close path on a different thread) won't tear down the storage we're about to write to. We do the
+        # actual write outside the lock so we never block the close path on disk IO - instead, Cleanup() defers the
+        # storage cleanup back to us, and we run it here once the write finishes. This mirrors how active read
+        # contexts are tracked for the request-time file handle.
+        with self._lock:
+            if self._state == UploadBodyState.CleanedUp:
+                self._Debug("ignoring upload data because the body was cleaned up while receiving.")
+                return
+            if self._state != UploadBodyState.Building:
+                raise Exception("OctoWebStreamUploadBody tried to append after finalize.")
+            self._activeAppendCount += 1
+
+        try:
+            if self._usingFile is False and projectedUploadBytes > self.MaxInMemoryBodyBytes:
+                self._SwitchToFile("upload exceeded in-memory limit")
+
+            if self._usingFile:
+                self._AppendRawDataToFile(rawData, originalSizeBytes, compressionType, webStreamMsg.IsDataTransmissionDone())
+            else:
+                self._chunks.append(_UploadChunk(0, rawDataLen, originalSizeBytes, compressionType, webStreamMsg.IsDataTransmissionDone(), rawData))
+
+            self.UploadBytesReceivedSoFar = projectedUploadBytes
+            self._Debug("received upload data chunk. using file: %s; bytes in this msg: %s; total received so far: %s; known full size: %s", str(self._usingFile), originalSizeBytes, self.UploadBytesReceivedSoFar, self.KnownFullUploadSizeBytes)
+        finally:
+            cleanupNow = False
+            with self._lock:
+                self._activeAppendCount -= 1
+                # If Cleanup() ran while we were writing, it deferred to us. Now that the write is done and nothing
+                # else is using the storage, do the cleanup it skipped.
+                cleanupNow = self._state == UploadBodyState.CleanedUp and self._activeAppendCount == 0 and self._activeReadContextCount == 0
+            if cleanupNow:
+                self._CleanupStorage()
 
 
     def Finalize(self) -> None:
@@ -427,11 +467,14 @@ class UploadBody:
     def Cleanup(self) -> None:
         with self._lock:
             if self._state == UploadBodyState.CleanedUp:
-                cleanupNow = self._activeReadContextCount == 0 and self._HasStorage()
+                cleanupNow = self._activeReadContextCount == 0 and self._activeAppendCount == 0 and self._HasStorage()
                 if cleanupNow is False:
                     return
             else:
-                cleanupNow = self._state != UploadBodyState.Finalizing and self._activeReadContextCount == 0
+                # Defer the storage cleanup if a request read or an append is in-flight; whoever finishes last will
+                # run it (see _OnReadContextClosed and the AppendMessage finally), so we never free storage out from
+                # under an active reader/writer or block this (possibly close-path) thread on disk IO.
+                cleanupNow = self._state != UploadBodyState.Finalizing and self._activeReadContextCount == 0 and self._activeAppendCount == 0
             self._state = UploadBodyState.CleanedUp
 
         if cleanupNow is False:

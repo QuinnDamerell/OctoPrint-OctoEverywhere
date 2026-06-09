@@ -217,7 +217,7 @@ class BambuClient:
                "led_mode": mode, "led_on_time": 500, "led_off_time": 500, "loop_times": 0, "interval_time": 0}})
 
 
-    def SendCommand(self, payload:Dict[str, Any], timeoutSec:Optional[float]=None) -> "BambuCommandResult":
+    def SendCommand(self, payload:Dict[str, Any], timeoutSec:Optional[float]=None, waitForResponse:bool=True) -> "BambuCommandResult":
         try:
             msg = copy.deepcopy(payload)
             if not isinstance(msg, dict):
@@ -229,12 +229,26 @@ class BambuClient:
                 if not self._SetSequenceIdIfMissing(msg, sequenceId):
                     return BambuCommandResult(otherError="Payload must contain a top-level MQTT command object.")
 
+            requestTopic = f"device/{self.PrinterSn}/request"
+
+            # Fire-and-forget: publish and return immediately without waiting for a matched response.
+            if waitForResponse is False:
+                if not self._Publish(msg):
+                    return BambuCommandResult(connected=False)
+                return BambuCommandResult(result={
+                    "request": {
+                        "topic": requestTopic,
+                        "payload": msg,
+                        "qos": 0,
+                    },
+                    "response": None,
+                })
+
             waitContext = BambuMqttWaitingContext(sequenceId)
             with self.RequestLock:
                 self.RequestPendingContexts[sequenceId] = waitContext
 
             try:
-                requestTopic = f"device/{self.PrinterSn}/request"
                 if not self._Publish(msg):
                     return BambuCommandResult(connected=False)
 
@@ -312,6 +326,7 @@ class BambuClient:
         else:
             self.LastConnectionFailedDueToAuth = False
             self.Logger.warning("Bambu printer connection lost. We will try to reconnect in a few seconds.")
+        # Cleanup any pending contexts.
         with self.RequestLock:
             for waiter in list(self.RequestPendingContexts.values()):
                 waiter.SetSocketClosed()
@@ -395,6 +410,7 @@ class BambuClient:
             if BambuClient._PrintMQTTMessages and self.Logger.isEnabledFor(logging.DEBUG):
                 self.Logger.debug("Incoming Bambu Message:\r\n%s", json.dumps(msg, indent=3))
 
+            # Check if this is a response to a pending command context.
             self._HandlePendingCommandResponse(mqtt_msg.topic, msg)
 
             isFirstFullSyncResponse = False

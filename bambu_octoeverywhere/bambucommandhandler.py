@@ -336,21 +336,44 @@ class BambuCommandHandler(IPlatformCommandHandler):
     # Sends a Bambu MQTT JSON payload and returns the matched MQTT JSON response.
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
         if transportType != "mqtt":
-            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Bambu Lab printer, which communicates over MQTT, so it only accepts send-command requests with transportType 'mqtt'. The received transportType was '{transportType}'. Set 'transportType' to 'mqtt' and put the full MQTT JSON payload in 'request' (it is sent to the printer as-is). Example: {{\"transportType\": \"mqtt\", \"request\": {{\"pushing\": {{\"sequence_id\": \"0\", \"command\": \"pushall\"}}}}}}.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Bambu Lab printer, which communicates over MQTT, so it only accepts send-command requests with TransportType 'mqtt'. The received TransportType was '{transportType}'. Set 'TransportType' to 'mqtt' and put the full MQTT JSON payload in 'Request' (it is sent to the printer as-is). Example: {{\"TransportType\": \"mqtt\", \"Request\": {{\"pushing\": {{\"sequence_id\": \"0\", \"command\": \"pushall\"}}}}}}.")
 
-        # Bambu sends the request payload to the printer as-is over MQTT.
-        result = BambuClient.Get().SendCommand(request, timeoutSec=10.0)
+        # We only use the common parse for the WaitForResponse flag; Bambu sends the full Request payload as-is over MQTT.
+        parsed = CommandHandler.ParseMqttSendCommand(rawPayload, request)
+        if isinstance(parsed, CommandResponse):
+            return parsed
+
+        result = BambuClient.Get().SendCommand(parsed.Request, timeoutSec=parsed.TimeoutSec, waitForResponse=parsed.WaitForResponse)
         if result.HasError():
             if result.Connected is False:
                 if BambuClient.Get().IsDisconnectDueToAuth():
-                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized")
+                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
-            return CommandResponse.Error(400, result.GetLoggingErrorStr())
+            if result.Timeout:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some MQTT commands don't return a response - set WaitForResponse to false for those.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetLoggingErrorStr())
 
-        return CommandResponse.Success({
-            "type": "mqtt",
-            "response": result.Result,
-        })
+        # The client returns {"request": {topic, payload, qos}, "response": {topic, payload}}; convert to the common
+        # PascalCase envelope. The MQTT payloads themselves are the native messages, passed through untouched, so a
+        # developer has full access to the request and response messages.
+        res:Dict[str, Any] = result.Result if isinstance(result.Result, dict) else {}
+        reqRaw:Any = res.get("request", None)
+        reqEcho:Dict[str, Any] = reqRaw if isinstance(reqRaw, dict) else {}
+        requestEcho:Dict[str, Any] = {
+            "Topic": reqEcho.get("topic", None),
+            "Payload": reqEcho.get("payload", None),
+            "Qos": reqEcho.get("qos", 0),
+        }
+        if parsed.WaitForResponse is False:
+            return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseReceived=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+
+        respRaw:Any = res.get("response", None)
+        respEcho:Dict[str, Any] = respRaw if isinstance(respRaw, dict) else {}
+        responseEcho:Dict[str, Any] = {
+            "Topic": respEcho.get("topic", None),
+            "Payload": respEcho.get("payload", None),
+        }
+        return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseEcho, isError=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -366,7 +389,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:

@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL
 from octoeverywhere.localip import LocalIpHelper
@@ -445,7 +445,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # Sends a Moonraker JSON-RPC payload and returns the JSON-RPC result.
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
         if transportType != "websocket":
-            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Moonraker (Klipper) printer, which only accepts send-command requests with transportType 'websocket'. The received transportType was '{transportType}'. Set 'transportType' to 'websocket' and put the Moonraker JSON-RPC call in 'request'. Example: {{\"transportType\": \"websocket\", \"request\": {{\"method\": \"printer.objects.query\", \"params\": {{\"objects\": {{\"toolhead\": null}}}}}}}}.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a Moonraker (Klipper) printer, which only accepts send-command requests with TransportType 'websocket'. The received TransportType was '{transportType}'. Set 'TransportType' to 'websocket' and put the Moonraker JSON-RPC call in 'Request'. Example: {{\"TransportType\": \"websocket\", \"Request\": {{\"Method\": \"printer.objects.query\", \"Params\": {{\"objects\": {{\"toolhead\": null}}}}}}}}.")
 
         parsed = CommandHandler.ParseWebsocketSendCommand(rawPayload, request)
         if isinstance(parsed, CommandResponse):
@@ -454,21 +454,30 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         # Moonraker speaks JSON-RPC, so the command identifier must be a method string.
         method = parsed.Method
         if method is None or not isinstance(method, str) or len(method) == 0:
-            return CommandResponse.Error(400, f"This Moonraker (Klipper) printer speaks JSON-RPC, so the 'request' object must include a non-empty string 'method' naming the JSON-RPC method to call (e.g. 'printer.objects.query', 'printer.gcode.script'), but the received method value was {json.dumps(method, default=str)}. Provide it as \"request\": {{\"method\": \"<json-rpc method>\", \"params\": {{...}}}}.")
+            return CommandResponse.Error(400, f"This Moonraker (Klipper) printer speaks JSON-RPC, so the 'Request' object must include a non-empty string 'Method' naming the JSON-RPC method to call (e.g. 'printer.objects.query', 'printer.gcode.script'), but the received method value was {json.dumps(method, default=str)}. Provide it as \"Request\": {{\"Method\": \"<json-rpc method>\", \"Params\": {{...}}}}.")
 
-        result = MoonrakerClient.Get().SendJsonRpcRequest(method, parsed.Params, timeoutSec=10.0)
+        requestEcho:Dict[str, Any] = {"Method": method, "Params": parsed.Params}
+        result = MoonrakerClient.Get().SendJsonRpcRequest(method, parsed.Params, timeoutSec=parsed.TimeoutSec, waitForResponse=parsed.WaitForResponse)
         if result.HasError():
-            if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+            code = result.GetErrorCode()
+            # Transport/connection/auth failures are returned as actionable OE error codes (no useful payload).
+            if code == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
-            if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED:
-                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized")
-            return CommandResponse.Error(400, result.GetLoggingErrorStr())
+            if code == JsonRpcResponse.MR_401_UNAUTHORIZED:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - refresh the Moonraker API key or credentials.")
+            if code == JsonRpcResponse.OE_ERROR_TIMEOUT:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some commands don't return a response - set WaitForResponse to false for those.")
+            if code == JsonRpcResponse.OE_ERROR_EXCEPTION:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetErrorStr() or "Failed to send command.")
+            # A real JSON-RPC protocol error (e.g. unknown method, a gcode error). Surface the full native response.
+            return CommandHandler.BuildSendCommandResult("websocket", requestEcho, result.GetRawResponseOrError(), isError=True, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
-        response:Dict[str, Any] = {
-            "type": "websocket",
-            "response": result.GetSimpleResult() if result.IsSimpleResult() else result.GetResult()
-        }
-        return CommandResponse.Success(response)
+        # Fire-and-forget: nothing was awaited.
+        if parsed.WaitForResponse is False:
+            return CommandHandler.BuildSendCommandResult("websocket", requestEcho, responseReceived=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+
+        response = result.GetRawResponseOrResult()
+        return CommandHandler.BuildSendCommandResult("websocket", requestEcho, response, isError=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -557,7 +566,8 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_FilesUploadCommand))
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("Moonraker", CommandHandler.c_FilesUploadCommand, result.StatusCode, bodyBytes))
-            return FileSystemCommandHelper.BuildFileUploadSuccess("Moonraker", parsedPath, uploadBody.UploadBytesReceivedSoFar, result.StatusCode, bodyBytes, fields)
+            platformPath = self._GetPlatformPath(parsedPath)
+            return FileSystemCommandHelper.BuildFileUploadSuccess(parsedPath, platformPath, uploadBody.UploadBytesReceivedSoFar, bodyBytes)
         finally:
             result.Free()
 
@@ -596,7 +606,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -628,9 +638,15 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_FilesDeleteCommand))
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("Moonraker", CommandHandler.c_FilesDeleteCommand, result.StatusCode, bodyBytes))
-            return FileSystemCommandHelper.BuildFileDeleteSuccess("Moonraker", parsedPath, result.StatusCode, bodyBytes)
+            platformPath = self._GetPlatformPath(parsedPath)
+            return FileSystemCommandHelper.BuildFileDeleteSuccess(parsedPath, platformPath, bodyBytes)
         finally:
             result.Free()
+
+
+    def _GetPlatformPath(self, virtPath:VirtualFilePath) -> str:
+        # The print command takes file paths relative to the gcode folder, so this is what we want.
+        return virtPath.RelativePath
 
 
     # Checks if the printer is connected and in the correct state (or states)

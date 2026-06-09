@@ -40,10 +40,11 @@ class ResponseMsg:
     OE_ERROR_MIN = OE_ERROR_MQTT_NOT_CONNECTED
     OE_ERROR_MAX = OE_ERROR_EXCEPTION
 
-    def __init__(self, resultObj:Optional[Dict[str, Any]], errorCode:int=0, errorStr:Optional[str]=None) -> None:
+    def __init__(self, resultObj:Optional[Dict[str, Any]], errorCode:int=0, errorStr:Optional[str]=None, rawResponse:Optional[Dict[str, Any]]=None) -> None:
         self.Result = resultObj
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
+        self.RawResponse = rawResponse
         if self.ErrorCode == ResponseMsg.OE_ERROR_TIMEOUT:
             self.ErrorStr = "Timeout waiting for Elegoo CC2 MQTT response."
         if self.ErrorCode == ResponseMsg.OE_ERROR_MQTT_NOT_CONNECTED:
@@ -70,6 +71,12 @@ class ResponseMsg:
         return self.Result
 
 
+    def GetRawResponseOrResult(self) -> Any:
+        if self.RawResponse is not None:
+            return self.RawResponse
+        return self.Result
+
+
 class MqttWaitingContext:
 
     def __init__(self, msgId:int) -> None:
@@ -78,14 +85,16 @@ class MqttWaitingContext:
         self.Result:Optional[Dict[str, Any]] = None
         self.ErrorCode:int = 0
         self.ErrorMessage:Optional[str] = None
+        self.RawResponse:Optional[Dict[str, Any]] = None
 
     def GetEvent(self) -> threading.Event:
         return self.WaitEvent
 
-    def SetResultAndEvent(self, result:Optional[Dict[str, Any]], errorCode:int=0, errorMessage:Optional[str]=None) -> None:
+    def SetResultAndEvent(self, result:Optional[Dict[str, Any]], errorCode:int=0, errorMessage:Optional[str]=None, rawResponse:Optional[Dict[str, Any]]=None) -> None:
         self.Result = result
         self.ErrorCode = errorCode
         self.ErrorMessage = errorMessage
+        self.RawResponse = rawResponse
         self.WaitEvent.set()
 
     def SetSocketClosed(self) -> None:
@@ -337,11 +346,11 @@ class ElegooCc2Client:
                 timeoutSec = ElegooCc2Client.RequestTimeoutSec
             waitContext.GetEvent().wait(timeoutSec)
             if waitContext.ErrorCode != 0:
-                return ResponseMsg(waitContext.Result, waitContext.ErrorCode, waitContext.ErrorMessage)
+                return ResponseMsg(waitContext.Result, waitContext.ErrorCode, waitContext.ErrorMessage, rawResponse=waitContext.RawResponse)
             if waitContext.Result is None:
                 self.Logger.info(f"Elegoo CC2 client timeout while waiting for request. {requestId}")
                 return ResponseMsg(None, ResponseMsg.OE_ERROR_TIMEOUT)
-            return ResponseMsg(waitContext.Result)
+            return ResponseMsg(waitContext.Result, rawResponse=waitContext.RawResponse)
         except Exception as e:
             Sentry.OnException("Elegoo CC2 MQTT request failed to send.", e)
             return ResponseMsg(None, ResponseMsg.OE_ERROR_EXCEPTION, str(e))
@@ -650,11 +659,11 @@ class ElegooCc2Client:
                 return
             error = msg.get("error", None)
             if isinstance(error, dict):
-                context.SetResultAndEvent(resultObj if isinstance(resultObj, dict) else None, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(error))
+                context.SetResultAndEvent(resultObj if isinstance(resultObj, dict) else None, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(error), rawResponse=msg)
             elif isinstance(resultObj, dict) and int(resultObj.get("error_code", 0)) != 0:
-                context.SetResultAndEvent(resultObj, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(resultObj.get("error_msg", "Printer command failed.")))
+                context.SetResultAndEvent(resultObj, ResponseMsg.ELEGOO_CMD_ERROR_GENERIC, str(resultObj.get("error_msg", "Printer command failed.")), rawResponse=msg)
             else:
-                context.SetResultAndEvent(resultObj if resultObj is not None else {})
+                context.SetResultAndEvent(resultObj if resultObj is not None else {}, rawResponse=msg)
 
 
     def _HandleStatusMessage(self, msg:Dict[str, Any]) -> None:

@@ -201,7 +201,7 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
     # Sends an Elegoo CC2 MQTT request and returns the matched MQTT response.
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
         if transportType != "mqtt":
-            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an Elegoo Centauri (CC2) printer, which communicates over MQTT, so it only accepts send-command requests with transportType 'mqtt'. The received transportType was '{transportType}'. Set 'transportType' to 'mqtt' and put the command in 'request'. Example: {{\"transportType\": \"mqtt\", \"request\": {{\"method\": 1, \"params\": {{}}}}}}.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an Elegoo Centauri (CC2) printer, which communicates over MQTT, so it only accepts send-command requests with TransportType 'mqtt'. The received TransportType was '{transportType}'. Set 'TransportType' to 'mqtt' and put the command in 'Request'. Example: {{\"TransportType\": \"mqtt\", \"Request\": {{\"Method\": 1, \"Params\": {{}}}}}}.")
 
         parsed = CommandHandler.ParseMqttSendCommand(rawPayload, request)
         if isinstance(parsed, CommandResponse):
@@ -210,30 +210,40 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         # Elegoo CC2 uses an int method id and a params object.
         method = parsed.Method
         if method is None or not isinstance(method, int) or isinstance(method, bool):
-            return CommandResponse.Error(400, f"This Elegoo CC2 printer requires an integer 'method' id inside 'request', e.g. \"request\": {{\"method\": 1, \"params\": {{...}}}}, but the received method value was {json.dumps(method, default=str)}. The 'method' selects which CC2 command to run and must be a JSON integer.")
+            return CommandResponse.Error(400, f"This Elegoo CC2 printer requires an integer 'Method' id inside 'Request', e.g. \"Request\": {{\"Method\": 1, \"Params\": {{...}}}}, but the received method value was {json.dumps(method, default=str)}. The 'Method' selects which CC2 command to run and must be a JSON integer.")
 
-        result = ElegooCc2Client.Get().SendRequest(method, parsed.Params, waitForResponse=True, timeoutSec=10.0)
-        if result.HasError():
-            if result.GetErrorCode() == result.OE_ERROR_MQTT_NOT_CONNECTED:
-                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
-            return CommandResponse.Error(400, result.GetLoggingErrorStr())
-
+        # The MQTT request/response topics and payloads are surfaced so a developer has full access to the messages.
         topics = ElegooCc2Client.Get().GetApiRequestResponseTopics()
-        return CommandResponse.Success({
-            "type": "mqtt",
-            "request": {
-                "topic": topics["RequestTopic"],
-                "payload": {
-                    "method": method,
-                    "params": parsed.Params,
-                },
-                "qos": 0,
-            },
-            "response": {
-                "topic": topics["ResponseTopic"],
-                "payload": result.GetResult(),
-            },
-        })
+        requestEcho:Dict[str, Any] = {
+            "Topic": topics["RequestTopic"],
+            "Payload": {"method": method, "params": parsed.Params},
+            "Qos": 0,
+        }
+
+        result = ElegooCc2Client.Get().SendRequest(method, parsed.Params, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+        if result.HasError():
+            code = result.GetErrorCode()
+            # Transport failures are returned as actionable OE error codes (no useful payload).
+            if code == result.OE_ERROR_MQTT_NOT_CONNECTED:
+                if ElegooCc2Client.Get().IsDisconnectDueToAuth():
+                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            if code == result.OE_ERROR_TIMEOUT:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some MQTT commands don't return a response - set WaitForResponse to false for those.")
+            if code == result.OE_ERROR_EXCEPTION:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetErrorStr() or "Failed to send command.")
+            # A printer-side command error (e.g. a failed result) still carries the full response payload. Surface it.
+            payload = result.GetRawResponseOrResult()
+            if payload is not None:
+                return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, {"Topic": topics["ResponseTopic"], "Payload": payload}, isError=True, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetLoggingErrorStr())
+
+        # Fire-and-forget: nothing was awaited.
+        if parsed.WaitForResponse is False:
+            return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseReceived=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+
+        responseEcho:Dict[str, Any] = {"Topic": topics["ResponseTopic"], "Payload": result.GetRawResponseOrResult()}
+        return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseEcho, isError=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -249,7 +259,7 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:

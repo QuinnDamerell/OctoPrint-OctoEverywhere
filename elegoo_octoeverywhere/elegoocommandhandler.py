@@ -236,7 +236,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     # Sends an Elegoo SDCP JSON command and returns the JSON response.
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
         if transportType != "websocket":
-            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an Elegoo printer that uses the SDCP protocol over a websocket, so it only accepts send-command requests with transportType 'websocket'. The received transportType was '{transportType}'. Set 'transportType' to 'websocket' and put the SDCP command in 'request'. Example: {{\"transportType\": \"websocket\", \"request\": {{\"Cmd\": 1, \"Data\": {{}}}}}}.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an Elegoo printer that uses the SDCP protocol over a websocket, so it only accepts send-command requests with TransportType 'websocket'. The received TransportType was '{transportType}'. Set 'TransportType' to 'websocket' and put the SDCP command in 'Request'. Example: {{\"TransportType\": \"websocket\", \"Request\": {{\"Cmd\": 1, \"Data\": {{}}}}}}.")
 
         parsed = CommandHandler.ParseWebsocketSendCommand(rawPayload, request)
         if isinstance(parsed, CommandResponse):
@@ -251,22 +251,34 @@ class ElegooCommandHandler(IPlatformCommandHandler):
             cmdId = data.get("Cmd", None)
             nestedData = data.get("Data", {})
             if not isinstance(nestedData, dict):
-                return CommandResponse.Error(400, f"This Elegoo SDCP command was given in the native nested form {{\"Data\": {{\"Cmd\": ..., \"Data\": {{...}}}}}}, but the inner 'Data' field must be a JSON object and a value of type '{type(nestedData).__name__}' was received. The inner 'Data' holds the command parameters, e.g. \"request\": {{\"Data\": {{\"Cmd\": 1, \"Data\": {{}}}}}}.")
+                return CommandResponse.Error(400, f"This Elegoo SDCP command was given in the native nested form {{\"Data\": {{\"Cmd\": ..., \"Data\": {{...}}}}}}, but the inner 'Data' field must be a JSON object and a value of type '{type(nestedData).__name__}' was received. The inner 'Data' holds the command parameters, e.g. \"Request\": {{\"Data\": {{\"Cmd\": 1, \"Data\": {{}}}}}}.")
             data = cast(Dict[str, Any], nestedData)
 
         if cmdId is None or not isinstance(cmdId, int) or isinstance(cmdId, bool):
-            return CommandResponse.Error(400, f"This Elegoo printer uses SDCP, which requires an integer command id. Provide it as 'Cmd' (or 'cmd') inside 'request', e.g. \"request\": {{\"Cmd\": 1, \"Data\": {{...}}}}, but no valid integer command id was found (received value: {json.dumps(cmdId, default=str)}).")
+            return CommandResponse.Error(400, f"This Elegoo printer uses SDCP, which requires an integer command id. Provide it as 'Cmd' (or 'cmd') inside 'Request', e.g. \"Request\": {{\"Cmd\": 1, \"Data\": {{...}}}}, but no valid integer command id was found (received value: {json.dumps(cmdId, default=str)}).")
 
-        result = ElegooClient.Get().SendRequest(cmdId, data, timeoutSec=10.0)
+        requestEcho:Dict[str, Any] = {"Cmd": cmdId, "Data": data}
+        result = ElegooClient.Get().SendRequest(cmdId, data, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
         if result.HasError():
-            if result.GetErrorCode() == result.OE_ERROR_WS_NOT_CONNECTED:
+            code = result.GetErrorCode()
+            # Transport failures are returned as actionable OE error codes (no useful payload).
+            if code == result.OE_ERROR_WS_NOT_CONNECTED:
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            if code == result.OE_ERROR_TIMEOUT:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some commands don't return a response - set WaitForResponse to false for those.")
+            if code == result.OE_ERROR_EXCEPTION:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetErrorStr() or "Failed to send command.")
+            # A printer-side command error (e.g. a failed ack) still carries the full SDCP response. Surface it.
+            payload = result.GetResult()
+            if payload is not None:
+                return CommandHandler.BuildSendCommandResult("websocket", requestEcho, payload, isError=True, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
             return CommandResponse.Error(400, result.GetLoggingErrorStr())
 
-        return CommandResponse.Success({
-            "type": "websocket",
-            "response": result.GetResult()
-        })
+        # Fire-and-forget: nothing was awaited.
+        if parsed.WaitForResponse is False:
+            return CommandHandler.BuildSendCommandResult("websocket", requestEcho, responseReceived=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+
+        return CommandHandler.BuildSendCommandResult("websocket", requestEcho, result.GetResult(), isError=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -282,7 +294,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:

@@ -243,7 +243,7 @@ class MoonrakerClient(IMoonrakerClient):
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None, timeoutSec:Optional[float]=None) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None, timeoutSec:Optional[float]=None, waitForResponse:bool=True) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -251,18 +251,20 @@ class MoonrakerClient(IMoonrakerClient):
             msgId = self.JsonRpcIdCounter
             self.JsonRpcIdCounter += 1
 
-            # Add our waiting context.
-            waitContext = JsonRpcWaitingContext(msgId)
-            self.JsonRpcWaitingContexts[msgId] = waitContext
+            # Add our waiting context, unless this is a fire-and-forget send.
+            if waitForResponse:
+                waitContext = JsonRpcWaitingContext(msgId)
+                self.JsonRpcWaitingContexts[msgId] = waitContext
 
         # From now on, we need to always make sure to clean up the wait context, even in error.
         try:
             # Create the request object
-            obj = {
+            obj:Dict[str, Any] = {
                 "jsonrpc": "2.0",
-                "method": method,
-                "id": msgId
+                "method": method
             }
+            if waitForResponse:
+                obj["id"] = msgId
             # Add the params, if there are any.
             if paramsDict is not None:
                 obj["params"] = paramsDict
@@ -272,6 +274,10 @@ class MoonrakerClient(IMoonrakerClient):
             if self._WebSocketSend(jsonStr) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
                 return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
+
+            # Fire-and-forget: the message was sent, don't wait for a matched response.
+            if waitForResponse is False or waitContext is None:
+                return JsonRpcResponse.FromSimpleSuccess("ok")
 
             # Wait for a response
             timeoutSec = timeoutSec if timeoutSec is not None else MoonrakerClient.RequestTimeoutSec
@@ -289,20 +295,21 @@ class MoonrakerClient(IMoonrakerClient):
                 # Get the error parts
                 errorCode = error.get("code", JsonRpcResponse.OE_ERROR_EXCEPTION)
                 errorStr = error.get("message", "Unknown")
-                return JsonRpcResponse.FromError(errorCode, errorStr)
+                return JsonRpcResponse.FromError(errorCode, errorStr, rawResponse=result)
 
             # If there's a result, return the entire response
-            resultValue = result.get("result", None)
-            if resultValue is not None:
+            if "result" in result:
+                resultValue = result.get("result", None)
                 # Depending on the type, set it as a dict or simple result.
                 if isinstance(resultValue, dict):
-                    return JsonRpcResponse.FromSuccess(resultValue)
+                    return JsonRpcResponse.FromSuccess(resultValue, rawResponse=result)
                 if isinstance(resultValue, str):
-                    return JsonRpcResponse.FromSimpleSuccess(resultValue)
+                    return JsonRpcResponse.FromSimpleSuccess(resultValue, rawResponse=result)
+                return JsonRpcResponse.FromSuccess(resultValue, rawResponse=result)
 
             # Finally, both are missing?
             self.Logger.error("Moonraker client json rpc got a response that didn't have an error or result object? "+json.dumps(result))
-            return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object")
+            return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_EXCEPTION, "No result or error object", rawResponse=result)
 
         except Exception as e:
             Sentry.OnException("Moonraker client json rpc request failed to send.", e)

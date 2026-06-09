@@ -7,7 +7,7 @@ from octoprint.printer import PrinterInterface
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.compat import Compat
-from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
@@ -312,7 +312,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # Sends a native JSON command payload to the printer control system and returns the JSON response.
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
         if transportType != "http":
-            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an OctoPrint printer, which only accepts send-command requests with transportType 'http'. The received transportType was '{transportType}'. Set 'transportType' to 'http', put the OctoPrint API path/method/headers at the top level of the payload, and put any JSON request body in 'request'. Example: {{\"transportType\": \"http\", \"path\": \"/api/version\", \"method\": \"GET\", \"request\": {{}}}}.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is an OctoPrint printer, which only accepts send-command requests with TransportType 'http'. The received TransportType was '{transportType}'. Set 'TransportType' to 'http', put the OctoPrint API Path/Method/Headers at the top level of the payload, and put any JSON request body in 'Request'. Example: {{\"TransportType\": \"http\", \"Path\": \"/api/version\", \"Method\": \"GET\", \"Request\": {{}}}}.")
 
         parsed = CommandHandler.ParseHttpSendCommand(rawPayload, request)
         if isinstance(parsed, CommandResponse):
@@ -335,16 +335,16 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             parsed.Headers,
             bodyBuffer,
             allowRedirects=False,
-            timeoutSec=10.0
+            timeoutSec=parsed.TimeoutSec
         )
         if result is None:
             return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
 
+        # The HTTP request itself succeeded; the printer's response (including a 4xx/5xx) is the meaningful payload.
         try:
-            return CommandResponse.Success({
-                "type": "http",
-                "response": self._BuildHttpResponse(result)
-            })
+            response = self._BuildHttpResponse(result)
+            isError = bool(response.get("StatusCode", 0) >= 400)
+            return CommandHandler.BuildSendCommandResult("http", {"Path": parsed.Path, "Method": parsed.Method}, response, isError, waitForResponse=True, timeoutSec=parsed.TimeoutSec)
         finally:
             result.Free()
 
@@ -374,7 +374,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", "file-list", result.StatusCode, bodyBytes))
             try:
-                responseObj = json.loads(bodyBytes.decode("utf-8"))
+                responseObj:Dict[str, Any] = json.loads(bodyBytes.decode("utf-8"))
             except Exception:
                 return CommandResponse.Error(502, FileSystemCommandHelper.InvalidJsonResponseError("OctoPrint", "file-list"))
             if not isinstance(responseObj, dict):
@@ -430,7 +430,8 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_FilesUploadCommand))
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_FilesUploadCommand, result.StatusCode, bodyBytes))
-            return FileSystemCommandHelper.BuildFileUploadSuccess("OctoPrint", parsedPath, uploadBody.UploadBytesReceivedSoFar, result.StatusCode, bodyBytes, fields)
+            platformPath = self._GetPlatformPath(parsedPath)
+            return FileSystemCommandHelper.BuildFileUploadSuccess(parsedPath, platformPath, uploadBody.UploadBytesReceivedSoFar, bodyBytes)
         finally:
             result.Free()
 
@@ -469,7 +470,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoprint.log", CommandHandler.c_FileGetPluginLogsCommand, "octoprint.log", args)
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoprint.log", CommandHandler.c_GetPluginLogsCommand, "octoprint.log", args)
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -479,8 +480,8 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
         headers:Dict[str, str] = {}
         self._AddOctoPrintLocalAuth(headers)
-        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
-        deletePath = "/api/files/local/" + relativePath
+        platformPath = self._GetPlatformPath(parsedPath)
+        deletePath = "/api/files/local/" + FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
         result = OctoHttpRequest.MakeHttpCall(
             self.Logger,
             deletePath,
@@ -501,9 +502,13 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_FilesDeleteCommand))
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_FilesDeleteCommand, result.StatusCode, bodyBytes))
-            return FileSystemCommandHelper.BuildFileDeleteSuccess("OctoPrint", parsedPath, result.StatusCode, bodyBytes)
+            return FileSystemCommandHelper.BuildFileDeleteSuccess(parsedPath, platformPath, bodyBytes)
         finally:
             result.Free()
+
+
+    def _GetPlatformPath(self, virtPath:VirtualFilePath) -> str:
+        return virtPath.RelativePath
 
 
     def _BuildHttpResponse(self, result:Any) -> Dict[str, Any]:
@@ -511,18 +516,14 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
         bodyBytes = b""
         if result.FullBodyBuffer is not None:
             bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
-        bodyText = bodyBytes.decode("utf-8", errors="replace")
         response:Dict[str, Any] = {
-            "statusCode": result.StatusCode,
-            "headers": dict(result.Headers),
-            "url": result.Url,
-            "body": bodyText,
+            "StatusCode": result.StatusCode,
+            "Headers": dict(result.Headers),
+            "Url": result.Url,
         }
-        if len(bodyText) > 0:
-            try:
-                response["bodyJson"] = json.loads(bodyText)
-            except Exception:
-                pass
+
+        # Add the body to the response.
+        FileSystemCommandHelper.BuildHttpResponseBody(response, bodyBytes)
         return response
 
 

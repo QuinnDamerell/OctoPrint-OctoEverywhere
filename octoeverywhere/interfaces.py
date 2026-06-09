@@ -298,10 +298,13 @@ class IPlatformCommandHandler(ABC):
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
         pass
 
-    # Sends a native JSON command payload to the printer's control system and returns the native JSON response.
-    # The common payload shape is:
-    #   {"transportType": "http|websocket|mqtt", "request": {...}, ...transport root args...}
-    # Type and request are required and pre-parsed out of the rawPayload.
+    # Sends a native command payload to the printer's control system and returns the native response.
+    # The common payload shape is (envelope keys are PascalCase; the Request/Response contents are native and untouched):
+    #   {"TransportType": "http|websocket|mqtt", "Request": {...}, "WaitForResponse": <bool>, "TimeoutSec": <int>, ...transport root args...}
+    # transportType (lower-cased) and request are required and pre-parsed out of the rawPayload.
+    # On success the platform must return CommandHandler.BuildSendCommandResult(...) so every platform shares the same
+    # response envelope. Transport/connection/auth failures should be returned as the matching c_CommandError_* code so
+    # the response is actionable; protocol-level errors that carry a payload should be surfaced via the result (IsError).
     # Platforms without a generic request/response control channel should return FeatureNotSupported.
     @abstractmethod
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:

@@ -166,22 +166,22 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
     # Sends an HTTP request to PrusaLink and returns the HTTP response.
     def ExecuteSendCommand(self, transportType:str, request:Dict[str, Any], rawPayload:Dict[str, Any]) -> CommandResponse:
         if transportType != "http":
-            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a PrusaLink printer, which only accepts send-command requests with transportType 'http'. The received transportType was '{transportType}'. Set 'transportType' to 'http', put the PrusaLink API path/method/headers at the top level of the payload, and put any JSON request body in 'request'. Example: {{\"transportType\": \"http\", \"path\": \"/api/version\", \"method\": \"GET\", \"request\": {{}}}}.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, f"This is a PrusaLink printer, which only accepts send-command requests with TransportType 'http'. The received TransportType was '{transportType}'. Set 'TransportType' to 'http', put the PrusaLink API Path/Method/Headers at the top level of the payload, and put any JSON request body in 'Request'. Example: {{\"TransportType\": \"http\", \"Path\": \"/api/version\", \"Method\": \"GET\", \"Request\": {{}}}}.")
 
         parsed = CommandHandler.ParseHttpSendCommand(rawPayload, request)
         if isinstance(parsed, CommandResponse):
             return parsed
 
         try:
-            response = PrusaLinkClient.Get().SendHttpCommand(parsed.Method, parsed.Path, parsed.Headers, parsed.BodyBytes, 10.0)
+            response = PrusaLinkClient.Get().SendHttpCommand(parsed.Method, parsed.Path, parsed.Headers, parsed.BodyBytes, parsed.TimeoutSec)
         except Exception as e:
             self.Logger.warning("PrusaLink send-command HTTP request failed. %s", e)
             return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
 
-        return CommandResponse.Success({
-            "type": "http",
-            "response": self._BuildHttpResponse(response)
-        })
+        # The HTTP request itself succeeded; the printer's response (including a 4xx/5xx) is the meaningful payload.
+        responseObj = self._BuildHttpResponse(response)
+        isError = bool(responseObj.get("StatusCode", 0) >= 400)
+        return CommandHandler.BuildSendCommandResult("http", {"Path": parsed.Path, "Method": parsed.Method}, responseObj, isError, waitForResponse=True, timeoutSec=parsed.TimeoutSec)
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -197,7 +197,7 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_FileGetPluginLogsCommand, "octoeverywhere.log", args)
+        return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
@@ -205,16 +205,12 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
 
     def _BuildHttpResponse(self, response:Any) -> Dict[str, Any]:
-        bodyText = response.text if response.text is not None else ""
+        bodyBytes = response.content if response.content is not None else b""
         responseObj:Dict[str, Any] = {
-            "statusCode": response.status_code,
-            "headers": dict(response.headers),
-            "url": response.url,
-            "body": bodyText,
+            "StatusCode": response.status_code,
+            "Headers": dict(response.headers),
+            "Url": response.url,
         }
-        if len(bodyText) > 0:
-            try:
-                responseObj["bodyJson"] = response.json()
-            except Exception:
-                pass
+        # Add the body to the response.
+        FileSystemCommandHelper.BuildHttpResponseBody(responseObj, bodyBytes)
         return responseObj

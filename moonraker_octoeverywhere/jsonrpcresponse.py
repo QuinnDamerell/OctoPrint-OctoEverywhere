@@ -23,27 +23,29 @@ class JsonRpcResponse:
 
 
     @staticmethod
-    def FromSuccess(resultObj:Dict[str, Any]) -> 'JsonRpcResponse':
-        return JsonRpcResponse(resultObj=resultObj)
+    def FromSuccess(resultObj:Any, rawResponse:Optional[Dict[str, Any]]=None) -> 'JsonRpcResponse':
+        return JsonRpcResponse(resultObj=resultObj, rawResponse=rawResponse, resultWasSet=True)
 
 
     @staticmethod
-    def FromSimpleSuccess(result:str) -> 'JsonRpcResponse':
-        return JsonRpcResponse(simpleResult=result)
+    def FromSimpleSuccess(result:str, rawResponse:Optional[Dict[str, Any]]=None) -> 'JsonRpcResponse':
+        return JsonRpcResponse(simpleResult=result, rawResponse=rawResponse, resultWasSet=True)
 
 
     @staticmethod
-    def FromError(errorCode:int, errorStr:Optional[str]=None) -> 'JsonRpcResponse':
-        return JsonRpcResponse(errorCode=errorCode, errorStr=errorStr)
+    def FromError(errorCode:int, errorStr:Optional[str]=None, rawResponse:Optional[Dict[str, Any]]=None) -> 'JsonRpcResponse':
+        return JsonRpcResponse(errorCode=errorCode, errorStr=errorStr, rawResponse=rawResponse)
 
 
-    def __init__(self, resultObj:Optional[Dict[str, Any]]=None, simpleResult:Optional[str]=None, errorCode=0, errorStr:Optional[str]=None) -> None:
+    def __init__(self, resultObj:Any=None, simpleResult:Optional[str]=None, errorCode:int=0, errorStr:Optional[str]=None, rawResponse:Optional[Dict[str, Any]]=None, resultWasSet:bool=False) -> None:
         # Sometimes the Result is a dict, sometimes it's just a string "ok" like in command responses.
         self.Result = resultObj
         self.SimpleResult = simpleResult
         self.ErrorCode = errorCode
         self.ErrorStr = errorStr
-        if self.Result is None and self.SimpleResult is None and self.ErrorCode == 0:
+        self.RawResponse = rawResponse
+        self.ResultWasSet = resultWasSet
+        if self.ResultWasSet is False and self.SimpleResult is None and self.ErrorCode == 0:
             raise Exception("JsonRpcResponse was created with no result, simple result, and no error code.")
         if self.ErrorCode == JsonRpcResponse.OE_ERROR_TIMEOUT:
             self.ErrorStr = "Timeout waiting for RPC response."
@@ -56,7 +58,7 @@ class JsonRpcResponse:
 
     # This must be checked first, if it returns True then GetResult can be called.
     def HasError(self) -> bool:
-        if self.ErrorCode != 0 or (self.Result is None and self.SimpleResult is None):
+        if self.ErrorCode != 0 or (self.ResultWasSet is False and self.SimpleResult is None):
             return True
         return False
 
@@ -68,8 +70,8 @@ class JsonRpcResponse:
 
 
     # This can only be called after HasError is false and IsSimpleResult is false.
-    def GetResult(self) -> Dict[str, Any]:
-        if self.Result is None:
+    def GetResult(self) -> Any:
+        if self.ResultWasSet is False:
             raise Exception("JsonRpcResponse GetResult was called when the result was None. HasError needs to be called first.")
         return self.Result
 
@@ -91,6 +93,27 @@ class JsonRpcResponse:
 
     def GetErrorStr(self) -> Optional[str]:
         return self.ErrorStr
+
+
+    def GetRawResponse(self) -> Optional[Dict[str, Any]]:
+        return self.RawResponse
+
+
+    def GetRawResponseOrResult(self) -> Any:
+        if self.RawResponse is not None:
+            return self.RawResponse
+        if self.IsSimpleResult():
+            return self.GetSimpleResult()
+        return self.GetResult()
+
+
+    def GetRawResponseOrError(self) -> Any:
+        if self.RawResponse is not None:
+            return self.RawResponse
+        return {
+            "Code": self.GetErrorCode(),
+            "Message": self.GetErrorStr()
+        }
 
 
     def GetLoggingErrorStr(self) -> str:
