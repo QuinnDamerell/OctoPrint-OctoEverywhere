@@ -240,6 +240,7 @@ class UploadBodyReadContext:
         self._onClose = onClose
         self._isClosed = False
 
+
     def GetData(self) -> BufferedReaderBytesOrNone:
         if self._isClosed:
             raise Exception("UploadBodyReadContext tried to get data after it was closed.")

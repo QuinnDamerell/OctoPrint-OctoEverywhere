@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import importlib.util
 import ftplib
 import json
@@ -697,8 +698,6 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(captured["method"], "POST")
         self.assertEqual(captured["fields"], {
             "path": "folder",
-            "select": "true",
-            "print": "true",
         })
         self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/a.gcode")
         self.assertEqual(response.ResultDict["PlatformPath"], "folder/a.gcode")
@@ -731,8 +730,6 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(captured["fields"], {
             "root": "gcodes",
             "path": "folder",
-            "print": "true",
-            "checksum": "abc123",
         })
         self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/a.gcode")
         self.assertEqual(response.ResultDict["PlatformPath"], "folder/a.gcode")
@@ -926,7 +923,6 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         ])
         cacheFile = next(f for f in fileNodes if f["VirtualPath"] == "gcode/cache/test.gcode.3mf")
         self.assertEqual(cacheFile["PlatformPath"], "cache/test.gcode.3mf")
-        self.assertEqual(cacheFile["FtpPath"], "cache/test.gcode.3mf")
         self.assertEqual(cacheFile["SizeBytes"], 3)
         self.assertTrue(all(c.Passive for c in ftpServer.Connections))
 
@@ -961,7 +957,7 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(deleteResponse.ResultDict["PlatformPath"], "cache/new file.gcode.3mf")
 
 
-    def test_bambu_file_upload_with_print_starts_project_file(self) -> None:
+    def test_bambu_file_upload_ignores_print_options(self) -> None:
         module = self._LoadBambuCommandHandlerModule()
         ftpServer = FakeBambuFtpServer()
         fakeClient = FakeBambuClientForCommands()
@@ -982,17 +978,9 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
             }, uploadBody)
 
         self.assertEqual(response.StatusCode, 200)
-        self.assertTrue(response.ResultDict["PrintStarted"])
         self.assertEqual(ftpServer.Files["folder/my file.gcode.3mf"], b"3mf bytes")
-        self.assertEqual(len(fakeClient.Commands), 1)
-        printPayload = fakeClient.Commands[0]["payload"]["print"]
-        self.assertEqual(printPayload["command"], "project_file")
-        self.assertEqual(printPayload["param"], "Metadata/plate_2.gcode")
-        self.assertEqual(printPayload["url"], "ftp:///folder/my%20file.gcode.3mf")
-        self.assertEqual(printPayload["subtask_name"], "my file")
-        self.assertTrue(printPayload["use_ams"])
-        self.assertEqual(printPayload["ams_mapping"], [0, -1])
-        self.assertTrue(printPayload["flow_cali"])
+        self.assertNotIn("PrintStarted", response.ResultDict)
+        self.assertEqual(fakeClient.Commands, [])
 
 
     def test_file_path_errors_are_short_and_actionable(self) -> None:

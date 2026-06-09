@@ -6,9 +6,9 @@ import os
 import ssl
 import tempfile
 from dataclasses import dataclass
-from typing import Any, BinaryIO, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, BinaryIO, Callable, Dict, Iterable, List, Optional, Tuple, Union, cast
 
-from octoeverywhere.WebStream.uploadbody import UploadBody
+from octoeverywhere.WebStream.uploadbody import UploadBody, BufferedReaderBytesOrNone
 
 
 @dataclass
@@ -81,7 +81,7 @@ class BambuFileManager:
 
     def DownloadFileToTemp(self, printerPath:str) -> Tuple[str, int]:
         printerPath = self._NormalizePrinterPath(printerPath)
-        tempFile = tempfile.NamedTemporaryFile(prefix="oe-bambu-download-", suffix=".tmp", mode="w+b", delete=False)
+        tempFile = tempfile.NamedTemporaryFile(prefix="oe-bambu-download-", suffix=".tmp", mode="w+b", delete=False) # pylint: disable=consider-using-with
         tempPath = tempFile.name
         success = False
         try:
@@ -195,7 +195,10 @@ class BambuFileManager:
             raise Exception("MLSD unavailable.")
 
         entries:List[_BambuFtpEntry] = []
-        iterable:Iterable[Tuple[str, Dict[str, str]]] = mlsd(path) if len(path) > 0 else mlsd()
+        rawIterable = mlsd(path) if len(path) > 0 else mlsd()
+        if not isinstance(rawIterable, Iterable):
+            raise Exception("MLSD returned a non-iterable response.")
+        iterable = cast(Iterable[Tuple[str, Dict[str, str]]], rawIterable)
         for name, facts in iterable:
             if name == "." or name == "..":
                 continue
@@ -276,8 +279,8 @@ class BambuFileManager:
                 sizeFunc = getattr(ftp, "size", None)
                 if not callable(sizeFunc):
                     return False
-                size = sizeFunc(printerPath)
-                return size is not None and int(size) == expectedSize
+                size = self._ParseInt(sizeFunc(printerPath))
+                return size is not None and size == expectedSize
             return bool(self._RunWithConnection(_size))
         except Exception:
             return False
@@ -300,10 +303,12 @@ class BambuFileManager:
         return path
 
 
-    def _AsBinaryReader(self, requestBody:Any) -> BinaryIO:
-        if hasattr(requestBody, "read"):
+    def _AsBinaryReader(self, requestBody:BufferedReaderBytesOrNone) -> BinaryIO:
+        if requestBody is None:
+            raise BambuFtpsError("Upload body was empty.", isInvalidPath=True)
+        if isinstance(requestBody, BinaryIO):
             return requestBody
-        return _BytesReader(bytes(requestBody))
+        return cast(BinaryIO, _BytesReader(bytes(requestBody)))
 
 
     def _JoinPrinterPath(self, parentPath:str, name:str) -> str:
@@ -373,7 +378,7 @@ class BambuFileManager:
 
     def _IsLikelyUploadShutdownTimeout(self, e:Exception) -> bool:
         msg = str(e).lower().strip()
-        return "read operation timed out" in msg or "ssl" in msg and "timed out" in msg
+        return "read operation timed out" in msg or ("ssl" in msg and "timed out" in msg)
 
 
     def _DeleteFileIfExists(self, filePath:Optional[str]) -> None:
@@ -445,7 +450,7 @@ class ImplicitFTP_TLS(ftplib.FTP_TLS):
 
     def ntransfercmd(self, cmd: str, rest:Optional[str]=None) -> Tuple[Any, Optional[int]]: #type: ignore[override]
         conn, size = ftplib.FTP.ntransfercmd(self, cmd, rest)
-        if self._prot_p:
+        if bool(getattr(self, "_prot_p", False)):
             session = None
             if isinstance(self.sock, ssl.SSLSocket):
                 session = self.sock.session
