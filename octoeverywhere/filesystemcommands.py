@@ -380,7 +380,7 @@ class FileSystemCommandHelper:
             "PlatformPath": platformPath,
             "SizeBytes": uploadSizeBytes,
         }
-        printerResponse = FileSystemCommandHelper._DecodeSuccessBody(bodyBytes)
+        printerResponse = FileSystemCommandHelper.DecodeSuccessBody(bodyBytes)
         if printerResponse is not None:
             result["PrinterResponse"] = printerResponse
         return CommandResponse.Success(result)
@@ -392,7 +392,7 @@ class FileSystemCommandHelper:
             "VirtualPath": parsedPath.FullPath(),
             "PlatformPath": platformPath,
         }
-        printerResponse = FileSystemCommandHelper._DecodeSuccessBody(bodyBytes)
+        printerResponse = FileSystemCommandHelper.DecodeSuccessBody(bodyBytes)
         if printerResponse is not None:
             result["PrinterResponse"] = printerResponse
         return CommandResponse.Success(result)
@@ -437,7 +437,7 @@ class FileSystemCommandHelper:
 
 
     @staticmethod
-    def _DecodeSuccessBody(bodyBytes:bytes) -> Optional[Any]:
+    def DecodeSuccessBody(bodyBytes:bytes) -> Optional[Any]:
         if bodyBytes is None or len(bodyBytes) == 0:
             return None
         bodyText = bodyBytes.decode("utf-8", errors="replace").strip()

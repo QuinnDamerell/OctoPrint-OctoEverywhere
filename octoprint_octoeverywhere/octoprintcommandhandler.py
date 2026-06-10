@@ -310,7 +310,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_StartCommand))
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_StartCommand, result.StatusCode, bodyBytes))
-            return FileSystemCommandHelper.BuildFileStartSuccess(parsedPath, platformPath, FileSystemCommandHelper._DecodeSuccessBody(bodyBytes))
+            return FileSystemCommandHelper.BuildFileStartSuccess(parsedPath, platformPath, FileSystemCommandHelper.DecodeSuccessBody(bodyBytes))
         finally:
             result.Free()
 
