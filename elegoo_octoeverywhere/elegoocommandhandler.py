@@ -186,6 +186,12 @@ class ElegooCommandHandler(IPlatformCommandHandler):
 
 
     # !! Platform Command Handler Interface Function !!
+    # Starts a print from a virtual file system path.
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo", CommandHandler.c_StartCommand))
+
+
+    # !! Platform Command Handler Interface Function !!
     # Sets the light state for the specified light type.
     def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
         if lightName != self.c_ChamberLightName:

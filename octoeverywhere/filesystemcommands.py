@@ -338,8 +338,10 @@ class FileSystemCommandHelper:
 
 
     @staticmethod
-    def UnsupportedPlatformError(platformName:str) -> str:
-        return f"File commands are unsupported on {platformName}. Use OctoPrint or Moonraker for files/list, files/upload, files/download, and files/delete."
+    def UnsupportedPlatformError(platformName:str, commandName:Optional[str]=None) -> str:
+        if commandName is not None:
+            return f"{commandName} is unsupported on {platformName} because this platform does not expose a compatible file start surface."
+        return f"File commands are unsupported on {platformName}. Use a platform with file system support for files/list, files/upload, files/download, and files/delete."
 
 
     @staticmethod
@@ -391,6 +393,17 @@ class FileSystemCommandHelper:
             "PlatformPath": platformPath,
         }
         printerResponse = FileSystemCommandHelper._DecodeSuccessBody(bodyBytes)
+        if printerResponse is not None:
+            result["PrinterResponse"] = printerResponse
+        return CommandResponse.Success(result)
+
+
+    @staticmethod
+    def BuildFileStartSuccess(parsedPath:VirtualFilePath, platformPath:str, printerResponse:Optional[Any]=None) -> CommandResponse:
+        result:Dict[str, Any] = {
+            "VirtualPath": parsedPath.FullPath(),
+            "PlatformPath": platformPath,
+        }
         if printerResponse is not None:
             result["PrinterResponse"] = printerResponse
         return CommandResponse.Success(result)

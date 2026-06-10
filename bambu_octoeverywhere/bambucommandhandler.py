@@ -1,13 +1,15 @@
+import json
 import logging
 import os
 from typing import Any, BinaryIO, Callable, Dict, Union, Optional, List
+from urllib.parse import quote
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper, VirtualFileSystemTree
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.printinfo import PrintInfoManager
-from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, IPlatformCommandHandler, ConnectionInfo
+from octoeverywhere.interfaces import FEATURE_LIGHT_CONTROL, FEATURE_PRINT_START, IPlatformCommandHandler, ConnectionInfo
 from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
 
@@ -247,7 +249,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
     # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
     def GetSupportedFeatureFlags(self) -> int:
         # These are all we support right now.
-        return 0 | FEATURE_LIGHT_CONTROL
+        return 0 | FEATURE_LIGHT_CONTROL | FEATURE_PRINT_START
 
 
     # !! Platform Command Handler Interface Function !!
@@ -292,6 +294,27 @@ class BambuCommandHandler(IPlatformCommandHandler):
             return CommandResponse.Success(None)
         else:
             return CommandResponse.Error(400, "Failed to send command to printer.")
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Starts a print from a virtual file system path.
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        payload = self._BuildStartPrintPayload(parsedPath.RelativePath, args)
+        result = BambuClient.Get().SendCommand(payload, timeoutSec=30.0, waitForResponse=True)
+        if result.HasError():
+            if result.Connected is False:
+                if BambuClient.Get().IsDisconnectDueToAuth():
+                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Bambu", CommandHandler.c_StartCommand))
+            if result.Timeout:
+                return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer while starting the print.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetLoggingErrorStr())
+
+        return FileSystemCommandHelper.BuildFileStartSuccess(parsedPath, parsedPath.RelativePath, result.Result)
 
 
     # !! Platform Command Handler Interface Function !!
@@ -530,6 +553,89 @@ class BambuCommandHandler(IPlatformCommandHandler):
             return int(str(value).strip())
         except Exception:
             return defaultValue
+
+
+    def _BuildStartPrintPayload(self, printerPath:str, args:Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        lowerPath = printerPath.lower()
+        if lowerPath.endswith(".3mf"):
+            return self._BuildProjectFileStartPayload(printerPath, args)
+        return {
+            "print": {
+                "sequence_id": "0",
+                "command": "gcode_file",
+                "param": printerPath,
+            }
+        }
+
+
+    def _BuildProjectFileStartPayload(self, printerPath:str, args:Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        plate = self._GetIntArg(args, 1, "Plate", "plate", "PlateIndex", "plateIndex", "plate_index")
+        if plate < 1:
+            plate = 1
+
+        fileName = printerPath
+        slash = fileName.rfind("/")
+        if slash != -1:
+            fileName = fileName[slash + 1:]
+        printObj:Dict[str, Any] = {
+            "sequence_id": "0",
+            "command": "project_file",
+            "param": f"Metadata/plate_{plate}.gcode",
+            "url": "ftp:///" + quote(printerPath, safe="/"),
+            "subtask_name": self._RemoveKnownBambuExtension(fileName),
+            "use_ams": self._GetBoolArg(args, True, "UseAms", "useAms", "use_ams"),
+            "flow_cali": self._GetBoolArg(args, True, "FlowCali", "flowCali", "flow_cali"),
+        }
+
+        amsMapping = self._GetAmsMappingArg(args)
+        if amsMapping is not None:
+            printObj["ams_mapping"] = amsMapping
+
+        self._AddOptionalBoolArg(printObj, args, "timelapse", "Timelapse", "timeLapse", "time_lapse")
+        self._AddOptionalBoolArg(printObj, args, "bed_levelling", "BedLeveling", "BedLevelling", "bedLeveling", "bedLevelling", "bed_leveling", "bed_levelling")
+        self._AddOptionalBoolArg(printObj, args, "vibration_cali", "VibrationCali", "vibrationCali", "vibration_cali")
+        self._AddOptionalBoolArg(printObj, args, "layer_inspect", "LayerInspect", "layerInspect", "layer_inspect")
+
+        return {
+            "print": printObj
+        }
+
+
+    def _AddOptionalBoolArg(self, target:Dict[str, Any], args:Optional[Dict[str, Any]], targetKey:str, *sourceKeys:str) -> None:
+        if args is None:
+            return
+        value = FileSystemCommandHelper.GetFirstArg(args, *sourceKeys)
+        if value is None:
+            return
+        target[targetKey] = self._GetBoolArg(args, False, *sourceKeys)
+
+
+    def _GetAmsMappingArg(self, args:Optional[Dict[str, Any]]) -> Optional[List[int]]:
+        if args is None:
+            return None
+        value = FileSystemCommandHelper.GetFirstArg(args, "AmsMapping", "amsMapping", "ams_mapping")
+        if value is None:
+            return None
+        if isinstance(value, str):
+            valueStr = value.strip()
+            if len(valueStr) == 0:
+                return None
+            if valueStr.startswith("["):
+                try:
+                    value = json.loads(valueStr)
+                except Exception:
+                    return None
+            else:
+                value = [v.strip() for v in valueStr.split(",")]
+        if not isinstance(value, list):
+            return None
+        mapping:List[int] = []
+        for item in value:
+            try:
+                mapping.append(int(item))
+            except Exception:
+                return None
+        return mapping
 
 
     def _RemoveKnownBambuExtension(self, fileName:str) -> str:

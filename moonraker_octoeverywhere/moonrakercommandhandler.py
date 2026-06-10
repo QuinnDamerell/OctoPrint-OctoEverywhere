@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath
 from octoeverywhere.httpresult import HttpResult
-from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL
+from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL, FEATURE_PRINT_START
 from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
@@ -209,7 +209,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
     def GetSupportedFeatureFlags(self) -> int:
         # These are all we support right now.
-        return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING | FEATURE_AXIS_MOVEMENT | FEATURE_EXTRUSION | FEATURE_TEMPERATURE_CONTROL
+        return 0 | FEATURE_LIGHT_CONTROL | FEATURE_HOMING | FEATURE_AXIS_MOVEMENT | FEATURE_EXTRUSION | FEATURE_TEMPERATURE_CONTROL | FEATURE_PRINT_START
 
 
     # !! Platform Command Handler Interface Function !!
@@ -294,6 +294,33 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             return CommandResponse.Error(400, "Invalid request response.")
 
         return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Starts a print from a virtual file system path.
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        platformPath = self._GetPlatformPath(parsedPath)
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.start", {
+            "filename": platformPath
+        }, timeoutSec=60.0)
+        if result.HasError():
+            code = result.GetErrorCode()
+            if code == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", CommandHandler.c_StartCommand))
+            if code == JsonRpcResponse.MR_401_UNAUTHORIZED or MoonrakerClient.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_StartCommand))
+            self.Logger.error("ExecuteStart failed to request start. "+result.GetLoggingErrorStr())
+            return CommandResponse.Error(400, result.GetErrorStr() or "Failed to request start")
+
+        if result.IsSimpleResult() and result.GetSimpleResult() != "ok":
+            self.Logger.error("ExecuteStart got an invalid request response. "+json.dumps(result.GetSimpleResult()))
+            return CommandResponse.Error(400, "Invalid request response.")
+
+        return FileSystemCommandHelper.BuildFileStartSuccess(parsedPath, platformPath, result.GetRawResponseOrResult())
 
 
     # !! Platform Command Handler Interface Function !!

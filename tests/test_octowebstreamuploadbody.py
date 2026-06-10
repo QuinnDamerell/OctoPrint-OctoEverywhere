@@ -20,7 +20,7 @@ from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadB
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.compression import CompressionContext
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder
-from octoeverywhere.interfaces import CommandResponse
+from octoeverywhere.interfaces import CommandResponse, FEATURE_PRINT_START
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.DataCompression import DataCompression
 from octoeverywhere.Proto.PathTypes import PathTypes
@@ -81,6 +81,15 @@ class FakeResponse:
         return None
 
 
+class FakeRequestsResponse:
+    def __init__(self, statusCode:int, content:bytes=b"", url:str="http://printer.local/test") -> None:
+        self.status_code = statusCode
+        self.content = content
+        self.text = content.decode("utf-8", errors="replace")
+        self.headers = {"Content-Length": str(len(content))}
+        self.url = url
+
+
 class RecordingSession:
     def __init__(self, responses) -> None:
         self.Responses = list(responses)
@@ -111,6 +120,7 @@ class RecordingSession:
 class FakeFileCommandPlatform:
     def __init__(self) -> None:
         self.Args = None
+        self.StartArgs = None
         self.UsedFileBackedUploadBody = False
         self.BodyBytes = b""
 
@@ -123,6 +133,13 @@ class FakeFileCommandPlatform:
         return CommandResponse.Success({
             "ok": True,
             "size": len(self.BodyBytes)
+        })
+
+
+    def ExecuteStart(self, args):
+        self.StartArgs = args
+        return CommandResponse.Success({
+            "started": True
         })
 
 
@@ -673,6 +690,146 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(platform.BodyBytes, payload)
 
 
+    def test_start_command_routes_virtual_path_to_platform(self) -> None:
+        platform = FakeFileCommandPlatform()
+        handler = CommandHandler(self.logger, None, platform, None)
+        context = FakeHttpInitialContext(CommandHandler.c_CommandHandlerPathPrefix + CommandHandler.c_StartCommand + "?path=gcode/folder/test.gcode")
+
+        result = handler.HandleCommand(context, None)
+
+        self.assertEqual(result.StatusCode, 200)
+        self.assertIsNotNone(result.FullBodyBuffer)
+        responseObj = json.loads(result.FullBodyBuffer.GetBytesLike().decode("utf-8"))
+        self.assertEqual(responseObj["Status"], 200)
+        self.assertTrue(responseObj["Result"]["started"])
+        self.assertEqual(platform.StartArgs["path"], "gcode/folder/test.gcode")
+
+
+    def test_print_start_feature_flag_matches_platform_support(self) -> None:
+        octoprintModule = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
+        moonrakerModule = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
+        prusaLinkModule = LoadPlatformCommandHandlerModule("prusalink_octoeverywhere", "prusalinkcommandhandler")
+        bambuModule = self._LoadBambuCommandHandlerModule()
+        elegooModule = LoadPlatformCommandHandlerModule("elegoo_octoeverywhere", "elegoocommandhandler")
+        elegooCc2Module = LoadPlatformCommandHandlerModule("elegoo_cc2_octoeverywhere", "elegoocc2commandhandler")
+
+        supportedHandlers = [
+            octoprintModule.OctoPrintCommandHandler(self.logger, None, None, None),
+            moonrakerModule.MoonrakerCommandHandler(self.logger, None),
+            prusaLinkModule.PrusaLinkCommandHandler(self.logger, None),
+            bambuModule.BambuCommandHandler(self.logger, None),
+        ]
+        unsupportedHandlers = [
+            elegooModule.ElegooCommandHandler(self.logger, None),
+            elegooCc2Module.ElegooCc2CommandHandler(self.logger, None),
+        ]
+
+        for platform in supportedHandlers:
+            self.assertNotEqual(platform.GetSupportedFeatureFlags() & FEATURE_PRINT_START, 0)
+        for platform in unsupportedHandlers:
+            self.assertEqual(platform.GetSupportedFeatureFlags() & FEATURE_PRINT_START, 0)
+
+
+    def test_octoprint_start_selects_and_prints_virtual_path(self) -> None:
+        module = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
+        handler = module.OctoPrintCommandHandler(self.logger, None, None, None)
+        handler._AddOctoPrintLocalAuth = lambda headers: None
+        captured = {}
+
+        def fakeMakeHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            captured["path"] = path
+            captured["method"] = method
+            captured["headers"] = dict(headers)
+            captured["body"] = bytes(body.GetBytesLike())
+            return FakeUploadHttpResult()
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeMakeHttpCall):
+            response = handler.ExecuteStart({"Path": "gcode/folder/a file.gcode"})
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(captured["path"], "/api/files/local/folder/a%20file.gcode")
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["headers"]["Content-Type"], "application/json")
+        self.assertEqual(json.loads(captured["body"].decode("utf-8")), {
+            "command": "select",
+            "print": True,
+        })
+        self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/a file.gcode")
+        self.assertEqual(response.ResultDict["PlatformPath"], "folder/a file.gcode")
+
+
+    def test_moonraker_start_uses_print_start_with_relative_gcodes_path(self) -> None:
+        module = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
+        handler = module.MoonrakerCommandHandler(self.logger, None)
+
+        class FakeMoonrakerClient:
+            def __init__(self) -> None:
+                self.Requests = []
+
+            def SendJsonRpcRequest(self, method, params, timeoutSec=None, waitForResponse=True):
+                self.Requests.append({
+                    "method": method,
+                    "params": params,
+                    "timeoutSec": timeoutSec,
+                    "waitForResponse": waitForResponse,
+                })
+                return module.JsonRpcResponse.FromSimpleSuccess("ok", {"result": "ok"})
+
+            def IsDisconnectDueToAuth(self) -> bool:
+                return False
+
+        fakeClient = FakeMoonrakerClient()
+        with patch.object(module.MoonrakerClient, "Get", return_value=fakeClient):
+            response = handler.ExecuteStart({"Path": "gcode/folder/a.gcode"})
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(fakeClient.Requests, [{
+            "method": "printer.print.start",
+            "params": {"filename": "folder/a.gcode"},
+            "timeoutSec": 60.0,
+            "waitForResponse": True,
+        }])
+        self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/a.gcode")
+        self.assertEqual(response.ResultDict["PlatformPath"], "folder/a.gcode")
+
+
+    def test_prusalink_start_posts_to_local_storage_file(self) -> None:
+        module = LoadPlatformCommandHandlerModule("prusalink_octoeverywhere", "prusalinkcommandhandler")
+        handler = module.PrusaLinkCommandHandler(self.logger, None)
+
+        class FakePrusaLinkClient:
+            def __init__(self) -> None:
+                self.Commands = []
+
+            def SendHttpCommand(self, method, path, headers, data, timeoutSec):
+                self.Commands.append({
+                    "method": method,
+                    "path": path,
+                    "headers": headers,
+                    "data": data,
+                    "timeoutSec": timeoutSec,
+                })
+                return FakeRequestsResponse(204, url="http://printer.local" + path)
+
+            def IsDisconnectDueToAuth(self) -> bool:
+                return False
+
+        fakeClient = FakePrusaLinkClient()
+        with patch.object(module.PrusaLinkClient, "Get", return_value=fakeClient):
+            response = handler.ExecuteStart({"Path": "gcode/folder/a file.gcode"})
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(fakeClient.Commands, [{
+            "method": "POST",
+            "path": "/api/v1/files/local/folder/a%20file.gcode",
+            "headers": {},
+            "data": None,
+            "timeoutSec": 60.0,
+        }])
+        self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/a file.gcode")
+        self.assertEqual(response.ResultDict["PlatformPath"], "local/folder/a file.gcode")
+
+
     def test_octoprint_file_upload_forwards_backend_options(self) -> None:
         module = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
         handler = module.OctoPrintCommandHandler(self.logger, None, None, None)
@@ -1069,6 +1226,34 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(ftpServer.Files["folder/my file.gcode.3mf"], b"3mf bytes")
         self.assertNotIn("PrintStarted", response.ResultDict)
         self.assertEqual(fakeClient.Commands, [])
+
+
+    def test_bambu_start_uses_project_file_payload_for_3mf_virtual_path(self) -> None:
+        module = self._LoadBambuCommandHandlerModule()
+        fakeClient = FakeBambuClientForCommands()
+        handler = module.BambuCommandHandler(self.logger, None)
+
+        with patch.object(module.BambuClient, "Get", return_value=fakeClient):
+            response = handler.ExecuteStart({
+                "Path": "gcode/folder/my file.gcode.3mf",
+                "Plate": "2",
+                "UseAms": "true",
+                "AmsMapping": "[0, -1]",
+                "FlowCali": "true",
+            })
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/my file.gcode.3mf")
+        self.assertEqual(response.ResultDict["PlatformPath"], "folder/my file.gcode.3mf")
+        self.assertEqual(len(fakeClient.Commands), 1)
+        printPayload = fakeClient.Commands[0]["payload"]["print"]
+        self.assertEqual(printPayload["command"], "project_file")
+        self.assertEqual(printPayload["param"], "Metadata/plate_2.gcode")
+        self.assertEqual(printPayload["url"], "ftp:///folder/my%20file.gcode.3mf")
+        self.assertEqual(printPayload["subtask_name"], "my file")
+        self.assertTrue(printPayload["use_ams"])
+        self.assertEqual(printPayload["ams_mapping"], [0, -1])
+        self.assertTrue(printPayload["flow_cali"])
 
 
     def test_bambu_send_command_echo_is_symmetric_and_carries_response_payload(self) -> None:

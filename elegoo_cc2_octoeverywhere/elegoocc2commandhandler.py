@@ -146,6 +146,10 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         return CommandResponse.Success(None)
 
 
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2", CommandHandler.c_StartCommand))
+
+
     def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
         if lightName != self.c_ChamberLightName:
             return CommandResponse.Error(400, f"Unknown light name: {lightName}")

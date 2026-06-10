@@ -11,7 +11,7 @@ from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSyste
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.interfaces import IPlatformCommandHandler, IOctoPrintPlugin, ConnectionInfo
+from octoeverywhere.interfaces import FEATURE_PRINT_START, IPlatformCommandHandler, IOctoPrintPlugin, ConnectionInfo
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
 from octoeverywhere.localip import LocalIpHelper
@@ -178,8 +178,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # !! Platform Command Handler Interface Function !!
     # Returns an int with the supported feature flags for this platform, such as FEATURE_LIGHT_CONTROL, etc
     def GetSupportedFeatureFlags(self) -> int:
-        # We don't support any extra features right now.
-        return 0
+        return 0 | FEATURE_PRINT_START
 
 
     # !! Platform Command Handler Interface Function !!
@@ -270,6 +269,50 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
         # Return success.
         return CommandResponse.Success(None)
+
+
+    # !! Platform Command Handler Interface Function !!
+    # Starts a print from a virtual file system path.
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        headers:Dict[str, str] = {
+            "Content-Type": "application/json",
+        }
+        self._AddOctoPrintLocalAuth(headers)
+        platformPath = self._GetPlatformPath(parsedPath)
+        startPath = "/api/files/local/" + FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        body = Buffer(json.dumps({
+            "command": "select",
+            "print": True,
+        }).encode("utf-8"))
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            startPath,
+            OctoHttpRequest.GetPathType(startPath),
+            "POST",
+            headers,
+            body,
+            allowRedirects=False,
+            timeoutSec=60.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", CommandHandler.c_StartCommand))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_StartCommand))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_StartCommand, result.StatusCode, bodyBytes))
+            return FileSystemCommandHelper.BuildFileStartSuccess(parsedPath, platformPath, FileSystemCommandHelper._DecodeSuccessBody(bodyBytes))
+        finally:
+            result.Free()
 
 
     # !! Platform Command Handler Interface Function !!

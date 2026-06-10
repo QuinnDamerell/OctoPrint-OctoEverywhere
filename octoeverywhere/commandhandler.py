@@ -100,6 +100,9 @@ class CommandHandler:
     # This is a special command that allows the a websocket to be created to proxy MQTT messages.
     c_MqttWebsocketProxyCommand = "proxy/mqtt"
 
+    # Starts a print from a file identified by the virtual file system path.
+    c_StartCommand = "start"
+
     # File system commands that have some special body logic.
     c_FilesListCommand = "files/list"
     c_FilesUploadCommand = "files/upload"
@@ -211,6 +214,8 @@ class CommandHandler:
             return self.Resume()
         elif commandPathLower.startswith("cancel"):
             return self.Cancel()
+        elif commandPathLower.startswith(CommandHandler.c_StartCommand):
+            return self.Start(jsonObj_CanBeNone)
         elif commandPathLower.startswith("set-light"):
             return self.SetLight(jsonObj_CanBeNone)
         elif commandPathLower.startswith("move-axis"):
@@ -521,6 +526,12 @@ class CommandHandler:
 
     def Cancel(self) -> CommandResponse:
         return self.PlatformCommandHandler.ExecuteCancel()
+
+
+    def Start(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        if self.PlatformCommandHandler is None:
+            return CommandResponse.Error(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_StartCommand))
+        return self.PlatformCommandHandler.ExecuteStart(jsonObjData)
 
 
     # Must return a CommandResponse

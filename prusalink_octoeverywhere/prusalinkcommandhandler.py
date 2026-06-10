@@ -1,10 +1,10 @@
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper
 from octoeverywhere.httpresult import HttpResult
-from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo
+from octoeverywhere.interfaces import FEATURE_PRINT_START, IPlatformCommandHandler, ConnectionInfo
 from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
 
@@ -100,7 +100,7 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
 
     def GetSupportedFeatureFlags(self) -> int:
-        return 0
+        return 0 | FEATURE_PRINT_START
 
 
     def GetConnectionInfo(self) -> ConnectionInfo:
@@ -136,6 +136,35 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
         if PrusaLinkClient.Get().SendCancel():
             return CommandResponse.Success(None)
         return CommandResponse.Error(400, "Failed to send cancel command to printer.")
+
+
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        storage, storageError = self._GetStartStorage(args)
+        if storageError is not None or storage is None:
+            return CommandResponse.Error(400, storageError)
+
+        platformPath = storage + "/" + parsedPath.RelativePath
+        startPath = "/api/v1/files/" + FileSystemCommandHelper.EncodeRelativePathForUrl(storage) + "/" + FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        try:
+            response = PrusaLinkClient.Get().SendHttpCommand("POST", startPath, {}, None, 60.0)
+        except Exception as e:
+            self.Logger.warning("PrusaLink start request failed. %s", e)
+            if PrusaLinkClient.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("PrusaLink", CommandHandler.c_StartCommand))
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("PrusaLink", CommandHandler.c_StartCommand))
+
+        bodyBytes = response.content if response.content is not None else b""
+        if response.status_code == 401 or response.status_code == 403:
+            return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("PrusaLink", CommandHandler.c_StartCommand))
+        if response.status_code == 409:
+            return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, FileSystemCommandHelper.BackendHttpError("PrusaLink", CommandHandler.c_StartCommand, response.status_code, bodyBytes))
+        if response.status_code < 200 or response.status_code >= 300:
+            return CommandResponse.Error(response.status_code, FileSystemCommandHelper.BackendHttpError("PrusaLink", CommandHandler.c_StartCommand, response.status_code, bodyBytes))
+        return FileSystemCommandHelper.BuildFileStartSuccess(parsedPath, platformPath, self._BuildHttpResponse(response))
 
 
     def ExecuteSetLight(self, lightName:str, on:bool) -> CommandResponse:
@@ -202,6 +231,22 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("PrusaLink"))
+
+
+    def _GetStartStorage(self, args:Optional[Dict[str, Any]]) -> Tuple[Optional[str], Optional[str]]:
+        storage = "local"
+        if args is not None:
+            value = FileSystemCommandHelper.GetFirstArg(args, "Storage", "storage")
+            if value is not None:
+                storage = str(value)
+
+        storage = storage.replace("\\", "/").strip().strip("/")
+        if len(storage) == 0:
+            return (None, "Invalid storage. Use a non-empty PrusaLink storage name such as 'local'.")
+        for part in storage.split("/"):
+            if len(part) == 0 or part == "." or part == "..":
+                return (None, "Invalid storage. Use a PrusaLink storage name without '.', '..', or empty segments.")
+        return (storage, None)
 
 
     def _BuildHttpResponse(self, response:Any) -> Dict[str, Any]:

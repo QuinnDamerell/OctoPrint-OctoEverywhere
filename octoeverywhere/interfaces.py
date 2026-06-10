@@ -194,6 +194,7 @@ FEATURE_AXIS_MOVEMENT = 1 << 1
 FEATURE_HOMING        = 1 << 2
 FEATURE_EXTRUSION     = 1 << 3
 FEATURE_TEMPERATURE_CONTROL = 1 << 4
+FEATURE_PRINT_START   = 1 << 5
 
 
 class ConnectionInfo():
@@ -260,6 +261,11 @@ class IPlatformCommandHandler(ABC):
     # If not, it must return the correct two error codes accordingly.
     @abstractmethod
     def ExecuteCancel(self) -> CommandResponse:
+        pass
+
+    # Starts printing the file identified by the command system's virtual file path.
+    @abstractmethod
+    def ExecuteStart(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         pass
 
     # Sets the light state for the specified light type.
