@@ -1103,7 +1103,9 @@ class NotificationsHandler(INotificationHandler):
     # Returns True on success, otherwise False
     def _sendEvent(self, event:str, args:Optional[Dict[str,str]]=None, progressOverwriteFloat:Optional[float]=None, useFinalSnapSnapshot=False):
         # Push the work off to a thread so we don't hang OctoPrint's plugin callbacks.
-        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ), name="NotificationsHandler._sendEvent")
+        # This must be a daemon thread, since the retry logic can sleep for many minutes and would
+        # otherwise hold the process open on shutdown.
+        thread = threading.Thread(target=self._sendEventThreadWorker, args=(event, args, progressOverwriteFloat, useFinalSnapSnapshot, ), name="NotificationsHandler._sendEvent", daemon=True)
         thread.start()
         return True
 

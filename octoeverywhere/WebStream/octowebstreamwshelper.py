@@ -61,6 +61,9 @@ class OctoWebStreamWsHelper:
         # These are important for when we try to send a message.
         self.IsWsObjOpened = False
         self.IsWsObjClosed = False
+        # Set whenever the websocket opens, closes, or this webstream is closed, so threads waiting
+        # on the websocket to be ready wake up right away instead of polling.
+        self.WsOpenOrClosedEvent = threading.Event()
 
         # Capture the initial http context
         context = webStreamOpenMsg.HttpInitialContext()
@@ -285,6 +288,9 @@ class OctoWebStreamWsHelper:
             # We must capture this in the same lock as self.IsClosed
             wsToClose = self.Ws
 
+        # Wake up anything waiting on the websocket to open, since we are now closed it never will.
+        self.WsOpenOrClosedEvent.set()
+
         self.Logger.info(self.getLogMsgPrefix()+"websocket closed after " +str(time.time() - self.OpenedTime) + " seconds")
 
         # This close is called by the main websocket thread for the entire connection and thus it can't be blocked or hang.
@@ -324,9 +330,10 @@ class OctoWebStreamWsHelper:
             if self.IsWsObjClosed is True or self.IsClosed:
                 return True
 
-            # Sleep for a bit to wait for the socket open. The socket will open super quickly (5-10ms), so don't delay long.
-            # Sleep for 5ms.
-            time.sleep(0.005)
+            # Wait on the event, which is set when the websocket opens or closes, so we wake up instantly.
+            # The timeout is just a safety net so we re-check the flags, since connection retry attempts can
+            # swap the websocket object without signaling this event.
+            self.WsOpenOrClosedEvent.wait(0.25)
 
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
         # exist, we need to check for it.
@@ -443,14 +450,18 @@ class OctoWebStreamWsHelper:
                 originalDataSize = len(buffer)
                 compressionResult = Compression.Get().Compress(self.CompressionContext, buffer)
                 compressedSize = len(compressionResult.Bytes)
+                # IMPORTANT - For zstandard, the compression context is one continuous stream shared by every compressed
+                # message sent on this websocket. Once data has been run through the compressor, the compressed output MUST
+                # be sent, otherwise the server's streaming decompressor will lose sync and all future compressed messages
+                # on this stream will be corrupted. So we always send what we compressed, and only use the efficiency stats
+                # to decide if we should stop compressing FUTURE messages (which is safe, they just bypass the stream).
+                buffer = compressionResult.Bytes
 
-                # If compression doesn't reduce size enough, don't use it.
-                minCompressedSizeThreshold = int(float(originalDataSize) * (1.0 - self.c_BinaryCompressionMinSavingsRatio))
-                if compressedSize >= minCompressedSizeThreshold:
-                    compressionResult = None
-
-                    # Binary payloads are often already compressed. Disable future attempts for this stream.
-                    if sendType == WebSocketDataTypes.WebSocketDataTypes.Binary:
+                # Binary payloads are often already compressed (video, images). If compression isn't helping, disable
+                # future attempts for this stream so we stop wasting CPU on it.
+                if sendType == WebSocketDataTypes.WebSocketDataTypes.Binary:
+                    minCompressedSizeThreshold = int(float(originalDataSize) * (1.0 - self.c_BinaryCompressionMinSavingsRatio))
+                    if compressedSize >= minCompressedSizeThreshold:
                         self.BinaryCompressionInefficientCount += 1
                         if self.BinaryCompressionInefficientCount >= self.c_BinaryCompressionDisableAfterCount:
                             self.DisableBinaryCompression = True
@@ -458,10 +469,8 @@ class OctoWebStreamWsHelper:
                                 "%sbinary compression disabled for this stream after repeated inefficient results.",
                                 self.getLogMsgPrefix(),
                             )
-                else:
-                    if sendType == WebSocketDataTypes.WebSocketDataTypes.Binary:
+                    else:
                         self.BinaryCompressionInefficientCount = 0
-                    buffer = compressionResult.Bytes
 
             # Send the message along!
             builder = OctoStreamMsgBuilder.CreateBuffer(len(buffer) + 200)
@@ -498,6 +507,7 @@ class OctoWebStreamWsHelper:
 
         # Indicate the socket is closed.
         self.IsWsObjClosed = True
+        self.WsOpenOrClosedEvent.set()
 
         # Make sure the stream is closed.
         self.WebStream.Close()
@@ -544,6 +554,7 @@ class OctoWebStreamWsHelper:
         self.IsWsObjClosed = False
         self.IsWsObjOpened = True
         self.SuccessfullyOpenedSocket = True
+        self.WsOpenOrClosedEvent.set()
         self.Logger.info(self.getLogMsgPrefix()+"opened, attempt "+str(self.ConnectionAttempt) + " after " +str(time.time() - self.OpenedTime) + " seconds")
 
 

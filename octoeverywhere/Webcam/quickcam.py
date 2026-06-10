@@ -739,7 +739,7 @@ class QuickCam_RTSP:
         self.PipeSelect.register(stdout, selectors.EVENT_READ)
 
         # Since we setup the stderr pipe, we must read from it. If it fills it's buffer it will block the ffmpeg process.
-        self.ErrorReaderThread = threading.Thread(target=self._ErrorReader)
+        self.ErrorReaderThread = threading.Thread(target=self._ErrorReader, name="QuickCamRtspErrorReader", daemon=True)
         self.ErrorReaderThread.start()
 
         if QuickCam_RTSP.c_DebugLogging:
@@ -891,7 +891,13 @@ class QuickCam_RTSP:
                                 self.StdErrBuffer = self.StdErrBuffer[-100000:] #pyright: ignore[reportUnknownMemberType]
 
             except Exception as e:
-                Sentry.OnException("RTSP error reader thread failed.", e)
+                # Only report if we are still supposed to be running, since tearing down the process will
+                # make the pipe reads and selector registration throw.
+                if self.ErrorReaderThreadRunning:
+                    Sentry.OnException("RTSP error reader thread failed.", e)
+                # If the pipe is broken (like the process died) the loop will throw instantly on every pass,
+                # so we must sleep to prevent spinning at full CPU until the thread is asked to stop.
+                time.sleep(1)
 
 
     # Checks if the buffer is only one image, from start to end.

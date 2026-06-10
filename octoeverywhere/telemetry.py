@@ -27,7 +27,8 @@ class Telemetry:
     # Example: Telemetry.Write("Test", 1, { "FieldKey":"FieldValue", "FieldKey2":1.5 }, { "TagKey":"TagValue" })
     @staticmethod
     def Write(measureStr:str, valueInt:Optional[int]=None, fieldsOpt:Optional[Dict[str,Any]]=None, tagsOpt:Optional[Dict[str,str]]=None):
-        thread = threading.Thread(target=Telemetry._WriteSync, args=(measureStr, valueInt, fieldsOpt, tagsOpt, ))
+        # Daemon, since this is fire-and-forget and shouldn't hold the process open on shutdown.
+        thread = threading.Thread(target=Telemetry._WriteSync, args=(measureStr, valueInt, fieldsOpt, tagsOpt, ), name="TelemetryWrite", daemon=True)
         thread.start()
 
 

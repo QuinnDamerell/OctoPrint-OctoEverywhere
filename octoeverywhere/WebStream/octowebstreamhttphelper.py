@@ -1109,12 +1109,12 @@ class OctoWebStreamHttpHelper:
             # Note if this spins multiple times, it will be zeroed out. That would mean there's a more than 1s gap in reading.
             if isFirstIncrement is False and self.MultipartReadsPerSecond == 0:
                 self.Logger.warning("Multipart read per second stats hit a period where 0 reads happened for more than second.")
-            self.MultipartReadsPerSecond = self.MissingBoundaryWarningCounter
-            self.MissingBoundaryWarningCounter = 0
+            self.MultipartReadsPerSecond = self.MultipartReadsPerSecondCounter
+            self.MultipartReadsPerSecondCounter = 0
             isFirstIncrement = False
 
         # Now increment our counter, to account for the frame we just processed.
-        self.MissingBoundaryWarningCounter += 1
+        self.MultipartReadsPerSecondCounter += 1
 
 
     # Ensures the temp body buffer is sized correctly and returns it.

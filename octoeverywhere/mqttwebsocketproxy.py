@@ -88,7 +88,7 @@ class MqttWebsocketProxy(IWebSocketClient):
         if self.IsClosed:
             raise Exception(f"{self._GetLogMsgStart()} Can't run async, already closed.")
         # Start the main async thread.
-        self.MainThread = threading.Thread(target=self._RunThread, name="MqttWebsocketProxy")
+        self.MainThread = threading.Thread(target=self._RunThread, name="MqttWebsocketProxy", daemon=True)
         self.MainThread.start()
 
 
@@ -150,7 +150,7 @@ class MqttWebsocketProxy(IWebSocketClient):
                 except Exception as e:
                     self.Logger.error(f"{self._GetLogMsgStart()}  Error in _onWsClose callback: {e}")
             self.Logger.debug("%s close complete.", self._GetLogMsgStart())
-        threading.Thread(target=closeThread, name="MqttWebsocketProxyClose").start()
+        threading.Thread(target=closeThread, name="MqttWebsocketProxyClose", daemon=True).start()
 
 
     # Ensures if we have a client, it's fully disconnected.

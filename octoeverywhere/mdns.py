@@ -308,7 +308,8 @@ class MDns:
     # Starts a thread to update the domain in the cache async.
     def TryToUpdateCacheAsync(self, domain:str):
         # Spin off a thread to try to resolve the dns and update the cache.
-        workerThread = threading.Thread(target=self.TryToUpdateCacheAsync_Thread, args=(domain,))
+        # Daemon, since this is a best effort cache update and shouldn't hold the process open on shutdown.
+        workerThread = threading.Thread(target=self.TryToUpdateCacheAsync_Thread, args=(domain,), name="MDnsCacheUpdate", daemon=True)
         workerThread.start()
 
 

@@ -58,8 +58,10 @@ class PingPong:
             self._ResetStats()
 
         # Start a new thread to do the occasional work.
+        # This must be a daemon thread, since it sleeps for up to ~50 hours between work and would
+        # otherwise prevent the process from ever exiting.
         try:
-            th = threading.Thread(target=self._WorkerThread)
+            th = threading.Thread(target=self._WorkerThread, name="PingPongWorker", daemon=True)
             th.start()
         except Exception as e:
             Sentry.OnException("Failed to start PingPong Thread.", e)
