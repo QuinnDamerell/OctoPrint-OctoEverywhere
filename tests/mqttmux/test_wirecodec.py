@@ -351,5 +351,28 @@ class TestUtf8(unittest.TestCase):
             d.FeedBytes(packet)
 
 
+class TestSpecComplianceRules(unittest.TestCase):
+
+    def test_publish_with_empty_topic_is_malformed(self):
+        # §4.7.3 [MQTT-4.7.3-1]: all topic names must be at least one character long.
+        data = EncodePacket(PublishPacket(topic="", payload=b"x", qos=0))
+        d = MqttPacketDecoder()
+        with self.assertRaises(MalformedPacketException):
+            d.FeedBytes(data)
+
+    def test_connack_with_nonzero_return_code_forces_session_present_false(self):
+        # §3.2.2.2 [MQTT-3.2.2-4]: a CONNACK with a non-zero return code must
+        # carry session-present = 0, even if the caller got it wrong.
+        pkt = _decode_one(EncodePacket(ConnAckPacket(session_present=True, return_code=5)))
+        self.assertIsInstance(pkt, ConnAckPacket)
+        self.assertFalse(pkt.session_present)
+        self.assertEqual(pkt.return_code, 5)
+
+    def test_connack_with_zero_return_code_keeps_session_present(self):
+        pkt = _decode_one(EncodePacket(ConnAckPacket(session_present=True, return_code=0)))
+        self.assertIsInstance(pkt, ConnAckPacket)
+        self.assertTrue(pkt.session_present)
+
+
 if __name__ == "__main__":
     unittest.main()

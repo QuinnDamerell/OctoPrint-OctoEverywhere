@@ -411,6 +411,67 @@ class TestPublishFlow(unittest.TestCase):
         self.assertTrue(self.wc.transport_closed)
 
 
+class TestQosAckOrdering(unittest.TestCase):
+    # MQTT 3.1.1 §4.6: PUBACK [MQTT-4.6.0-2] and PUBREC [MQTT-4.6.0-3] must be
+    # sent in the order the corresponding PUBLISHes were received, and the
+    # messages must be forwarded upstream in the order they arrived.
+
+    def setUp(self):
+        self.fake = FakePahoClient()
+        self.mux = _make_mux(self.fake)
+        self.mux.Start()
+        _wait_until(lambda: self.fake.connect_called)
+        self.fake.FireConnect(0)
+        self.wc = _InMemoryWireClient(self.mux)
+        self.wc.FeedBytes(EncodePacket(ConnectPacket(client_id="c", keep_alive=0)))
+        self.wc.out_bytes.clear()
+
+    def tearDown(self):
+        self.mux.Shutdown()
+
+    def test_qos1_pubacks_sent_in_publish_order(self):
+        # Make upstream publishes require manual completion so the first stays
+        # in flight while the later PUBLISHes arrive.
+        self.fake.publish_auto_complete = False
+        for pid in (11, 12, 13):
+            self.wc.FeedBytes(EncodePacket(PublishPacket(topic="t", payload=b"x", qos=1, packet_id=pid)))
+        # The single ordered worker must not start the second upstream publish
+        # until the first completes.
+        _wait_until(lambda: len(self.fake.publishes) >= 1)
+        time.sleep(0.05)
+        self.assertEqual(len(self.fake.publishes), 1)
+        # Complete the upstream handshakes one at a time.
+        self.fake.publish_infos[0].Complete()
+        _wait_until(lambda: len(self.fake.publishes) >= 2)
+        self.fake.publish_infos[1].Complete()
+        _wait_until(lambda: len(self.fake.publishes) >= 3)
+        self.fake.publish_infos[2].Complete()
+        _wait_until(lambda: len(self.wc.OutboundPackets()) >= 3)
+        packets = self.wc.OutboundPackets()
+        self.assertEqual(len(packets), 3)
+        for p in packets:
+            self.assertIsInstance(p, PubAckPacket)
+        self.assertEqual([p.packet_id for p in packets], [11, 12, 13])
+        # And the upstream saw the messages in arrival order.
+        self.assertEqual([p[1] for p in self.fake.publishes], [b"x", b"x", b"x"])
+
+    def test_mixed_qos1_qos2_acks_sent_in_publish_order(self):
+        self.fake.publish_auto_complete = False
+        self.wc.FeedBytes(EncodePacket(PublishPacket(topic="t", payload=b"a", qos=1, packet_id=21)))
+        self.wc.FeedBytes(EncodePacket(PublishPacket(topic="t", payload=b"b", qos=2, packet_id=22)))
+        _wait_until(lambda: len(self.fake.publishes) >= 1)
+        self.fake.publish_infos[0].Complete()
+        _wait_until(lambda: len(self.fake.publishes) >= 2)
+        self.fake.publish_infos[1].Complete()
+        _wait_until(lambda: len(self.wc.OutboundPackets()) >= 2)
+        packets = self.wc.OutboundPackets()
+        self.assertEqual(len(packets), 2)
+        self.assertIsInstance(packets[0], PubAckPacket)
+        self.assertEqual(packets[0].packet_id, 21)
+        self.assertIsInstance(packets[1], PubRecPacket)
+        self.assertEqual(packets[1].packet_id, 22)
+
+
 class TestUpstreamDisconnectClosesPeer(unittest.TestCase):
 
     def test_upstream_disconnect_closes_wire(self):

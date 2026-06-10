@@ -323,7 +323,10 @@ def _EncodeConnect(p: ConnectPacket) -> bytes:
 
 
 def _EncodeConnAck(p: ConnAckPacket) -> bytes:
-    body = bytes([0x01 if p.session_present else 0x00, p.return_code & 0xFF])
+    # §3.2.2.2 [MQTT-3.2.2-4]: a CONNACK with a non-zero return code must have
+    # session-present set to 0. Enforce it here so no caller can get it wrong.
+    session_present = p.session_present and p.return_code == 0
+    body = bytes([0x01 if session_present else 0x00, p.return_code & 0xFF])
     return _FixedHeader(PacketType.CONNACK, 0, len(body)) + body
 
 
@@ -605,6 +608,9 @@ def _DecodePublish(flags: int, body: bytes, protocol_level: int) -> PublishPacke
         raise MalformedPacketException("PUBLISH DUP must be 0 for QoS 0")
     pos = 0
     topic, pos = _DecodeString(body, pos)
+    if len(topic) == 0:
+        # §4.7.3 [MQTT-4.7.3-1]: all topic names must be at least one character long.
+        raise MalformedPacketException("PUBLISH topic must not be empty")
     if "+" in topic or "#" in topic:
         raise MalformedPacketException("PUBLISH topic must not contain wildcards")
     packet_id: Optional[int] = None

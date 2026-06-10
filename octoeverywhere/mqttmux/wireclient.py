@@ -67,8 +67,12 @@ from .wirecodec import (
 # Both eventually call self._SendBytes() which subclass implements with its
 # own per-connection write lock.
 #
-# Per-PUBLISH QoS>0 from peer is offloaded to a small worker thread per
-# message so the reader stays responsive while waiting on upstream paho.
+# QoS>0 PUBLISHes from the peer are processed on the same ordered control
+# worker as SUBSCRIBE/UNSUBSCRIBE. This keeps the reader responsive while
+# waiting on upstream paho acks, while still satisfying MQTT 3.1.1 §4.6:
+# PUBACK/PUBREC must be sent in the order the corresponding PUBLISHes were
+# received ([MQTT-4.6.0-2], [MQTT-4.6.0-3]), and messages must be forwarded
+# in order. A single FIFO worker guarantees both.
 class WireVirtualClient(IVirtualClient):
     _client_id_registry_lock = threading.Lock()
     _client_id_registry: Dict[Tuple[int, str], "WireVirtualClient"] = {}
@@ -132,10 +136,11 @@ class WireVirtualClient(IVirtualClient):
         self._keepalive_thread: Optional[threading.Thread] = None
         self._keepalive_stop = threading.Event()
 
-        # SUBSCRIBE and UNSUBSCRIBE are processed on one ordered control
-        # worker. They can block on upstream SUBACK/UNSUBACK, so they stay off
-        # the reader thread, but MQTT requires the server to process them in
-        # packet order for a single client session.
+        # SUBSCRIBE, UNSUBSCRIBE, and QoS>0 PUBLISH are processed on one
+        # ordered control worker. They can block on upstream acks, so they
+        # stay off the reader thread, but MQTT requires the server to process
+        # them in packet order for a single client session and to emit
+        # PUBACK/PUBREC in the order the PUBLISHes arrived (§4.6).
         self._control_queue: "queue.Queue[Tuple[str, int, Any]]" = queue.Queue()
         self._control_worker_lock = threading.Lock()
         self._control_worker_thread: Optional[threading.Thread] = None
@@ -429,6 +434,12 @@ class WireVirtualClient(IVirtualClient):
                     self._WorkerSubscribe(packet_id, payload)
                 elif op == "unsub":
                     self._WorkerUnsubscribe(packet_id, payload)
+                elif op == "pub1":
+                    topic, body, retain = payload
+                    self._WorkerPublishQos1(packet_id, topic, body, retain)
+                elif op == "pub2":
+                    topic, body, retain = payload
+                    self._WorkerPublishQos2(packet_id, topic, body, retain)
                 else:
                     self._logger.warning("WireVirtualClient[%s] unknown control op=%s",
                                          self._peer_label, op)
@@ -454,12 +465,11 @@ class WireVirtualClient(IVirtualClient):
             raise ProtocolError("PUBLISH with QoS > 0 must have a packet identifier")
         pid: int = pkt.packet_id
         if pkt.qos == 1:
-            # Spawn a worker so the reader doesn't block on the upstream PUBACK.
-            threading.Thread(
-                target=self._WorkerPublishQos1,
-                args=(pid, pkt.topic, pkt.payload, pkt.retain),
-                name=f"mqttmux-pub1[{self._peer_label}]", daemon=True,
-            ).start()
+            # Queue on the ordered control worker so the reader doesn't block on the
+            # upstream PUBACK. Per MQTT 3.1.1 §4.6 [MQTT-4.6.0-2] the PUBACKs we send
+            # must be in the order the PUBLISHes were received, and the messages must
+            # be forwarded upstream in order - the single FIFO worker guarantees both.
+            self._EnqueueControlOp("pub1", pid, (pkt.topic, pkt.payload, pkt.retain))
             return
         # QoS 2 (MQTT 3.1.1 §4.3.3): PUBREC MUST go out as the response to
         # a PUBLISH only after we have accepted ownership. We treat a
@@ -472,24 +482,22 @@ class WireVirtualClient(IVirtualClient):
             existing_state = self._inbound_qos2.get(pid)
             if existing_state == self._QOS2_AWAIT_PUBREL:
                 send_pubrec = True
-                spawn_worker = False
+                enqueue_work = False
             elif existing_state == self._QOS2_PUBLISHING:
                 send_pubrec = False
-                spawn_worker = False
+                enqueue_work = False
             else:
                 self._inbound_qos2[pid] = self._QOS2_PUBLISHING
                 send_pubrec = False
-                spawn_worker = True
+                enqueue_work = True
         if send_pubrec:
             self._SendPacket(PubRecPacket(packet_id=pid))
             return
-        if not spawn_worker:
+        if not enqueue_work:
             return
-        threading.Thread(
-            target=self._WorkerPublishQos2,
-            args=(pid, pkt.topic, pkt.payload, pkt.retain),
-            name=f"mqttmux-pub2[{self._peer_label}]", daemon=True,
-        ).start()
+        # Queue on the ordered control worker, like QoS 1. [MQTT-4.6.0-3] requires
+        # PUBRECs in the order the corresponding PUBLISHes were received.
+        self._EnqueueControlOp("pub2", pid, (pkt.topic, pkt.payload, pkt.retain))
 
 
     def _WorkerPublishQos1(self, packet_id: int, topic: str, payload: bytes, retain: bool) -> None:

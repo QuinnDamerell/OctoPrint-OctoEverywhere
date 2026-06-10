@@ -1,4 +1,5 @@
 import json
+import base64
 import logging
 from dataclasses import dataclass
 from urllib.parse import parse_qsl
@@ -896,6 +897,14 @@ class CommandHandler:
         path = CommandHandler._FirstPresent(rawPayload, "Path", "path")
         if path is None or not isinstance(path, str) or len(path) == 0:
             return CommandResponse.Error(400, f"For an 'http' send-command, the top-level 'Path' field is required and must be a non-empty string, but the received value was {json.dumps(path, default=str)}. Note that for http the 'Path', 'Method', and 'Headers' fields go at the top level of the payload (next to 'TransportType'), while 'Request' holds only the JSON request body. Example payload: {{\"TransportType\": \"http\", \"Path\": \"/api/printer\", \"Method\": \"GET\", \"Request\": {{}}}}.")
+        # The send-command http transport always targets the local printer's own API, and the platform attaches the
+        # printer's local auth credentials (e.g. OctoPrint's admin X-Api-Key) to the outgoing request. So the 'Path'
+        # MUST be a server-relative path beginning with a single '/'. We reject absolute URLs ("http://..."), scheme-
+        # relative URLs ("//host"), and bare relative paths ("api/x"): allowing any of those would let the request be
+        # routed to an arbitrary host while still carrying the local credentials, leaking them (an SSRF / credential
+        # exfiltration vector). Callers that need to reach other LAN services should use the relay, not send-command.
+        if not path.startswith("/") or path.startswith("//") or "://" in path:
+            return CommandResponse.Error(400, f"For an 'http' send-command, the 'Path' must be a relative path to the printer's own API beginning with a single '/', such as '/api/version'. Absolute or scheme-relative URLs are not allowed (received value: {json.dumps(path, default=str)}). The plugin attaches the printer's local credentials to this request, so it can only target the local printer.")
         method = str(CommandHandler._FirstPresent(rawPayload, "Method", "method") or "GET").upper()
         if len(method) == 0:
             return CommandResponse.Error(400, "For an 'http' send-command, the top-level 'Method' field must be a non-empty string HTTP verb such as 'GET', 'POST', 'PUT', 'PATCH', or 'DELETE'. It is optional and defaults to 'GET' when omitted, but an empty string is not allowed.")
@@ -904,10 +913,37 @@ class CommandHandler:
         except Exception as e:
             return CommandResponse.Error(400, str(e))
 
-        # Build the JSON body from the request object. We send a body for any non GET/HEAD method, or whenever a request
-        # object was provided. When we send a body and no content type was set, default to application/json.
+        # Determine the request body. There are two mutually exclusive ways to provide one:
+        #   1) The JSON convenience path (the common case): the `Request` object is serialized to a JSON body, and the
+        #      Content-Type defaults to application/json.
+        #   2) A raw body escape hatch: top-level `BodyText` (sent as UTF-8) or `BodyBase64` (decoded to raw bytes). The
+        #      bytes are sent verbatim with whatever Content-Type the caller sets in `Headers` (none is implied). This
+        #      lets callers send form-encoded, plain-text, pre-serialized, or binary bodies that aren't a JSON object.
+        # The raw body and a non-empty `Request` can't both be given - that would be ambiguous.
+        bodyText = CommandHandler._FirstPresent(rawPayload, "BodyText", "bodyText")
+        bodyBase64 = CommandHandler._FirstPresent(rawPayload, "BodyBase64", "bodyBase64")
+        rawBodyProvided = bodyText is not None or bodyBase64 is not None
+        if bodyText is not None and bodyBase64 is not None:
+            return CommandResponse.Error(400, "Provide the raw http body as either 'BodyText' or 'BodyBase64', not both.")
+        if rawBodyProvided and len(request) > 0:
+            return CommandResponse.Error(400, "Provide the http request body either as a raw 'BodyText'/'BodyBase64' OR as a JSON 'Request' object, not both. For a raw body, set 'Request' to {} and put the body in 'BodyText' (UTF-8 text) or 'BodyBase64' (base64 of raw bytes), and set the Content-Type yourself via 'Headers'.")
+
         bodyBytes:Optional[bytes] = None
-        if len(request) > 0 or method not in ("GET", "HEAD"):
+        if rawBodyProvided:
+            if bodyText is not None:
+                if not isinstance(bodyText, str):
+                    return CommandResponse.Error(400, f"The optional top-level 'BodyText' field must be a string, sent verbatim as the UTF-8 request body, but a value of type '{type(bodyText).__name__}' was received. Set the Content-Type yourself via 'Headers' if the server needs one.")
+                bodyBytes = bodyText.encode("utf-8")
+            else:
+                if not isinstance(bodyBase64, str):
+                    return CommandResponse.Error(400, f"The optional top-level 'BodyBase64' field must be a base64-encoded string of the raw request body, but a value of type '{type(bodyBase64).__name__}' was received.")
+                try:
+                    bodyBytes = base64.b64decode(bodyBase64, validate=True)
+                except Exception:
+                    return CommandResponse.Error(400, "The optional top-level 'BodyBase64' field was not valid base64. Provide the raw request body as a standard base64-encoded string, or use 'BodyText' for a UTF-8 text body.")
+        elif len(request) > 0 or method not in ("GET", "HEAD"):
+            # JSON convenience path. We send a body for any non GET/HEAD method, or whenever a request object was
+            # provided. When we send a body and no content type was set, default to application/json.
             if "Content-Type" not in headers and "content-type" not in headers:
                 headers["Content-Type"] = "application/json"
             bodyBytes = json.dumps(request, default=str).encode("utf-8")
@@ -979,6 +1015,21 @@ class CommandHandler:
         return CommandResponse.Success(result)
 
 
+    # Builds the canonical MQTT application-message echo used by the mqtt send-command request and response echoes.
+    # MQTT 3.1.1 §3.3 defines the application-visible fields of a PUBLISH as the Topic, the Payload (the application
+    # message), the QoS, and the Retain flag. We surface exactly those four, identically for both the request and the
+    # response, so a developer modeling the mqtt result has one stable, protocol-faithful shape. The Payload is the
+    # printer's native message, passed through untouched.
+    @staticmethod
+    def BuildMqttMessageEcho(topic:Optional[str], payload:Any, qos:int=0, retain:bool=False) -> Dict[str, Any]:
+        return {
+            "Topic": topic,
+            "Payload": payload,
+            "Qos": qos,
+            "Retain": retain,
+        }
+
+
     # Parses the optional payload-root "WaitForResponse" flag (case-insensitive). Defaults to True.
     @staticmethod
     def _ParseWaitForResponse(rawPayload:Dict[str, Any]) -> bool:
@@ -997,15 +1048,21 @@ class CommandHandler:
         value = CommandHandler._FirstPresent(rawPayload, "TimeoutSec", "timeoutSec")
         if value is None:
             return 10
+        # Reject bools explicitly (bool is a subclass of int, and True/False are not a timeout).
         if isinstance(value, bool):
             return CommandResponse.Error(400, "The optional 'TimeoutSec' field must be an integer number of seconds between 1 and 1800.")
+        # Accept a JSON number or a numeric string, including an integral float like 30 or "30.0" (JSON has no
+        # separate integer type, so models commonly emit these), but reject non-integral values like 1.5.
         valueStr = str(value).strip()
         if len(valueStr) == 0:
             return CommandResponse.Error(400, "The optional 'TimeoutSec' field must be an integer number of seconds between 1 and 1800.")
         try:
-            timeoutSec = int(valueStr)
+            asFloat = float(valueStr)
         except Exception:
             return CommandResponse.Error(400, "The optional 'TimeoutSec' field must be an integer number of seconds between 1 and 1800.")
+        if not asFloat.is_integer():
+            return CommandResponse.Error(400, "The optional 'TimeoutSec' field must be a whole number of seconds (no fractional seconds) between 1 and 1800.")
+        timeoutSec = int(asFloat)
         if timeoutSec < 1 or timeoutSec > 1800:
             return CommandResponse.Error(400, "The optional 'TimeoutSec' field must be an integer number of seconds between 1 and 1800.")
         return timeoutSec

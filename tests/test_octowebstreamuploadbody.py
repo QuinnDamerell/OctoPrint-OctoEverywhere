@@ -823,6 +823,94 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertIsInstance(invalidTimeout, CommandResponse)
 
 
+    def test_send_command_http_path_must_be_relative_to_local_printer(self) -> None:
+        # The http transport attaches the printer's local credentials, so the path must be a relative path
+        # to the local API. Absolute / scheme-relative / non-rooted paths are rejected to prevent leaking those
+        # credentials to an arbitrary host (SSRF).
+        for badPath in [
+            "http://evil.com/steal",
+            "https://evil.com/steal",
+            "//evil.com/steal",
+            "api/version",            # missing leading slash
+            "ftp://host/x",
+            " http://evil.com",       # leading space then scheme
+        ]:
+            parsed = CommandHandler.ParseHttpSendCommand({"Path": badPath}, {})
+            self.assertIsInstance(parsed, CommandResponse, msg=f"expected rejection for path {badPath!r}")
+            self.assertEqual(parsed.StatusCode, 400)  # type: ignore[union-attr]
+
+        # A normal relative path (with query string) is still accepted.
+        good = CommandHandler.ParseHttpSendCommand({"Path": "/api/printer?history=true"}, {})
+        self.assertNotIsInstance(good, CommandResponse)
+        self.assertEqual(good.Path, "/api/printer?history=true")  # type: ignore[union-attr]
+
+
+    def test_send_command_timeout_accepts_integral_floats_rejects_fractional(self) -> None:
+        # JSON has no integer type, so models commonly emit 30 or 30.0; both should be accepted as 30.
+        for value in [30, 30.0, "30", "30.0"]:
+            parsed = CommandHandler.ParseHttpSendCommand({"Path": "/api/version", "TimeoutSec": value}, {})
+            self.assertNotIsInstance(parsed, CommandResponse, msg=f"expected accept for TimeoutSec {value!r}")
+            self.assertEqual(parsed.TimeoutSec, 30)  # type: ignore[union-attr]
+        # Fractional and out-of-range values are still rejected.
+        for value in [1.5, "1.5", 0, 0.0, 1801, 2000.0, True]:
+            parsed = CommandHandler.ParseHttpSendCommand({"Path": "/api/version", "TimeoutSec": value}, {})
+            self.assertIsInstance(parsed, CommandResponse, msg=f"expected reject for TimeoutSec {value!r}")
+
+
+    def test_send_command_http_raw_body_escape_hatch(self) -> None:
+        # BodyText is sent verbatim as UTF-8, with NO implied Content-Type (caller controls it via Headers).
+        text = CommandHandler.ParseHttpSendCommand(
+            {"Path": "/api/x", "Method": "POST", "BodyText": "G28\nG1 X0", "Headers": {"Content-Type": "text/plain"}},
+            {})
+        self.assertNotIsInstance(text, CommandResponse)
+        self.assertEqual(text.BodyBytes, b"G28\nG1 X0")             # type: ignore[union-attr]
+        self.assertEqual(text.Headers["Content-Type"], "text/plain")  # type: ignore[union-attr]
+
+        # BodyText with no Content-Type header leaves it unset (raw means the caller owns the content type).
+        textNoCt = CommandHandler.ParseHttpSendCommand({"Path": "/api/x", "Method": "POST", "BodyText": "hi"}, {})
+        self.assertNotIsInstance(textNoCt, CommandResponse)
+        self.assertNotIn("Content-Type", textNoCt.Headers)          # type: ignore[union-attr]
+        self.assertNotIn("content-type", textNoCt.Headers)          # type: ignore[union-attr]
+
+        # BodyBase64 is decoded to raw bytes (lets callers send arbitrary binary).
+        import base64 as _b64
+        raw = bytes([0x00, 0x01, 0xFF, 0x10])
+        b64 = CommandHandler.ParseHttpSendCommand(
+            {"Path": "/api/x", "Method": "PUT", "BodyBase64": _b64.b64encode(raw).decode("ascii")}, {})
+        self.assertNotIsInstance(b64, CommandResponse)
+        self.assertEqual(b64.BodyBytes, raw)                        # type: ignore[union-attr]
+
+        # Invalid base64 is rejected.
+        badB64 = CommandHandler.ParseHttpSendCommand({"Path": "/api/x", "BodyBase64": "not base64!!"}, {})
+        self.assertIsInstance(badB64, CommandResponse)
+
+        # Providing both raw forms, or a raw form together with a non-empty Request, is ambiguous and rejected.
+        both = CommandHandler.ParseHttpSendCommand({"Path": "/api/x", "BodyText": "a", "BodyBase64": "Yg=="}, {})
+        self.assertIsInstance(both, CommandResponse)
+        rawAndJson = CommandHandler.ParseHttpSendCommand({"Path": "/api/x", "BodyText": "a"}, {"k": "v"})
+        self.assertIsInstance(rawAndJson, CommandResponse)
+
+        # The JSON convenience path is unchanged: a Request object still serializes to JSON with a default Content-Type.
+        jsonPath = CommandHandler.ParseHttpSendCommand({"Path": "/api/x", "Method": "POST"}, {"k": "v"})
+        self.assertNotIsInstance(jsonPath, CommandResponse)
+        self.assertEqual(jsonPath.BodyBytes, b"{\"k\": \"v\"}")     # type: ignore[union-attr]
+        self.assertEqual(jsonPath.Headers["Content-Type"], "application/json")  # type: ignore[union-attr]
+
+
+    def test_build_mqtt_message_echo_is_protocol_faithful(self) -> None:
+        # The shared MQTT echo is the canonical application-visible PUBLISH shape: Topic, Payload, Qos, Retain.
+        echo = CommandHandler.BuildMqttMessageEcho("device/sn/request", {"print": {"command": "pushall"}})
+        self.assertEqual(set(echo.keys()), {"Topic", "Payload", "Qos", "Retain"})
+        self.assertEqual(echo["Topic"], "device/sn/request")
+        self.assertEqual(echo["Payload"], {"print": {"command": "pushall"}})
+        self.assertEqual(echo["Qos"], 0)
+        self.assertFalse(echo["Retain"])
+        # Explicit qos/retain are carried through.
+        echo2 = CommandHandler.BuildMqttMessageEcho("t", b"raw", qos=1, retain=True)
+        self.assertEqual(echo2["Qos"], 1)
+        self.assertTrue(echo2["Retain"])
+
+
     def test_send_command_wait_for_response_parsing(self) -> None:
         # Default is wait. The flag is case-insensitive and accepts string/bool.
         ws = CommandHandler.ParseWebsocketSendCommand({}, {"Method": "printer.info"})
@@ -981,6 +1069,38 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(ftpServer.Files["folder/my file.gcode.3mf"], b"3mf bytes")
         self.assertNotIn("PrintStarted", response.ResultDict)
         self.assertEqual(fakeClient.Commands, [])
+
+
+    def test_bambu_send_command_echo_is_symmetric_and_carries_response_payload(self) -> None:
+        # Regression: the mqtt response echo previously read the raw payload as if it were a {topic,payload} wrapper,
+        # yielding {Topic:None, Payload:None} and losing the printer's reply. The request and response echo must now be
+        # the same protocol-faithful {Topic, Payload, Qos, Retain} shape, with the real payloads.
+        module = self._LoadBambuCommandHandlerModule()
+        fakeClient = FakeBambuClientForCommands()
+        handler = module.BambuCommandHandler(self.logger, None)
+        request = {"print": {"command": "pushall"}}
+        rawPayload = {"TransportType": "mqtt", "Request": request}
+        with patch.object(module.BambuClient, "Get", return_value=fakeClient):
+            response = handler.ExecuteSendCommand("mqtt", request, rawPayload)
+
+        self.assertEqual(response.StatusCode, 200)
+        rd = response.ResultDict
+        self.assertEqual(rd["TransportType"], "mqtt")
+        self.assertTrue(rd["ResponseReceived"])
+        # Request echo.
+        self.assertEqual(rd["Request"], {
+            "Topic": "device/sn/request",
+            "Payload": request,
+            "Qos": 0,
+            "Retain": False,
+        })
+        # Response echo carries the actual printer reply (not None) and matches the request shape.
+        self.assertEqual(rd["Response"], {
+            "Topic": "device/sn/report",
+            "Payload": {"print": {"command": "pushall", "result": "success"}},
+            "Qos": 0,
+            "Retain": False,
+        })
 
 
     def test_file_path_errors_are_short_and_actionable(self) -> None:

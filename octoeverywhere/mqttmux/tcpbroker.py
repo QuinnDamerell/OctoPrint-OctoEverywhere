@@ -67,16 +67,23 @@ class LocalTcpBrokerServer:
     # backlog defaults to 32 - well over what a single printer's worth of
     # clients should ever need but not so high as to invite SYN flood antics
     # on an exposed instance.
+    #
+    # max_clients bounds the number of concurrent connections. Each connection
+    # costs a reader thread (plus a keepalive/control thread once connected),
+    # so on low memory devices we must not let an open port turn into
+    # unbounded thread growth. Connections over the cap are closed on accept.
     def __init__(self, logger: logging.Logger, mux: MqttUpstreamMux,
                  bind: str, port: int,
                  auth_check: Optional[AuthCheck] = None,
-                 backlog: int = 32) -> None:
+                 backlog: int = 32,
+                 max_clients: int = 25) -> None:
         self._logger = logger
         self._mux = mux
         self._bind = bind
         self._port = port
         self._auth_check = auth_check
         self._backlog = backlog
+        self._max_clients = max_clients
         self._listener: Optional[socket.socket] = None
         self._accept_thread: Optional[threading.Thread] = None
         self._clients_lock = threading.Lock()
@@ -204,17 +211,30 @@ class LocalTcpBrokerServer:
             self._SpawnClient(client_sock, addr)
 
 
-    # Fallback recv timeout for clients that connect with MQTT keepalive=0
-    # (disabled). Without this, a peer that disappears without a FIN would
-    # leave the reader thread blocked on recv() forever.
-    _FALLBACK_RECV_TIMEOUT_SEC = 300.0
-
     def _SpawnClient(self, client_sock: socket.socket, addr: _PeerAddress) -> None:
         peer = f"{addr[0]}:{addr[1]}"
+        # Enforce the connection cap before spending any more resources.
+        with self._clients_lock:
+            at_capacity = len(self._clients) >= self._max_clients
+        if at_capacity:
+            self._logger.warning("LocalTcpBrokerServer rejecting %s: at max client count (%d)",
+                                 peer, self._max_clients)
+            try:
+                client_sock.close()
+            except Exception:
+                pass
+            return
         try:
-            client_sock.settimeout(self._FALLBACK_RECV_TIMEOUT_SEC)
+            # MQTT acks (CONNACK, PUBACK, PINGRESP...) are tiny request/response
+            # packets; disable Nagle so they aren't delayed behind unacked data.
+            client_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            # Until the CONNECT lands, use a short recv timeout so an idle peer
+            # can't hold a reader thread open (MQTT 3.1.1 §3.1: the server
+            # SHOULD close the connection if no CONNECT arrives in a reasonable
+            # time). The client bumps this to the long fallback after CONNECT.
+            client_sock.settimeout(TcpBrokerClient.PRE_CONNECT_TIMEOUT_SEC)
         except Exception as e:
-            self._logger.debug("LocalTcpBrokerServer settimeout raised: %s", e)
+            self._logger.debug("LocalTcpBrokerServer socket setup raised: %s", e)
         client = TcpBrokerClient(self._logger, self._mux, peer, client_sock,
                                   auth_check=self._auth_check,
                                   on_finished=self._OnClientFinished)
@@ -236,6 +256,17 @@ class LocalTcpBrokerServer:
 # pumps recv() into the wire decoder, and writes outbound bytes via a
 # send-side lock.
 class TcpBrokerClient(WireVirtualClient):
+
+    # Recv timeout used until the MQTT CONNECT lands. Per MQTT 3.1.1 §3.1 the
+    # server SHOULD close connections that don't send a CONNECT in a
+    # reasonable amount of time.
+    PRE_CONNECT_TIMEOUT_SEC = 30.0
+
+    # Fallback recv timeout (set once the session is connected) for clients
+    # that connect with MQTT keepalive=0 (disabled). Without this, a peer that
+    # disappears without a FIN would leave the reader thread blocked on
+    # recv() forever.
+    FALLBACK_RECV_TIMEOUT_SEC = 300.0
 
     def __init__(self, logger: logging.Logger, mux: MqttUpstreamMux, peer_label: str,
                  client_sock: socket.socket,
@@ -260,12 +291,20 @@ class TcpBrokerClient(WireVirtualClient):
 
 
     def _ReaderLoop(self) -> None:
+        relaxed_timeout = False
         try:
             while not self._closed:
                 try:
                     data = self._socket.recv(4096)
                 except socket.timeout:
                     if self._closed:
+                        return
+                    # If the peer hasn't completed CONNECT yet, close. Per MQTT
+                    # 3.1.1 §3.1 the server should drop connections that don't
+                    # send a CONNECT in a reasonable amount of time.
+                    if not self._connected:
+                        self._logger.info("TcpBrokerClient[%s] no CONNECT within %.0fs; closing",
+                                          self._peer_label, TcpBrokerClient.PRE_CONNECT_TIMEOUT_SEC)
                         return
                     # For clients with MQTT keepalive > 0, the keepalive
                     # watchdog in WireVirtualClient handles liveness. The
@@ -282,6 +321,14 @@ class TcpBrokerClient(WireVirtualClient):
                 if not data:
                     return
                 self.FeedBytes(data)
+                # Once the CONNECT lands (dispatched on this same thread inside
+                # FeedBytes), relax the recv timeout to the long fallback.
+                if not relaxed_timeout and self._connected:
+                    relaxed_timeout = True
+                    try:
+                        self._socket.settimeout(TcpBrokerClient.FALLBACK_RECV_TIMEOUT_SEC)
+                    except Exception as e:
+                        self._logger.debug("TcpBrokerClient[%s] settimeout raised: %s", self._peer_label, e)
         finally:
             self.OnPeerClosed()
             if self._on_finished is not None:

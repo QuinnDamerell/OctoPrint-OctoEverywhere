@@ -213,12 +213,9 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
             return CommandResponse.Error(400, f"This Elegoo CC2 printer requires an integer 'Method' id inside 'Request', e.g. \"Request\": {{\"Method\": 1, \"Params\": {{...}}}}, but the received method value was {json.dumps(method, default=str)}. The 'Method' selects which CC2 command to run and must be a JSON integer.")
 
         # The MQTT request/response topics and payloads are surfaced so a developer has full access to the messages.
+        # The shared echo builder gives the request and response the same protocol-faithful {Topic, Payload, Qos, Retain} shape.
         topics = ElegooCc2Client.Get().GetApiRequestResponseTopics()
-        requestEcho:Dict[str, Any] = {
-            "Topic": topics["RequestTopic"],
-            "Payload": {"method": method, "params": parsed.Params},
-            "Qos": 0,
-        }
+        requestEcho = CommandHandler.BuildMqttMessageEcho(topics["RequestTopic"], {"method": method, "params": parsed.Params})
 
         result = ElegooCc2Client.Get().SendRequest(method, parsed.Params, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
         if result.HasError():
@@ -235,14 +232,14 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
             # A printer-side command error (e.g. a failed result) still carries the full response payload. Surface it.
             payload = result.GetRawResponseOrResult()
             if payload is not None:
-                return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, {"Topic": topics["ResponseTopic"], "Payload": payload}, isError=True, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
+                return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, CommandHandler.BuildMqttMessageEcho(topics["ResponseTopic"], payload), isError=True, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
             return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetLoggingErrorStr())
 
         # Fire-and-forget: nothing was awaited.
         if parsed.WaitForResponse is False:
             return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseReceived=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
-        responseEcho:Dict[str, Any] = {"Topic": topics["ResponseTopic"], "Payload": result.GetRawResponseOrResult()}
+        responseEcho = CommandHandler.BuildMqttMessageEcho(topics["ResponseTopic"], result.GetRawResponseOrResult())
         return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseEcho, isError=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
 

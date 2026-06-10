@@ -357,26 +357,20 @@ class BambuCommandHandler(IPlatformCommandHandler):
                 return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some MQTT commands don't return a response - set WaitForResponse to false for those.")
             return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, result.GetLoggingErrorStr())
 
-        # The client returns {"request": {topic, payload, qos}, "response": {topic, payload}}; convert to the common
-        # PascalCase envelope. The MQTT payloads themselves are the native messages, passed through untouched, so a
-        # developer has full access to the request and response messages.
+        # The client returns {"request": {topic, payload, qos}, "response": {topic, payload, qos}}; convert to the common
+        # PascalCase envelope via the shared MQTT echo builder so the request and response are the same protocol-faithful
+        # {Topic, Payload, Qos, Retain} shape. The MQTT payloads themselves are the native messages, passed through
+        # untouched, so a developer has full access to the request and response messages.
         res:Dict[str, Any] = result.Result if isinstance(result.Result, dict) else {}
         reqRaw:Any = res.get("request", None)
         reqEcho:Dict[str, Any] = reqRaw if isinstance(reqRaw, dict) else {}
-        requestEcho:Dict[str, Any] = {
-            "Topic": reqEcho.get("topic", None),
-            "Payload": reqEcho.get("payload", None),
-            "Qos": reqEcho.get("qos", 0),
-        }
+        requestEcho = CommandHandler.BuildMqttMessageEcho(reqEcho.get("topic", None), reqEcho.get("payload", None), reqEcho.get("qos", 0))
         if parsed.WaitForResponse is False:
             return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseReceived=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
         respRaw:Any = res.get("response", None)
         respEcho:Dict[str, Any] = respRaw if isinstance(respRaw, dict) else {}
-        responseEcho:Dict[str, Any] = {
-            "Topic": respEcho.get("topic", None),
-            "Payload": respEcho.get("payload", None),
-        }
+        responseEcho = CommandHandler.BuildMqttMessageEcho(respEcho.get("topic", None), respEcho.get("payload", None), respEcho.get("qos", 0))
         return CommandHandler.BuildSendCommandResult("mqtt", requestEcho, responseEcho, isError=False, waitForResponse=parsed.WaitForResponse, timeoutSec=parsed.TimeoutSec)
 
 

@@ -5,7 +5,7 @@ import unittest
 from typing import Tuple
 
 from octoeverywhere.mqttmux.mux import MqttConnectionContext, MqttUpstreamMux
-from octoeverywhere.mqttmux.tcpbroker import LocalTcpBrokerServer, StaticAuthCheck
+from octoeverywhere.mqttmux.tcpbroker import LocalTcpBrokerServer, StaticAuthCheck, TcpBrokerClient
 from octoeverywhere.mqttmux.types import ConnAckReturnCode
 from octoeverywhere.mqttmux.wirecodec import (
     ConnAckPacket,
@@ -341,6 +341,73 @@ class TestTcpBrokerCustomAuth(unittest.TestCase):
             finally:
                 sock.close()
         finally:
+            server.Stop()
+            mux.Shutdown()
+
+
+class TestTcpBrokerLimits(unittest.TestCase):
+
+    def test_max_clients_cap_rejects_excess_connections(self):
+        mux, _fake = _start_mux()
+        port = _pick_free_port()
+        server = LocalTcpBrokerServer(_silent_logger(), mux, "127.0.0.1", port, max_clients=2)
+        server.Start()
+        socks = []
+        try:
+            # The first two clients connect and complete a CONNECT handshake.
+            for i in range(2):
+                s = socket.create_connection(("127.0.0.1", port), timeout=2.0)
+                socks.append(s)
+                s.sendall(EncodePacket(ConnectPacket(client_id=f"cap{i}", keep_alive=0)))
+                pkt = _read_one_packet(s)
+                self.assertIsInstance(pkt, ConnAckPacket)
+            # The third connection is over the cap; the server must close it
+            # without ever sending a CONNACK.
+            s3 = socket.create_connection(("127.0.0.1", port), timeout=2.0)
+            socks.append(s3)
+            try:
+                s3.sendall(EncodePacket(ConnectPacket(client_id="cap3", keep_alive=0)))
+            except OSError:
+                pass  # Already closed by the server - also a valid outcome.
+            # The server may close cleanly (FIN -> recv returns b"") or reset
+            # the connection (RST -> ConnectionResetError); both mean rejected.
+            try:
+                pkt = _read_one_packet(s3, timeout=1.0)
+            except (ConnectionResetError, ConnectionAbortedError):
+                pkt = None
+            self.assertIsNone(pkt)
+        finally:
+            for s in socks:
+                try:
+                    s.close()
+                except OSError:
+                    pass
+            server.Stop()
+            mux.Shutdown()
+
+    def test_no_connect_within_deadline_closes_connection(self):
+        # MQTT 3.1.1 §3.1: the server should close connections that don't send
+        # a CONNECT within a reasonable amount of time.
+        old_timeout = TcpBrokerClient.PRE_CONNECT_TIMEOUT_SEC
+        TcpBrokerClient.PRE_CONNECT_TIMEOUT_SEC = 0.2
+        mux, _fake = _start_mux()
+        port = _pick_free_port()
+        server = LocalTcpBrokerServer(_silent_logger(), mux, "127.0.0.1", port)
+        server.Start()
+        try:
+            s = socket.create_connection(("127.0.0.1", port), timeout=2.0)
+            try:
+                # Send nothing; the server should close the socket on us.
+                s.settimeout(2.0)
+                try:
+                    data = s.recv(1)
+                except (ConnectionResetError, ConnectionAbortedError):
+                    data = b""
+                self.assertEqual(data, b"")
+            finally:
+                s.close()
+        finally:
+            TcpBrokerClient.PRE_CONNECT_TIMEOUT_SEC = old_timeout
             server.Stop()
             mux.Shutdown()
 

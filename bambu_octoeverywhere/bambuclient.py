@@ -265,7 +265,13 @@ class BambuClient:
                         "payload": msg,
                         "qos": 0,
                     },
-                    "response": response,
+                    # Wrap the response the same way as the request so the command handler echoes a symmetric MQTT
+                    # message shape. The response arrives on the printer's report topic, which we subscribe to.
+                    "response": {
+                        "topic": f"device/{self.PrinterSn}/report",
+                        "payload": response,
+                        "qos": 0,
+                    },
                 })
             finally:
                 with self.RequestLock:
