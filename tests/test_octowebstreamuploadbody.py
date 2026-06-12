@@ -16,6 +16,7 @@ from tests.test_dependency_stubs import InstallTestDependencyStubs
 
 InstallTestDependencyStubs()
 
+from octoeverywhere.buffer import Buffer
 from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
 from octoeverywhere.commandhandler import CommandHandler
 from octoeverywhere.compression import CompressionContext
@@ -156,6 +157,30 @@ class FakeUploadHttpResult:
 
     def Free(self) -> None:
         self.FreeCalled = True
+
+
+class FakeMoonrakerHttpResult:
+    def __init__(self, statusCode:int=200, body:bytes=b"") -> None:
+        self.StatusCode = statusCode
+        self.FullBodyBuffer = Buffer(body)
+        self.Headers = {"Content-Length": str(len(body))}
+        self.FreeCalled = False
+
+
+    def ReadAllContentFromStreamResponse(self, logger) -> None:
+        return None
+
+
+    def Free(self) -> None:
+        self.FreeCalled = True
+
+
+    def __enter__(self) -> "FakeMoonrakerHttpResult":
+        return self
+
+
+    def __exit__(self, t, v, tb) -> None:
+        self.Free()
 
 
 class FakeBambuFtpServer:
@@ -861,6 +886,100 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(response.ResultDict["SizeBytes"], len(b"G1 X1\n"))
 
 
+    def test_octoprint_file_list_includes_logs_root(self) -> None:
+        module = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
+        handler = module.OctoPrintCommandHandler(self.logger, None, None, None)
+        handler._AddOctoPrintLocalAuth = lambda headers: None
+        calls = []
+        responses = {
+            "/api/files/local?recursive=true": {
+                "files": [{"type": "machinecode", "path": "folder/a.gcode", "size": 10, "date": 1}]
+            },
+            "/plugin/logging/logs": {
+                "files": [{"name": "octoprint.log", "size": 20, "date": 2, "refs": {"download": "/downloads/logs/octoprint.log"}}],
+                "free": 1000,
+            },
+        }
+
+        def fakeMakeHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            calls.append(path)
+            return FakeMoonrakerHttpResult(200, json.dumps(responses[path]).encode("utf-8"))
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeMakeHttpCall):
+            response = handler.ExecuteFileList(None)
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(calls, [
+            "/api/files/local?recursive=true",
+            "/plugin/logging/logs",
+        ])
+        fileNodes = self._FlattenFileTree(response.ResultDict)
+        virtualPaths = sorted([f["VirtualPath"] for f in fileNodes])
+        self.assertEqual(virtualPaths, [
+            "gcode/folder/a.gcode",
+            "logs/octoprint.log",
+        ])
+        logFile = next(f for f in fileNodes if f["VirtualPath"] == "logs/octoprint.log")
+        self.assertEqual(logFile["PlatformPath"], "octoprint.log")
+        self.assertEqual(logFile["SizeBytes"], 20)
+        self.assertEqual(logFile["Refs"], {"download": "/downloads/logs/octoprint.log"})
+
+
+    def test_octoprint_file_list_can_request_logs_root(self) -> None:
+        module = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
+        handler = module.OctoPrintCommandHandler(self.logger, None, None, None)
+        handler._AddOctoPrintLocalAuth = lambda headers: None
+        calls = []
+
+        def fakeMakeHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            calls.append(path)
+            return FakeMoonrakerHttpResult(200, b'{"files":[{"name":"serial.log","size":30,"date":3}]}')
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeMakeHttpCall):
+            response = handler.ExecuteFileList({"root": "logs"})
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(calls, ["/plugin/logging/logs"])
+        fileNodes = self._FlattenFileTree(response.ResultDict)
+        self.assertEqual(fileNodes[0]["VirtualPath"], "logs/serial.log")
+        self.assertEqual(fileNodes[0]["ModifiedTimeSec"], 3)
+
+
+    def test_octoprint_log_download_and_delete_use_logging_endpoints(self) -> None:
+        module = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
+        handler = module.OctoPrintCommandHandler(self.logger, None, None, None)
+        handler._AddOctoPrintLocalAuth = lambda headers: None
+        calls = []
+
+        def fakeMakeHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            calls.append((method, path))
+            return FakeMoonrakerHttpResult(200, b"log data")
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeMakeHttpCall):
+            downloadResponse = handler.ExecuteFileDownload({"Path": "logs/serial log.txt"})
+            deleteResponse = handler.ExecuteFileDelete({"Path": "logs/serial log.txt"})
+
+        self.assertEqual(downloadResponse.StatusCode, 200)
+        self.assertEqual(deleteResponse.StatusCode, 200)
+        self.assertEqual(calls, [
+            ("GET", "/downloads/logs/serial%20log.txt"),
+            ("DELETE", "/plugin/logging/logs/serial%20log.txt"),
+        ])
+        self.assertEqual(deleteResponse.ResultDict["VirtualPath"], "logs/serial log.txt")
+        self.assertEqual(deleteResponse.ResultDict["PlatformPath"], "serial log.txt")
+
+
+    def test_octoprint_log_upload_is_not_supported(self) -> None:
+        module = LoadPlatformCommandHandlerModule("octoprint_octoeverywhere", "octoprintcommandhandler")
+        handler = module.OctoPrintCommandHandler(self.logger, None, None, None)
+        uploadBody = self._BuildFinalizedUploadBody(b"log data\n")
+
+        response = handler.ExecuteFileUpload({"Path": "logs/octoprint.log"}, uploadBody)
+
+        self.assertEqual(response.StatusCode, 400)
+        self.assertIn("Unsupported path root 'logs'", response.ErrorStr)
+
+
     def test_moonraker_file_upload_forwards_backend_options(self) -> None:
         module = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
         handler = module.MoonrakerCommandHandler(self.logger, None)
@@ -891,6 +1010,161 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(response.ResultDict["VirtualPath"], "gcode/folder/a.gcode")
         self.assertEqual(response.ResultDict["PlatformPath"], "folder/a.gcode")
         self.assertEqual(response.ResultDict["SizeBytes"], len(b"G1 X1\n"))
+
+
+    def test_moonraker_file_list_includes_config_and_logs_roots(self) -> None:
+        module = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
+        handler = module.MoonrakerCommandHandler(self.logger, None)
+        handler._AddMoonrakerAuth = lambda headers: None
+        calls = []
+        responses = {
+            "/server/files/list?root=gcodes": [{"path": "calibration.gcode", "size": 10, "modified": 1, "permissions": "rw"}],
+            "/server/files/list?root=config": [{"path": "printer.cfg", "size": 20, "modified": 2, "permissions": "rw"}],
+            "/server/files/list?root=logs": [{"path": "klippy.log", "size": 30, "modified": 3, "permissions": "r"}],
+        }
+
+        def fakeMakeHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            calls.append(path)
+            return FakeMoonrakerHttpResult(200, json.dumps(responses[path]).encode("utf-8"))
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeMakeHttpCall):
+            response = handler.ExecuteFileList(None)
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(calls, [
+            "/server/files/list?root=gcodes",
+            "/server/files/list?root=config",
+            "/server/files/list?root=logs",
+        ])
+        fileNodes = self._FlattenFileTree(response.ResultDict)
+        virtualPaths = sorted([f["VirtualPath"] for f in fileNodes])
+        self.assertEqual(virtualPaths, [
+            "config/printer.cfg",
+            "gcode/calibration.gcode",
+            "logs/klippy.log",
+        ])
+        logFile = next(f for f in fileNodes if f["VirtualPath"] == "logs/klippy.log")
+        self.assertEqual(logFile["Permissions"], "r")
+
+
+    def test_moonraker_file_list_can_request_single_root(self) -> None:
+        module = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
+        handler = module.MoonrakerCommandHandler(self.logger, None)
+        handler._AddMoonrakerAuth = lambda headers: None
+        calls = []
+
+        def fakeMakeHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            calls.append(path)
+            return FakeMoonrakerHttpResult(200, b'[{"path":"moonraker.log","size":5,"modified":4,"permissions":"r"}]')
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeMakeHttpCall):
+            response = handler.ExecuteFileList({"root": "logs"})
+
+        self.assertEqual(response.StatusCode, 200)
+        self.assertEqual(calls, ["/server/files/list?root=logs"])
+        fileNodes = self._FlattenFileTree(response.ResultDict)
+        self.assertEqual(fileNodes[0]["VirtualPath"], "logs/moonraker.log")
+
+
+    def test_moonraker_config_upload_download_and_delete_use_config_root(self) -> None:
+        module = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
+        handler = module.MoonrakerCommandHandler(self.logger, None)
+        handler._AddMoonrakerAuth = lambda headers: None
+        uploadBody = self._BuildFinalizedUploadBody(b"[include mainsail.cfg]\n")
+        captured = {}
+
+        def fakeUploadHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            captured["uploadPath"] = path
+            captured["uploadMethod"] = method
+            captured["uploadFields"] = dict(body.Fields)
+            return FakeUploadHttpResult()
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeUploadHttpCall):
+            uploadResponse = handler.ExecuteFileUpload({"Path": "config/sub/printer.cfg"}, uploadBody)
+
+        self.assertEqual(uploadResponse.StatusCode, 200)
+        self.assertEqual(captured["uploadPath"], "/server/files/upload")
+        self.assertEqual(captured["uploadMethod"], "POST")
+        self.assertEqual(captured["uploadFields"], {
+            "root": "config",
+            "path": "sub",
+        })
+        self.assertEqual(uploadResponse.ResultDict["VirtualPath"], "config/sub/printer.cfg")
+        self.assertEqual(uploadResponse.ResultDict["PlatformPath"], "sub/printer.cfg")
+
+        def fakeDownloadHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            captured["downloadPath"] = path
+            captured["downloadMethod"] = method
+            return FakeMoonrakerHttpResult(200, b"cfg")
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeDownloadHttpCall):
+            downloadResponse = handler.ExecuteFileDownload({"Path": "config/sub/printer.cfg"})
+
+        self.assertEqual(downloadResponse.StatusCode, 200)
+        self.assertEqual(captured["downloadPath"], "/server/files/config/sub/printer.cfg")
+        self.assertEqual(captured["downloadMethod"], "GET")
+
+        def fakeDeleteHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            captured["deletePath"] = path
+            captured["deleteMethod"] = method
+            return FakeMoonrakerHttpResult(200, b'{"action":"delete_file"}')
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeDeleteHttpCall):
+            deleteResponse = handler.ExecuteFileDelete({"Path": "config/sub/printer.cfg"})
+
+        self.assertEqual(deleteResponse.StatusCode, 200)
+        self.assertEqual(captured["deletePath"], "/server/files/config/sub/printer.cfg")
+        self.assertEqual(captured["deleteMethod"], "DELETE")
+        self.assertEqual(deleteResponse.ResultDict["VirtualPath"], "config/sub/printer.cfg")
+        self.assertEqual(deleteResponse.ResultDict["PlatformPath"], "sub/printer.cfg")
+
+
+    def test_moonraker_logs_root_is_read_only(self) -> None:
+        # Moonraker's logs root is read-only: listing and downloading work, but upload/delete must be rejected
+        # client-side before any backend call (Moonraker only allows writes to the gcodes and config roots).
+        module = LoadPlatformCommandHandlerModule("moonraker_octoeverywhere", "moonrakercommandhandler")
+        handler = module.MoonrakerCommandHandler(self.logger, None)
+        handler._AddMoonrakerAuth = lambda headers: None
+        captured = {}
+
+        def fakeDownloadHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            captured["downloadPath"] = path
+            return FakeMoonrakerHttpResult(200, b"log data")
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeDownloadHttpCall):
+            downloadResponse = handler.ExecuteFileDownload({"Path": "logs/archive/moonraker.log"})
+
+        self.assertEqual(downloadResponse.StatusCode, 200)
+        self.assertEqual(captured["downloadPath"], "/server/files/logs/archive/moonraker.log")
+
+        # Upload to the logs root is rejected and never reaches the backend.
+        uploadCalls = []
+
+        def fakeUploadHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            uploadCalls.append(path)
+            return FakeUploadHttpResult()
+
+        uploadBody = self._BuildFinalizedUploadBody(b"log data\n")
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeUploadHttpCall):
+            uploadResponse = handler.ExecuteFileUpload({"Path": "logs/archive/moonraker.log"}, uploadBody)
+
+        self.assertEqual(uploadResponse.StatusCode, 400)
+        self.assertIn("Unsupported path root 'logs'", uploadResponse.ErrorStr)
+        self.assertEqual(uploadCalls, [])
+
+        # Delete on the logs root is likewise rejected and never reaches the backend.
+        deleteCalls = []
+
+        def fakeDeleteHttpCall(logger, path, pathType, method, headers, body=None, **kwargs):
+            deleteCalls.append(path)
+            return FakeMoonrakerHttpResult(200, b"ok")
+
+        with patch.object(module.OctoHttpRequest, "MakeHttpCall", fakeDeleteHttpCall):
+            deleteResponse = handler.ExecuteFileDelete({"Path": "logs/archive/moonraker.log"})
+
+        self.assertEqual(deleteResponse.StatusCode, 400)
+        self.assertIn("Unsupported path root 'logs'", deleteResponse.ErrorStr)
+        self.assertEqual(deleteCalls, [])
 
 
     def test_multipart_form_upload_body_streams_file_backed_upload(self) -> None:

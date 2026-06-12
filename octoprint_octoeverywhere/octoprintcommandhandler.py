@@ -1,13 +1,13 @@
 import json
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from octoprint import __version__
 from octoprint.printer import PrinterInterface
 
 from octoeverywhere.buffer import Buffer
 from octoeverywhere.compat import Compat
-from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath, VirtualFileSystemTree
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
@@ -21,6 +21,11 @@ from .printerstateobject import PrinterStateObject
 
 # This class implements the Platform Command Handler Interface
 class OctoPrintCommandHandler(IPlatformCommandHandler):
+    c_OctoPrintVirtualFileRoots = [
+        FileSystemCommandHelper.c_VirtualGcodeRoot,
+        FileSystemCommandHelper.c_VirtualLogsRoot,
+    ]
+    c_OctoPrintAllowedFileRoots = set(c_OctoPrintVirtualFileRoots)
 
     def __init__(self, logger:logging.Logger, octoPrintPrinterObject:PrinterInterface, printerStateObject:PrinterStateObject, mainPluginImpl:IOctoPrintPlugin) -> None:
         self.Logger = logger
@@ -393,10 +398,30 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
-        # Make the request for all files.
+        virtualRoots, errorStr = FileSystemCommandHelper.ResolveRequestedRoots(args, OctoPrintCommandHandler.c_OctoPrintVirtualFileRoots, FileSystemCommandHelper.c_RootAliases)
+        if errorStr is not None:
+            return CommandResponse.Error(400, errorStr)
+
+        def addToTree(tree:VirtualFileSystemTree, virtualRoot:str, listResult:List[Dict[str, Any]]) -> None:
+            if virtualRoot == FileSystemCommandHelper.c_VirtualLogsRoot:
+                FileSystemTreeBuilder.AddOctoPrintLogListToTree(tree, listResult)
+            else:
+                FileSystemTreeBuilder.AddOctoPrintFileListToTree(tree, listResult)
+
+        return FileSystemCommandHelper.BuildMultiRootFileListResponse(
+            virtualRoots,
+            self._ListOctoPrintFileRoot,
+            addToTree,
+            self.Logger,
+            "OctoPrint")
+
+
+    def _ListOctoPrintFileRoot(self, virtualRoot:str) -> Union[List[Dict[str, Any]], CommandResponse]:
         headers:Dict[str, str] = {}
         self._AddOctoPrintLocalAuth(headers)
         path = "/api/files/local?recursive=true"
+        if virtualRoot == FileSystemCommandHelper.c_VirtualLogsRoot:
+            path = "/plugin/logging/logs"
         result = OctoHttpRequest.MakeHttpCall(
             self.Logger,
             path,
@@ -408,12 +433,13 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
         if result is None:
             return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", "file-list"))
 
-        # Read and parse the result.
         with result:
             result.ReadAllContentFromStreamResponse(self.Logger)
             bodyBytes = b""
             if result.FullBodyBuffer is not None:
                 bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", "file-list"))
             if result.StatusCode < 200 or result.StatusCode >= 300:
                 return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", "file-list", result.StatusCode, bodyBytes))
             try:
@@ -425,7 +451,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             files = responseObj.get("files", [])
             if not isinstance(files, list):
                 files = []
-            return CommandResponse.Success(FileSystemTreeBuilder.FromOctoPrintFileList(files))
+            return files
 
 
     def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
@@ -476,14 +502,16 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, OctoPrintCommandHandler.c_OctoPrintAllowedFileRoots)
         if errorStr is not None or parsedPath is None:
-            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(), CommandHandler.c_FilesDownloadCommand)
+            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(OctoPrintCommandHandler.c_OctoPrintAllowedFileRoots), CommandHandler.c_FilesDownloadCommand)
 
         headers:Dict[str, str] = {}
         self._AddOctoPrintLocalAuth(headers)
         relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
         downloadPath = "/downloads/files/local/" + relativePath
+        if parsedPath.Root == FileSystemCommandHelper.c_VirtualLogsRoot:
+            downloadPath = "/downloads/logs/" + relativePath
         result = OctoHttpRequest.MakeHttpCall(
             self.Logger,
             downloadPath,
@@ -513,14 +541,17 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
-        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, OctoPrintCommandHandler.c_OctoPrintAllowedFileRoots)
         if errorStr is not None or parsedPath is None:
-            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError(OctoPrintCommandHandler.c_OctoPrintAllowedFileRoots))
 
         headers:Dict[str, str] = {}
         self._AddOctoPrintLocalAuth(headers)
         platformPath = self._GetPlatformPath(parsedPath)
-        deletePath = "/api/files/local/" + FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        deletePath = "/api/files/local/" + relativePath
+        if parsedPath.Root == FileSystemCommandHelper.c_VirtualLogsRoot:
+            deletePath = "/plugin/logging/logs/" + relativePath
         result = OctoHttpRequest.MakeHttpCall(
             self.Logger,
             deletePath,

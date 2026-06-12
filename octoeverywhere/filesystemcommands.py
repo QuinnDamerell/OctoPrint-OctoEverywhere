@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, BinaryIO, Dict, List, Optional, Set, Tuple
+from typing import Any, BinaryIO, Callable, Dict, List, Optional, Set, Tuple, Union
 from urllib.parse import quote
 
 from .buffer import Buffer
@@ -30,18 +30,26 @@ class VirtualFilePath:
 
 class FileSystemCommandHelper:
     c_VirtualGcodeRoot = "gcode"
+    c_VirtualConfigRoot = "config"
+    c_VirtualLogsRoot = "logs"
+    c_DefaultAllowedRoots:Set[str] = {c_VirtualGcodeRoot}
+    # Backend root synonyms a caller might send, mapped to our virtual root names.
+    c_RootAliases:Dict[str, str] = {"gcodes": c_VirtualGcodeRoot}
     c_ErrorMaxChars = 240
     c_FileReadChunkSizeBytes = 512 * 1024
 
 
     @staticmethod
-    def ParsePathArg(args:Optional[Dict[str, Any]]) -> Tuple[Optional[VirtualFilePath], Optional[str]]:
+    def ParsePathArg(args:Optional[Dict[str, Any]], allowedRoots:Optional[Set[str]]=None) -> Tuple[Optional[VirtualFilePath], Optional[str]]:
+        if allowedRoots is None:
+            allowedRoots = FileSystemCommandHelper.c_DefaultAllowedRoots
+
         if args is None:
-            return (None, FileSystemCommandHelper.MissingPathError())
+            return (None, FileSystemCommandHelper.MissingPathError(allowedRoots))
 
         path = FileSystemCommandHelper.GetFirstArg(args, "path", "filepath", "file")
         if path is None or len(str(path)) == 0:
-            return (None, FileSystemCommandHelper.MissingPathError())
+            return (None, FileSystemCommandHelper.MissingPathError(allowedRoots))
 
         normalized = str(path).replace("\\", "/").strip()
         while normalized.startswith("/"):
@@ -51,22 +59,79 @@ class FileSystemCommandHelper:
         normalized = normalized.rstrip("/")
 
         if len(normalized) == 0:
-            return (None, FileSystemCommandHelper.MissingPathError())
+            return (None, FileSystemCommandHelper.MissingPathError(allowedRoots))
 
         parts = normalized.split("/")
         for part in parts:
             if len(part) == 0 or part == "." or part == "..":
-                return (None, FileSystemCommandHelper.InvalidPathError())
+                return (None, FileSystemCommandHelper.InvalidPathError(allowedRoots))
 
         root = parts[0].lower()
-        if root != FileSystemCommandHelper.c_VirtualGcodeRoot:
-            return (None, f"Unsupported path root '{parts[0]}'. Use 'gcode/<file>'.")
+        if root not in allowedRoots:
+            return (None, f"Unsupported path root '{parts[0]}'. Use {FileSystemCommandHelper._FormatRootUsage(allowedRoots)}.")
 
         relativePath = "/".join(parts[1:])
         if len(relativePath) == 0:
-            return (None, "Invalid path. Include a file under 'gcode', e.g. 'path=gcode/example.gcode'.")
+            return (None, f"Invalid path. Include a file under {FileSystemCommandHelper._FormatRootUsage(allowedRoots)}, e.g. 'path={FileSystemCommandHelper._ExampleForRoot(allowedRoots)}'.")
 
-        return (VirtualFilePath(FileSystemCommandHelper.c_VirtualGcodeRoot, relativePath), None)
+        return (VirtualFilePath(root, relativePath), None)
+
+
+    @staticmethod
+    def ResolveRequestedRoots(args:Optional[Dict[str, Any]], allowedRoots:List[str], aliases:Optional[Dict[str, str]]=None) -> Tuple[List[str], Optional[str]]:
+        # Figure out which virtual root the caller asked for. We accept an explicit "root" arg, or fall back to
+        # inferring it from the first segment of a "path" arg. When nothing is provided, we list every allowed root.
+        rootArg:Optional[Any] = None
+        if args is not None:
+            rootArg = FileSystemCommandHelper.GetFirstArg(args, "root", "Root")
+            if rootArg is None:
+                pathArg = FileSystemCommandHelper.GetFirstArg(args, "path", "filepath", "file")
+                if pathArg is not None:
+                    rootArg = pathArg
+        if rootArg is None or len(str(rootArg).strip()) == 0:
+            # Return a copy so callers can't mutate the shared root list.
+            return (list(allowedRoots), None)
+
+        requestedRoot = str(rootArg).replace("\\", "/").strip().strip("/").lower()
+        if "/" in requestedRoot:
+            requestedRoot = requestedRoot.split("/", 1)[0]
+        if aliases is not None:
+            requestedRoot = aliases.get(requestedRoot, requestedRoot)
+
+        if requestedRoot not in allowedRoots:
+            return ([], f"Unsupported file root '{rootArg}'. Use {FileSystemCommandHelper._FormatRootNames(allowedRoots)}.")
+
+        return ([requestedRoot], None)
+
+
+    @staticmethod
+    def BuildMultiRootFileListResponse(virtualRoots:List[str],
+                                       listRoot:Callable[[str], Union[List[Dict[str, Any]], CommandResponse]],
+                                       addToTree:Callable[["VirtualFileSystemTree", str, List[Dict[str, Any]]], None],
+                                       logger:Any,
+                                       platformName:str) -> CommandResponse:
+        # Local import to avoid a circular import - commandhandler imports this module.
+        #pylint: disable=import-outside-toplevel
+        from .commandhandler import CommandHandler
+        # Lists each requested root and merges the results into a single virtual tree.
+        tree = VirtualFileSystemTree([])
+        listedRootCount = 0
+        for virtualRoot in virtualRoots:
+            listResult = listRoot(virtualRoot)
+            if isinstance(listResult, CommandResponse):
+                # Preserve the old behavior for gcode failures, and return exact errors for explicitly requested roots.
+                # Other roots are optional - if one fails, log it and keep going so a single bad root doesn't sink the list.
+                if len(virtualRoots) == 1 or virtualRoot == FileSystemCommandHelper.c_VirtualGcodeRoot:
+                    return listResult
+                logger.warning("%s file-list failed for optional root %s. %s", platformName, virtualRoot, str(listResult.ErrorStr))
+                continue
+            addToTree(tree, virtualRoot, listResult)
+            listedRootCount += 1
+
+        if listedRootCount == 0:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"files/list failed on {platformName}: no file roots could be listed.")
+
+        return CommandResponse.Success(tree.Serialize())
 
 
     @staticmethod
@@ -313,13 +378,62 @@ class FileSystemCommandHelper:
 
 
     @staticmethod
-    def MissingPathError() -> str:
-        return "Missing Path. Provide a file path like 'gcode/<file>'."
+    def MissingPathError(allowedRoots:Optional[Set[str]]=None) -> str:
+        if allowedRoots is None:
+            allowedRoots = FileSystemCommandHelper.c_DefaultAllowedRoots
+        return "Missing Path. Provide a file path like " + FileSystemCommandHelper._FormatRootUsage(allowedRoots) + "."
 
 
     @staticmethod
-    def InvalidPathError() -> str:
-        return "Invalid Path. Use 'gcode/<file>' without '.', '..', empty segments, or a trailing slash."
+    def InvalidPathError(allowedRoots:Optional[Set[str]]=None) -> str:
+        if allowedRoots is None:
+            allowedRoots = FileSystemCommandHelper.c_DefaultAllowedRoots
+        return "Invalid Path. Use " + FileSystemCommandHelper._FormatRootUsage(allowedRoots) + " without '.', '..', empty segments, or a trailing slash."
+
+
+    @staticmethod
+    def _FormatRootUsage(allowedRoots:Set[str]) -> str:
+        examples = [f"'{root}/<file>'" for root in sorted(allowedRoots)]
+        return FileSystemCommandHelper._JoinWithOr(examples) or "'<root>/<file>'"
+
+
+    @staticmethod
+    def _FormatRootNames(roots:List[str]) -> str:
+        names = [f"'{root}'" for root in roots]
+        return FileSystemCommandHelper._JoinWithOr(names) or "'<root>'"
+
+
+    @staticmethod
+    def _JoinWithOr(items:List[str]) -> str:
+        if len(items) == 0:
+            return ""
+        if len(items) == 1:
+            return items[0]
+        if len(items) == 2:
+            return items[0] + " or " + items[1]
+        return ", ".join(items[:-1]) + ", or " + items[-1]
+
+
+    @staticmethod
+    def _FirstRootForExample(allowedRoots:Set[str]) -> str:
+        if FileSystemCommandHelper.c_VirtualGcodeRoot in allowedRoots:
+            return FileSystemCommandHelper.c_VirtualGcodeRoot
+        roots = sorted(allowedRoots)
+        if len(roots) > 0:
+            return roots[0]
+        return "root"
+
+
+    @staticmethod
+    def _ExampleForRoot(allowedRoots:Set[str]) -> str:
+        # Pick a representative example file for the root so the hint matches the root type.
+        root = FileSystemCommandHelper._FirstRootForExample(allowedRoots)
+        exampleFiles = {
+            FileSystemCommandHelper.c_VirtualGcodeRoot: "example.gcode",
+            FileSystemCommandHelper.c_VirtualConfigRoot: "printer.cfg",
+            FileSystemCommandHelper.c_VirtualLogsRoot: "klippy.log",
+        }
+        return root + "/" + exampleFiles.get(root, "example.txt")
 
 
     @staticmethod
@@ -508,24 +622,20 @@ class FileSystemCommandHelper:
 
 
 class VirtualFileSystemTree:
-    def __init__(self) -> None:
+    def __init__(self, rootNames:Optional[List[str]]=None) -> None:
+        if rootNames is None:
+            rootNames = [FileSystemCommandHelper.c_VirtualGcodeRoot]
         self.Root:Dict[str, Any] = {
             "Type": "folder",
             "Name": "",
             "VirtualPath": "",
-            "Children": [
-                {
-                    "Type": "folder",
-                    "Name": FileSystemCommandHelper.c_VirtualGcodeRoot,
-                    "VirtualPath": FileSystemCommandHelper.c_VirtualGcodeRoot,
-                    "Children": []
-                }
-            ]
+            "Children": []
         }
         self._folderByPath:Dict[str, Dict[str, Any]] = {
             "": self.Root,
-            FileSystemCommandHelper.c_VirtualGcodeRoot: self.Root["Children"][0],
         }
+        for rootName in rootNames:
+            self.AddFolder(rootName)
 
 
     def AddFolder(self, virtualPath:str, metadata:Optional[Dict[str, Any]]=None) -> Dict[str, Any]:
@@ -614,8 +724,15 @@ class VirtualFileSystemTree:
 
 class FileSystemTreeBuilder:
     @staticmethod
-    def FromMoonrakerFileList(fileList:List[Dict[str, Any]]) -> Dict[str, Any]:
-        tree = VirtualFileSystemTree()
+    def FromMoonrakerFileList(fileList:List[Dict[str, Any]], virtualRoot:str=FileSystemCommandHelper.c_VirtualGcodeRoot) -> Dict[str, Any]:
+        tree = VirtualFileSystemTree([virtualRoot])
+        FileSystemTreeBuilder.AddMoonrakerFileListToTree(tree, fileList, virtualRoot)
+        return tree.Serialize()
+
+
+    @staticmethod
+    def AddMoonrakerFileListToTree(tree:VirtualFileSystemTree, fileList:List[Dict[str, Any]], virtualRoot:str) -> None:
+        tree.AddFolder(virtualRoot)
         for item in fileList:
             if not isinstance(item, dict):
                 continue
@@ -629,20 +746,51 @@ class FileSystemTreeBuilder:
             permissions = item.get("permissions", None)
 
             # Send the rest of the item as metadata, but remove anything we already set.
-            for key in ("path", "size", "modified", "permissions"):
-                item.pop(key, None)
+            metadata = {}
+            for key, value in item.items():
+                if key not in ("path", "size", "modified", "permissions"):
+                    metadata[key] = value
 
-            tree.AddFile(FileSystemCommandHelper.c_VirtualGcodeRoot + "/" + relativePath,  relativePath, sizeBytes, modifiedTimeSec, permissions, item)
-        return tree.Serialize()
+            tree.AddFile(virtualRoot + "/" + relativePath, relativePath, sizeBytes, modifiedTimeSec, permissions, metadata)
 
 
     @staticmethod
     def FromOctoPrintFileList(files:List[Dict[str, Any]]) -> Dict[str, Any]:
         tree = VirtualFileSystemTree()
+        FileSystemTreeBuilder.AddOctoPrintFileListToTree(tree, files)
+        return tree.Serialize()
+
+
+    @staticmethod
+    def AddOctoPrintFileListToTree(tree:VirtualFileSystemTree, files:List[Dict[str, Any]]) -> None:
+        tree.AddFolder(FileSystemCommandHelper.c_VirtualGcodeRoot)
         for item in files:
             if isinstance(item, dict):
                 FileSystemTreeBuilder._AddOctoPrintItem(tree, item)
-        return tree.Serialize()
+
+
+    @staticmethod
+    def AddOctoPrintLogListToTree(tree:VirtualFileSystemTree, logs:List[Dict[str, Any]]) -> None:
+        tree.AddFolder(FileSystemCommandHelper.c_VirtualLogsRoot)
+        for item in logs:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name", None)
+            if name is None or len(str(name)) == 0:
+                continue
+            platformPath = str(name).replace("\\", "/").strip("/")
+            if len(platformPath) == 0:
+                continue
+
+            sizeBytes = item.get("size", None)
+            modifiedTimeSec = item.get("date", None)
+
+            metadata = {}
+            refs = item.get("refs", None)
+            if refs is not None:
+                metadata["Refs"] = refs
+
+            tree.AddFile(FileSystemCommandHelper.c_VirtualLogsRoot + "/" + platformPath, platformPath, sizeBytes, modifiedTimeSec, None, metadata)
 
 
     @staticmethod

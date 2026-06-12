@@ -41,7 +41,7 @@ class ElegooCc2StateTranslator(IPrinterStateReporter, IStateTranslator):
 
 
     def _DelayedConnectionLostCallback(self) -> None:
-        self.NotificationsHandler.OnError("Connection to printer lost during a print.")
+        self.NotificationsHandler.OnError("Connection to printer lost during a print.", platformErrorCode="connection_lost", platformErrorMessage="Connection to printer lost during a print.")
 
 
     def OnStatusUpdate(self, pState:PrinterState, isFirstFullSyncResponse:bool) -> None:
@@ -114,7 +114,11 @@ class ElegooCc2StateTranslator(IPrinterStateReporter, IStateTranslator):
 
     def OnPauseOrTempError(self, printerState:PrinterState) -> None:
         mostRecentPrint = printerState.GetMostRecentPrintInfo()
-        self.NotificationsHandler.OnPaused(mostRecentPrint.GetFileNameWithNoExtension())
+        self.NotificationsHandler.OnPaused(
+            mostRecentPrint.GetFileNameWithNoExtension(),
+            platformErrorCode=self._GetElegooCc2PlatformErrorCode(printerState),
+            platformErrorMessage=self._GetElegooCc2PlatformErrorMessage(printerState)
+        )
 
 
     def OnResume(self, printerState:PrinterState) -> None:
@@ -124,11 +128,22 @@ class ElegooCc2StateTranslator(IPrinterStateReporter, IStateTranslator):
 
     def OnCancelled(self, printerState:PrinterState) -> None:
         mostRecentPrint = printerState.GetMostRecentPrintInfo()
-        self.NotificationsHandler.OnFailed(mostRecentPrint.GetFileNameWithNoExtension(), None, "cancelled")
+        self.NotificationsHandler.OnFailed(
+            mostRecentPrint.GetFileNameWithNoExtension(),
+            None,
+            "cancelled",
+            platformErrorCode=self._GetElegooCc2PlatformErrorCode(printerState),
+            platformErrorMessage=self._GetElegooCc2PlatformErrorMessage(printerState)
+        )
 
 
     def OnError(self, printerState:PrinterState) -> None:
-        self.NotificationsHandler.OnError("Printer error")
+        platformErrorMessage = self._GetElegooCc2PlatformErrorMessage(printerState) or "Printer error"
+        self.NotificationsHandler.OnError(
+            platformErrorMessage,
+            platformErrorCode=self._GetElegooCc2PlatformErrorCode(printerState),
+            platformErrorMessage=platformErrorMessage
+        )
 
 
     def OnPrintProgress(self, printerState:PrinterState) -> None:
@@ -136,6 +151,28 @@ class ElegooCc2StateTranslator(IPrinterStateReporter, IStateTranslator):
         if progress is None:
             progress = 0.0
         self.NotificationsHandler.OnPrintProgress(None, float(progress))
+
+
+    def _GetElegooCc2PlatformErrorCode(self, printerState:PrinterState) -> Optional[str]:
+        parts = []
+        if printerState.MachineStatus is not None:
+            parts.append("machine_status=" + str(printerState.MachineStatus))
+        if printerState.SubStatus is not None:
+            parts.append("sub_status=" + str(printerState.SubStatus))
+        if len(printerState.ExceptionStatus) > 0:
+            parts.append("exception_status=" + str(printerState.ExceptionStatus))
+        if len(parts) == 0:
+            return None
+        return ";".join(parts)
+
+
+    def _GetElegooCc2PlatformErrorMessage(self, printerState:PrinterState) -> Optional[str]:
+        (_, subStatus) = printerState.GetCurrentStatus()
+        if subStatus is not None:
+            return subStatus
+        if len(printerState.ExceptionStatus) > 0:
+            return "Printer Error"
+        return None
 
 
     def GetPrintTimeRemainingEstimateInSeconds(self) -> int:

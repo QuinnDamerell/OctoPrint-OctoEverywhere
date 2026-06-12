@@ -344,13 +344,15 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             if "m600" in lineLower or "fsensor_update" in lineLower:
                 self.Logger.info("Firing On Filament Change Notification From GcodeReceived: %s", str(line))
                 # No need to use a thread since all events are handled on a new thread.
-                self.NotificationHandler.OnFilamentChange()
+                platformErrorCode = "M600" if "m600" in lineLower else "fsensor_update"
+                self.NotificationHandler.OnFilamentChange(platformErrorCode=platformErrorCode, platformErrorMessage=line)
             else:
                 # Look for a line indicating user interaction is needed.
                 if "paused for user" in lineLower or "// action:paused" in lineLower:
                     self.Logger.info("Firing On User Interaction Required From GcodeReceived: %s", str(line))
                     # No need to use a thread since all events are handled on a new thread.
-                    self.NotificationHandler.OnUserInteractionNeeded()
+                    platformErrorCode = "action:paused" if "// action:paused" in lineLower else "paused for user"
+                    self.NotificationHandler.OnUserInteractionNeeded(platformErrorCode=platformErrorCode, platformErrorMessage=line)
 
         # We must return line the line won't make it to OctoPrint!
         return line
@@ -367,7 +369,7 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         if self.NotificationHandler is not None and gcode and gcode == "M600":
             self.Logger.info("Firing On Filament Change Notification From GcodeSent: %s", str(gcode))
             # No need to use a thread since all events are handled on a new thread.
-            self.NotificationHandler.OnFilamentChange()
+            self.NotificationHandler.OnFilamentChange(platformErrorCode=gcode, platformErrorMessage=cmd or gcode)
 
         # Look for positive extrude commands, so we can keep track of them for final snap and our first layer tracking logic.
         # Example cmd value: `G1 X112.979 Y93.81 E.03895`
@@ -486,14 +488,14 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
             reason = self.GetDictStringOrEmpty(payload, "reason")
-            self.NotificationHandler.OnFailed(fileName, durationSec, reason)
+            self.NotificationHandler.OnFailed(fileName, durationSec, reason, platformErrorCode=event, platformErrorMessage=reason)
         elif event == "PrintDone":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             durationSec = self.GetDictStringOrEmpty(payload, "time")
             self.NotificationHandler.OnDone(fileName, durationSec)
         elif event == "PrintPaused":
             fileName = self.GetDictStringOrEmpty(payload, "name")
-            self.NotificationHandler.OnPaused(fileName)
+            self.NotificationHandler.OnPaused(fileName, platformErrorCode=event, platformErrorMessage=self.GetDictStringOrNone(payload, "reason"))
         elif event == "PrintResumed":
             fileName = self.GetDictStringOrEmpty(payload, "name")
             self.NotificationHandler.OnResume(fileName)
@@ -501,22 +503,29 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         # Printer Connection
         elif event == "Error":
             error = self.GetDictStringOrEmpty(payload, "error")
-            self.NotificationHandler.OnError(error)
+            self.NotificationHandler.OnError(error, platformErrorCode=event, platformErrorMessage=error)
 
         # GCODE Events
         # Note most of these aren't sent when printing from the SD card
         elif event == "Waiting":
-            self.NotificationHandler.OnWaiting()
+            self.NotificationHandler.OnWaiting(platformErrorCode=event)
         elif event == "FilamentChange":
             # We also handle some of these filament change gcode events ourselves, but since we already have
             # anti duplication logic in the notification handler for this event, might as well send it here as well.
-            self.NotificationHandler.OnFilamentChange()
+            self.NotificationHandler.OnFilamentChange(platformErrorCode=event)
 
 
     def GetDictStringOrEmpty(self, d:Dict[str, Any], key:str) -> str:
         if d[key] is None:
             return ""
         return str(d[key])
+
+
+    def GetDictStringOrNone(self, d:Dict[str, Any], key:str) -> Optional[str]:
+        value = d.get(key, None)
+        if value is None:
+            return None
+        return str(value)
 
 
     def HandleClientAuthedEvent(self) -> None:

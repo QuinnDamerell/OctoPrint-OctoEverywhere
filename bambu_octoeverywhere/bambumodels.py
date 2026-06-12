@@ -193,7 +193,7 @@ class BambuState:
         # We format the error into a hex the same way the are on the page, to make it easier.
         # NOTE SOME ERRORS HAVE MULTIPLE VALUES, SO GET THEM ALL!
         # They have different values for the different AMS slots
-        h = hex(self.print_error)[2:].rjust(8, '0')
+        h = format(self.print_error, "08X")
         errorMap = {
             "07008011": BambuPrintErrors.FilamentRunOut,
             "07018011": BambuPrintErrors.FilamentRunOut,
@@ -213,7 +213,7 @@ class BambuState:
         # If there is a printer error, this is not 0
         if self.print_error is None or self.print_error == 0:
             return None
-        h = hex(self.print_error)[2:].rjust(8, '0')
+        h = format(self.print_error, "08X")
         errorStr = BAMBU_PRINT_ERROR_STRINGS.get(h, "Error")
         # Fix escaped quotes.
         return errorStr.replace("\\\"", "\"")

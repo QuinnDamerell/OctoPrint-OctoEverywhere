@@ -54,7 +54,7 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
 
     def _DelayedConnectionLostCallback(self):
         # If this fired, the amount of time passed before a reconnect where we should fire the notification.
-        self.NotificationsHandler.OnError("Connection to printer lost during a print.")
+        self.NotificationsHandler.OnError("Connection to printer lost during a print.", platformErrorCode="connection_lost", platformErrorMessage="Connection to printer lost during a print.")
 
 
     # Fired when any mqtt message comes in.
@@ -167,7 +167,11 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
     def OnPauseOrTempError(self, printerState:PrinterState):
         # Use the most recent print info, to ensure the data still exists. It gets cleared out of the print info sometimes
         mostRecentPrint = printerState.GetMostRecentPrintInfo()
-        self.NotificationsHandler.OnPaused(mostRecentPrint.GetFileNameWithNoExtension())
+        self.NotificationsHandler.OnPaused(
+            mostRecentPrint.GetFileNameWithNoExtension(),
+            platformErrorCode=self._GetElegooPlatformErrorCode(printerState),
+            platformErrorMessage=self._GetElegooPlatformErrorMessage(printerState)
+        )
         # TODO - Right now we don't seem to have a way to get error states, they just always "pause"
         # For errors that are user fixable, like filament run outs, the printer will go into a paused state with
         # a printer error message. In this case we want to fire different things.
@@ -194,7 +198,13 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
     def OnCancelled(self, printerState:PrinterState):
         # Use the most recent print info, to ensure the data still exists. It gets cleared out of the print info sometimes
         mostRecentPrint = printerState.GetMostRecentPrintInfo()
-        self.NotificationsHandler.OnFailed(mostRecentPrint.GetFileNameWithNoExtension(), None, "cancelled")
+        self.NotificationsHandler.OnFailed(
+            mostRecentPrint.GetFileNameWithNoExtension(),
+            None,
+            "cancelled",
+            platformErrorCode=self._GetElegooPlatformErrorCode(printerState),
+            platformErrorMessage=self._GetElegooPlatformErrorMessage(printerState)
+        )
 
 
     def OnPrintProgress(self, printerState:PrinterState):
@@ -204,6 +214,22 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
         if progress is None:
             progress = 0.0
         self.NotificationsHandler.OnPrintProgress(None, float(progress))
+
+
+    def _GetElegooPlatformErrorCode(self, printerState:PrinterState) -> Optional[str]:
+        parts = []
+        if printerState.CurrentStatus is not None:
+            parts.append("CurrentStatus=" + str(printerState.CurrentStatus))
+        if printerState.PrintInfoStatus is not None:
+            parts.append("PrintInfoStatus=" + str(printerState.PrintInfoStatus))
+        if len(parts) == 0:
+            return None
+        return ";".join(parts)
+
+
+    def _GetElegooPlatformErrorMessage(self, printerState:PrinterState) -> Optional[str]:
+        (_, subStatus) = printerState.GetCurrentStatus()
+        return subStatus
 
 
     #

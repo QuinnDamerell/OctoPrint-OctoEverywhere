@@ -40,7 +40,7 @@ class PrusaLinkStateTranslator(IPrinterStateReporter, IStateTranslator):
 
 
     def _DelayedConnectionLostCallback(self) -> None:
-        self.NotificationsHandler.OnError("Connection to printer lost during a print.")
+        self.NotificationsHandler.OnError("Connection to printer lost during a print.", platformErrorCode="connection_lost", platformErrorMessage="Connection to printer lost during a print.")
 
 
     def OnStatusUpdate(self, pState:PrinterState, isFirstFullSyncResponse:bool) -> None:
@@ -108,7 +108,11 @@ class PrusaLinkStateTranslator(IPrinterStateReporter, IStateTranslator):
 
     def OnPause(self, printerState:PrinterState) -> None:
         mostRecentPrint = printerState.GetMostRecentPrintInfo()
-        self.NotificationsHandler.OnPaused(mostRecentPrint.GetFileNameWithNoExtension())
+        self.NotificationsHandler.OnPaused(
+            mostRecentPrint.GetFileNameWithNoExtension(),
+            platformErrorCode=self._GetPrusaLinkPlatformErrorCode(printerState),
+            platformErrorMessage=self._GetPrusaLinkPlatformErrorMessage(printerState)
+        )
 
 
     def OnResume(self, printerState:PrinterState) -> None:
@@ -118,12 +122,23 @@ class PrusaLinkStateTranslator(IPrinterStateReporter, IStateTranslator):
 
     def OnCancelled(self, printerState:PrinterState) -> None:
         mostRecentPrint = printerState.GetMostRecentPrintInfo()
-        self.NotificationsHandler.OnFailed(mostRecentPrint.GetFileNameWithNoExtension(), None, "cancelled")
+        self.NotificationsHandler.OnFailed(
+            mostRecentPrint.GetFileNameWithNoExtension(),
+            None,
+            "cancelled",
+            platformErrorCode=self._GetPrusaLinkPlatformErrorCode(printerState),
+            platformErrorMessage=self._GetPrusaLinkPlatformErrorMessage(printerState)
+        )
 
 
     def OnError(self, printerState:PrinterState) -> None:
         (_, subStatus) = printerState.GetCurrentStatus()
-        self.NotificationsHandler.OnError(subStatus or "Printer error")
+        errorMessage = subStatus or "Printer error"
+        self.NotificationsHandler.OnError(
+            errorMessage,
+            platformErrorCode=self._GetPrusaLinkPlatformErrorCode(printerState),
+            platformErrorMessage=self._GetPrusaLinkPlatformErrorMessage(printerState) or errorMessage
+        )
 
 
     def OnPrintProgress(self, printerState:PrinterState) -> None:
@@ -131,6 +146,22 @@ class PrusaLinkStateTranslator(IPrinterStateReporter, IStateTranslator):
         if progress is None:
             progress = 0.0
         self.NotificationsHandler.OnPrintProgress(None, float(progress))
+
+
+    def _GetPrusaLinkPlatformErrorCode(self, printerState:PrinterState) -> Optional[str]:
+        parts = []
+        if printerState.PrinterState is not None:
+            parts.append("printer_state=" + str(printerState.PrinterState))
+        if printerState.JobState is not None:
+            parts.append("job_state=" + str(printerState.JobState))
+        if len(parts) == 0:
+            return None
+        return ";".join(parts)
+
+
+    def _GetPrusaLinkPlatformErrorMessage(self, printerState:PrinterState) -> Optional[str]:
+        (_, subStatus) = printerState.GetCurrentStatus()
+        return subStatus
 
 
     def GetPrintTimeRemainingEstimateInSeconds(self) -> int:

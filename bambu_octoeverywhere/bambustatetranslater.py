@@ -128,19 +128,26 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
 
         if err is None or err == BambuPrintErrors.PausedByUser or err == BambuPrintErrors.PausedUnknownReason or err == BambuPrintErrors.PrintFilePauseCommand:
             # If error is none or this reason, it's just a normal pause.
-            self.NotificationsHandler.OnPaused(bambuState.GetFileNameWithNoExtension())
+            self.NotificationsHandler.OnPaused(
+                bambuState.GetFileNameWithNoExtension(),
+                platformErrorCode=self._GetBambuPlatformErrorCode(bambuState),
+                platformErrorMessage=self._GetBambuPlatformErrorMessage(bambuState, "Paused")
+            )
             return
 
         # Try to match known temporary errors.
         if err == BambuPrintErrors.FilamentRunOut:
-            self.NotificationsHandler.OnFilamentChange()
+            self.NotificationsHandler.OnFilamentChange(
+                platformErrorCode=self._GetBambuPlatformErrorCode(bambuState),
+                platformErrorMessage=self._GetBambuPlatformErrorMessage(bambuState, "Filament run out")
+            )
             return
 
         # Send the error string from the bambu API map.
-        errorStr = bambuState.GetDetailedPrinterErrorStr()
+        errorStr = self._GetBambuPlatformErrorMessage(bambuState, "General Error")
         if errorStr is None:
             errorStr = "General Error"
-        self.NotificationsHandler.OnError(errorStr)
+        self.NotificationsHandler.OnError(errorStr, platformErrorCode=self._GetBambuPlatformErrorCode(bambuState), platformErrorMessage=errorStr)
 
 
     def BambuOnResume(self, bambuState:BambuState) -> None:
@@ -150,7 +157,13 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
     def BambuOnFailed(self, bambuState:BambuState) -> None:
         # TODO - Right now this is only called by what we think are use requested cancels.
         # How can we add this for print stopping errors as well?
-        self.NotificationsHandler.OnFailed(bambuState.GetFileNameWithNoExtension(), None, "cancelled")
+        self.NotificationsHandler.OnFailed(
+            bambuState.GetFileNameWithNoExtension(),
+            None,
+            "cancelled",
+            platformErrorCode=self._GetBambuPlatformErrorCode(bambuState),
+            platformErrorMessage=self._GetBambuPlatformErrorMessage(bambuState, bambuState.gcode_state)
+        )
 
 
     def BambuOnPrintProgress(self, bambuState:BambuState) -> None:
@@ -162,6 +175,22 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
             self.Logger.debug("BambuOnPrintProgress - No percentage available.")
             return
         self.NotificationsHandler.OnPrintProgress(None, float(percent))
+
+
+    def _GetBambuPlatformErrorCode(self, bambuState:BambuState) -> Optional[str]:
+        if bambuState.print_error is not None and bambuState.print_error != 0:
+            return format(bambuState.print_error, "08X")
+        return bambuState.gcode_state
+
+
+    def _GetBambuPlatformErrorMessage(self, bambuState:BambuState, fallback:Optional[str]=None) -> Optional[str]:
+        detailedError = bambuState.GetDetailedPrinterErrorStr()
+        if detailedError is not None:
+            return detailedError
+        err = bambuState.GetPrinterErrorType()
+        if err is not None:
+            return err.name
+        return fallback
 
     # TODO - Handlers
     #     # Fired when OctoPrint or the printer hits an error.

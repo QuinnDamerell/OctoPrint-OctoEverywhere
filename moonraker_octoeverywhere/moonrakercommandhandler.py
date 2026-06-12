@@ -3,7 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
-from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath
+from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath, VirtualFileSystemTree
 from octoeverywhere.httpresult import HttpResult
 from octoeverywhere.interfaces import IPlatformCommandHandler, ConnectionInfo, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, FEATURE_AXIS_MOVEMENT, FEATURE_EXTRUSION, FEATURE_TEMPERATURE_CONTROL, FEATURE_PRINT_START
 from octoeverywhere.localip import LocalIpHelper
@@ -19,6 +19,22 @@ from .lightmanager import LightManager
 
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler(IPlatformCommandHandler):
+    c_MoonrakerVirtualFileRoots = [
+        FileSystemCommandHelper.c_VirtualGcodeRoot,
+        FileSystemCommandHelper.c_VirtualConfigRoot,
+        FileSystemCommandHelper.c_VirtualLogsRoot,
+    ]
+    c_MoonrakerAllowedFileRoots = set(c_MoonrakerVirtualFileRoots)
+    # Moonraker's logs root is read-only - only the gcodes and config roots accept upload/delete.
+    c_MoonrakerWritableFileRoots = {
+        FileSystemCommandHelper.c_VirtualGcodeRoot,
+        FileSystemCommandHelper.c_VirtualConfigRoot,
+    }
+    c_MoonrakerRootByVirtualRoot = {
+        FileSystemCommandHelper.c_VirtualGcodeRoot: "gcodes",
+        FileSystemCommandHelper.c_VirtualConfigRoot: "config",
+        FileSystemCommandHelper.c_VirtualLogsRoot: "logs",
+    }
 
     def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
@@ -508,7 +524,24 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileList(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
-        path = "/server/files/list?root=gcodes"
+        virtualRoots, errorStr = FileSystemCommandHelper.ResolveRequestedRoots(args, MoonrakerCommandHandler.c_MoonrakerVirtualFileRoots, FileSystemCommandHelper.c_RootAliases)
+        if errorStr is not None:
+            return CommandResponse.Error(400, errorStr)
+
+        def addToTree(tree:VirtualFileSystemTree, virtualRoot:str, fileList:List[Dict[str, Any]]) -> None:
+            FileSystemTreeBuilder.AddMoonrakerFileListToTree(tree, fileList, virtualRoot)
+
+        return FileSystemCommandHelper.BuildMultiRootFileListResponse(
+            virtualRoots,
+            self._ListMoonrakerFileRoot,
+            addToTree,
+            self.Logger,
+            "Moonraker")
+
+
+    def _ListMoonrakerFileRoot(self, virtualRoot:str) -> Union[List[Dict[str, Any]], CommandResponse]:
+        moonrakerRoot = self._GetMoonrakerRoot(virtualRoot)
+        path = "/server/files/list?root=" + moonrakerRoot
         headers:Dict[str, str] = {}
         self._AddMoonrakerAuth(headers)
         result = OctoHttpRequest.MakeHttpCall(
@@ -541,21 +574,21 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                 fileList = responseObj["result"]
             if not isinstance(fileList, list):
                 fileList = []
-            return CommandResponse.Success(FileSystemTreeBuilder.FromMoonrakerFileList(fileList))
+            return fileList
         finally:
             result.Free()
 
 
     def ExecuteFileUpload(self, args:Optional[Dict[str, Any]], uploadBody:UploadBody) -> CommandResponse:
-        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, MoonrakerCommandHandler.c_MoonrakerWritableFileRoots)
         if errorStr is not None or parsedPath is None:
-            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError(MoonrakerCommandHandler.c_MoonrakerWritableFileRoots))
         if uploadBody.HasData is False:
             return CommandResponse.Error(400, FileSystemCommandHelper.EmptyUploadBodyError())
 
         fileName, parentPath = parsedPath.FileNameAndParent()
         fields:Dict[str, str] = {
-            "root": "gcodes"
+            "root": self._GetMoonrakerRoot(parsedPath.Root)
         }
         if len(parentPath) > 0:
             fields["path"] = parentPath
@@ -595,14 +628,14 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:
-        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, MoonrakerCommandHandler.c_MoonrakerAllowedFileRoots)
         if errorStr is not None or parsedPath is None:
-            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(), CommandHandler.c_FilesDownloadCommand)
+            return FileSystemCommandHelper.BuildRawError(400, errorStr or FileSystemCommandHelper.InvalidPathError(MoonrakerCommandHandler.c_MoonrakerAllowedFileRoots), CommandHandler.c_FilesDownloadCommand)
 
         headers:Dict[str, str] = {}
         self._AddMoonrakerAuth(headers)
         relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
-        downloadPath = "/server/files/gcodes/" + relativePath
+        downloadPath = "/server/files/" + self._GetMoonrakerRoot(parsedPath.Root) + "/" + relativePath
         result = OctoHttpRequest.MakeHttpCall(
             self.Logger,
             downloadPath,
@@ -632,14 +665,14 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
-        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, MoonrakerCommandHandler.c_MoonrakerWritableFileRoots)
         if errorStr is not None or parsedPath is None:
-            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError(MoonrakerCommandHandler.c_MoonrakerWritableFileRoots))
 
         headers:Dict[str, str] = {}
         self._AddMoonrakerAuth(headers)
         relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
-        deletePath = "/server/files/gcodes/" + relativePath
+        deletePath = "/server/files/" + self._GetMoonrakerRoot(parsedPath.Root) + "/" + relativePath
         result = OctoHttpRequest.MakeHttpCall(
             self.Logger,
             deletePath,
@@ -667,8 +700,12 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
 
     def _GetPlatformPath(self, virtPath:VirtualFilePath) -> str:
-        # The print command takes file paths relative to the gcode folder, so this is what we want.
+        # Moonraker file commands take file paths relative to the selected root.
         return virtPath.RelativePath
+
+
+    def _GetMoonrakerRoot(self, virtualRoot:str) -> str:
+        return MoonrakerCommandHandler.c_MoonrakerRootByVirtualRoot[virtualRoot]
 
 
     # Checks if the printer is connected and in the correct state (or states)
