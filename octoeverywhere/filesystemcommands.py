@@ -109,10 +109,8 @@ class FileSystemCommandHelper:
                                        listRoot:Callable[[str], Union[List[Dict[str, Any]], CommandResponse]],
                                        addToTree:Callable[["VirtualFileSystemTree", str, List[Dict[str, Any]]], None],
                                        logger:Any,
-                                       platformName:str) -> CommandResponse:
-        # Local import to avoid a circular import - commandhandler imports this module.
-        #pylint: disable=import-outside-toplevel
-        from .commandhandler import CommandHandler
+                                       platformName:str,
+                                       allRootsFailedStatusCode:int) -> CommandResponse:
         # Lists each requested root and merges the results into a single virtual tree.
         tree = VirtualFileSystemTree([])
         listedRootCount = 0
@@ -129,7 +127,7 @@ class FileSystemCommandHelper:
             listedRootCount += 1
 
         if listedRootCount == 0:
-            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"files/list failed on {platformName}: no file roots could be listed.")
+            return CommandResponse.Error(allRootsFailedStatusCode, f"files/list failed on {platformName}: no file roots could be listed.")
 
         return CommandResponse.Success(tree.Serialize())
 

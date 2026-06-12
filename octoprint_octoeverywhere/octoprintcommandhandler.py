@@ -413,7 +413,8 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
             self._ListOctoPrintFileRoot,
             addToTree,
             self.Logger,
-            "OctoPrint")
+            "OctoPrint",
+            CommandHandler.c_CommandError_ExecutionFailure)
 
 
     def _ListOctoPrintFileRoot(self, virtualRoot:str) -> Union[List[Dict[str, Any]], CommandResponse]:

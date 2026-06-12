@@ -536,7 +536,8 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self._ListMoonrakerFileRoot,
             addToTree,
             self.Logger,
-            "Moonraker")
+            "Moonraker",
+            CommandHandler.c_CommandError_ExecutionFailure)
 
 
     def _ListMoonrakerFileRoot(self, virtualRoot:str) -> Union[List[Dict[str, Any]], CommandResponse]:
