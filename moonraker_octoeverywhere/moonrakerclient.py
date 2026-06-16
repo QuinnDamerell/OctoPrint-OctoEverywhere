@@ -935,7 +935,7 @@ class MoonrakerCompat(IPrinterStateReporter):
             time.sleep(5.0)
             if MoonrakerClient.Get().GetIsKlippyReady() is False:
                 # Send a notification to the user.
-                self.NotificationHandler.OnError("Klipper Disconnected", platformErrorCode="klippy_disconnected", platformErrorMessage="Klipper Disconnected")
+                self.NotificationHandler.OnError("Klipper Disconnected", platformErrorCode="klippy_disconnected")
         thread = threading.Thread(target=disconnectWaiter)
         thread.start()
 
@@ -981,7 +981,7 @@ class MoonrakerCompat(IPrinterStateReporter):
         # The API expects the duration as a float of seconds, as a string.
         # The API expects either cancelled or error for the reason. This is the only two strings OctoPrint produces.
         # We can't differentiate between printer errors and user canceling the print right now, so we always use cancelled.
-        self.NotificationHandler.OnFailed(fileName, str(totalDurationSec), "cancelled", platformErrorCode=status, platformErrorMessage=status)
+        self.NotificationHandler.OnFailed(fileName, str(totalDurationSec), "cancelled", platformErrorCode=status)
 
 
     # Called the the print is paused.
@@ -996,11 +996,11 @@ class MoonrakerCompat(IPrinterStateReporter):
         if stats is not None:
             fileName = stats.get("filename", None)
         platformErrorCode = None
-        platformErrorMessage = None
+        error = None
         if printStats is not None:
             platformErrorCode = printStats.get("state", None)
-            platformErrorMessage = printStats.get("message", None)
-        self.NotificationHandler.OnPaused(fileName, platformErrorCode=platformErrorCode, platformErrorMessage=platformErrorMessage)
+            error = printStats.get("message", None)
+        self.NotificationHandler.OnPaused(fileName, platformErrorCode=platformErrorCode, error=error)
 
 
     # Called the the print is resumed.

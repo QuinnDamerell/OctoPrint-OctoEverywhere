@@ -131,7 +131,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
             self.NotificationsHandler.OnPaused(
                 bambuState.GetFileNameWithNoExtension(),
                 platformErrorCode=self._GetBambuPlatformErrorCode(bambuState),
-                platformErrorMessage=self._GetBambuPlatformErrorMessage(bambuState, "Paused")
+                error=self._GetBambuError(bambuState, None)
             )
             return
 
@@ -139,15 +139,13 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         if err == BambuPrintErrors.FilamentRunOut:
             self.NotificationsHandler.OnFilamentChange(
                 platformErrorCode=self._GetBambuPlatformErrorCode(bambuState),
-                platformErrorMessage=self._GetBambuPlatformErrorMessage(bambuState, "Filament run out")
+                error=self._GetBambuError(bambuState, None)
             )
             return
 
         # Send the error string from the bambu API map.
-        errorStr = self._GetBambuPlatformErrorMessage(bambuState, "General Error")
-        if errorStr is None:
-            errorStr = "General Error"
-        self.NotificationsHandler.OnError(errorStr, platformErrorCode=self._GetBambuPlatformErrorCode(bambuState), platformErrorMessage=errorStr)
+        errorStr = self._GetBambuError(bambuState, None)
+        self.NotificationsHandler.OnError(errorStr, platformErrorCode=self._GetBambuPlatformErrorCode(bambuState))
 
 
     def BambuOnResume(self, bambuState:BambuState) -> None:
@@ -162,7 +160,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
             None,
             "cancelled",
             platformErrorCode=self._GetBambuPlatformErrorCode(bambuState),
-            platformErrorMessage=self._GetBambuPlatformErrorMessage(bambuState, bambuState.gcode_state)
+            error=self._GetBambuError(bambuState, None)
         )
 
 
@@ -183,7 +181,7 @@ class BambuStateTranslator(IPrinterStateReporter, IBambuStateTranslator):
         return bambuState.gcode_state
 
 
-    def _GetBambuPlatformErrorMessage(self, bambuState:BambuState, fallback:Optional[str]=None) -> Optional[str]:
+    def _GetBambuError(self, bambuState:BambuState, fallback:Optional[str]=None) -> Optional[str]:
         detailedError = bambuState.GetDetailedPrinterErrorStr()
         if detailedError is not None:
             return detailedError

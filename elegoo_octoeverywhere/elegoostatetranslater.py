@@ -54,7 +54,7 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
 
     def _DelayedConnectionLostCallback(self):
         # If this fired, the amount of time passed before a reconnect where we should fire the notification.
-        self.NotificationsHandler.OnError("Connection to printer lost during a print.", platformErrorCode="connection_lost", platformErrorMessage="Connection to printer lost during a print.")
+        self.NotificationsHandler.OnError("Connection to printer lost during a print.", platformErrorCode="connection_lost")
 
 
     # Fired when any mqtt message comes in.
@@ -170,7 +170,7 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
         self.NotificationsHandler.OnPaused(
             mostRecentPrint.GetFileNameWithNoExtension(),
             platformErrorCode=self._GetElegooPlatformErrorCode(printerState),
-            platformErrorMessage=self._GetElegooPlatformErrorMessage(printerState)
+            error=self._GetElegooError(printerState)
         )
         # TODO - Right now we don't seem to have a way to get error states, they just always "pause"
         # For errors that are user fixable, like filament run outs, the printer will go into a paused state with
@@ -203,7 +203,7 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
             None,
             "cancelled",
             platformErrorCode=self._GetElegooPlatformErrorCode(printerState),
-            platformErrorMessage=self._GetElegooPlatformErrorMessage(printerState)
+            error=self._GetElegooError(printerState)
         )
 
 
@@ -227,7 +227,7 @@ class ElegooStateTranslator(IPrinterStateReporter, IStateTranslator):
         return ";".join(parts)
 
 
-    def _GetElegooPlatformErrorMessage(self, printerState:PrinterState) -> Optional[str]:
+    def _GetElegooError(self, printerState:PrinterState) -> Optional[str]:
         (_, subStatus) = printerState.GetCurrentStatus()
         return subStatus
 

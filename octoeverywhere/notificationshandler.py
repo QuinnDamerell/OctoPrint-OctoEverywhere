@@ -363,7 +363,7 @@ class NotificationsHandler(INotificationHandler):
 
 
     # Fired when a print fails
-    def OnFailed(self, fileName:Optional[str], durationSecStr:Optional[str]=None, reason:Optional[str]=None, platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None):
+    def OnFailed(self, fileName:Optional[str], durationSecStr:Optional[str]=None, reason:Optional[str]=None, platformErrorCode:Optional[object]=None, error:Optional[str]=None):
         if self._shouldIgnoreEvent(fileName):
             return
         self._updateCurrentFileName(fileName)
@@ -373,7 +373,7 @@ class NotificationsHandler(INotificationHandler):
         args:Dict[str, str] = {}
         if reason is not None:
             args["Reason"] = reason
-        self._AddPlatformErrorInfo(args, platformErrorCode, platformErrorMessage)
+        self._AddErrorInfo(args, platformErrorCode, error)
         self._sendEvent("failed", args)
 
 
@@ -390,13 +390,13 @@ class NotificationsHandler(INotificationHandler):
 
 
     # Fired when a print is paused
-    def OnPaused(self, fileName:Optional[str]=None, platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None):
+    def OnPaused(self, fileName:Optional[str]=None, platformErrorCode:Optional[object]=None, error:Optional[str]=None):
         if self._shouldIgnoreEvent(fileName):
             return
 
         # Always update the file name.
         self._updateCurrentFileName(fileName)
-        args = self._BuildPlatformErrorArgs(platformErrorCode, platformErrorMessage)
+        args = self._BuildErrorArgs(platformErrorCode, error)
 
         # See if there is a pause notification suppression set. If this is not null and it was recent enough
         # suppress the notification from firing.
@@ -431,7 +431,7 @@ class NotificationsHandler(INotificationHandler):
 
 
     # Fired when OctoPrint or the printer hits an error.
-    def OnError(self, error:str, platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None):
+    def OnError(self, error:Optional[str], platformErrorCode:Optional[object]=None):
         if self._shouldIgnoreEvent():
             return
 
@@ -445,21 +445,21 @@ class NotificationsHandler(INotificationHandler):
         if self._shouldSendSpammyEvent("on-error"+str(error), 30.0) is False:
             return
 
-        args = {"Error": error}
-        self._AddPlatformErrorInfo(args, platformErrorCode, platformErrorMessage)
+        args:Dict[str, str] = {}
+        self._AddErrorInfo(args, platformErrorCode, error)
         self._sendEvent("error", args)
 
 
     # Fired when the waiting command is received from the printer.
-    def OnWaiting(self, platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None):
+    def OnWaiting(self, platformErrorCode:Optional[object]=None, error:Optional[str]=None):
         if self._shouldIgnoreEvent():
             return
         # Make this the same as the paused command.
-        self.OnPaused(platformErrorCode=platformErrorCode, platformErrorMessage=platformErrorMessage)
+        self.OnPaused(platformErrorCode=platformErrorCode, error=error)
 
 
     # Fired when we get a M600 command from the printer to change the filament
-    def OnFilamentChange(self, platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None):
+    def OnFilamentChange(self, platformErrorCode:Optional[object]=None, error:Optional[str]=None):
         if self._shouldIgnoreEvent():
             return
         # This event might fire over and over or might be paired with a filament change event.
@@ -469,11 +469,11 @@ class NotificationsHandler(INotificationHandler):
             return
 
         # Otherwise, send it.
-        self._sendEvent("filamentchange", self._BuildPlatformErrorArgs(platformErrorCode, platformErrorMessage))
+        self._sendEvent("filamentchange", self._BuildErrorArgs(platformErrorCode, error))
 
 
     # Fired when the printer needs user interaction to continue
-    def OnUserInteractionNeeded(self, platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None):
+    def OnUserInteractionNeeded(self, platformErrorCode:Optional[object]=None, error:Optional[str]=None):
         if self._shouldIgnoreEvent():
             return
         # This event might fire over and over or might be paired with a filament change event.
@@ -483,7 +483,7 @@ class NotificationsHandler(INotificationHandler):
             return
 
         # Otherwise, send it.
-        self._sendEvent("userinteractionneeded", self._BuildPlatformErrorArgs(platformErrorCode, platformErrorMessage))
+        self._sendEvent("userinteractionneeded", self._BuildErrorArgs(platformErrorCode, error))
 
 
     # Fired when a print is making progress.
@@ -582,22 +582,22 @@ class NotificationsHandler(INotificationHandler):
 
 
     @staticmethod
-    def _BuildPlatformErrorArgs(platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None) -> Dict[str, str]:
+    def _BuildErrorArgs(platformErrorCode:Optional[object]=None, error:Optional[str]=None) -> Dict[str, str]:
         args:Dict[str, str] = {}
-        NotificationsHandler._AddPlatformErrorInfo(args, platformErrorCode, platformErrorMessage)
+        NotificationsHandler._AddErrorInfo(args, platformErrorCode, error)
         return args
 
 
     @staticmethod
-    def _AddPlatformErrorInfo(args:Dict[str, str], platformErrorCode:Optional[object]=None, platformErrorMessage:Optional[str]=None) -> None:
+    def _AddErrorInfo(args:Dict[str, str], platformErrorCode:Optional[object]=None, error:Optional[str]=None) -> None:
         if platformErrorCode is not None:
             codeStr = str(platformErrorCode).strip()
             if len(codeStr) > 0:
                 args["PlatformErrorCode"] = codeStr
-        if platformErrorMessage is not None:
-            messageStr = str(platformErrorMessage).strip()
-            if len(messageStr) > 0:
-                args["PlatformErrorMessage"] = messageStr
+        if error is not None:
+            errorStr = str(error).strip()
+            if len(errorStr) > 0:
+                args["Error"] = errorStr
 
 
     #
