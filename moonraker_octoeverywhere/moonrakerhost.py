@@ -73,7 +73,8 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
 
 
     def RunBlocking(self, klipperConfigDir:str, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
-                    moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode
+                    moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode 
+                    disableMoonrakerConfigFileWrites:bool,
                     isCompanion:bool, isDockerContainer:bool,
                     devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
@@ -100,7 +101,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             Sentry.Setup(pluginVersionStr, "klipper", devConfig is not None, canEnableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # This logic only works if running locally.
-            if not isCompanion:
+            if not isCompanion and not disableMoonrakerConfigFileWrites:
                 # Before we do this first time setup, make sure our config files are in place. This is important
                 # because if this fails it will throw. We don't want to let the user complete the install setup if things
                 # with the update aren't working.

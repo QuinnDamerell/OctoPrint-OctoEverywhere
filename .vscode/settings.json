@@ -250,6 +250,7 @@
         "printerid",
         "printernotifications",
         "printerprofiles",
+        "printerstatemapping",
         "printerstateobject",
         "printinfo",
         "printkeeper",

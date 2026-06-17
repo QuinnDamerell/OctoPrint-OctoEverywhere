@@ -16,6 +16,7 @@ from .smartpause import SmartPause
 from .filemetadatacache import FileMetadataCache
 from .jsonrpcresponse import JsonRpcResponse
 from .lightmanager import LightManager
+from .printerstatemapping import PrinterStateMapping
 
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler(IPlatformCommandHandler):
@@ -62,6 +63,9 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
             "extruder": None,       # Needed for temps
             "heater_bed": None,     # Needed for temps
+            # Optional. Standard Klipper returns an empty object if this doesn't exist.
+            # Some forks, including Snapmaker U1 firmware, expose richer machine and action states here.
+            "machine_state_manager": None,
         }
 
         # Add light objects to the query if any are detected
@@ -113,6 +117,12 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         # TODO - If in an error state, set some context as to why.
         # This is shown to the user directly, so it must be short (think of a dashboard status) and formatted well.
         errorStr:Optional[str] = None
+
+        # Some Klipper forks expose a richer machine/action state in a custom object.
+        # Keep this additive as SubState so the core Moonraker state mapping remains stable.
+        subState_CanBeNone = PrinterStateMapping.GetMachineStateManagerSubState(
+            statusObjectOrEmptyDict.get("machine_state_manager", None)
+        )
 
         # Get current layer info
         # None = The platform doesn't provide it.
@@ -191,6 +201,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         # Build the object and return.
         return {
             "State": state,
+            "SubState": subState_CanBeNone,
             "Error": errorStr,
             # List of lights with their status, or None if not supported/unknown
             "Lights": lights,
@@ -212,7 +223,6 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                 }
             }
         }
-
 
     # !! Platform Command Handler Interface Function !!
     # This must return the platform version as a string.

@@ -39,6 +39,7 @@ if __name__ == '__main__':
         # 3) Now parse the required vars based on the IsCompanion flag state.
         #
         MoonrakerConfigFile = None
+        DisableMoonrakerConfigFileWrites = False
         #CompanionInstanceIdStr = None
 
         if isCompanion:
@@ -47,6 +48,8 @@ if __name__ == '__main__':
             pass
         else:
             MoonrakerConfigFile = s.GetConfigVarAndValidate(jsonConfig, "MoonrakerConfigFile", ConfigDataTypes.Path)
+            MoonrakerConfigFile = s.GetConfigVarAndValidate(jsonConfig, "MoonrakerConfigFile", ConfigDataTypes.Path)
+            DisableMoonrakerConfigFileWrites = s.GetConfigVarAndValidate(jsonConfig, "DisableMoonrakerConfigFileWrites", ConfigDataTypes.Bool, defaultValue=False)
 
     except Exception as e:
         s.PrintErrorAndExit(f"Exception while loading json config. Error:{str(e)} Config: {jsonConfigStr}")
@@ -59,7 +62,7 @@ if __name__ == '__main__':
         # Create and run the main host!
         host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
         host.RunBlocking(KlipperConfigFolder, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
-                        MoonrakerConfigFile, isCompanion, isDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+                        MoonrakerConfigFile, DisableMoonrakerConfigFileWrites, isCompanion, isDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main moonraker host class. Error:{str(e)}")
 
