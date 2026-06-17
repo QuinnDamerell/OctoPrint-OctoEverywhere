@@ -73,7 +73,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
 
 
     def RunBlocking(self, klipperConfigDir:str, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
-                    moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode 
+                    moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode
                     disableMoonrakerConfigFileWrites:bool,
                     isCompanion:bool, isDockerContainer:bool,
                     devConfig:Optional[Dict[str, Any]]) -> None:
