@@ -1134,11 +1134,14 @@ class MoonrakerCompat(IPrinterStateReporter):
                     self.Logger.debug("GetCurrentLayerInfo failed to get a total layer count. %s", json.dumps(printStats))
 
             # Next, try to get the current layer.
-            currentLayer = 0
+            # If we can get it from the info object, that's the best source of truth.
+            currentLayer:Optional[int] = None
             printStatusCurrentLayer = printStats.get("info", {}).get("current_layer", None)
             if printStatusCurrentLayer is not None:
+                # If we found a value, use it. A current layer of 0 is valid if the print hasn't started or it's warming up.
                 currentLayer = int(printStatusCurrentLayer)
-            if currentLayer == 0 and firstLayerHeight > 0 and layerHeight > 0 and "gcode_position" in gcodeMove and len(gcodeMove["gcode_position"]) > 2:
+            # If we couldn't get it from the info object, try to estimate it from the gcode position.
+            if currentLayer is None and firstLayerHeight > 0 and layerHeight > 0 and "gcode_position" in gcodeMove and len(gcodeMove["gcode_position"]) > 2:
                 # Note that we need to check print_duration before checking this, because print duration will only start going after the hotend is in print position.
                 # If we take the zAxisPosition before that, the z axis might be up in a pre-print position, and we will get the wrong value.
                 if "print_duration" not in printStats:
@@ -1152,7 +1155,8 @@ class MoonrakerCompat(IPrinterStateReporter):
                 else:
                     # If the print hasn't started yet, the layer height is 0.
                     currentLayer = 0
-            if currentLayer == 0:
+            if currentLayer is None:
+                currentLayer = 0
                 if self.Logger.isEnabledFor(logging.DEBUG):
                     self.Logger.debug("GetCurrentLayerInfo failed to get a current layer count. %s", json.dumps(printStats))
 
