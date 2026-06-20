@@ -31,8 +31,9 @@ class BambuCommandHandler(IPlatformCommandHandler):
     # This map contains UI ready strings that map to a subset of sub-stages we can send which are more specific than the state.
     # These need to be UI ready, since they will be shown directly.
     # Some known stages are excluded, because we don't want to show them.
-    # Here's a full list: https://github.com/davglass/bambu-cli/blob/398c24057c71fc6bcc5dbd818bdcacc20833f61c/lib/const.js#L104
+    # Here's a full list: https://github.com/greghesp/ha-bambulab/blob/main/custom_components/bambu_lab/pybambu/const.py
     SubStageMap = {
+        # 0:  "Printing", Don't include printing, since this would make a substate string exist.
         1:  "Auto Bed Leveling",
         2:  "Bed Preheating",
         3:  "Sweeping XY Mech Mode",
@@ -67,7 +68,53 @@ class BambuCommandHandler(IPlatformCommandHandler):
         32: "Nozzle Filament Covered Detected Pause",
         33: "Cutter Error",
         34: "First Layer Error",
-        35: "Nozzle Clogged"
+        35: "Nozzle Clogged",
+        36: "Checking Absolute Accuracy Before Calibration",
+        37: "Absolute Accuracy Calibration",
+        38: "Checking Absolute Accuracy After Calibration",
+        39: "Calibrating Nozzle Offset",
+        40: "High Temperature Bed Leveling",
+        41: "Checking Quick Release",
+        42: "Checking Door And Cover",
+        43: "Laser Calibration",
+        44: "Checking Platform",
+        45: "Checking Birdseye Camera Position",
+        46: "Calibrating Birdseye Camera",
+        47: "Bed Leveling Phase 1",
+        48: "Bed Leveling Phase 2",
+        49: "Heating Chamber",
+        50: "Cooling Heated Bed",
+        51: "Printing Calibration Lines",
+        52: "Checking Material",
+        53: "Calibrating Live View Camera",
+        54: "Waiting For Bed Temperature",
+        55: "Checking Material Position",
+        56: "Calibrating Cutter Model Offset",
+        57: "Measuring Surface",
+        58: "Thermal Preconditioning",
+        59: "Homing Blade Holder",
+        60: "Calibrating Camera Offset",
+        61: "Calibrating Blade Holder Position",
+        62: "Hotend Pick And Place Test",
+        63: "Waiting For Chamber Temperature",
+        64: "Preparing Hotend",
+        65: "Calibrating Nozzle Clumping Detection",
+        66: "Purifying Chamber Air",
+        67: "Measuring Rotary Attachment",
+        68: "Moving Toolhead Above Purge Chute",
+        69: "Cooling Nozzle",
+        70: "Moving Toolhead To Center Of Bed",
+        71: "Active Arc Fitting",
+        72: "Detecting Hotend Type",
+        73: "Detecting Build Plate Alignment",
+        74: "Detecting Foreign Object On Bed Surface",
+        75: "Detecting Foreign Object Under Bed",
+        76: "Pre-Extrusion Before Printing",
+        77: "Preparing AMS",
+        # X1 returns -1 for idle
+        -1: "Idle",
+        # P1 returns 255 for idle
+        255: "Idle",
     }
 
 

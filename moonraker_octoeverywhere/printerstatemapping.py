@@ -1,7 +1,25 @@
-from typing import Any, Dict, Optional
+import json
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 
 class PrinterStateMapping:
+    ErrorMessageKeys = [
+        "message",
+        "msg",
+        "error_message",
+        "error",
+        "reason",
+        "pause_reason",
+        "detail",
+        "description",
+    ]
+    ErrorCodeKeys = [
+        "coded",
+        "error_code",
+        "platform_error_code",
+        "code",
+    ]
+
     # UI-ready strings for Klipper forks that expose a machine_state_manager object.
     # This schema is currently known to work with the Snapmaker U1. Other printers
     # can add compatible mappings here without changing Moonraker command handling.
@@ -143,6 +161,204 @@ class PrinterStateMapping:
             PrinterStateMapping.U1MachineMainStateMap,
             PrinterStateMapping.U1MachineMainStateNameMap
         )
+
+
+    @staticmethod
+    def GetPrintStatsErrorInfo(printStats:Optional[Dict[str, Any]], supplementalMessage:Optional[str]=None) -> Tuple[Optional[str], Optional[str]]:
+        if not isinstance(printStats, dict):
+            return (None, None)
+
+        platformErrorCode:Optional[str] = None
+        error:Optional[str] = None
+
+        # Snapmaker U1 firmware adds a structured exception object to print_stats.
+        # Prefer its clean message over print_stats.message, which can contain the
+        # raw encoded Klipper exception.
+        exceptionObj = printStats.get("exception", None)
+        if isinstance(exceptionObj, dict):
+            exception = cast(Dict[str, Any], exceptionObj)
+            platformErrorCode = PrinterStateMapping._GetU1ExceptionCode(exception)
+            structuredCode, structuredError = PrinterStateMapping._GetStructuredErrorInfo(exception)
+            if platformErrorCode is None:
+                platformErrorCode = structuredCode
+            error = structuredError
+
+        # Several Klipper forks expose a structured object under "error" rather
+        # than the standard string-only print_stats.message field.
+        errorObj = printStats.get("error", None)
+        if isinstance(errorObj, dict):
+            structuredCode, structuredError = PrinterStateMapping._GetStructuredErrorInfo(
+                cast(Dict[str, Any], errorObj)
+            )
+            if platformErrorCode is None:
+                platformErrorCode = structuredCode
+            if error is None:
+                error = structuredError
+
+        if platformErrorCode is None:
+            for key in PrinterStateMapping.ErrorCodeKeys:
+                platformErrorCode = PrinterStateMapping._GetOptionalString(printStats.get(key, None))
+                if platformErrorCode is not None:
+                    break
+
+        if error is None:
+            for key in PrinterStateMapping.ErrorMessageKeys:
+                fieldCode, fieldError = PrinterStateMapping._GetErrorInfoFromValue(printStats.get(key, None))
+                if platformErrorCode is None:
+                    platformErrorCode = fieldCode
+                if fieldError is not None:
+                    error = fieldError
+                    break
+
+        # Some pause macros set an M117/SET_DISPLAY_TEXT message immediately
+        # before PAUSE. Only callers with a message from the same status update
+        # should provide this fallback, so stale display text isn't reported.
+        if error is None:
+            error = PrinterStateMapping._CleanNotificationMessage(supplementalMessage)
+
+        # Preserve the existing generic Moonraker behavior when no platform code exists.
+        if platformErrorCode is None:
+            platformErrorCode = PrinterStateMapping._GetOptionalString(printStats.get("state", None))
+
+        return (platformErrorCode, PrinterStateMapping._CleanNotificationMessage(error))
+
+
+    @staticmethod
+    def GetWebhooksErrorInfo(state:Optional[str], stateMessage:Optional[str], notificationMethod:Optional[str]=None) -> Tuple[Optional[str], Optional[str]]:
+        normalizedState = PrinterStateMapping._GetOptionalString(state)
+        normalizedMethod = PrinterStateMapping._GetOptionalString(notificationMethod)
+        if normalizedMethod is not None:
+            normalizedMethod = normalizedMethod.lower()
+
+        if normalizedMethod == "notify_klippy_disconnected":
+            return ("klippy_disconnected", "Klipper Disconnected")
+
+        if normalizedMethod == "notify_klippy_shutdown":
+            code = "klippy_shutdown"
+        elif normalizedState is not None and normalizedState.lower() in ["error", "shutdown"]:
+            code = "klippy_" + normalizedState.lower()
+        else:
+            return (None, None)
+
+        error:Optional[str] = None
+        if normalizedState is not None and normalizedState.lower() in ["error", "shutdown"]:
+            error = PrinterStateMapping._CleanNotificationMessage(stateMessage)
+        if error is None:
+            error = "Klipper Shutdown" if code == "klippy_shutdown" else "Klipper Error"
+        return (code, error)
+
+
+    @staticmethod
+    def _GetU1ExceptionCode(exception:Dict[str, Any]) -> Optional[str]:
+        parts:List[str] = []
+        for key in ["level", "id", "index", "code"]:
+            value = PrinterStateMapping._GetOptionalNonNegativeInt(exception.get(key, None))
+            if value is None:
+                return None
+            parts.append(f"{value:04d}")
+        return "-".join(parts)
+
+
+    @staticmethod
+    def _GetErrorInfoFromValue(value:Any) -> Tuple[Optional[str], Optional[str]]:
+        if isinstance(value, dict):
+            return PrinterStateMapping._GetStructuredErrorInfo(cast(Dict[str, Any], value))
+
+        if isinstance(value, list):
+            for item in value:
+                code, message = PrinterStateMapping._GetErrorInfoFromValue(item)
+                if code is not None or message is not None:
+                    return (code, message)
+            return (None, None)
+
+        rawMessage = PrinterStateMapping._GetOptionalString(value)
+        if rawMessage is None:
+            return (None, None)
+
+        try:
+            encodedMessageObj = json.loads(rawMessage)
+            if isinstance(encodedMessageObj, dict):
+                return PrinterStateMapping._GetStructuredErrorInfo(
+                    cast(Dict[str, Any], encodedMessageObj)
+                )
+            if isinstance(encodedMessageObj, list):
+                return PrinterStateMapping._GetErrorInfoFromValue(encodedMessageObj)
+        except (TypeError, ValueError):
+            pass
+        return (None, rawMessage)
+
+
+    @staticmethod
+    def _GetStructuredErrorInfo(errorObj:Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
+        code:Optional[str] = None
+        message:Optional[str] = None
+
+        for key in PrinterStateMapping.ErrorCodeKeys:
+            code = PrinterStateMapping._GetOptionalString(errorObj.get(key, None))
+            if code is not None:
+                break
+
+        for key in PrinterStateMapping.ErrorMessageKeys:
+            nestedCode, nestedMessage = PrinterStateMapping._GetErrorInfoFromValue(errorObj.get(key, None))
+            if code is None:
+                code = nestedCode
+            if nestedMessage is not None:
+                message = nestedMessage
+                break
+
+        return (code, message)
+
+
+    @staticmethod
+    def _GetOptionalString(value:Any) -> Optional[str]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return None
+        result = str(value).strip()
+        return result if len(result) > 0 else None
+
+
+    @staticmethod
+    def _CleanNotificationMessage(value:Any) -> Optional[str]:
+        message = PrinterStateMapping._GetOptionalString(value)
+        if message is None:
+            return None
+
+        # Klipper state messages often append recovery instructions or a long
+        # traceback. The first paragraph contains the actionable fault.
+        stopPrefixes = [
+            "Once the underlying issue is corrected",
+            "This generally occurs",
+            "After correcting the underlying issue",
+            "Traceback (most recent call last)",
+        ]
+        lines:List[str] = []
+        for rawLine in message.splitlines():
+            line = rawLine.strip()
+            if len(line) == 0:
+                if len(lines) > 0:
+                    break
+                continue
+            if any(line.startswith(prefix) for prefix in stopPrefixes):
+                break
+            lines.append(line)
+
+        result = str(" ".join(lines) if len(lines) > 0 else message)
+        if len(result) > 1000:
+            result = result[:997].rstrip() + "..."
+        return result
+
+
+    @staticmethod
+    def _GetOptionalNonNegativeInt(value:Any) -> Optional[int]:
+        if isinstance(value, bool):
+            return None
+        try:
+            result = int(value)
+            return result if result >= 0 else None
+        except (TypeError, ValueError):
+            return None
 
 
     @staticmethod

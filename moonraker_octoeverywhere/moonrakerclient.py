@@ -27,6 +27,7 @@ from .moonrakercredentialmanager import MoonrakerCredentialManager
 from .interfaces import IMoonrakerConnectionStatusHandler
 from .jsonrpcresponse import JsonRpcResponse
 from .interfaces import IMoonrakerClient
+from .printerstatemapping import PrinterStateMapping
 
 
 # This class is our main interface to interact with moonraker. This includes the logic to make
@@ -93,6 +94,8 @@ class MoonrakerClient(IMoonrakerClient):
         self.WebSocketConnected = False
         self.WebSocketKlippyReady = False
         self.WebSocketLock = threading.Lock()
+        self.LastWebhooksState:Optional[str] = None
+        self.LastWebhooksStateMessage:Optional[str] = None
         self.WebSocketDebugProfiler:Optional[DebugProfiler] = None # Must be created on the thread.
         self.WsThread = threading.Thread(target=self._WebSocketWorkerThread)
         self.WsThreadRunning = False
@@ -367,8 +370,13 @@ class MoonrakerClient(IMoonrakerClient):
             {
                 # Using None allows us to get all of the data from the notification types.
                 # For some types, using None has way too many updates, so we filter them down.
-                "print_stats": { "state", "filename", "message" },
+                "print_stats": [
+                    "state", "filename", "message", "exception",
+                    "error", "error_message", "reason", "pause_reason",
+                    "code", "error_code", "platform_error_code",
+                ],
                 "webhooks": None,
+                "display_status": ["message"],
                 "virtual_sdcard": None,
                 "history" : None,
             }
@@ -379,6 +387,8 @@ class MoonrakerClient(IMoonrakerClient):
             self.Logger.error("Failed to setup moonraker notification subs. "+result.GetLoggingErrorStr())
             self._RestartWebsocket()
             return
+        self.LastWebhooksState = "ready"
+        self.LastWebhooksStateMessage = None
 
         # Call the event handler
         self.MoonrakerCompat.OnMoonrakerClientConnected()
@@ -448,7 +458,14 @@ class MoonrakerClient(IMoonrakerClient):
                 if state is not None:
                     # Check for pause
                     if state == "paused":
-                        self.MoonrakerCompat.OnPrintPaused(ps)
+                        displayMessage:Optional[str] = None
+                        displayStatusContainerObj = self._GetWsMsgParam(msg, "display_status")
+                        if displayStatusContainerObj is not None:
+                            displayMessage = displayStatusContainerObj["display_status"].get("message", None)
+                        self.MoonrakerCompat.OnPrintPaused(ps, displayMessage)
+                        return
+                    elif state == "error":
+                        self.MoonrakerCompat.OnPrintError(ps)
                         return
                     # Resume is hard, because it's hard to tell the difference between printing we get from the starting message
                     # and printing we get from a resume. So the way we do it is by looking at the progress, to see if it's just starting or not.
@@ -742,6 +759,10 @@ class MoonrakerClient(IMoonrakerClient):
                     # If once the response is handled, we are done.
                     return
 
+            # Cache Klipper's human-readable shutdown/error message before
+            # handling notify_klippy_shutdown, which has no payload of its own.
+            self._UpdateWebhooksStateFromMsg(msgObj)
+
             # Check for a special message that indicates the klippy connection has been lost.
             # According to the docs, in this case, we should restart the klippy ready process, so we will
             # nuke the WS and start again.
@@ -749,8 +770,13 @@ class MoonrakerClient(IMoonrakerClient):
             # it seems to use notify_klippy_disconnected. We handle them both as the same.
             if method is not None and (method == "notify_klippy_disconnected" or method == "notify_klippy_shutdown"):
                 self.Logger.info("Moonraker client received %s notification, so we will restart our client connection.", method)
+                platformErrorCode, error = PrinterStateMapping.GetWebhooksErrorInfo(
+                    self.LastWebhooksState,
+                    self.LastWebhooksStateMessage,
+                    method
+                )
                 self._RestartWebsocket()
-                self.MoonrakerCompat.KlippyDisconnectedOrShutdown()
+                self.MoonrakerCompat.KlippyDisconnectedOrShutdown(platformErrorCode, error)
                 return
 
             # We use a queue to handle all non reply messages to prevent this thread from getting blocked.
@@ -790,6 +816,25 @@ class MoonrakerClient(IMoonrakerClient):
                 Sentry.OnException("_NonReplyMsgQueueWorker got an exception while handing messages. Killing the websocket. ", e)
             finally:
                 self._RestartWebsocket()
+
+
+    def _UpdateWebhooksStateFromMsg(self, msg:Dict[str, Any]) -> None:
+        method = msg.get("method", None)
+        if not isinstance(method, str) or method.lower() != "notify_status_update":
+            return
+        webhooksContainer = self._GetWsMsgParam(msg, "webhooks")
+        if webhooksContainer is None:
+            return
+        webhooksObj = webhooksContainer.get("webhooks", None)
+        if not isinstance(webhooksObj, dict):
+            return
+        webhooks:Dict[str, Any] = dict(webhooksObj)
+        state = webhooks.get("state", None)
+        if state is not None:
+            self.LastWebhooksState = str(state)
+        stateMessage = webhooks.get("state_message", None)
+        if stateMessage is not None:
+            self.LastWebhooksStateMessage = str(stateMessage)
 
 
     # Called when the websocket is closed for any reason, connection loss or exception
@@ -911,7 +956,7 @@ class MoonrakerCompat(IPrinterStateReporter):
 
     # Called when moonraker's connection to klippy disconnects.
     # The systems seems to use disconnect and shutdown at different times for the same purpose, so we handle both the same.
-    def KlippyDisconnectedOrShutdown(self) -> None:
+    def KlippyDisconnectedOrShutdown(self, platformErrorCode:Optional[str]=None, error:Optional[str]=None) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
@@ -935,7 +980,10 @@ class MoonrakerCompat(IPrinterStateReporter):
             time.sleep(5.0)
             if MoonrakerClient.Get().GetIsKlippyReady() is False:
                 # Send a notification to the user.
-                self.NotificationHandler.OnError("Klipper Disconnected", platformErrorCode="klippy_disconnected")
+                self.NotificationHandler.OnError(
+                    error if error is not None else "Klipper Disconnected",
+                    platformErrorCode=platformErrorCode if platformErrorCode is not None else "klippy_disconnected"
+                )
         thread = threading.Thread(target=disconnectWaiter)
         thread.start()
 
@@ -985,22 +1033,44 @@ class MoonrakerCompat(IPrinterStateReporter):
 
 
     # Called the the print is paused.
-    def OnPrintPaused(self, printStats:Optional[Dict[str, Any]]=None) -> None:
+    def OnPrintPaused(self, printStats:Optional[Dict[str, Any]]=None, supplementalMessage:Optional[str]=None) -> None:
         # Only process notifications when ready, aka after state sync.
         if self.IsReadyToProcessNotifications is False:
             return
 
-        # Get the print filename. If we fail, the pause command accepts None, which will be ignored.
+        # Query the full current status because Moonraker status updates only contain changed
+        # fields. On the U1, the exception details can arrive separately from the state change.
         stats = self._GetCurrentPrintStats()
-        fileName:Optional[str] = None
+        notificationStats:Dict[str, Any] = {}
         if stats is not None:
-            fileName = stats.get("filename", None)
-        platformErrorCode = None
-        error = None
+            notificationStats.update(stats)
         if printStats is not None:
-            platformErrorCode = printStats.get("state", None)
-            error = printStats.get("message", None)
+            notificationStats.update(printStats)
+
+        fileName:Optional[str] = None
+        if len(notificationStats) > 0:
+            fileName = notificationStats.get("filename", None)
+        platformErrorCode, error = PrinterStateMapping.GetPrintStatsErrorInfo(notificationStats, supplementalMessage)
         self.NotificationHandler.OnPaused(fileName, platformErrorCode=platformErrorCode, error=error)
+
+
+    # Called when the print ends in an error state.
+    def OnPrintError(self, printStats:Optional[Dict[str, Any]]=None) -> None:
+        # Only process notifications when ready, aka after state sync.
+        if self.IsReadyToProcessNotifications is False:
+            return
+
+        # As with pause, merge the update with a full query so U1 exception details
+        # are available even when Moonraker sends them in a separate status update.
+        stats = self._GetCurrentPrintStats()
+        notificationStats:Dict[str, Any] = {}
+        if stats is not None:
+            notificationStats.update(stats)
+        if printStats is not None:
+            notificationStats.update(printStats)
+
+        platformErrorCode, error = PrinterStateMapping.GetPrintStatsErrorInfo(notificationStats)
+        self.NotificationHandler.OnError(error, platformErrorCode=platformErrorCode)
 
 
     # Called the the print is resumed.
