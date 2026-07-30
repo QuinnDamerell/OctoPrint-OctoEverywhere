@@ -5,4 +5,5 @@
 extend-exclude = ["octoeverywhere/Proto"]
 
 [lint]
-extend-select = ["B", "RUF021"]
+# Keep the pre-0.16 default rules explicit so Ruff upgrades don't silently expand the lint scope.
+select = ["E4", "E7", "E9", "F", "B", "RUF021"]
