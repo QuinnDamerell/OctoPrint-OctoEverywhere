@@ -11,8 +11,11 @@ class ElegooCc2Bootstrap:
     @staticmethod
     def Bootstrap(logger:logging.Logger, config:Config) -> None:
 
-        # Set the printer protocol to Elegoo CC2, so the rest of the code knows which printer we're targeting and can adjust behavior accordingly.
+        # These are constants that are always used for Elegoo CC2 connect.
+        # The CC2 runs an MQTT broker on port 1883
+        # Always set these to ensure they override any other settings from other companion modes.
         config.SetStr(Config.SectionElegoo, Config.ElegooPrinterProtocol, Config.ElegooPrinterProtocolCc2)
+        config.SetStr(Config.SectionCompanion, Config.CompanionKeyPort, "1883")
 
         # The printer IP is always required.
         printerIp = os.environ.get("PRINTER_IP", None)
