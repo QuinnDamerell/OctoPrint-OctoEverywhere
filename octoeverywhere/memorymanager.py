@@ -51,6 +51,17 @@ class MemoryManager:
     # MUST BE LESS THAN OR EQUAL TO Global_MaxSingleChunkSizeBytes
     QuickCam_MaxStreamChunkSizeBytes = 3 * MB
 
+    # The is the max for both compression and decompression pools.
+    # A single Home Assistant cached dashboard load can use upwards of 70 concurrent compression objects.
+    # Once the max pool size is hit, new instances will be created and destroyed rather than blocking.
+    Compression_MaxPoolSize = 10
+
+    # These control the max number of HTTP sessions the urllib3 lib can hold on to.
+    # The more we hold, the more memory we hold open but also the faster we can make the connection.
+    # The default value in the lib is 10.
+    HttpSessions_MaxConnections = 10
+    HttpSessions_MaxPoolSize = 10
+
 
     _Instance:"MemoryManager" = None #pyright: ignore[reportAssignmentType]
 
@@ -88,6 +99,10 @@ class MemoryManager:
             MemoryManager.OctoWebStreamHttpHelper_MaxMultipartReadSizeBytes = MemoryManager.Global_MaxSingleChunkSizeBytes
             MemoryManager.OctoWebStreamHttpHelper_MaxUploadBufferSizeBytes = 128 * MemoryManager.MB
             MemoryManager.QuickCam_MaxStreamChunkSizeBytes = MemoryManager.Global_MaxSingleChunkSizeBytes
+            MemoryManager.Compression_MaxPoolSize = 50
+            # We care less about the unique hosts and more about total connections to each host.
+            MemoryManager.HttpSessions_MaxConnections = 10
+            MemoryManager.HttpSessions_MaxPoolSize = 50
         except Exception as e:
             self.Logger.warning(f"MemoryManager failed to read system memory info during initialization. {e}")
         finally:

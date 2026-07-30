@@ -35,7 +35,8 @@ class HttpResult():
                     fullBodyBuffer:Optional[Buffer]=None,
                     requestLibResponseObj:Optional[requests.Response]=None,
                     customBodyStreamCallback:Optional[Callable[[], Optional[Buffer]]]=None,
-                    customBodyStreamClosedCallback:Optional[Callable[[],None]]=None
+                    customBodyStreamClosedCallback:Optional[Callable[[],None]]=None,
+                    allowRedirectCorrection:bool=True
                     ):
         # Status code isn't a property because some things need to set it externally to the class. (Result.StatusCode = 302)
         self.StatusCode = statusCode
@@ -47,6 +48,7 @@ class HttpResult():
         self._fullBodyBufferPreCompressedSize:int = 0
         self._customBodyStreamCallback = customBodyStreamCallback
         self._customBodyStreamClosedCallback = customBodyStreamClosedCallback
+        self._allowRedirectCorrection:bool = allowRedirectCorrection
 
         # Validate.
         if (self._customBodyStreamCallback is not None and self._customBodyStreamClosedCallback is None) or (self._customBodyStreamCallback is None and self._customBodyStreamClosedCallback is not None):
@@ -75,12 +77,14 @@ class HttpResult():
 
     # Allows for a quick way to create a Result object that is a redirect.
     @staticmethod
-    def Redirect(url:str, didFallback:bool=False) -> "HttpResult":
+    def Redirect(redirectUrl:str, allowRedirectCorrection:bool, didFallback:bool=False) -> "HttpResult":
         headers = CaseInsensitiveDict()
-        headers["Location"] = url
-        # We must use a content length of 0 and set an empty body for the request to be handled correctly.
-        headers["Content-Length"] = "0"
-        return HttpResult(302, headers, url, didFallback, fullBodyBuffer=Buffer(bytearray()))
+        headers["Location"] = redirectUrl
+        # Set these headers to prevent caching of redirects from the Home Assistant PWA
+        headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate"
+        headers["Pragma"] = "no-cache"
+        headers["Expires"] = "0"
+        return HttpResult(302, headers, redirectUrl, didFallback, fullBodyBuffer=Buffer(bytearray()), allowRedirectCorrection=allowRedirectCorrection)
 
 
     # Builds a Result object from a requests.Response object.
@@ -140,6 +144,11 @@ class HttpResult():
     @property
     def GetCustomBodyStreamClosedCallback(self) -> Optional[Callable[[], None]]:
         return self._customBodyStreamClosedCallback
+
+
+    @property
+    def GetAllowRedirectCorrection(self) -> bool:
+        return self._allowRedirectCorrection
 
 
     # Note the buffer can be bytes or bytearray object!
@@ -214,6 +223,16 @@ class HttpResult():
 
                 # Check if we are done.
                 if buffer is None or len(buffer) == 0:
+                    # This is weird, but for non-streamed bodies there can be lingering data in response.content,
+                    # so add that if there is any. See doBodyReadInto for the same fallback.
+                    content = self._requestLibResponseObj.content
+                    if len(content) > 0:
+                        if maxBodySizeBytes is not None and totalBytesRead + len(content) > maxBodySizeBytes:
+                            logger.warning("ReadAllContentFromStreamResponse stopped reading because the body exceeded %d bytes.", maxBodySizeBytes)
+                            buffers = []
+                            return
+                        buffers.append(content)
+                        totalBytesRead += len(content)
                     # Break out when we are done.
                     break
 

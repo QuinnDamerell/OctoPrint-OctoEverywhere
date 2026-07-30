@@ -177,7 +177,7 @@ class HttpStreamAccumulationReader:
                         # There are buffers to read!
 
                         # If the pending size + our accumulated size is under the max, take them all.
-                        if accumulatedBufferListSizeBytes + self.BufferListPendingSize <= self.MaxReturnBufferSizeBytes:
+                        if accumulatedBufferListSizeBytes + self.BufferListPendingSize < self.MaxReturnBufferSizeBytes:
                             if accumulatedBufferList is None:
                                 accumulatedBufferList = self.BufferList
                             else:

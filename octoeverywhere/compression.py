@@ -11,6 +11,7 @@ import subprocess
 import multiprocessing
 
 from .sentry import Sentry
+from .memorymanager import MemoryManager
 from .buffer import Buffer, BufferOrNone, ByteLikeOrMemoryView
 from .zstandarddictionary import ZStandardDictionary
 
@@ -257,8 +258,6 @@ class Compression:
     # THIS MUST STAY IN SYNC WITH THE VERSION IN THE Dockerfile and the GitHub actions linter file.
     ZStandardPipPackageString = "zstandard>=0.21.0,<0.23.0"
     ZStandardMinCoreCountForInstall = 3
-    ZStandardMaxCompressorPoolSize = 4
-    ZStandardMaxDecompressorPoolSize = 4
 
     _Instance:"Compression" = None #pyright: ignore[reportAssignmentType]
 
@@ -387,7 +386,7 @@ class Compression:
         if compressor is None:
             return
         with self.ZStandardCompressorPoolLock:
-            if len(self.ZStandardCompressorPool) >= Compression.ZStandardMaxCompressorPoolSize:
+            if len(self.ZStandardCompressorPool) >= MemoryManager.Compression_MaxPoolSize:
                 self.Logger.debug("ZStandard compressor pool is full, dropping compressor")
                 return
             self.ZStandardCompressorPool.append(compressor)
@@ -422,7 +421,7 @@ class Compression:
         if decompressor is None:
             return
         with self.ZStandardDecompressorPoolLock:
-            if len(self.ZStandardDecompressorPool) >= Compression.ZStandardMaxDecompressorPoolSize:
+            if len(self.ZStandardDecompressorPool) >= MemoryManager.Compression_MaxPoolSize:
                 self.Logger.debug("ZStandard decompressor pool is full, dropping decompressor")
                 return
             self.ZStandardDecompressorPool.append(decompressor)

@@ -99,7 +99,7 @@ class OctoWebStreamWsHelper:
     #
     # Returns True if a new connection is being attempted.
     # Returns False if a new connection is not being attempted.
-    def AttemptConnection(self):
+    def AttemptConnection(self) -> bool:
         # If this webstream context has already opened a successful websocket connection to something,
         # never try to connect again.
         if self.SuccessfullyOpenedSocket is True:
@@ -167,7 +167,7 @@ class OctoWebStreamWsHelper:
                 return None
             self.Logger.debug("%sopening websocket to using the relay provider, attempt %s", self.getLogMsgPrefix(), self.ConnectionAttempt)
             return relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
-                    onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+                    onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, headers=self.Headers, subProtocolList=self.SubProtocolList)
 
         # We also need to check if this is a command websocket, and if so, allow the command system to handle it.
         if CommandHandler.Get().IsCommandRequest(self.HttpInitialContext):
@@ -183,7 +183,7 @@ class OctoWebStreamWsHelper:
                 return None
             self.Logger.debug("%sopening websocket to using the command provider, attempt %s", self.getLogMsgPrefix(), self.ConnectionAttempt)
             return wsProvider.GetWebsocketObject(self.Id, path, pathType, self.HttpInitialContext,
-                    onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+                    onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, headers=self.Headers, subProtocolList=self.SubProtocolList)
 
         # This is a normal websocket creation.
         # Depending on the connection attempt, build the URI
@@ -268,8 +268,18 @@ class OctoWebStreamWsHelper:
             raise Exception(self.getLogMsgPrefix()+" AttemptConnection failed to create a URI")
 
         # Make the websocket object and start it running.
+        # Important! The headers must be included for some klipper clients and Home Assistant features to work!
+        # If the auth header isn't included WS like Studio Code Server will return "rsv is not implemented, yet".
         self.Logger.debug("%sopening websocket to %s attempt %s", self.getLogMsgPrefix(), uri, self.ConnectionAttempt)
-        return Client(url=uri, onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, subProtocolList=self.SubProtocolList)
+        return Client(
+            url=uri,
+            onWsOpen=self.onWsOpened,
+            onWsData=self.onWsData,
+            onWsClose=self.onWsClosed,
+            onWsError=self.onWsError,
+            headers=self.Headers,
+            subProtocolList=self.SubProtocolList
+        )
 
 
     # When close is called, all http operations should be shutdown.
@@ -335,6 +345,13 @@ class OctoWebStreamWsHelper:
             # swap the websocket object without signaling this event.
             self.WsOpenOrClosedEvent.wait(0.25)
 
+        # If the websocket object is closed ignore this message. It will throw if the socket is closed
+        # which will take down the entire Stream. But since it's closed the web stream is already cleaning up.
+        # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
+        # were already inbound messages on the way.
+        if self.IsWsObjClosed:
+            return True
+
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
         # exist, we need to check for it.
         buffer = webStreamMsg.DataAsByteArray()
@@ -379,7 +396,7 @@ class OctoWebStreamWsHelper:
         return False
 
 
-    def onWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode):
+    def onWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode) -> None:
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -500,7 +517,7 @@ class OctoWebStreamWsHelper:
             self.WebStream.Close()
 
 
-    def onWsClosed(self, ws:IWebSocketClient):
+    def onWsClosed(self, ws:IWebSocketClient) -> None:
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -513,7 +530,7 @@ class OctoWebStreamWsHelper:
         self.WebStream.Close()
 
 
-    def onWsError(self, ws:IWebSocketClient, error:Exception):
+    def onWsError(self, ws:IWebSocketClient, error:Exception) -> None:
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -545,7 +562,7 @@ class OctoWebStreamWsHelper:
         self.WebStream.Close()
 
 
-    def onWsOpened(self, ws:IWebSocketClient):
+    def onWsOpened(self, ws:IWebSocketClient) -> None:
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -558,5 +575,5 @@ class OctoWebStreamWsHelper:
         self.Logger.info(self.getLogMsgPrefix()+"opened, attempt "+str(self.ConnectionAttempt) + " after " +str(time.time() - self.OpenedTime) + " seconds")
 
 
-    def getLogMsgPrefix(self):
+    def getLogMsgPrefix(self) -> str:
         return "Web Stream ws   ["+str(self.Id)+"] "

@@ -1,6 +1,7 @@
 import platform
 import logging
 from typing import Dict, Optional, Union
+from urllib.parse import urlsplit
 
 from .mdns import MDns
 from .buffer import Buffer
@@ -75,6 +76,15 @@ class OctoHttpRequest:
             return PathTypes.Absolute
         # TODO - It might be worth to add some logic to try to detect no protocol hostnames, like test.com/helloworld.
         return PathTypes.Relative
+
+
+    # Given a relative URL or absolute URL, returns the path with no query string.
+    # Can throw if there's a string issue.
+    @staticmethod
+    def ParseOutPath(uri:str) -> str:
+        path = urlsplit(uri).path
+        # An absolute URL with no explicit path still targets the root path.
+        return path if len(path) > 0 else "/"
 
 
     # Handles making all http calls out of the plugin to OctoPrint or other services running locally on the device or

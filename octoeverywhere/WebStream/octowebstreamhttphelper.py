@@ -68,6 +68,7 @@ class OctoWebStreamHttpHelper:
         # Vars for response reading
         self.BodyReadTempBuffer:Optional[Buffer] = None
         self.BodyReadUseReadInto = True
+        self.BodyReadContentFallbackOffset = 0
         self.ChunkedBodyHasNoContentLengthHeaders = False
         self.CompressionType:Optional[int] = None
         self.CompressionTimeSec = -1
@@ -1144,11 +1145,17 @@ class OctoWebStreamHttpHelper:
 
             # Preserve the response.content fallback used by doBodyRead for non-streamed bodies.
             content = response.content
-            if len(content) > 0:
-                if len(content) > readSize:
-                    self.Logger.warning("Http request has non-streamed content but it's larger than the requested readSize. Returning anyways.")
-                bytesRead = min(len(content), readSize)
-                targetBuffer[offset:offset + bytesRead] = content[0:bytesRead]
+            contentLength = len(content)
+            if contentLength > 0:
+                if self.BodyReadContentFallbackOffset >= contentLength:
+                    return 0
+                if self.BodyReadContentFallbackOffset == 0 and contentLength > readSize:
+                    self.Logger.warning("Http request has non-streamed content but it's larger than the requested readSize. Returning it in chunks.")
+                bytesRead = min(contentLength - self.BodyReadContentFallbackOffset, readSize)
+                readStartOffset = self.BodyReadContentFallbackOffset
+                readEndOffset = readStartOffset + bytesRead
+                targetBuffer[offset:offset + bytesRead] = content[readStartOffset:readEndOffset]
+                self.BodyReadContentFallbackOffset = readEndOffset
                 return bytesRead
             return 0
 

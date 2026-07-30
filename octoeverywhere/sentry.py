@@ -164,7 +164,9 @@ class Sentry:
             # send things that have some origin in our code. This can be any file in the stack or any module with our name in it.
             # Otherwise, we will ignore it.
             exc_info = hint.get("exc_info")
-            if exc_info is None or len(exc_info) < 2 or hasattr(exc_info[2], "tb_frame") is False:
+            # Note the < 3 guard must stay in sync with the exc_info[2] access below, otherwise a short
+            # exc_info tuple would throw an IndexError right here inside the before-send hook.
+            if exc_info is None or len(exc_info) < 3 or hasattr(exc_info[2], "tb_frame") is False:
                 Sentry._Logger.error("Failed to extract exception stack in sentry before send.")
                 return None
 

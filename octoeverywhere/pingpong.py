@@ -49,6 +49,9 @@ class PingPong:
         self.PluginFirstRunLatencyCompleteCallback = None
         self.IsDisablePrimaryOverride = False
 
+        # Lock to protect Stats access from race conditions between worker thread and readers
+        self.StatsLock = threading.Lock()
+
         # Try to load past stats from the file.
         self.Stats:Dict[str, Any] = None #pyright: ignore[reportAttributeAccessIssue]
         self._LoadStatsFromFile()
@@ -77,10 +80,12 @@ class PingPong:
     def GetLowestLatencyServerSub(self) -> Optional[str]:
         # Do this in a thread safe way, if we fail, just return None.
         try:
-            stats = self.Stats
-            if stats is None:
-                return None
-            lowestLatencyServerSub = stats.get(PingPong.LowestLatencyServerSubKey, None)
+            # Use lock to safely read from Stats
+            with self.StatsLock:
+                stats = self.Stats
+                if stats is None:
+                    return None
+                lowestLatencyServerSub = stats.get(PingPong.LowestLatencyServerSubKey, None)
             if lowestLatencyServerSub is None:
                 return None
             if self.IsDisablePrimaryOverride:
@@ -110,7 +115,8 @@ class PingPong:
             try:
                 # Compute how long it's been since the last update.
                 # Since this is written to disk, it's stays across boots / restarts.
-                lastWorkTime = self.Stats.get(PingPong.LastWorkTimeKey, 0)
+                with self.StatsLock:
+                    lastWorkTime = self.Stats.get(PingPong.LastWorkTimeKey, 0)
                 secondsSinceLastWork = time.time() - lastWorkTime
 
                 # Compute how long until we should do work, this will be negative if the time has passed.
@@ -132,7 +138,8 @@ class PingPong:
 
                 # It's time to work, first update the time we are working is now.
                 # Also write to disk to ensure it's known and we don't get in a tight loop of working.
-                self.Stats[PingPong.LastWorkTimeKey] = time.time()
+                with self.StatsLock:
+                    self.Stats[PingPong.LastWorkTimeKey] = time.time()
                 self._SaveStatsToFile()
 
                 # Update now
@@ -247,11 +254,13 @@ class PingPong:
             # Only if the latency delta is more than what the server is asking for do we override the default server for the lowest latency server.
             # See the server side code for AutoLowestLatencyThresholdRttMs to understand where the value comes from.
             if deltaRttMs > defaultServerResult.AutoLowestLatencyThresholdRttMs:
-                self.Stats[PingPong.LowestLatencyServerSubKey] = lowestLatencySubName
+                with self.StatsLock:
+                    self.Stats[PingPong.LowestLatencyServerSubKey] = lowestLatencySubName
                 selectedLatencyMs = lowestLatencyValueMs
             else:
                 # Else, no override, we will use the default server.
-                self.Stats[PingPong.LowestLatencyServerSubKey] = None
+                with self.StatsLock:
+                    self.Stats[PingPong.LowestLatencyServerSubKey] = None
                 selectedLatencyMs = defaultServerComputedAvgMs
 
         # Save the new stats to disk.
@@ -379,10 +388,12 @@ class PingPong:
     # Resets the stats object to it's default state.
     def _ResetStats(self) -> None:
         self.Logger.info("PingPong stats reset")
-        self.Stats = {}
-        self.Stats[PingPong.LastWorkTimeKey] = 0
-        self.Stats[PingPong.ServerStatsKey] = {}
-        self.Stats[PingPong.LowestLatencyServerSubKey] = None
+        # Use lock to safely reset Stats since readers may be accessing it
+        with self.StatsLock:
+            self.Stats = {}
+            self.Stats[PingPong.LastWorkTimeKey] = 0
+            self.Stats[PingPong.ServerStatsKey] = {}
+            self.Stats[PingPong.LowestLatencyServerSubKey] = None
 
 
     # Blocks to write the current stats to a file.
@@ -416,7 +427,9 @@ class PingPong:
             # encoding only supported in py3
             with open(self.StatsFilePath) as f:
                 data = json.load(f)
-            self.Stats = data["Stats"]
+            # Use lock to safely assign Stats
+            with self.StatsLock:
+                self.Stats = data["Stats"]
 
             self.Logger.info("PingPong stats loaded from file.")
 

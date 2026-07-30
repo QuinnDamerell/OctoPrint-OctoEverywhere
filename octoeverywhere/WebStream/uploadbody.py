@@ -454,11 +454,13 @@ class UploadBody:
         return UploadBodyReadContext(self.Logger, self._bodyBuffer, self._bodyFilePath, onClose)
 
 
-    def GetBodyAsBuffer(self) -> Optional[Buffer]:
+    def GetBodyAsBuffer(self, maxReadSizeBytes:Optional[int]=None) -> Optional[Buffer]:
         if self._state != UploadBodyState.Finalized:
             raise Exception("OctoWebStreamUploadBody is not in a finalized state before getting the body buffer.")
         if self.UploadBytesReceivedSoFar == 0:
             return None
+        if maxReadSizeBytes is not None and self.UploadBytesReceivedSoFar > maxReadSizeBytes:
+            raise ValueError("Upload body is too large to read into memory. max:"+str(maxReadSizeBytes)+"; actual:"+str(self.UploadBytesReceivedSoFar))
         if self._bodyFilePath is not None:
             with open(self._bodyFilePath, "rb") as f:
                 return Buffer(f.read())

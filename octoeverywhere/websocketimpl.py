@@ -31,7 +31,7 @@ class Client(IWebSocketClient):
     c_MaxSendQueueSizeBytes = 10 * 1024 * 1024
     c_SocketSendBufferBytes = 512 * 1024
     c_SocketReceiveBufferBytes = 512 * 1024
-    c_SendQueueBackpressureLogIntervalSec = 1.0
+    c_SendQueueBackpressureLogIntervalSec = 5.0
 
 
     # Allows us to still enable the websocket debug logs if we want.
@@ -135,7 +135,7 @@ class Client(IWebSocketClient):
             if strongSelf is not None and strongOnData is not None:
                 strongOnData(strongSelf, Buffer(buffer), WebSocketOpCode.FromWsLibInt(msgType))
 
-        def OnError(ws:WebSocketApp, exception:Any):
+        def OnError(ws:WebSocketApp, exception:Exception):
             # For this special case, call our function.
             strongSelf = weakSelf()
             if strongSelf is None:

@@ -4,6 +4,9 @@ from typing import Dict
 
 import requests
 from requests import Session
+from requests.adapters import HTTPAdapter
+
+from .memorymanager import MemoryManager
 
 # A common class to cache http sessions per host.
 # This makes the connections more efficient as we can reuse the connections and the session isn't created every time.
@@ -76,6 +79,14 @@ class HttpSessions:
             # Create a new session.
             self.Logger.info(f"Creating new session for {host}")
             s = requests.Session()
+
+            # Set our limits on the max hostnames pooled and the max connections per host.
+            adapter = HTTPAdapter(
+                pool_connections=MemoryManager.HttpSessions_MaxConnections,
+                pool_maxsize=MemoryManager.HttpSessions_MaxPoolSize
+            )
+            s.mount('http://', adapter)
+            s.mount('https://', adapter)
 
             # We need to be really careful of setting any params, since they will apply to all requests.
             # But, from debugging we found that the requests lib takes time on every call to try to merge env vars for proxies and such.
