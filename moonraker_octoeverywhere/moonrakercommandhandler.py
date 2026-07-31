@@ -80,7 +80,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         if result.HasError():
             self.Logger.error("MoonrakerCommandHandler failed GetCurrentJobStatus() query. "+result.GetLoggingErrorStr())
             errorStr = result.ErrorStr.lower() if result.ErrorStr is not None else ""
-            if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED or errorStr == "unauthorized" or MoonrakerClient.Get().IsDisconnectDueToAuth():
+            if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStr or "forbidden" in errorStr or MoonrakerClient.Get().IsDisconnectDueToAuth():
                 return CommandHandler.c_CommandError_LostAuth
             return None
 
@@ -256,7 +256,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         # Check the state and that we have a connection to the host.
-        result = self._CheckIfConnectedAndForExpectedStates(["printing"])
+        result = self._CheckIfConnectedAndForExpectedStates(["printing"], "pause")
         if result is not None:
             return result
 
@@ -270,7 +270,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecuteResume(self) -> CommandResponse:
         # Check the state and that we have a connection to the host.
-        result = self._CheckIfConnectedAndForExpectedStates(["paused"])
+        result = self._CheckIfConnectedAndForExpectedStates(["paused"], "resume")
         if result is not None:
             return result
 
@@ -278,7 +278,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.resume", {})
         if result.HasError():
             self.Logger.error("ExecuteResume failed to request resume. "+result.GetLoggingErrorStr())
-            return CommandResponse.Error(400, "Failed to request resume")
+            return self._BuildMoonrakerJsonRpcCommandError("resume", result, "Failed to request resume")
 
         # Ensure the response is a simple result.
         if result.IsSimpleResult() is False:
@@ -299,7 +299,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # This must return a CommandResponse.
     def ExecuteCancel(self) -> CommandResponse:
         # Check the state and that we have a connection to the host.
-        result = self._CheckIfConnectedAndForExpectedStates(["printing","paused"])
+        result = self._CheckIfConnectedAndForExpectedStates(["printing","paused"], "cancel")
         if result is not None:
             return result
 
@@ -307,7 +307,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.print.cancel", {})
         if result.HasError():
             self.Logger.error("ExecuteCancel failed to request cancel. "+result.GetLoggingErrorStr())
-            return CommandResponse.Error(400, "Failed to request cancel")
+            return self._BuildMoonrakerJsonRpcCommandError("cancel", result, "Failed to request cancel")
 
         # Ensure the response is a simple result.
         if result.IsSimpleResult() is False:
@@ -335,10 +335,12 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         }, timeoutSec=60.0)
         if result.HasError():
             code = result.GetErrorCode()
+            errorStr = result.GetErrorStr()
+            errorStrLower = errorStr.lower() if errorStr is not None else ""
+            if code == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStrLower or "forbidden" in errorStrLower or MoonrakerClient.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_StartCommand))
             if code == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", CommandHandler.c_StartCommand))
-            if code == JsonRpcResponse.MR_401_UNAUTHORIZED or MoonrakerClient.Get().IsDisconnectDueToAuth():
-                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", CommandHandler.c_StartCommand))
             self.Logger.error("ExecuteStart failed to request start. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(400, result.GetErrorStr() or "Failed to request start")
 
@@ -364,7 +366,10 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             return CommandResponse.Success(None)
         else:
             self.Logger.error("ExecuteSetLight: Failed to set light state")
-            return CommandResponse.Error(500, "Failed to set light state")
+            lightResult = LightManager.Get().GetLastSetLightStateResponse()
+            if lightResult is not None:
+                return self._BuildMoonrakerJsonRpcCommandError("set-light", lightResult, "Failed to set light state")
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "set-light failed on Moonraker: failed to set light state.")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -390,7 +395,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         if result.HasError():
             self.Logger.error(f"ExecuteMoveAxis failed: {result.GetLoggingErrorStr()}")
-            return CommandResponse.Error(500, "Failed to move axis: "+result.GetLoggingErrorStr())
+            return self._BuildMoonrakerJsonRpcCommandError("move-axis", result, "Failed to move axis")
 
         self.Logger.info(f"ExecuteMoveAxis: Successfully moved {axis_upper} by {distanceMm}mm")
         return CommandResponse.Success(None)
@@ -412,7 +417,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         if result.HasError():
             self.Logger.error(f"ExecuteHome failed: {result.GetLoggingErrorStr()}")
-            return CommandResponse.Error(500, "Failed to home axes: "+result.GetLoggingErrorStr())
+            return self._BuildMoonrakerJsonRpcCommandError("home", result, "Failed to home axes")
 
         self.Logger.info("ExecuteHome: Successfully homed all axes")
         return CommandResponse.Success(None)
@@ -441,7 +446,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         if result.HasError():
             self.Logger.error(f"ExecuteExtrude failed: {result.GetLoggingErrorStr()}")
-            return CommandResponse.Error(500, "Failed to extrude: "+result.GetLoggingErrorStr())
+            return self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to extrude")
 
         action = "extruded" if distanceMm > 0 else "retracted"
         self.Logger.info(f"ExecuteExtrude: Successfully {action} {abs(distanceMm)}mm on extruder {extruder}")
@@ -479,7 +484,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         if result.HasError():
             self.Logger.error(f"ExecuteSetTemp failed: {result.GetLoggingErrorStr()}")
-            return CommandResponse.Error(500, "Failed to set temperature: "+result.GetLoggingErrorStr())
+            return self._BuildMoonrakerJsonRpcCommandError("set-temp", result, "Failed to set temperature")
 
         # Build success message
         targets:List[str] = []
@@ -513,11 +518,13 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         result = MoonrakerClient.Get().SendJsonRpcRequest(method, parsed.Params, timeoutSec=parsed.TimeoutSec, waitForResponse=parsed.WaitForResponse)
         if result.HasError():
             code = result.GetErrorCode()
+            errorStr = result.GetErrorStr()
+            errorStrLower = errorStr.lower() if errorStr is not None else ""
             # Transport/connection/auth failures are returned as actionable OE error codes (no useful payload).
+            if code == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStrLower or "forbidden" in errorStrLower or MoonrakerClient.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - refresh the Moonraker API key or credentials.")
             if code == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
-            if code == JsonRpcResponse.MR_401_UNAUTHORIZED:
-                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - refresh the Moonraker API key or credentials.")
             if code == JsonRpcResponse.OE_ERROR_TIMEOUT:
                 return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some commands don't return a response - set WaitForResponse to false for those.")
             if code == JsonRpcResponse.OE_ERROR_EXCEPTION:
@@ -719,9 +726,23 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return MoonrakerCommandHandler.c_MoonrakerRootByVirtualRoot[virtualRoot]
 
 
+    def _BuildMoonrakerJsonRpcCommandError(self, commandName:str, result:JsonRpcResponse, fallbackMessage:str) -> CommandResponse:
+        code = result.GetErrorCode()
+        errorStr = result.GetErrorStr()
+        errorStrLower = errorStr.lower() if errorStr is not None else ""
+        if code == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStrLower or "forbidden" in errorStrLower or MoonrakerClient.Get().IsDisconnectDueToAuth():
+            return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Moonraker", commandName))
+        if code == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Moonraker", commandName))
+        if code == JsonRpcResponse.OE_ERROR_TIMEOUT:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Moonraker: no response received from the printer before timeout.")
+        detail = errorStr or fallbackMessage
+        return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Moonraker: {detail}")
+
+
     # Checks if the printer is connected and in the correct state (or states)
     # If everything checks out, returns None. Otherwise it returns a CommandResponse
-    def _CheckIfConnectedAndForExpectedStates(self, stateArray:List[str]) -> Optional[CommandResponse]:
+    def _CheckIfConnectedAndForExpectedStates(self, stateArray:List[str], commandName:str) -> Optional[CommandResponse]:
         # Only allow the pause if the print state is printing, otherwise the system seems to get confused.
         result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.query",
         {
@@ -730,9 +751,14 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             }
         })
         if result.HasError():
-            if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
-                self.Logger.error("Command failed because the printer is no connected. "+result.GetLoggingErrorStr())
-                return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
+            errorStr = result.GetErrorStr()
+            errorStrLower = errorStr.lower() if errorStr is not None else ""
+            if result.GetErrorCode() == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                self.Logger.error("Command failed because the printer is not connected. "+result.GetLoggingErrorStr())
+                return self._BuildMoonrakerJsonRpcCommandError(commandName, result, "Printer Not Connected")
+            if result.GetErrorCode() == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStrLower or "forbidden" in errorStrLower or MoonrakerClient.Get().IsDisconnectDueToAuth():
+                self.Logger.error("Command failed because Moonraker auth is invalid. "+result.GetLoggingErrorStr())
+                return self._BuildMoonrakerJsonRpcCommandError(commandName, result, "Moonraker authentication failed")
             self.Logger.error("Command failed to get state. "+result.GetLoggingErrorStr())
             return CommandResponse.Error(500, "Error Getting State")
         res = result.GetResult()

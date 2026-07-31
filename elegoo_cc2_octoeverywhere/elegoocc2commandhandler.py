@@ -128,21 +128,21 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         result = ElegooCc2Client.Get().SendRequest(1021)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("pause", result)
         return CommandResponse.Success(None)
 
 
     def ExecuteResume(self) -> CommandResponse:
         result = ElegooCc2Client.Get().SendRequest(1023)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("resume", result)
         return CommandResponse.Success(None)
 
 
     def ExecuteCancel(self) -> CommandResponse:
         result = ElegooCc2Client.Get().SendRequest(1022)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("cancel", result)
         return CommandResponse.Success(None)
 
 
@@ -157,7 +157,7 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         # According to the docs, both brightness is the correct value, but it doesn't wok on some firmware versions and the official elegoo HTML page uses "power" instead.
         result = ElegooCc2Client.Get().SendRequest(1029, {"brightness": 255 if on else 0, "power" : 1 if on else 0})
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("set-light", result)
         return CommandResponse.Success(None)
 
 
@@ -169,14 +169,14 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
         result = ElegooCc2Client.Get().SendRequest(1027, {"axes": axisLower, "distance": distanceMm})
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("move-axis", result)
         return CommandResponse.Success(None)
 
 
     def ExecuteHome(self) -> CommandResponse:
         result = ElegooCc2Client.Get().SendRequest(1026, {"homed_axes": "xyz"})
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("home", result)
         return CommandResponse.Success(None)
 
 
@@ -197,7 +197,7 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
         result = ElegooCc2Client.Get().SendRequest(1028, params)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCc2CommandError("set-temp", result)
         return CommandResponse.Success(None)
 
 
@@ -225,9 +225,11 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         if result.HasError():
             code = result.GetErrorCode()
             # Transport failures are returned as actionable OE error codes (no useful payload).
+            if ElegooCc2Client.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
             if code == result.OE_ERROR_MQTT_NOT_CONNECTED:
-                if ElegooCc2Client.Get().IsDisconnectDueToAuth():
-                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
+                if ElegooCc2Client.Get().IsDisconnectDueToTooManyClients():
+                    return CommandResponse.Error(CommandHandler.c_CommandError_CantConnectTooManyClients, "Too many clients are already connected to the printer.")
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
             if code == result.OE_ERROR_TIMEOUT:
                 return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some MQTT commands don't return a response - set WaitForResponse to false for those.")
@@ -265,3 +267,17 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2"))
+
+
+    def _BuildElegooCc2CommandError(self, commandName:str, result:Any) -> CommandResponse:
+        code = result.GetErrorCode()
+        if ElegooCc2Client.Get().IsDisconnectDueToAuth():
+            return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Elegoo CC2", commandName))
+        if code == result.OE_ERROR_MQTT_NOT_CONNECTED:
+            if ElegooCc2Client.Get().IsDisconnectDueToTooManyClients():
+                return CommandResponse.Error(CommandHandler.c_CommandError_CantConnectTooManyClients, f"{commandName} failed on Elegoo CC2: too many clients are already connected to the printer.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Elegoo CC2", commandName))
+        if code == result.OE_ERROR_TIMEOUT:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Elegoo CC2: no response received from the printer before timeout.")
+        errorStr = result.GetErrorStr() or result.GetLoggingErrorStr()
+        return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Elegoo CC2: {errorStr}")

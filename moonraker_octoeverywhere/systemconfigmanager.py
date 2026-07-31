@@ -7,12 +7,19 @@ class SystemConfigManager:
 
     # This can't change or it will break old installs.
     c_updateConfigFileName = "octoeverywhere-system.cfg"
+    c_moonrakerConfigFileName = "moonraker.conf"
 
     # We use config files to integrate into moonraker's update manager, which allows our plugin repo to stay updated.
     # This also write a block that's used to allow the announcement system to show updates from our repo.
     # This function ensures they exist and are up to date. If not, they are fixed.
     @staticmethod
-    def EnsureUpdateManagerFilesSetup(logger:logging.Logger, klipperConfigDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str):
+    def EnsureUpdateManagerFilesSetup(logger:logging.Logger, klipperConfigDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str, disableMoonrakerConfigFileWrites:bool):
+
+        # Keep this check next to the code that performs the write so future callers
+        # can't accidentally bypass the startup-level setting.
+        if disableMoonrakerConfigFileWrites:
+            logger.info("Moonraker config file writes are disabled, skipping update manager file setup.")
+            return
 
         # Special case for K1 and K1 max setups. If the service file name is the special init.d name, we can just use
         # the started "octoeverywhere" and the update manager will find the right service to manage.
@@ -154,7 +161,7 @@ subscriptions:
     @staticmethod
     def _ensureMoonrakerConfigHasUpdateConfigInclude(klipperConfigDir:str, logger:logging.Logger):
         # Create the path where we should find the file, and make sure it exists. If not throw, so things blow up.
-        moonrakerConfigFileName = "moonraker.conf"
+        moonrakerConfigFileName = SystemConfigManager.c_moonrakerConfigFileName
         moonrakerConfigFilePath = os.path.join(klipperConfigDir, moonrakerConfigFileName)
         if os.path.exists(moonrakerConfigFilePath) is False:
             raise Exception("Failed to find the "+moonrakerConfigFileName+" file in dir. Expected: "+moonrakerConfigFilePath)

@@ -317,8 +317,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         if BambuClient.Get().SendPause():
             return CommandResponse.Success(None)
-        else:
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+        return self._BuildBambuCommandError("pause")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -328,8 +327,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
     def ExecuteResume(self) -> CommandResponse:
         if BambuClient.Get().SendResume():
             return CommandResponse.Success(None)
-        else:
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+        return self._BuildBambuCommandError("resume")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -339,8 +337,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
     def ExecuteCancel(self) -> CommandResponse:
         if BambuClient.Get().SendCancel():
             return CommandResponse.Success(None)
-        else:
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+        return self._BuildBambuCommandError("cancel")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -353,9 +350,9 @@ class BambuCommandHandler(IPlatformCommandHandler):
         payload = self._BuildStartPrintPayload(parsedPath.RelativePath, args)
         result = BambuClient.Get().SendCommand(payload, timeoutSec=30.0, waitForResponse=True)
         if result.HasError():
+            if BambuClient.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
             if result.Connected is False:
-                if BambuClient.Get().IsDisconnectDueToAuth():
-                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Bambu", CommandHandler.c_StartCommand))
             if result.Timeout:
                 return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer while starting the print.")
@@ -373,8 +370,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
         if BambuClient.Get().SendSetChamberLight(on):
             return CommandResponse.Success(None)
-        else:
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+        return self._BuildBambuCommandError("set-light")
 
 
     # !! Platform Command Handler Interface Function !!
@@ -419,9 +415,9 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
         result = BambuClient.Get().SendCommand(parsed.Request, timeoutSec=parsed.TimeoutSec, waitForResponse=parsed.WaitForResponse)
         if result.HasError():
+            if BambuClient.Get().IsDisconnectDueToAuth():
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
             if result.Connected is False:
-                if BambuClient.Get().IsDisconnectDueToAuth():
-                    return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, "Unauthorized - re-authenticate with the printer (check the access code / credentials).")
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
             if result.Timeout:
                 return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some MQTT commands don't return a response - set WaitForResponse to false for those.")
@@ -520,6 +516,14 @@ class BambuCommandHandler(IPlatformCommandHandler):
             self.Config.GetStr(Config.SectionCompanion, Config.CompanionKeyIpOrHostname, None),
             self.Config.GetStr(Config.SectionBambu, Config.BambuAccessToken, None)
         )
+
+
+    def _BuildBambuCommandError(self, commandName:str) -> CommandResponse:
+        if BambuClient.Get().IsDisconnectDueToAuth():
+            return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("Bambu", commandName))
+        if BambuClient.Get().IsConnected() is False:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Bambu", commandName))
+        return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Bambu: failed to send command to printer.")
 
 
     def _BuildDownloadedFileResult(self, tempPath:str, fileSizeBytes:int, downloadFileName:str) -> HttpResult:

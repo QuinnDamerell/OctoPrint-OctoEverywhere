@@ -159,7 +159,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     def ExecutePause(self, smartPause:bool, suppressNotificationBool:bool, disableHotendBool:bool, disableBedBool:bool, zLiftMm:int, retractFilamentMm:int, showSmartPausePopup:bool) -> CommandResponse:
         result = ElegooClient.Get().SendRequest(129)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCommandError("pause", result)
         return CommandResponse.Success(None)
 
 
@@ -170,7 +170,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     def ExecuteResume(self) -> CommandResponse:
         result = ElegooClient.Get().SendRequest(131)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCommandError("resume", result)
         return CommandResponse.Success(None)
 
 
@@ -181,7 +181,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     def ExecuteCancel(self) -> CommandResponse:
         result = ElegooClient.Get().SendRequest(130)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCommandError("cancel", result)
         return CommandResponse.Success(None)
 
 
@@ -201,7 +201,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         # SecondLight is the chamber light, RgbLight is the LED strip (we keep it off)
         result = ElegooClient.Get().SendRequest(403, {"LightStatus": {"SecondLight": on, "RgbLight": [0, 0, 0]}})
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCommandError("set-light", result)
         return CommandResponse.Success(None)
 
 
@@ -222,7 +222,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
         data = {"Axis": "XYZ"}
         result = ElegooClient.Get().SendRequest(402, data)
         if result.HasError():
-            return CommandResponse.Error(400, "Failed to send command to printer.")
+            return self._BuildElegooCommandError("home", result)
         return CommandResponse.Success(None)
 
 
@@ -269,6 +269,8 @@ class ElegooCommandHandler(IPlatformCommandHandler):
             code = result.GetErrorCode()
             # Transport failures are returned as actionable OE error codes (no useful payload).
             if code == result.OE_ERROR_WS_NOT_CONNECTED:
+                if ElegooClient.Get().IsDisconnectDueToTooManyClients():
+                    return CommandResponse.Error(CommandHandler.c_CommandError_CantConnectTooManyClients, "Too many clients are already connected to the printer.")
                 return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, "Printer Not Connected")
             if code == result.OE_ERROR_TIMEOUT:
                 return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "No response received from the printer within the timeout. Some commands don't return a response - set WaitForResponse to false for those.")
@@ -305,3 +307,15 @@ class ElegooCommandHandler(IPlatformCommandHandler):
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo"))
+
+
+    def _BuildElegooCommandError(self, commandName:str, result:Any) -> CommandResponse:
+        code = result.GetErrorCode()
+        if code == result.OE_ERROR_WS_NOT_CONNECTED:
+            if ElegooClient.Get().IsDisconnectDueToTooManyClients():
+                return CommandResponse.Error(CommandHandler.c_CommandError_CantConnectTooManyClients, f"{commandName} failed on Elegoo: too many clients are already connected to the printer.")
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("Elegoo", commandName))
+        if code == result.OE_ERROR_TIMEOUT:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Elegoo: no response received from the printer before timeout.")
+        errorStr = result.GetErrorStr() or result.GetLoggingErrorStr()
+        return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, f"{commandName} failed on Elegoo: {errorStr}")

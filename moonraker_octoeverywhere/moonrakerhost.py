@@ -101,11 +101,17 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             Sentry.Setup(pluginVersionStr, "klipper", devConfig is not None, canEnableProfiling=True, filterExceptionsByPackage=False, restartOnCantCreateThreadBug=True)
 
             # This logic only works if running locally.
-            if not isCompanion and not disableMoonrakerConfigFileWrites:
+            if not isCompanion:
                 # Before we do this first time setup, make sure our config files are in place. This is important
                 # because if this fails it will throw. We don't want to let the user complete the install setup if things
                 # with the update aren't working.
-                SystemConfigManager.EnsureUpdateManagerFilesSetup(self.Logger, klipperConfigDir, serviceName, pyVirtEnvRoot, repoRoot)
+                SystemConfigManager.EnsureUpdateManagerFilesSetup(
+                    self.Logger,
+                    klipperConfigDir,
+                    serviceName,
+                    pyVirtEnvRoot,
+                    repoRoot,
+                    disableMoonrakerConfigFileWrites)
 
             # Before the first time setup, we must also init the Secrets class and do the migration for the printer id and private key, if needed.
             # As of 8/15/2023, we don't store any sensitive things in teh config file, since all config files are sometimes backed up publicly.

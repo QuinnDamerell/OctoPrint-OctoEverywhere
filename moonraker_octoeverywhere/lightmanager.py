@@ -3,6 +3,7 @@ import threading
 from typing import Any, List, Optional, Dict, Tuple
 
 from .moonrakerclient import MoonrakerClient
+from .jsonrpcresponse import JsonRpcResponse
 
 
 class LightStatus:
@@ -55,6 +56,7 @@ class LightManager:
         # Combined flag for any lights detected
         self.LightsDetected = False
         self.DetectionAttempted = False
+        self.LastSetLightStateResponse: Optional[JsonRpcResponse] = None
 
 
     # Detects available lights in the printer configuration.
@@ -304,6 +306,7 @@ class LightManager:
     # If name is empty, controls the first detected light.
     # Returns True if successful, False otherwise
     def SetLightState(self, name: str, on: bool) -> bool:
+        self.LastSetLightStateResponse = None
         if not self.HasLights():
             self.Logger.warning("LightManager: Cannot set light state, no lights detected")
             return False
@@ -363,6 +366,7 @@ class LightManager:
             })
 
             if result.HasError():
+                self.LastSetLightStateResponse = result
                 self.Logger.error(f"LightManager: Failed to set light state: {result.GetLoggingErrorStr()}")
                 return False
 
@@ -384,6 +388,7 @@ class LightManager:
             })
 
             if result.HasError():
+                self.LastSetLightStateResponse = result
                 self.Logger.error(f"LightManager: Failed to set power device state: {result.GetLoggingErrorStr()}")
                 return False
 
@@ -393,3 +398,7 @@ class LightManager:
         except Exception as e:
             self.Logger.error(f"LightManager: Exception setting power device state: {e}")
             return False
+
+
+    def GetLastSetLightStateResponse(self) -> Optional[JsonRpcResponse]:
+        return self.LastSetLightStateResponse

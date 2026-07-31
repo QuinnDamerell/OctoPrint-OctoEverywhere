@@ -163,6 +163,14 @@ class BambuClient:
         return "not authorized" in reason_str or "bad user" in reason_str or "bad username" in reason_str
 
 
+    def IsConnected(self) -> bool:
+        if not self.Client.IsConnected():
+            self._context_sleep_event.set()
+            self._mux.WakeReconnect()
+            return False
+        return True
+
+
     # Returned for the existing mqttwebsocketproxy.py to consume. Step 5 will
     # replace those callers with direct mux attachments, removing the need
     # for the legacy shape.
