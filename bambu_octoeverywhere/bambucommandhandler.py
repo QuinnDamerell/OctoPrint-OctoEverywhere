@@ -15,6 +15,7 @@ from linux_host.config import Config
 
 from .bambuclient import BambuClient
 from .bambufilemanager import BambuFileManager, BambuFtpsError
+from .bambumaterialsystem import BambuMaterialSystemBuilder
 from .bambumodels import BambuPrintErrors
 
 # This class implements the Platform Command Handler Interface
@@ -130,7 +131,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
         # Try to get the current state.
         bambuState = BambuClient.Get().GetState()
 
@@ -262,7 +263,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
             lights = [ {"Name": self.c_ChamberLightName, "On": bambuState.chamber_light}   ]
 
         # Build the object and return.
-        return {
+        result:Dict[str, Any] = {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
@@ -287,6 +288,15 @@ class BambuCommandHandler(IPlatformCommandHandler):
                 }
             }
         }
+        if includeMaterialSystem:
+            try:
+                result["MaterialSystem"] = BambuMaterialSystemBuilder.Build(bambuState)
+            except Exception as e:
+                # Material details are supplemental. A malformed vendor field must not make the whole printer look
+                # disconnected, and None lets the service explain that the topology is temporarily unavailable.
+                self.Logger.warning(f"Failed to build the Bambu material system: {e}")
+                result["MaterialSystem"] = None
+        return result
 
 
     # !! Platform Command Handler Interface Function !!

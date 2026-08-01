@@ -13,6 +13,7 @@ from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadB
 from linux_host.config import Config
 
 from .moonrakerclient import MoonrakerClient
+from .moonrakermaterialsystem import MoonrakerMaterialSystemBuilder
 from .smartpause import SmartPause
 from .filemetadatacache import FileMetadataCache
 from .jsonrpcresponse import JsonRpcResponse
@@ -121,7 +122,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         return activeName
 
 
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
 
         # Build the query objects dict, including light objects if available
         query_objects: Dict[str, None] = {
@@ -144,6 +145,10 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         extruderObjectNames = MoonrakerCommandHandler.GetExtruderObjectNames(printerObjects)
         for extruderObjectName in extruderObjectNames:
             query_objects[extruderObjectName] = None
+
+        if includeMaterialSystem:
+            for objectName in MoonrakerMaterialSystemBuilder.GetOptionalQueryObjectNames(printerObjects):
+                query_objects[objectName] = None
 
         # Add the chamber temp object, if this printer has one.
         chamberObjectName = MoonrakerCommandHandler.GetChamberObjectName(printerObjects)
@@ -298,7 +303,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             self.Logger.debug(f"Failed to get light status: {e}")
 
         # Build the object and return.
-        return {
+        response:Dict[str, Any] = {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr,
@@ -324,6 +329,18 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                 }
             }
         }
+        if includeMaterialSystem:
+            try:
+                response["MaterialSystem"] = MoonrakerMaterialSystemBuilder.Build(
+                    statusObjectOrEmptyDict,
+                    extruderObjectNames,
+                    activeExtruderName
+                )
+            except Exception as e:
+                self.Logger.warning(f"Failed to build the Moonraker material system: {e}")
+                response["MaterialSystem"] = None
+        return response
+
 
     # !! Platform Command Handler Interface Function !!
     # This must return the platform version as a string.

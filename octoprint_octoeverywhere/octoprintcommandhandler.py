@@ -16,6 +16,8 @@ from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.WebStream.uploadbody import MultipartFormUploadBody, UploadBody
 from octoeverywhere.localip import LocalIpHelper
 
+from .octoprintmaterialsystem import OctoPrintMaterialSystemBuilder
+
 from .smartpause import SmartPause
 from .printerstateobject import PrinterStateObject
 
@@ -68,7 +70,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
         try:
             # Get the date from the octoprint printer object.
             currentData:Dict[str, Any] = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType] octoprint has no typing
@@ -168,7 +170,7 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                     chamberTarget = round(float(chamber["target"]), 2)
 
             # Build the object and return.
-            return {
+            result:Dict[str, Any] = {
                 "State": state,
                 "Error": errorStr_CanBeNone,
                 # Chamber light status: "on", "off", or None if not supported/unknown
@@ -194,6 +196,9 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                     }
                 }
             }
+            if includeMaterialSystem:
+                result["MaterialSystem"] = OctoPrintMaterialSystemBuilder.Build(currentTemps)
+            return result
 
         except Exception as e:
             Sentry.OnExceptionNoSend("GetCurrentJobStatus failed to get job status", e)

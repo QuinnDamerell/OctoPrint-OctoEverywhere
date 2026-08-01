@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper
 from octoeverywhere.httpresult import HttpResult
+from octoeverywhere.materialsystem import MaterialSystemHelper
 from octoeverywhere.interfaces import (
     FEATURE_AXIS_MOVEMENT,
     FEATURE_HOMING,
@@ -30,7 +31,7 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         self.Config = config
 
 
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
         printerState = ElegooCc2Client.Get().GetState()
         if printerState is None:
             if ElegooCc2Client.Get().IsDisconnectDueToAuth():
@@ -78,7 +79,7 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
         if printerState.ChamberLightOn is not None:
             lights = [ {"Name": self.c_ChamberLightName, "On": printerState.ChamberLightOn} ]
 
-        return {
+        result:Dict[str, Any] = {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
@@ -103,6 +104,11 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
                 }
             }
         }
+        if includeMaterialSystem:
+            result["MaterialSystem"] = MaterialSystemHelper.BuildOneToOne([
+                MaterialSystemHelper.BuildTool(0, "Tool 0", True, hotendActual, hotendTarget)
+            ], ["External Spool"])
+        return result
 
 
     def GetPlatformVersionStr(self) -> str:
