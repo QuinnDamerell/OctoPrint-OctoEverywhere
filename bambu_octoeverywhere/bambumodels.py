@@ -1,5 +1,6 @@
 import time
 import logging
+import copy
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -40,6 +41,16 @@ class BambuState:
         # The chamber temp. Note Bambu printers measure the chamber but don't actively heat it, so there's no target.
         # This doesn't exist on printers without a chamber sensor, so it stays None.
         self.chamber_temper:Optional[float] = None
+        self.nozzle_diameter:Optional[float] = None
+        self.nozzle_type:Optional[str] = None
+        # Bambu sends a full AMS tree on the initial push and nested partial updates afterwards. Keep the raw trees in
+        # the synchronized state so status can normalize them only when IncludeMaterialSystem is requested.
+        self.ams:Optional[Dict[str, Any]] = None
+        self.vt_tray:Optional[Dict[str, Any]] = None
+        # H2-series printers report their dual-nozzle state in this packed extruder object and expose separate virtual
+        # external-spool slots. They remain raw here and are normalized by the material-system builder on demand.
+        self.extruder:Optional[Dict[str, Any]] = None
+        self.vir_slot:Optional[List[Dict[str, Any]]] = None
         self.mc_remaining_time:Optional[int] = None
         self.project_id:Optional[str] = None
         self.task_id:Optional[str] = None
@@ -71,6 +82,20 @@ class BambuState:
         self.bed_temper = msg.get("bed_temper", self.bed_temper)
         self.bed_target_temper = msg.get("bed_target_temper", self.bed_target_temper)
         self.chamber_temper = msg.get("chamber_temper", self.chamber_temper)
+        self.nozzle_diameter = msg.get("nozzle_diameter", self.nozzle_diameter)
+        self.nozzle_type = msg.get("nozzle_type", self.nozzle_type)
+        amsUpdate = msg.get("ams", None)
+        if isinstance(amsUpdate, dict):
+            self.ams = BambuState._MergeDict(self.ams, amsUpdate)
+        virtualTrayUpdate = msg.get("vt_tray", None)
+        if isinstance(virtualTrayUpdate, dict):
+            self.vt_tray = BambuState._MergeDict(self.vt_tray, virtualTrayUpdate)
+        extruderUpdate = msg.get("extruder", None)
+        if isinstance(extruderUpdate, dict):
+            self.extruder = BambuState._MergeDict(self.extruder, extruderUpdate)
+        virtualSlotsUpdate = msg.get("vir_slot", None)
+        if isinstance(virtualSlotsUpdate, list):
+            self.vir_slot = copy.deepcopy([slot for slot in virtualSlotsUpdate if isinstance(slot, dict)])
         self.print_error = msg.get("print_error", self.print_error)
         ipCam = msg.get("ipcam", None)
         if ipCam is not None:
@@ -94,6 +119,20 @@ class BambuState:
         self.mc_remaining_time = msg.get("mc_remaining_time", self.mc_remaining_time)
         if old_mc_remaining_time != self.mc_remaining_time:
             self.LastTimeRemainingWallClock = time.time()
+
+
+    @staticmethod
+    def _MergeDict(current:Optional[Dict[str, Any]], update:Dict[str, Any]) -> Dict[str, Any]:
+        # MQTT status messages are partial. Recursively merge objects so a one-field AMS update doesn't erase the
+        # other slots learned during the full sync. Arrays are replaced because Bambu reports them as snapshots.
+        result:Dict[str, Any] = copy.deepcopy(current) if current is not None else {}
+        for key, value in update.items():
+            oldValue = result.get(key, None)
+            if isinstance(value, dict) and isinstance(oldValue, dict):
+                result[key] = BambuState._MergeDict(oldValue, value)
+            else:
+                result[key] = copy.deepcopy(value)
+        return result
 
 
     # Returns a time reaming value that counts down in seconds, not just minutes.

@@ -197,7 +197,7 @@ class CommandHandler:
         if commandPathLower.startswith("ping"):
             return CommandResponse.Success({"Message":"Pong"})
         elif commandPathLower.startswith("status"):
-            return self.GetStatus()
+            return self.GetStatus(jsonObj_CanBeNone)
         # This works for both, in the docks we moved it to the webcam path so it's more clear.
         elif commandPathLower.startswith("list-webcam") or commandPathLower.startswith("webcam/list"):
             return self.ListWebcams()
@@ -265,7 +265,11 @@ class CommandHandler:
     #
 
     # Must return a CommandResponse
-    def GetStatus(self) -> CommandResponse:
+    def GetStatus(self, jsonObjData:Optional[Dict[str, Any]]=None) -> CommandResponse:
+        includeMaterialSystem = CommandHandler._ParseIncludeMaterialSystem(jsonObjData)
+        if isinstance(includeMaterialSystem, CommandResponse):
+            return includeMaterialSystem
+
         # We want to mock the OctoPrint /api/job API since it has good stuff in it.
         # So we will return a similar result. We use similar code to what the actual API returns.
         # If we fail to get this object, we will still return a result without it.
@@ -277,7 +281,7 @@ class CommandHandler:
                 # If the plugin is connected and in a good state, this should return the standard job status.
                 # On error, this should return None and then we send back the CommandHandler.c_CommandError_HostNotConnected error
                 # OR it will return an int, which must be a CommandHandler.c_CommandError_... error, and we will send that back.
-                jobStatus = self.PlatformCommandHandler.GetCurrentJobStatus()
+                jobStatus = self.PlatformCommandHandler.GetCurrentJobStatus(includeMaterialSystem)
                 # This interface should always return None, an int, or a dict with details.
                 if jobStatus is not None and (isinstance(jobStatus, dict) and len(jobStatus) == 0):
                     jobStatus = None
@@ -290,6 +294,16 @@ class CommandHandler:
         # If we got an int back, it's an error code.
         if isinstance(jobStatus, int):
             return CommandResponse.Error(jobStatus, "Failed to get current status.")
+
+        # The material topology is an explicitly opt-in part of status because a fully populated material changer can
+        # be much larger than the rest of the response. Enforce the boundary here as a final guard even if a platform
+        # handler accidentally returns it for a lean request. A new plugin asked for the data always returns the key;
+        # None means this platform couldn't report a material system.
+        if includeMaterialSystem:
+            if "MaterialSystem" not in jobStatus:
+                jobStatus["MaterialSystem"] = None
+        else:
+            jobStatus.pop("MaterialSystem", None)
 
         # Gather info that's specific to us.
         octoeverywhereStatus = None
@@ -1104,6 +1118,32 @@ class CommandHandler:
             if k in d:
                 return d[k]
         return None
+
+
+    # Parses the status payload's optional material-system flag. JSON callers should send a boolean, while GET query
+    # parameters arrive here as strings. The default is deliberately False so old callers retain the lean response.
+    @staticmethod
+    def _ParseIncludeMaterialSystem(args:Optional[Dict[str, Any]]) -> Union[bool, CommandResponse]:
+        if args is None:
+            return False
+        value = CommandHandler._FirstPresent(
+            args,
+            "IncludeMaterialSystem",
+            "includeMaterialSystem",
+            "include_material_system",
+            "includematerialsystem"
+        )
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            valueLower = value.strip().lower()
+            if valueLower == "true" or valueLower == "1":
+                return True
+            if valueLower == "false" or valueLower == "0":
+                return False
+        return CommandResponse.Error(400, "The optional 'IncludeMaterialSystem' status field must be true or false.")
 
 
     # Parses the optional 'headers' field (case-insensitive) into a string->string dict. Raises on a non-object value.

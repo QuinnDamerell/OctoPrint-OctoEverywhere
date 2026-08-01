@@ -226,7 +226,7 @@ class IPlatformCommandHandler(ABC):
     # On error, this should return None and then we send back the CommandHandler.c_CommandError_HostNotConnected error
     # OR it will return an int, which must be a CommandHandler.c_CommandError_... error, and we will send that back.
     @abstractmethod
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
         pass
 
     # This must return the platform version as a string.

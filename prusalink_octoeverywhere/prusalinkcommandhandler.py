@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper
 from octoeverywhere.httpresult import HttpResult
+from octoeverywhere.materialsystem import MaterialSystemHelper
 from octoeverywhere.interfaces import FEATURE_PRINT_START, IPlatformCommandHandler, ConnectionInfo
 from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
@@ -19,7 +20,7 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
         self.Config = config
 
 
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
         printerState = PrusaLinkClient.Get().GetState()
         if printerState is None:
             if PrusaLinkClient.Get().IsDisconnectDueToAuth():
@@ -53,7 +54,7 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
         filamentUsedMm = printerState.EstFilamentUsedMm if printerState.EstFilamentUsedMm is not None else 0
         filamentWeightMg = printerState.EstFilamentWeightMg if printerState.EstFilamentWeightMg is not None else 0
 
-        return {
+        result:Dict[str, Any] = {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
@@ -76,6 +77,11 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
                 }
             }
         }
+        if includeMaterialSystem:
+            result["MaterialSystem"] = MaterialSystemHelper.BuildOneToOne([
+                MaterialSystemHelper.BuildTool(0, "Tool 0", True, hotendActual, hotendTarget)
+            ], ["External Spool"])
+        return result
 
 
     def GetPlatformVersionStr(self) -> str:

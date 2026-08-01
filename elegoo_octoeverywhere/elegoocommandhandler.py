@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Union, List, cast
 from octoeverywhere.commandhandler import CommandResponse, CommandHandler
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper
 from octoeverywhere.httpresult import HttpResult
+from octoeverywhere.materialsystem import MaterialSystemHelper
 from octoeverywhere.interfaces import IPlatformCommandHandler, FEATURE_LIGHT_CONTROL, FEATURE_HOMING, ConnectionInfo
 from octoeverywhere.WebStream.uploadbody import UploadBody
 from linux_host.config import Config
@@ -36,7 +37,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
-    def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
+    def GetCurrentJobStatus(self, includeMaterialSystem:bool=False) -> Union[int, None, Dict[str, Any]]:
         # Try to get the current state.
         printerState = ElegooClient.Get().GetState()
 
@@ -101,7 +102,7 @@ class ElegooCommandHandler(IPlatformCommandHandler):
             lights = [ {"Name": self.c_ChamberLightName, "On": printerState.ChamberLightOn} ]
 
         # Build the object and return.
-        return {
+        result:Dict[str, Any] = {
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr_CanBeNone,
@@ -126,6 +127,11 @@ class ElegooCommandHandler(IPlatformCommandHandler):
                 }
             }
         }
+        if includeMaterialSystem:
+            result["MaterialSystem"] = MaterialSystemHelper.BuildOneToOne([
+                MaterialSystemHelper.BuildTool(0, "Tool 0", True, hotendActual, hotendTarget)
+            ], ["External Spool"])
+        return result
 
 
     # !! Platform Command Handler Interface Function !!
