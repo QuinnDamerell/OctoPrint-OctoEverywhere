@@ -43,6 +43,8 @@ class PrusaLinkCommandHandler(IPlatformCommandHandler):
         timeLeftSec = printerState.RemainingTimeSec
         if timeLeftSec is not None:
             timeLeftSec = min(timeLeftSec, 2147483600)
+        if timeLeftSec is None:
+            timeLeftSec = 0
 
         progress = printerState.Progress if printerState.Progress is not None else 0.0
 
