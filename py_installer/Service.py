@@ -144,10 +144,9 @@ OOM_ADJ=-17
 
 start_service() {{
     procd_open_instance
-    procd_set_param env HOME=/root
-    procd_set_param env PYTHONPATH={context.RepoRootFolder}
-    procd_set_param env MALLOC_TRIM_THRESHOLD_=65536
-    procd_set_param env MALLOC_ARENA_MAX=2
+    # procd_set_param replaces an existing parameter. Keep all environment
+    # variables in one call so later values don't discard PYTHONPATH.
+    procd_set_param env HOME=/root PYTHONPATH={context.RepoRootFolder} MALLOC_TRIM_THRESHOLD_=65536 MALLOC_ARENA_MAX=2
     procd_set_param oom_adj $OOM_ADJ
     procd_set_param command {context.VirtualEnvPath}/bin/python3 -m {moduleNameToRun} "{argsJsonBase64}"
     procd_close_instance

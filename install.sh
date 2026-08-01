@@ -495,14 +495,15 @@ if [[ $IS_SONIC_PAD_OS -eq 1 ]] || [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]
 then
     # Creality OS only has a root user and we can't use sudo.
     ${OE_ENV}/bin/python3 -B -m py_installer ${PY_LAUNCH_JSON}
+    retVal=$?
 else
     sudo ${OE_ENV}/bin/python3 -B -m py_installer ${PY_LAUNCH_JSON}
+    retVal=$?
 fi
 
 cd ${CURRENT_DIR} > /dev/null
 
 # Check the output of the py script.
-retVal=$?
 if [ $retVal -ne 0 ]; then
     log_error "Failed to complete setup. Error Code: ${retVal}"
 fi

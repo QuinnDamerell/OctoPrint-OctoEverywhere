@@ -6,7 +6,7 @@ import queue
 import logging
 import math
 import configparser
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import octowebsocket
 
@@ -68,6 +68,16 @@ class MoonrakerClient(IMoonrakerClient):
         self.JsonRpcIdLock = threading.Lock()
         self.JsonRpcIdCounter = 0
         self.JsonRpcWaitingContexts:Dict[int, JsonRpcWaitingContext] = {}
+
+        # The printer's object list, cached per connection.
+        # Several systems need to know which objects this printer has, and the list only changes when the printer
+        # restarts, so it's fetched once per connection and shared rather than queried by each caller.
+        # The lock is only ever held to read or publish the list, never across the query itself.
+        self.PrinterObjectListLock = threading.Lock()
+        self.PrinterObjectList:Optional[List[str]] = None
+        # Bumped every time the cache is cleared, so a query that was already in flight at that moment can tell
+        # its result is from the previous connection and skip caching it.
+        self.PrinterObjectListGeneration = 0
 
         # Setup the Moonraker compat helper object.
         cooldownThresholdTempC = self.Config.GetFloatRequired(Config.GeneralSection, Config.GeneralBedCooldownThresholdTempC, Config.GeneralBedCooldownThresholdTempCDefault)
@@ -239,6 +249,52 @@ class MoonrakerClient(IMoonrakerClient):
     # Below this is websocket logic.
     #
 
+    # Returns the list of printer objects this printer has, such as "extruder1" or "temperature_sensor chamber".
+    # The result is cached for the life of the connection, since the list only changes when the printer restarts,
+    # and the cache is cleared when a new connection is established.
+    # Returns None if the list couldn't be queried, which callers should treat as "unknown", not "empty".
+    # https://moonraker.readthedocs.io/en/latest/web_api/#list-printer-objects
+    def GetPrinterObjectList(self) -> Optional[List[str]]:
+        # Take the lock only to read the cache, and note the generation we read it at.
+        with self.PrinterObjectListLock:
+            if self.PrinterObjectList is not None:
+                return self.PrinterObjectList
+            generation = self.PrinterObjectListGeneration
+
+        # Make the request with the lock released, since it blocks on the websocket and can take seconds or time out.
+        # Holding the lock across it would make every other caller wait on a network round trip.
+        # If two callers race here they both query and get the same answer, which is far cheaper than that wait.
+        result = self.SendJsonRpcRequest("printer.objects.list")
+        if result.HasError():
+            self.Logger.warning("Failed to query the printer object list. " + result.GetLoggingErrorStr())
+            return None
+
+        objects = result.GetResult().get("objects", None)
+        if not isinstance(objects, list):
+            self.Logger.warning("The printer object list response had no objects list.")
+            return None
+
+        # Only cache a response that actually has objects, so a bad response is retried rather than stuck.
+        names = [o for o in objects if isinstance(o, str)]
+        if len(names) == 0:
+            return None
+
+        # Take the lock back to publish the result.
+        # If the cache was cleared while we were querying, this list is from the previous connection, so we
+        # return it to our caller but don't cache it over the newer state.
+        with self.PrinterObjectListLock:
+            if generation == self.PrinterObjectListGeneration:
+                self.PrinterObjectList = names
+        return names
+
+
+    # Drops the cached printer object list, so the next caller queries it again.
+    def ClearPrinterObjectListCache(self) -> None:
+        with self.PrinterObjectListLock:
+            self.PrinterObjectList = None
+            self.PrinterObjectListGeneration += 1
+
+
     # Sends a rpc request via the connected websocket. This request will block until a response is received or the request times out.
     # This will not throw, it will always return a JsonRpcResponse which can be checked for errors or success.
     #
@@ -360,6 +416,8 @@ class MoonrakerClient(IMoonrakerClient):
     def _OnWsOpenAndKlippyReady(self) -> None:
         self.Logger.info("Moonraker client setting up default notification hooks")
         LocalWebApi.Get().SetPrinterConnectionState(True)
+        # The printer may have restarted with a different config, so the cached object list is no longer trusted.
+        self.ClearPrinterObjectListCache()
         # First, we need to setup our notification subs
         # https://moonraker.readthedocs.io/en/latest/web_api/#subscribe-to-printer-object-status
         # https://moonraker.readthedocs.io/en/latest/printer_objects/

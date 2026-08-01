@@ -26,6 +26,23 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
         FileSystemCommandHelper.c_VirtualLogsRoot,
     ]
     c_OctoPrintAllowedFileRoots = set(c_OctoPrintVirtualFileRoots)
+    # OctoPrint only analyzes gcode files, so file details are limited to that root.
+    c_OctoPrintGcodeOnlyFileRoots = {
+        FileSystemCommandHelper.c_VirtualGcodeRoot,
+    }
+
+    # OctoPrint state ids that mean OctoPrint itself is running, but it has no serial connection to the printer.
+    # In these states there's no printer to report on, so the status must not be reported as idle.
+    # https://github.com/OctoPrint/OctoPrint/blob/master/src/octoprint/util/comm.py
+    c_OctoPrintNotConnectedStates = frozenset([
+        "OFFLINE",
+        "CLOSED",
+        "OFFLINE_AFTER_ERROR",
+        "DETECT_SERIAL",
+        "DETECT_BAUDRATE",
+        "CONNECTING",
+        "UNKNOWN",
+    ])
 
     def __init__(self, logger:logging.Logger, octoPrintPrinterObject:PrinterInterface, printerStateObject:PrinterStateObject, mainPluginImpl:IOctoPrintPlugin) -> None:
         self.Logger = logger
@@ -107,6 +124,11 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                 state = "resuming"
             elif opStateStr == "ERROR" or opStateStr == "CLOSED_WITH_ERROR":
                 state = "error"
+            elif opStateStr in OctoPrintCommandHandler.c_OctoPrintNotConnectedStates:
+                # OctoPrint is running, but it isn't connected to the printer over serial, so there's no printer to report on.
+                # Returning None here is the documented way to report the "printer not connected" state.
+                # These states must not fall through to "idle", or a disconnected printer would look ready to print.
+                return None
             elif opStateStr == "OPERATIONAL":
                 # When a print is complete, the progress will stay at 100% until it's cleared.
                 if progress > 99.999:
@@ -135,6 +157,15 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                     bedActual = round(float(bed["actual"]), 2)
                 if self._Exists(bed, "target"):
                     bedTarget = round(float(bed["target"]), 2)
+            # The chamber only exists if the printer profile has a heated chamber, so this is usually absent.
+            chamberActual = 0.0
+            chamberTarget = 0.0
+            if self._Exists(currentTemps, "chamber"):
+                chamber = currentTemps["chamber"]
+                if self._Exists(chamber, "actual"):
+                    chamberActual = round(float(chamber["actual"]), 2)
+                if self._Exists(chamber, "target"):
+                    chamberTarget = round(float(chamber["target"]), 2)
 
             # Build the object and return.
             return {
@@ -158,6 +189,8 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
                         "BedTarget": bedTarget,
                         "HotendActual": hotendActual,
                         "HotendTarget": hotendTarget,
+                        "ChamberActual": chamberActual,
+                        "ChamberTarget": chamberTarget,
                     }
                 }
             }
@@ -539,6 +572,77 @@ class OctoPrintCommandHandler(IPlatformCommandHandler):
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
         return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoprint.log", CommandHandler.c_GetPluginLogsCommand, "octoprint.log", args)
+
+
+    def ExecuteFileDetails(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        # Only gcode files have analysis in OctoPrint, so this is limited to the gcode root.
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, OctoPrintCommandHandler.c_OctoPrintGcodeOnlyFileRoots)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError(OctoPrintCommandHandler.c_OctoPrintGcodeOnlyFileRoots))
+
+        headers:Dict[str, str] = {}
+        self._AddOctoPrintLocalAuth(headers)
+        relativePath = FileSystemCommandHelper.EncodeRelativePathForUrl(parsedPath.RelativePath)
+        detailsPath = "/api/files/local/" + relativePath
+        result = OctoHttpRequest.MakeHttpCall(
+            self.Logger,
+            detailsPath,
+            OctoHttpRequest.GetPathType(detailsPath),
+            "GET",
+            headers,
+            timeoutSec=60.0
+        )
+        if result is None:
+            return CommandResponse.Error(CommandHandler.c_CommandError_HostNotConnected, FileSystemCommandHelper.PrinterNotConnectedError("OctoPrint", CommandHandler.c_FilesDetailsCommand))
+
+        try:
+            result.ReadAllContentFromStreamResponse(self.Logger)
+            bodyBytes = b""
+            if result.FullBodyBuffer is not None:
+                bodyBytes = bytes(result.FullBodyBuffer.GetBytesLike())
+            if result.StatusCode == 401 or result.StatusCode == 403:
+                return CommandResponse.Error(CommandHandler.c_CommandError_LostAuth, FileSystemCommandHelper.AuthFailedError("OctoPrint", CommandHandler.c_FilesDetailsCommand))
+            if result.StatusCode < 200 or result.StatusCode >= 300:
+                return CommandResponse.Error(result.StatusCode, FileSystemCommandHelper.BackendHttpError("OctoPrint", CommandHandler.c_FilesDetailsCommand, result.StatusCode, bodyBytes))
+
+            meta = FileSystemCommandHelper.DecodeSuccessBody(bodyBytes)
+            if not isinstance(meta, dict):
+                return CommandResponse.Error(500, "OctoPrint returned no details for this file.")
+            return FileSystemCommandHelper.BuildFileDetailsSuccess(parsedPath, self._GetPlatformPath(parsedPath), self._BuildOctoPrintFileDetails(meta), meta)
+        finally:
+            result.Free()
+
+
+    # OctoPrint keeps the slicer estimates under gcodeAnalysis, which only exists once its analysis queue has
+    # processed the file, so everything in here is best effort.
+    # https://docs.octoprint.org/en/master/api/datamodel.html#file-information
+    @staticmethod
+    def _BuildOctoPrintFileDetails(meta:Dict[str, Any]) -> Dict[str, Any]:
+        analysis:Dict[str, Any] = meta.get("gcodeAnalysis", None) or {}
+        dimensions:Dict[str, Any] = analysis.get("dimensions", None) or {}
+
+        # The filament section is keyed per tool, so total up whatever tools it lists.
+        filamentLengthMm:Optional[float] = None
+        filamentVolume:Optional[float] = None
+        filament:Any = analysis.get("filament", None)
+        if isinstance(filament, dict):
+            for toolValue in filament.values():
+                if not isinstance(toolValue, dict):
+                    continue
+                length = FileSystemCommandHelper.AsFloatOrNone(toolValue.get("length", None))
+                if length is not None:
+                    filamentLengthMm = length if filamentLengthMm is None else filamentLengthMm + length
+                volume = FileSystemCommandHelper.AsFloatOrNone(toolValue.get("volume", None))
+                if volume is not None:
+                    filamentVolume = volume if filamentVolume is None else filamentVolume + volume
+
+        return {
+            "SizeBytes": FileSystemCommandHelper.AsIntOrNone(meta.get("size", None)),
+            "ModifiedTimeSec": FileSystemCommandHelper.AsIntOrNone(meta.get("date", None)),
+            "EstPrintTimeSec": FileSystemCommandHelper.AsIntOrNone(analysis.get("estimatedPrintTime", None)),
+            "EstFilamentUsedMm": FileSystemCommandHelper.AsIntOrNone(filamentLengthMm),
+            "ObjectHeightMm": FileSystemCommandHelper.AsFloatOrNone(dimensions.get("height", None)),
+        }
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:

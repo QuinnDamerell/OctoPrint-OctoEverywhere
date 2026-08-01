@@ -250,6 +250,10 @@ class BambuCommandHandler(IPlatformCommandHandler):
             bedActual = round(float(bambuState.bed_temper), 2)
         if bambuState.bed_target_temper is not None:
             bedTarget = round(float(bambuState.bed_target_temper), 2)
+        # Bambu printers measure the chamber but don't actively heat it, so there's an actual temp with no target.
+        chamberActual = 0.0
+        if bambuState.chamber_temper is not None:
+            chamberActual = round(float(bambuState.chamber_temper), 2)
 
         # Get light status.
         # None if there are no lights, otherwise a list of lights and their status.
@@ -278,6 +282,8 @@ class BambuCommandHandler(IPlatformCommandHandler):
                     "BedTarget": bedTarget,
                     "HotendActual": hotendActual,
                     "HotendTarget": hotendTarget,
+                    "ChamberActual": chamberActual,
+                    "ChamberTarget": 0.0,
                 }
             }
         }
@@ -492,6 +498,30 @@ class BambuCommandHandler(IPlatformCommandHandler):
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
         return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
+
+
+    def ExecuteFileDetails(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError())
+
+        # Bambu files are reached over FTP, which only reports the basics. There's no slicer metadata available
+        # without downloading and parsing the file itself, so we report the size and modified time we can see.
+        try:
+            wantedPath = parsedPath.RelativePath.replace("\\", "/").strip("/").lower()
+            for fileInfo in self._GetFileManager().ListPrintableFiles():
+                if str(fileInfo.Path).replace("\\", "/").strip("/").lower() != wantedPath:
+                    continue
+                normalized:Dict[str, Any] = {
+                    "SizeBytes": FileSystemCommandHelper.AsIntOrNone(fileInfo.SizeBytes),
+                    "ModifiedTimeSec": FileSystemCommandHelper.AsIntOrNone(fileInfo.ModifiedTimeSec),
+                }
+                return FileSystemCommandHelper.BuildFileDetailsSuccess(parsedPath, fileInfo.Path, normalized)
+            return CommandResponse.Error(404, f"No file was found on the printer at '{parsedPath.FullPath()}'.")
+        except BambuFtpsError as e:
+            return self._BuildFileCommandErrorResponse(CommandHandler.c_FilesDetailsCommand, e)
+        except Exception as e:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, FileSystemCommandHelper.ExceptionError(CommandHandler.c_FilesDetailsCommand, e))
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:

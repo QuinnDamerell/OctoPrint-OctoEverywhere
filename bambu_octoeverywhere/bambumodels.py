@@ -37,6 +37,9 @@ class BambuState:
         self.nozzle_target_temper:Optional[float] = None
         self.bed_temper:Optional[float] = None
         self.bed_target_temper:Optional[float] = None
+        # The chamber temp. Note Bambu printers measure the chamber but don't actively heat it, so there's no target.
+        # This doesn't exist on printers without a chamber sensor, so it stays None.
+        self.chamber_temper:Optional[float] = None
         self.mc_remaining_time:Optional[int] = None
         self.project_id:Optional[str] = None
         self.task_id:Optional[str] = None
@@ -67,6 +70,7 @@ class BambuState:
         self.nozzle_target_temper = msg.get("nozzle_target_temper", self.nozzle_target_temper)
         self.bed_temper = msg.get("bed_temper", self.bed_temper)
         self.bed_target_temper = msg.get("bed_target_temper", self.bed_target_temper)
+        self.chamber_temper = msg.get("chamber_temper", self.chamber_temper)
         self.print_error = msg.get("print_error", self.print_error)
         ipCam = msg.get("ipcam", None)
         if ipCam is not None:

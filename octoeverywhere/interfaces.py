@@ -341,6 +341,13 @@ class IPlatformCommandHandler(ABC):
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
         pass
 
+    # Returns details about one file, such as the slicer's print time and filament estimates.
+    # How much is known varies a lot by platform, so each platform should report whatever it can using
+    # FileSystemCommandHelper.BuildFileDetailsSuccess and pass its own raw metadata through as PlatformDetails.
+    @abstractmethod
+    def ExecuteFileDetails(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        pass
+
 
 class ILocalAuth(ABC):
 

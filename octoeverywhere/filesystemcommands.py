@@ -93,6 +93,12 @@ class FileSystemCommandHelper:
             return (list(allowedRoots), None)
 
         requestedRoot = str(rootArg).replace("\\", "/").strip().strip("/").lower()
+        # Only the first segment names the root, so that a full path like 'gcode/models/benchy.gcode' resolves to 'gcode'.
+        # Reject relative segments rather than silently ignoring them, so a caller that passes something like
+        # 'gcode/../..' gets told the root is invalid instead of quietly receiving a listing of 'gcode'.
+        segments = requestedRoot.split("/")
+        if "." in segments or ".." in segments:
+            return ([], f"Invalid file root '{rootArg}'. Use {FileSystemCommandHelper._FormatRootNames(allowedRoots)} without '.' or '..' segments.")
         if "/" in requestedRoot:
             requestedRoot = requestedRoot.split("/", 1)[0]
         if aliases is not None:
@@ -487,15 +493,120 @@ class FileSystemCommandHelper:
 
     @staticmethod
     def BuildFileUploadSuccess(parsedPath:VirtualFilePath, platformPath:str, uploadSizeBytes:int, bodyBytes:bytes) -> CommandResponse:
+        printerResponse = FileSystemCommandHelper.DecodeSuccessBody(bodyBytes)
+
+        # Some platforms rename the file on upload, for example Moonraker replaces non-ascii characters in the name.
+        # When that happens the requested path no longer exists on the printer, so the caller must be given the path the
+        # printer actually used. Otherwise a follow up download, start, or delete of the returned path fails with a 404.
+        storedRelativePath = FileSystemCommandHelper._GetStoredRelativePathFromPrinterResponse(printerResponse)
+        if storedRelativePath is not None and storedRelativePath != parsedPath.RelativePath:
+            parsedPath = VirtualFilePath(parsedPath.Root, storedRelativePath)
+            platformPath = storedRelativePath
+
         result:Dict[str, Any] = {
             "VirtualPath": parsedPath.FullPath(),
             "PlatformPath": platformPath,
             "SizeBytes": uploadSizeBytes,
         }
-        printerResponse = FileSystemCommandHelper.DecodeSuccessBody(bodyBytes)
         if printerResponse is not None:
             result["PrinterResponse"] = printerResponse
         return CommandResponse.Success(result)
+
+
+    # Returns the root relative path the printer reported storing the file at, or None if the response doesn't have one.
+    @staticmethod
+    def _GetStoredRelativePathFromPrinterResponse(printerResponse:Optional[Any]) -> Optional[str]:
+        if not isinstance(printerResponse, dict):
+            return None
+        # Moonraker returns {"action": "create_file", "item": {"path": "<root relative path>", "root": "gcodes", ...}}
+        item:Any = printerResponse.get("item", None)
+        if not isinstance(item, dict):
+            return None
+        storedPath:Any = item.get("path", None)
+        if not isinstance(storedPath, str):
+            return None
+        storedPath = storedPath.replace("\\", "/").strip().strip("/")
+        if len(storedPath) == 0:
+            return None
+        return storedPath
+
+
+    # The normalized detail fields a platform can report about a file.
+    # Every one is optional, since how much a platform knows about a file varies a lot. A platform fills in
+    # whatever it has and leaves the rest out, and passes anything else through in PlatformDetails.
+    c_FileDetailFields = [
+        "SizeBytes",            # int   - the file size in bytes.
+        "ModifiedTimeSec",      # int   - unix seconds the file was last modified.
+        "EstPrintTimeSec",      # int   - the slicer's estimated print duration.
+        "EstFilamentUsedMm",    # int   - the estimated filament length used.
+        "EstFilamentWeightMg",  # int   - the estimated filament weight used.
+        "LayerCount",           # int   - the total number of layers.
+        "LayerHeightMm",        # float - the layer height.
+        "FirstLayerHeightMm",   # float - the first layer height.
+        "ObjectHeightMm",       # float - the height of the printed object.
+        "NozzleDiameterMm",     # float - the nozzle diameter the file was sliced for.
+        "FilamentType",         # str   - such as PLA or PETG.
+        "FilamentName",         # str   - the slicer's filament profile name.
+        "BedTempC",             # float - the bed temp the file was sliced for.
+        "HotendTempC",          # float - the hotend temp the file was sliced for.
+        "ChamberTempC",         # float - the chamber temp the file was sliced for.
+        "PrintStartTimeSec",    # int   - unix seconds this file was last started, if the platform tracks it.
+        "Slicer",               # str   - the slicer that produced the file.
+        "SlicerVersion",        # str   - the slicer version.
+        "ThumbnailCount",       # int   - how many embedded thumbnails the platform found.
+    ]
+
+
+    # Builds the common file details response.
+    # `normalized` holds any of c_FileDetailFields the platform could determine; None values are dropped so the
+    # caller can tell "the platform doesn't know this" from "the value is zero".
+    # `platformDetails` is the platform's own raw metadata, passed through untouched so nothing is lost.
+    @staticmethod
+    def BuildFileDetailsSuccess(parsedPath:VirtualFilePath, platformPath:str, normalized:Dict[str, Any], platformDetails:Optional[Any]=None) -> CommandResponse:
+        fileName, _ = parsedPath.FileNameAndParent()
+        result:Dict[str, Any] = {
+            "VirtualPath": parsedPath.FullPath(),
+            "PlatformPath": platformPath,
+            "FileName": fileName,
+        }
+        for key in FileSystemCommandHelper.c_FileDetailFields:
+            value = normalized.get(key, None)
+            if value is not None:
+                result[key] = value
+        if platformDetails is not None:
+            result["PlatformDetails"] = platformDetails
+        return CommandResponse.Success(result)
+
+
+    # Helpers used by the platforms to normalize whatever type the platform's metadata used.
+    @staticmethod
+    def AsIntOrNone(value:Any) -> Optional[int]:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return None
+
+
+    @staticmethod
+    def AsFloatOrNone(value:Any, roundToDecimals:int=3) -> Optional[float]:
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            return round(float(value), roundToDecimals)
+        except (ValueError, TypeError):
+            return None
+
+
+    @staticmethod
+    def AsStringOrNone(value:Any) -> Optional[str]:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if len(text) == 0:
+            return None
+        return text
 
 
     @staticmethod

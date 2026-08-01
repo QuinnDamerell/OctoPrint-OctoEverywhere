@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Union
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
@@ -31,6 +32,10 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         FileSystemCommandHelper.c_VirtualGcodeRoot,
         FileSystemCommandHelper.c_VirtualConfigRoot,
     }
+    # Moonraker only tracks metadata for gcode files, so file details are limited to that root.
+    c_MoonrakerGcodeOnlyFileRoots = {
+        FileSystemCommandHelper.c_VirtualGcodeRoot,
+    }
     c_MoonrakerRootByVirtualRoot = {
         FileSystemCommandHelper.c_VirtualGcodeRoot: "gcodes",
         FileSystemCommandHelper.c_VirtualConfigRoot: "config",
@@ -54,6 +59,68 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # Returning None will result in the "Printer not connected" state.
     # Or one of the CommandHandler.c_CommandError_... ints can be returned, which will be sent as the result.
     #
+    # Klipper names extruders "extruder", "extruder1", "extruder2" and so on.
+    c_ExtruderObjectNameRegex = re.compile(r"^extruder\d*$")
+    # The object name used when we can't discover the printer's extruders. Every Klipper printer has this one.
+    c_DefaultExtruderObjectName = "extruder"
+    # Chamber temps can be a real heater with a target or a read only sensor, and the config name varies by
+    # printer, so we look for these words in whatever the printer actually has.
+    c_ChamberObjectPrefixes = ("heater_generic ", "temperature_sensor ")
+    c_ChamberObjectNameHints = ("chamber", "enclosure", "cavity")
+
+
+    # Returns the extruder object names to query for this printer.
+    # We read these from the printer's own object list rather than guessing names, so we never ask Moonraker
+    # for objects that don't exist. The object list is cached per connection by the client, so this is cheap.
+    @staticmethod
+    def GetExtruderObjectNames(printerObjects:Optional[List[str]]) -> List[str]:
+        if printerObjects is None:
+            return [MoonrakerCommandHandler.c_DefaultExtruderObjectName]
+        names = [o for o in printerObjects if MoonrakerCommandHandler.c_ExtruderObjectNameRegex.match(o) is not None]
+        # Every Klipper printer has an extruder, so an empty result means we couldn't read the list properly.
+        if len(names) == 0:
+            return [MoonrakerCommandHandler.c_DefaultExtruderObjectName]
+        # Sort so "extruder" comes first and the numbered ones follow in order.
+        names.sort(key=lambda n: 0 if n == MoonrakerCommandHandler.c_DefaultExtruderObjectName else int(n[len("extruder"):]))
+        return names
+
+
+    # Returns the chamber temp object name for this printer, or None if it doesn't have one.
+    # A chamber can be a heater with a target or a read only sensor, and printers name it differently,
+    # so we match on what the printer actually has and prefer a heater since only it reports a target.
+    @staticmethod
+    def GetChamberObjectName(printerObjects:Optional[List[str]]) -> Optional[str]:
+        if printerObjects is None:
+            return None
+        best:Optional[str] = None
+        for obj in printerObjects:
+            objLower = obj.lower()
+            if not objLower.startswith(MoonrakerCommandHandler.c_ChamberObjectPrefixes):
+                continue
+            if not any(hint in objLower for hint in MoonrakerCommandHandler.c_ChamberObjectNameHints):
+                continue
+            if objLower.startswith("heater_generic "):
+                return obj
+            if best is None:
+                best = obj
+        return best
+
+
+    # Returns the name of the extruder object whose temps should be reported.
+    # toolhead.extruder holds the active extruder's object name, which is what a tool changing printer updates
+    # when it swaps tools. If we can't get it, we fall back to the first extruder we know about.
+    @staticmethod
+    def GetActiveExtruderObjectName(statusObjectOrEmptyDict:Dict[str, Any], knownExtruderNames:List[str]) -> str:
+        fallback = knownExtruderNames[0] if len(knownExtruderNames) > 0 else MoonrakerCommandHandler.c_DefaultExtruderObjectName
+        toolhead = statusObjectOrEmptyDict.get("toolhead", None)
+        if toolhead is None:
+            return fallback
+        activeName = toolhead.get("extruder", None)
+        if not isinstance(activeName, str) or len(activeName) == 0:
+            return fallback
+        return activeName
+
+
     def GetCurrentJobStatus(self) -> Union[int, None, Dict[str, Any]]:
 
         # Build the query objects dict, including light objects if available
@@ -61,12 +128,27 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             "print_stats": None,    # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
             "gcode_move": None,     # Needed for GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult to get the current speed
             "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
-            "extruder": None,       # Needed for temps
+            "toolhead": None,       # Needed to know which extruder is currently active.
             "heater_bed": None,     # Needed for temps
             # Optional. Standard Klipper returns an empty object if this doesn't exist.
             # Some forks, including Snapmaker U1 firmware, expose richer machine and action states here.
             "machine_state_manager": None,
         }
+
+        # Ask the printer what objects it has, so we only query ones that exist.
+        # This is cached per connection by the client, so it doesn't cost a request on every status call.
+        printerObjects = MoonrakerClient.Get().GetPrinterObjectList()
+
+        # Add every extruder this printer has, so a tool changing printer reports the active tool's temp
+        # rather than always reporting the one named "extruder".
+        extruderObjectNames = MoonrakerCommandHandler.GetExtruderObjectNames(printerObjects)
+        for extruderObjectName in extruderObjectNames:
+            query_objects[extruderObjectName] = None
+
+        # Add the chamber temp object, if this printer has one.
+        chamberObjectName = MoonrakerCommandHandler.GetChamberObjectName(printerObjects)
+        if chamberObjectName is not None:
+            query_objects[chamberObjectName] = None
 
         # Add light objects to the query if any are detected
         light_objects = LightManager.Get().GetLightObjectNames()
@@ -171,7 +253,11 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         hotendTarget = 0.0
         bedTarget = 0.0
         bedActual = 0.0
-        extruder = statusObjectOrEmptyDict.get("extruder", None)
+        # Use the currently active extruder, not the one named "extruder".
+        # On a tool changing printer the active tool is often "extruder1" or higher, and the object named
+        # "extruder" is a parked tool sitting at room temp, so reading it reports a temp for the wrong tool.
+        activeExtruderName = MoonrakerCommandHandler.GetActiveExtruderObjectName(statusObjectOrEmptyDict, extruderObjectNames)
+        extruder = statusObjectOrEmptyDict.get(activeExtruderName, None)
         if extruder is not None:
             temp = extruder.get("temperature", None)
             if temp is not None:
@@ -187,6 +273,19 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             target = heater_bed.get("target", None)
             if target is not None:
                 bedTarget = round(float(target), 2)
+
+        # Get the chamber temp, if this printer has one.
+        # A heater_generic chamber can be heated so it has a target, a temperature_sensor chamber is read only.
+        chamberActual = 0.0
+        chamberTarget = 0.0
+        chamberObject = statusObjectOrEmptyDict.get(chamberObjectName, None) if chamberObjectName is not None else None
+        if chamberObject is not None:
+            temp = chamberObject.get("temperature", None)
+            if temp is not None:
+                chamberActual = round(float(temp), 2)
+            target = chamberObject.get("target", None)
+            if target is not None:
+                chamberTarget = round(float(target), 2)
 
         # Get the light status if available
         lights:Optional[List[Dict[str, Any]]] = None
@@ -220,6 +319,8 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                     "BedTarget": bedTarget,
                     "HotendActual": hotendActual,
                     "HotendTarget": hotendTarget,
+                    "ChamberActual": chamberActual,
+                    "ChamberTarget": chamberTarget,
                 }
             }
         }
@@ -458,21 +559,33 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     def ExecuteSetTemp(self, bedC:Optional[float], chamberC:Optional[float], toolC:Optional[float], toolNumber:Optional[int]) -> CommandResponse:
 
         # Build G-code commands
+        # Note these must be `is not None` checks, not truthiness checks.
+        # A target of 0 is how a heater is turned off, and `not 0` is True in python, so a truthiness
+        # check here would silently drop the command and send an empty script that does nothing.
         gcode_commands:List[str] = []
 
-        if bedC:
+        if bedC is not None:
             # M140: Set bed temperature without waiting
             gcode_commands.append(f"M140 S{bedC}")
 
-        if toolC:
+        if toolC is not None:
             # M104: Set hotend temperature without waiting
-            gcode_commands.append(f"M104 S{toolC}")
+            # Note the tool number is optional; when it's not set the printer's currently active tool is used.
+            if toolNumber is not None:
+                gcode_commands.append(f"M104 T{toolNumber} S{toolC}")
+            else:
+                gcode_commands.append(f"M104 S{toolC}")
 
-        if chamberC:
+        if chamberC is not None:
             # Chamber heating in Klipper is typically done via heater_generic
             # Use SET_HEATER_TEMPERATURE command if chamber heater exists
             # Note: This assumes chamber heater is named "chamber" in printer.cfg
             gcode_commands.append(f"SET_HEATER_TEMPERATURE HEATER=chamber TARGET={chamberC}")
+
+        # This shouldn't happen, since the caller validates that at least one heater was specified,
+        # but never send an empty script, since that would report success without doing anything.
+        if len(gcode_commands) == 0:
+            return CommandResponse.Error(400, "At least one heater must be specified")
 
         # Combine all commands with newlines
         gcode = "\n".join(gcode_commands)
@@ -488,11 +601,11 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
 
         # Build success message
         targets:List[str] = []
-        if bedC:
+        if bedC is not None:
             targets.append(f"bed to {bedC}°C")
-        if toolC:
+        if toolC is not None:
             targets.append(f"tool to {toolC}°C")
-        if chamberC:
+        if chamberC is not None:
             targets.append(f"chamber to {chamberC}°C")
 
         self.Logger.info(f"ExecuteSetTemp: Successfully set {', '.join(targets)}")
@@ -643,6 +756,59 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             return FileSystemCommandHelper.BuildFileUploadSuccess(parsedPath, platformPath, uploadBody.UploadBytesReceivedSoFar, bodyBytes)
         finally:
             result.Free()
+
+
+    def ExecuteFileDetails(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        # Only gcode files have metadata in Moonraker, so this is limited to the gcode root.
+        parsedPath, errorStr = FileSystemCommandHelper.ParsePathArg(args, MoonrakerCommandHandler.c_MoonrakerGcodeOnlyFileRoots)
+        if errorStr is not None or parsedPath is None:
+            return CommandResponse.Error(400, errorStr or FileSystemCommandHelper.InvalidPathError(MoonrakerCommandHandler.c_MoonrakerGcodeOnlyFileRoots))
+
+        result = MoonrakerClient.Get().SendJsonRpcRequest("server.files.metadata", {
+            "filename": parsedPath.RelativePath
+        })
+        if result.HasError():
+            self.Logger.error(f"ExecuteFileDetails failed: {result.GetLoggingErrorStr()}")
+            return self._BuildMoonrakerJsonRpcCommandError(CommandHandler.c_FilesDetailsCommand, result, "Failed to get file details")
+
+        meta = result.GetResult()
+        if not isinstance(meta, dict):
+            return CommandResponse.Error(500, "Moonraker returned no metadata for this file.")
+
+        # Moonraker's metadata is only populated after it has scanned the file, so any of these can be missing.
+        # https://moonraker.readthedocs.io/en/latest/web_api/#get-gcode-metadata
+        thumbnails = meta.get("thumbnails", None)
+        normalized:Dict[str, Any] = {
+            "SizeBytes": FileSystemCommandHelper.AsIntOrNone(meta.get("size", None)),
+            "ModifiedTimeSec": FileSystemCommandHelper.AsIntOrNone(meta.get("modified", None)),
+            "EstPrintTimeSec": FileSystemCommandHelper.AsIntOrNone(meta.get("estimated_time", None)),
+            "EstFilamentUsedMm": FileSystemCommandHelper.AsIntOrNone(meta.get("filament_total", None)),
+            "EstFilamentWeightMg": self._GetFilamentWeightMg(meta.get("filament_weight_total", None)),
+            "LayerCount": FileSystemCommandHelper.AsIntOrNone(meta.get("layer_count", None)),
+            "LayerHeightMm": FileSystemCommandHelper.AsFloatOrNone(meta.get("layer_height", None)),
+            "FirstLayerHeightMm": FileSystemCommandHelper.AsFloatOrNone(meta.get("first_layer_height", None)),
+            "ObjectHeightMm": FileSystemCommandHelper.AsFloatOrNone(meta.get("object_height", None)),
+            "NozzleDiameterMm": FileSystemCommandHelper.AsFloatOrNone(meta.get("nozzle_diameter", None)),
+            "FilamentType": FileSystemCommandHelper.AsStringOrNone(meta.get("filament_type", None)),
+            "FilamentName": FileSystemCommandHelper.AsStringOrNone(meta.get("filament_name", None)),
+            "BedTempC": FileSystemCommandHelper.AsFloatOrNone(meta.get("first_layer_bed_temp", None)),
+            "HotendTempC": FileSystemCommandHelper.AsFloatOrNone(meta.get("first_layer_extr_temp", None)),
+            "ChamberTempC": FileSystemCommandHelper.AsFloatOrNone(meta.get("chamber_temp", None)),
+            "PrintStartTimeSec": FileSystemCommandHelper.AsIntOrNone(meta.get("print_start_time", None)),
+            "Slicer": FileSystemCommandHelper.AsStringOrNone(meta.get("slicer", None)),
+            "SlicerVersion": FileSystemCommandHelper.AsStringOrNone(meta.get("slicer_version", None)),
+            "ThumbnailCount": len(thumbnails) if isinstance(thumbnails, list) else None,
+        }
+        return FileSystemCommandHelper.BuildFileDetailsSuccess(parsedPath, self._GetPlatformPath(parsedPath), normalized, meta)
+
+
+    # Moonraker reports the filament weight in grams, but our common shape uses milligrams.
+    @staticmethod
+    def _GetFilamentWeightMg(grams:Any) -> Optional[int]:
+        weightG = FileSystemCommandHelper.AsFloatOrNone(grams)
+        if weightG is None:
+            return None
+        return int(weightG * 1000.0)
 
 
     def ExecuteFileDownload(self, args:Optional[Dict[str, Any]]) -> HttpResult:

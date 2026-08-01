@@ -69,14 +69,9 @@ class LightManager:
         self.Logger.debug("LightManager: Detecting available lights...")
 
         try:
-            # Query all available printer objects
-            result = MoonrakerClient.Get().SendJsonRpcRequest("printer.objects.list")
-            if result.HasError():
-                self.Logger.warning("LightManager: Failed to query printer objects for light detection: " + result.GetLoggingErrorStr())
-                return
-
-            # Get the list of objects
-            objects = result.GetResult().get("objects", [])
+            # Query all available printer objects.
+            # This is the shared per-connection object list, so this doesn't cost an extra request.
+            objects = MoonrakerClient.Get().GetPrinterObjectList()
             if not objects:
                 self.Logger.debug("LightManager: No printer objects found")
                 return

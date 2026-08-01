@@ -192,8 +192,10 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
             params["extruder"] = toolC
         if chamberC is not None:
             return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, "Chamber temperature control is not supported")
+        # This shouldn't happen, since the caller validates that at least one heater was specified,
+        # but never report success without doing anything, since that would look like the heater was set.
         if len(params) == 0:
-            return CommandResponse.Success(None)
+            return CommandResponse.Error(400, "At least one heater must be specified")
 
         result = ElegooCc2Client.Get().SendRequest(1028, params)
         if result.HasError():
@@ -263,6 +265,10 @@ class ElegooCc2CommandHandler(IPlatformCommandHandler):
 
     def ExecuteGetPluginLogs(self, args:Optional[Dict[str, Any]]) -> HttpResult:
         return FileSystemCommandHelper.BuildLogFileResultFromLogger(self.Logger, "octoeverywhere.log", CommandHandler.c_GetPluginLogsCommand, "octoeverywhere.log", args)
+
+
+    def ExecuteFileDetails(self, args:Optional[Dict[str, Any]]) -> CommandResponse:
+        return CommandResponse.Error(CommandHandler.c_CommandError_FeatureNotSupported, FileSystemCommandHelper.UnsupportedPlatformError("Elegoo CC2"))
 
 
     def ExecuteFileDelete(self, args:Optional[Dict[str, Any]]) -> CommandResponse:

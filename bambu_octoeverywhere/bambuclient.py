@@ -148,6 +148,13 @@ class BambuClient:
     def IsDisconnectDueToAuth(self) -> bool:
         if self.LastConnectionFailedDueToAuth:
             return True
+        return self._WasLastConnectRefusedForAuth()
+
+
+    # Returns True if the last connect attempt was refused by the printer because the credentials were rejected.
+    # This only reads the live refusal reason from the mux, so it can be used to decide whether an auth failure
+    # actually happened, without consulting the sticky LastConnectionFailedDueToAuth flag.
+    def _WasLastConnectRefusedForAuth(self) -> bool:
         reason_code = self._mux.GetLastConnectRefusedReasonCode()
         if reason_code in (
             ConnAckReturnCode.BAD_USERNAME_OR_PASSWORD,
@@ -335,6 +342,13 @@ class BambuClient:
             except Exception as e:
                 self.Logger.debug("Bambu report unsubscribe on disconnect raised: %s", e)
         if was_pending:
+            self.LastConnectionFailedDueToAuth = True
+            self._LogBadCredentialsHelp()
+        elif self._WasLastConnectRefusedForAuth():
+            # The printer answered and refused our credentials at the MQTT CONNACK, so we never got far enough to have a
+            # pending subscribe. This must not clear the auth flag, or the reason for the disconnect is lost and the
+            # printer gets reported as "not connected" instead of "lost auth", sending the user to debug their network
+            # when the real problem is the access code.
             self.LastConnectionFailedDueToAuth = True
             self._LogBadCredentialsHelp()
         else:
@@ -529,12 +543,19 @@ class BambuClient:
     # _GetConnectionContextToTry logic, plus emits the OE-relay-compatible
     # ConnectionContext via _SetCurrentPublicCtx.
     def _BuildConnectionContext(self) -> MqttConnectionContext:
+        # If the printer refused our credentials, we already know exactly where it is and that it's reachable,
+        # the access code is just wrong. A LAN scan can't fix that; it only wastes time, hammers every host on the
+        # subnet, and delays reporting the real problem to the user.
+        wasRefusedForAuth = self._WasLastConnectRefusedForAuth()
+
         with self.ConnectionAttemptStateLock:
             self.ConsecutivelyFailedConnectionAttempts += 1
             doPrinterSearch = False
             if (self.HasDoneNetScanSincePluginStart is False and self.ConsecutivelyFailedConnectionAttempts > 1) or self.ConsecutivelyFailedConnectionAttempts > 6:
                 self.ConsecutivelyFailedConnectionAttempts = 0
                 doPrinterSearch = True
+            if wasRefusedForAuth:
+                doPrinterSearch = False
 
         connectionMode = self.Config.GetStr(Config.SectionBambu, Config.BambuConnectionMode, Config.BambuConnectionModeDefault)
         if connectionMode == Config.BambuConnectionModeValueCloud:

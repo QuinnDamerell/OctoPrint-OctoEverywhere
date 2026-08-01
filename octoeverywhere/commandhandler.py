@@ -108,6 +108,7 @@ class CommandHandler:
     c_FilesUploadCommand = "files/upload"
     c_FilesDownloadCommand = "files/download"
     c_FilesDeleteCommand = "files/delete"
+    c_FilesDetailsCommand = "files/details"
     c_GetPluginLogsCommand = "get-plugin-logs"
 
     # For webcam calls, this is an optional GET arg that will be an int of the webcam index.
@@ -230,6 +231,8 @@ class CommandHandler:
             return self.SendCommand(jsonObj_CanBeNone)
         elif commandPathLower.startswith(CommandHandler.c_FilesListCommand):
             return self.FileList(jsonObj_CanBeNone)
+        elif commandPathLower.startswith(CommandHandler.c_FilesDetailsCommand):
+            return self.FileDetails(jsonObj_CanBeNone)
         elif commandPathLower.startswith(CommandHandler.c_FilesDeleteCommand):
             return self.FileDelete(jsonObj_CanBeNone)
         elif commandPathLower.startswith("rekey"):
@@ -622,16 +625,17 @@ class CommandHandler:
             chamberC = jsonObjData.get("ChamberC", None)
             toolC = jsonObjData.get("ToolC", None)
             toolNumber = jsonObjData.get("ToolNumber", None)
-            if bedC is not None and not isinstance(bedC, (int, float)):
+            # Note bool is a subclass of int in python, so it must be excluded explicitly or True would be accepted as a temp of 1.
+            if bedC is not None and (isinstance(bedC, bool) or not isinstance(bedC, (int, float))):
                 return CommandResponse.Error(400, "Invalid bedC type")
-            if chamberC is not None and not isinstance(chamberC, (int, float)):
+            if chamberC is not None and (isinstance(chamberC, bool) or not isinstance(chamberC, (int, float))):
                 return CommandResponse.Error(400, "Invalid chamberC type")
-            if toolC is not None and not isinstance(toolC, (int, float)):
+            if toolC is not None and (isinstance(toolC, bool) or not isinstance(toolC, (int, float))):
                 return CommandResponse.Error(400, "Invalid toolC type")
-            if toolNumber is not None and not isinstance(toolNumber, int):
+            if toolNumber is not None and (isinstance(toolNumber, bool) or not isinstance(toolNumber, int)):
                 return CommandResponse.Error(400, "Invalid toolNumber type")
         except Exception as e:
-            Sentry.OnException("Failed to Extrude, bad args.", e)
+            Sentry.OnException("Failed to SetTemp, bad args.", e)
             return CommandResponse.Error(400, "Failed to parse args")
 
         # Safety check the temps
@@ -639,22 +643,30 @@ class CommandHandler:
         MAX_BED_TEMP_C = 75.0
         MAX_CHAMBER_TEMP_C = 75.0
         MAX_TOOL_TEMP_C = 260.0
-        if not bedC and not chamberC and not toolC:
+        # Note these must be `is None` checks, not truthiness checks.
+        # A target of 0 is how a heater is turned off, and `not 0` is True in python, so a truthiness
+        # check here would report that no heater was specified and make it impossible to cool a heater down.
+        if bedC is None and chamberC is None and toolC is None:
             self.Logger.error("ExecuteSetTemp: No heater specified")
             return CommandResponse.Error(400, "At least one heater must be specified")
 
-        # Safety check: enforce maximum temperatures
-        if bedC and bedC > MAX_BED_TEMP_C:
-            self.Logger.error(f"ExecuteSetTemp: Bed temperature {bedC}°C exceeds maximum {MAX_BED_TEMP_C}°C")
-            return CommandResponse.Error(400, f"Bed temperature cannot exceed {MAX_BED_TEMP_C}°C")
+        # Safety check: enforce the temperature range.
+        # The minimum is checked as well, since a negative target is never valid and shouldn't reach the printer.
+        if bedC is not None and (bedC < 0 or bedC > MAX_BED_TEMP_C):
+            self.Logger.error(f"ExecuteSetTemp: Bed temperature {bedC}°C is outside of 0-{MAX_BED_TEMP_C}°C")
+            return CommandResponse.Error(400, f"Bed temperature must be between 0 and {MAX_BED_TEMP_C}°C")
 
-        if chamberC and chamberC > MAX_CHAMBER_TEMP_C:
-            self.Logger.error(f"ExecuteSetTemp: Chamber temperature {chamberC}°C exceeds maximum {MAX_CHAMBER_TEMP_C}°C")
-            return CommandResponse.Error(400, f"Chamber temperature cannot exceed {MAX_CHAMBER_TEMP_C}°C")
+        if chamberC is not None and (chamberC < 0 or chamberC > MAX_CHAMBER_TEMP_C):
+            self.Logger.error(f"ExecuteSetTemp: Chamber temperature {chamberC}°C is outside of 0-{MAX_CHAMBER_TEMP_C}°C")
+            return CommandResponse.Error(400, f"Chamber temperature must be between 0 and {MAX_CHAMBER_TEMP_C}°C")
 
-        if toolC and toolC > MAX_TOOL_TEMP_C:
-            self.Logger.error(f"ExecuteSetTemp: Tool temperature {toolC}°C exceeds maximum {MAX_TOOL_TEMP_C}°C")
-            return CommandResponse.Error(400, f"Tool temperature cannot exceed {MAX_TOOL_TEMP_C}°C")
+        if toolC is not None and (toolC < 0 or toolC > MAX_TOOL_TEMP_C):
+            self.Logger.error(f"ExecuteSetTemp: Tool temperature {toolC}°C is outside of 0-{MAX_TOOL_TEMP_C}°C")
+            return CommandResponse.Error(400, f"Tool temperature must be between 0 and {MAX_TOOL_TEMP_C}°C")
+
+        if toolNumber is not None and toolNumber < 0:
+            self.Logger.error(f"ExecuteSetTemp: Invalid tool number {toolNumber}")
+            return CommandResponse.Error(400, "Tool number must be zero or greater")
 
         # Execute the command
         return self.PlatformCommandHandler.ExecuteSetTemp(bedC, chamberC, toolC, toolNumber)
@@ -686,6 +698,12 @@ class CommandHandler:
         if self.PlatformCommandHandler is None:
             return CommandResponse.Error(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesListCommand))
         return self.PlatformCommandHandler.ExecuteFileList(jsonObjData)
+
+
+    def FileDetails(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
+        if self.PlatformCommandHandler is None:
+            return CommandResponse.Error(400, FileSystemCommandHelper.MissingPlatformHandlerError(CommandHandler.c_FilesDetailsCommand))
+        return self.PlatformCommandHandler.ExecuteFileDetails(jsonObjData)
 
 
     def FileDelete(self, jsonObjData:Optional[Dict[str,Any]]) -> CommandResponse:
