@@ -16,7 +16,7 @@ from linux_host.config import Config
 from .bambuclient import BambuClient
 from .bambufilemanager import BambuFileManager, BambuFtpsError
 from .bambumaterialsystem import BambuMaterialSystemBuilder
-from .bambumodels import BambuPrintErrors
+from .bambumodels import BambuPrintErrors, BambuState, c_BambuModelsWithChamberSensor
 
 # This class implements the Platform Command Handler Interface
 class BambuCommandHandler(IPlatformCommandHandler):
@@ -252,9 +252,21 @@ class BambuCommandHandler(IPlatformCommandHandler):
         if bambuState.bed_target_temper is not None:
             bedTarget = round(float(bambuState.bed_target_temper), 2)
         # Bambu printers measure the chamber but don't actively heat it, so there's an actual temp with no target.
-        chamberActual = 0.0
-        if bambuState.chamber_temper is not None:
-            chamberActual = round(float(bambuState.chamber_temper), 2)
+        # Note this is only reported for models that actually have a chamber sensor, see _GetChamberTempOrNone.
+        chamberActual = self._GetChamberTempOrNone(bambuState)
+
+        # Build the temps. The chamber keys are only included when this printer really has a chamber sensor,
+        # so the service can tell "this printer has no chamber" from "the chamber reads zero".
+        temps:Dict[str, Any] = {
+            "BedActual": bedActual,
+            "BedTarget": bedTarget,
+            "HotendActual": hotendActual,
+            "HotendTarget": hotendTarget,
+        }
+        if chamberActual is not None:
+            temps["ChamberActual"] = chamberActual
+            # Bambu can measure the chamber but can't heat it, so there's never a target.
+            temps["ChamberTarget"] = 0.0
 
         # Get light status.
         # None if there are no lights, otherwise a list of lights and their status.
@@ -278,14 +290,7 @@ class BambuCommandHandler(IPlatformCommandHandler):
                 "EstTotalFilUsedMm" : filamentUsageMm,
                 "CurrentLayer": currentLayerInt,
                 "TotalLayers": totalLayersInt,
-                "Temps": {
-                    "BedActual": bedActual,
-                    "BedTarget": bedTarget,
-                    "HotendActual": hotendActual,
-                    "HotendTarget": hotendTarget,
-                    "ChamberActual": chamberActual,
-                    "ChamberTarget": 0.0,
-                }
+                "Temps": temps
             }
         }
         if includeMaterialSystem:
@@ -297,6 +302,22 @@ class BambuCommandHandler(IPlatformCommandHandler):
                 self.Logger.warning(f"Failed to build the Bambu material system: {e}")
                 result["MaterialSystem"] = None
         return result
+
+
+    # Returns the chamber temp for printers that have a chamber sensor, otherwise None.
+    # Models without a chamber sensor still send a chamber_temper value, but there's nothing measuring it, so
+    # reporting it would show the user a temperature that isn't real. A P1S for example reports a constant
+    # low value while its actual enclosure sits at room temp.
+    # If we don't know the model yet we report nothing, since guessing wrong shows a made up temperature.
+    def _GetChamberTempOrNone(self, bambuState:BambuState) -> Optional[float]:
+        if bambuState.chamber_temper is None:
+            return None
+        version = BambuClient.Get().GetVersion()
+        if version is None or version.PrinterName is None:
+            return None
+        if version.PrinterName not in c_BambuModelsWithChamberSensor:
+            return None
+        return round(float(bambuState.chamber_temper), 2)
 
 
     # !! Platform Command Handler Interface Function !!

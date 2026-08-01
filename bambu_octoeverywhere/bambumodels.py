@@ -276,6 +276,18 @@ class BambuPrinters(Enum):
     A1Mini = 21
 
 
+# The models that actually have a chamber temperature sensor.
+# The other models still send a chamber_temper value, but there's no sensor behind it, so the number is
+# meaningless and must not be reported. A P1S for example reports a constant value that isn't the real
+# chamber temp, which would otherwise be shown to the user as if it were a reading.
+c_BambuModelsWithChamberSensor = {
+    BambuPrinters.X1C,
+    BambuPrinters.X1E,
+    BambuPrinters.H2D,
+    BambuPrinters.H2S,
+}
+
+
 class BambuCPUs(Enum):
     Unknown = 1
     ESP32 = 2  # Lower powered CPU used on the A1 and P1P
