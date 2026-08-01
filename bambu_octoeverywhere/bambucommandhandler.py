@@ -197,6 +197,9 @@ class BambuCommandHandler(IPlatformCommandHandler):
         if bambuState.stg_cur is not None:
             if bambuState.stg_cur in BambuCommandHandler.SubStageMap:
                 subState_CanBeNone = BambuCommandHandler.SubStageMap[bambuState.stg_cur]
+                # Idle is the only stub state we don't want to report, since it's just the empty idle state.
+                if subState_CanBeNone is not None and subState_CanBeNone.strip().lower() == "idle":
+                    subState_CanBeNone = None
 
         # Get current layer info
         # None = The platform doesn't provide it.
