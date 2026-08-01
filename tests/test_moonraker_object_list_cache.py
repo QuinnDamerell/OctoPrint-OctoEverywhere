@@ -55,7 +55,7 @@ class TestPrinterObjectListCache(unittest.TestCase):
     def test_bad_responses_are_not_cached(self) -> None:
         for response in (_FakeJsonRpcResponse(None, hasError=True), _FakeJsonRpcResponse({"objects": []}), _FakeJsonRpcResponse({})):
             client = _MakeClient()
-            client.SendJsonRpcRequest = lambda *a, **k: response #pyright: ignore[reportAttributeAccessIssue]
+            client.SendJsonRpcRequest = lambda *a, _response=response, **k: _response #pyright: ignore[reportAttributeAccessIssue]
             self.assertIsNone(client.GetPrinterObjectList())
             self.assertIsNone(client.PrinterObjectList)
 
