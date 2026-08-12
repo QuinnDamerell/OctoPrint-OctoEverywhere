@@ -508,11 +508,11 @@ $(function() {
                                         {
                                             const link = "https://octoeverywhere.com/getstarted?source=octoprint_frontend_popup&printerid=" + encodeURIComponent(printerId);
                                             const msg = FormatNotificationMsg(
-                                                "You're <strong>only 5 seconds</strong> away from OctoEverywhere's free remote access, AI failure detection, notifications, and more.",
+                                                "<strong>You're only 5 seconds away</strong> from OctoEverywhere's free remote access, AI failure detection, notifications, and more.",
                                                 "Finish Your Setup Now",
                                                 link);
                                             new PNotify({
-                                                'title': "Complete Your Setup",
+                                                'title': "🚀 Complete Your Setup",
                                                 'text':  msg,
                                                 'type':  "notice",
                                                 'hide':  true,
