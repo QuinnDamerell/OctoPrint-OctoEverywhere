@@ -28,11 +28,11 @@ $(function() {
         function IsConnectedViaOctoEverywhere()
         {
             // Start with a to lower case to remove complexity.
-            url = window.location.href.toLowerCase();
+            var currentUrl = window.location.href.toLowerCase();
 
             // Check if the URL contains our domain name.
             // If so, we know we are loaded via our service.
-            return url.indexOf(".octoeverywhere.com") != -1 || url.indexOf(".octoeverywhere.dev") != -1;
+            return currentUrl.indexOf(".octoeverywhere.com") != -1 || currentUrl.indexOf(".octoeverywhere.dev") != -1;
         }
 
         function FormatNotificationMsg(text, actionText, actionLink)
@@ -277,7 +277,7 @@ $(function() {
         function FindAndReportLocalFrontendPort(url)
         {
             // Start with a to lower case to remove complexity.
-            var url = url.toLowerCase();
+            url = url.toLowerCase();
 
             // Look for the protocol end
             const protocolEndStr = "://"
@@ -342,7 +342,7 @@ $(function() {
 
             // We have a port, parse it out.
             var port = parseInt(hostname.substring(hasPortDelimiter + 1))
-            if(port == NaN)
+            if(Number.isNaN(port))
             {
                 LogError("Failed to parse port from hostname. "+hostname)
                 return;
@@ -399,12 +399,9 @@ $(function() {
 
         //
         //
+        // This logic does a check-in with the service to see if the plugin's state is ready and setup.
         //
-        //
-        // This logic is used to ping the octoeverywhere service when the page is loaded to detect if there are any
-        // notifications for this user.
-        //
-        function DoNotificationCheckIn(printerId, pluginVersion, isConnectedViaOctoEverywhere)
+        function DoCheckIn(printerId, pluginVersion, isConnectedViaOctoEverywhere)
         {
             // Create the payload
             var payload = {
@@ -421,7 +418,8 @@ $(function() {
                 dataType: "json",
                 data: JSON.stringify(payload),
                 contentType: "application/json; charset=UTF-8",
-                success: function(response) {
+                success: function(response)
+                {
                     try
                     {
                         if(response.Status !== 200)
@@ -429,26 +427,113 @@ $(function() {
                             LogError("Failed to call api/plugin/checkin; "+response.Status);
                             return;
                         }
-                        // If there's a notification, fire it.
-                        if(response.Result.Notification !== undefined && response.Result.Notification !== null)
+
+                        try
                         {
-                            var note = response.Result.Notification;
+                            // If there's a notification, fire it.
+                            if(response.Result.Notification !== undefined && response.Result.Notification !== null)
+                            {
+                                var note = response.Result.Notification;
 
-                            // Format the message the way we do for OctoPrint.
-                            var msg = FormatNotificationMsg(note.Message, note.ActionText, note.ActionLink);
-                            var showForMs = (note.ShowForSec * 1000);
+                                // Format the message the way we do for OctoPrint.
+                                var msg = FormatNotificationMsg(note.Message, note.ActionText, note.ActionLink);
+                                var showForMs = (note.ShowForSec * 1000);
 
-                            // Show a notification.
-                            new PNotify({
-                                'title': note.Title,
-                                'text':  msg,
-                                'type':  note.Type,
-                                'hide':  showForMs > 0 ? true : false,
-                                'delay': showForMs,
-                                'mouse_reset' : true,
-                                'icon' : false /* disable since we will use our own */
-                            });
+                                // Show a notification.
+                                new PNotify({
+                                    'title': note.Title,
+                                    'text':  msg,
+                                    'type':  note.Type,
+                                    'hide':  showForMs > 0 ? true : false,
+                                    'delay': showForMs,
+                                    'mouse_reset' : true,
+                                    'icon' : false /* disable since we will use our own */
+                                });
+                            }
                         }
+                        catch (error)
+                        {
+                            LogError("response.Result.Notification; "+error)
+                        }
+
+                        // Setup the UI depending if the printer is linked or not.
+                        try
+                        {
+                            // Setup the settings UI to reflect if this printer is setup or not.
+                            if(response.Result.IsLinked !== undefined)
+                            {
+                                // If the printer is linked, don't show the default setup help.
+                                if(response.Result.IsLinked === true)
+                                {
+                                    // Setup a worker to update the UI. Sometimes if this API call comes back really fast,
+                                    // it can seem to execute before the UI is fully loaded and these elements don't exist.
+                                    // In that case we will wait for them to exist and the set them.
+                                    var worker = function()
+                                    {
+                                        var notSetupUi = $("#octoeverywhere-printer-not-setup");
+                                        var setupUi = $("#octoeverywhere-setup-complete");
+                                        if(notSetupUi.length === 0 || setupUi.length === 0)
+                                        {
+                                            console.log("OE is waiting for the settings to load.")
+                                            setTimeout(worker, 1000);
+                                            return;
+                                        }
+                                        notSetupUi.hide();
+                                        setupUi.show();
+                                    }
+                                    worker();
+                                }
+                                // If the plugin is not linked, show a message to the user to link it now.
+                                else
+                                {
+                                    // Only show every 10 seconds.
+                                    // We want to show it often, so if the user misses it they can see it again easily.
+                                    let showLink = true;
+                                    try
+                                    {
+                                        const key = "oe-frontend-non-linked-printer-last-popup-time";
+                                        var lastPopupTime = localStorage.getItem(key);
+                                        if(lastPopupTime && (Date.now() - parseInt(lastPopupTime, 10) < 10000))
+                                        {
+                                            showLink = false;
+                                        }
+                                        localStorage.setItem(key, Date.now().toString());
+                                    }
+                                    catch{}
+
+                                    // Show the notification
+                                    if(showLink)
+                                    {
+                                        try
+                                        {
+                                            const link = "https://octoeverywhere.com/getstarted?source=octoprint_frontend_popup&printerid=" + encodeURIComponent(printerId);
+                                            const msg = FormatNotificationMsg(
+                                                "You're <strong>only 5 seconds</strong> away from OctoEverywhere's free remote access, AI failure detection, notifications, and more.",
+                                                "Finish Your Setup Now",
+                                                link);
+                                            new PNotify({
+                                                'title': "Complete Your Setup",
+                                                'text':  msg,
+                                                'type':  "notice",
+                                                'hide':  true,
+                                                'delay': 20 * 1000,
+                                                'mouse_reset' : true,
+                                                'icon' : false /* disable since we will use our own */
+                                            });
+                                        }
+                                        catch (error)
+                                        {
+                                            LogError("response.Result.Notification; "+error)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (error)
+                        {
+                            LogError("response.Result.IsLinked; "+error)
+                        }
+
                         // If the printer name is returned and this session is connected via OctoEverywhere, update the title so it's easier for users to tell multiple printers apart.
                         if(response.Result.PrinterName !== undefined && response.Result.PrinterName !== null)
                         {
@@ -457,35 +542,10 @@ $(function() {
                                 document.title = document.title + " - " + response.Result.PrinterName
                             }
                         }
-                        // Setup the settings UI to reflect if this printer is setup or not.
-                        if(response.Result.IsLinked !== undefined)
-                        {
-                            // If the printer is linked, don't show the default setup help.
-                            if(response.Result.IsLinked === true)
-                            {
-                                // Setup a worker to update the UI. Sometimes if this API call comes back really fast,
-                                // it can seem to execute before the UI is fully loaded and these elements don't exist.
-                                // In that case we will wait for them to exist and the set them.
-                                var worker = function()
-                                {
-                                    var notSetupUi = $("#octoeverywhere-printer-not-setup");
-                                    var setupUi = $("#octoeverywhere-setup-complete");
-                                    if(notSetupUi.length === 0 || setupUi.length === 0)
-                                    {
-                                        console.log("OE is waiting for the settings to load.")
-                                        setTimeout(worker, 1000);
-                                        return;
-                                    }
-                                    notSetupUi.hide();
-                                    setupUi.show();
-                                }
-                                worker();
-                            }
-                        }
                     }
                     catch (error)
                     {
-                        LogError("Exception in DoNotificationCheckIn; "+error)
+                        LogError("Exception in DoCheckIn; "+error)
                     }
                 },
                 failed: function(error){
@@ -497,11 +557,11 @@ $(function() {
         // Called when our plugin settings are ready and can be used.
         function OnSettingsReady(octoEverywhereSettings)
         {
-            // Try to get the settings required for the notification check in
+            // Try to get the settings required for the check in
             try {
-                DoNotificationCheckIn(octoEverywhereSettings.PrinterKey(), octoEverywhereSettings.PluginVersion(), IsConnectedViaOctoEverywhere())
+                DoCheckIn(octoEverywhereSettings.PrinterKey(), octoEverywhereSettings.PluginVersion(), IsConnectedViaOctoEverywhere())
             } catch (error) {
-                LogError("DoNotificationCheckIn failed." + error);
+                LogError("DoCheckIn failed." + error);
             }
         }
 

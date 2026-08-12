@@ -7,7 +7,6 @@ import logging
 from typing import Any, Dict, List, Optional, Union, Tuple
 
 import flask
-import requests
 import octoprint.plugin
 from octoprint.printer import PrinterInterface
 from octoprint.access.users import User
@@ -529,10 +528,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
 
     def HandleClientAuthedEvent(self) -> None:
-        # When the user is authed (opens the webpage in a new tab) we want to check if we should show the
-        # finish setup message. This helps users setup the plugin if the miss the wizard or something.
-        self.ShowLinkAccountMessageIfNeeded()
-
         # When the user sees the portal, check if we want to show the smart pause message.
         self.ShowSmartPausePopupIfNeeded()
 
@@ -575,76 +570,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
         title = "Smart Pause"
         message = "OctoEverywhere used Smart Pause to protect your print while paused. Smart Pause turned off your hotend and retracted the z-axis away from the print.<br/><br />When the printing is resumed, the hotend temp and z-axis state will automatically be restored <strong>before</strong> the print resumes."
         self.ShowUiPopup(title, message, "notice", None, None, 0, False)
-
-
-    def ShowLinkAccountMessageIfNeeded(self) -> None:
-        addPrinterUrl = self.GetAddPrinterUrl()
-        hasConnectedAccounts = self.GetHasConnectedAccounts()
-        # Check if we know there are connected accounts or not, if we have a add printer URL, and finally if there are no accounts setup yet.
-        # If we don't know about connected accounts or have a printer URL, we will skip this until we know for sure.
-        if hasConnectedAccounts is False and addPrinterUrl is not None:
-            # We will show a popup to help the user setup the plugin every little while. I have gotten a lot of feedback from support
-            # tickets indicating this is a problem, so this might help it.
-            #
-            # We don't want to show the message the first time we load, since the wizard should show. After that we will show it some what frequently.
-            # Ideally the user will either setup the plugin or remove it so it doesn't consume server resources.
-            minTimeBetweenInformsSec = 60 * 1 # Every 1 minute
-
-            # Check the time since the last message.
-            lastInformTime = self.GetNoAccountConnectedLastInform()
-            self.Logger.info("GetNoAccountConnectedLastInform: %s", str(lastInformTime))
-            now = time.time()
-            if lastInformTime is None or (now - lastInformTime) > minTimeBetweenInformsSec:
-                # Update the last show time.
-                self.SetNoAccountConnectedLastInform(now)
-
-                # Send the UI message.
-                if lastInformTime is None:
-                    # Since the wizard is working now, we will skip the first time we detect this.
-                    pass
-                else:
-                    # We want to show the finish setup message, but we only want to show it if the account is still unlinked.
-                    # So we will kick off a new thread to make a http request to check before we show it.
-                    t = threading.Thread(target=self.CheckIfPrinterIsSetupAndShowMessageIfNot)
-                    t.start()
-
-
-    # Should be called on a non-main thread!
-    # Make a http request to ensure this printer is not owned and shows a pop-up to help the user finish the install if not.
-    def CheckIfPrinterIsSetupAndShowMessageIfNot(self) -> None:
-        try:
-            # Check if this printer is owned or not.
-            response = requests.post('https://octoeverywhere.com/api/printer/info', json={ "Id": self.EnsureAndGetPrinterId() }, timeout=30)
-            if response.status_code != 200:
-                raise Exception("Invalid status code "+str(response.status_code))
-
-            # Parse
-            jsonData = response.json()
-            hasOwners = jsonData["Result"]["HasOwners"]
-            self.Logger.info("Printer has owner: %s", str(hasOwners))
-
-            # If we are owned, update our settings and return!
-            if hasOwners is True:
-                self.SetHasConnectedAccounts(True)
-                return
-
-            # Ensure the printer URL - Add our source tag to it.
-            addPrinterUrl = self.GetAddPrinterUrl()
-            if addPrinterUrl is None:
-                return
-            addPrinterUrl += "&source=plugin_popup"
-
-            # If not, show the message.
-            title = "Complete Your Setup"
-            message = 'You\'re <strong>only 15 seconds</strong> away from OctoEverywhere\'s free remote access to OctoPrint from anywhere!'
-            self.ShowUiPopup(title, message, "notice", "Finish Your Setup Now", addPrinterUrl, 20, False)
-
-        except Exception as e:
-            if "Temporary failure in name resolution" in str(e):
-                # Ignore this temp issue.
-                pass
-            else:
-                Sentry.OnException("CheckIfPrinterIsSetupAndShowMessageIfNot failed", e)
 
 
     # Ensures we have generated a printer id and returns it.
@@ -869,15 +794,6 @@ class OctoeverywherePlugin(octoprint.plugin.StartupPlugin,
 
     def SetPluginUpdateRequired(self, pluginUpdateRequired:bool) -> None:
         self.SaveToSettingsIfUpdated("PluginUpdateRequired", pluginUpdateRequired is True)
-
-
-    def GetNoAccountConnectedLastInform(self) -> Optional[float]:
-        return self.GetFromSettings("NoAccountConnectedLastInformFloat", None)
-
-
-    def SetNoAccountConnectedLastInform(self, time:float) -> None:
-        self.SaveToSettingsIfUpdated("NoAccountConnectedLastInformFloat", time)
-
 
     # Returns None if there is no url set.
     # Note the URL will always have a ?, so it's safe to append a &source=bar on it.

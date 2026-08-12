@@ -350,7 +350,7 @@ oe_do_load = function()
                         }
                         if(oe_printerId !== null && oe_pluginVersion !== null)
                         {
-                            oe_do_notification_check_in(oe_printerId, oe_pluginVersion, oe_is_connected_via_oe());
+                            oe_do_check_in(oe_printerId, oe_pluginVersion, oe_is_connected_via_oe());
                         }
                     }
                 }
@@ -386,11 +386,11 @@ oe_do_load = function()
     function oe_is_connected_via_oe()
     {
         // Start with a to lower case to remove complexity.
-        url = window.location.href.toLowerCase();
+        var currentUrl = window.location.href.toLowerCase();
 
         // Check if the URL contains our domain name.
         // If so, we know we are loaded via our service.
-        return url.indexOf(".octoeverywhere.com") != -1 || url.indexOf(".octoeverywhere.dev") != -1;
+        return currentUrl.indexOf(".octoeverywhere.com") != -1 || currentUrl.indexOf(".octoeverywhere.dev") != -1;
     }
     function oe_inject_service_helpers()
     {
@@ -412,11 +412,10 @@ oe_do_load = function()
     }
     oe_detect_oe_loaded_index_and_inject_helpers();
     //
-    // This logic is used to ping the octoeverywhere service when the page is loaded to detect if there are any
-    // notifications for this user.
+    // This logic does a check-in with the service to see if the plugin's state is ready and setup.
     //
     // This is fired by the websocket on connect, if it can query the printer id.
-    function oe_do_notification_check_in(printerId, pluginVersion, isConnectedViaOctoEverywhere)
+    function oe_do_check_in(printerId, pluginVersion, isConnectedViaOctoEverywhere)
     {
         // Create the payload
         var payload = {
@@ -449,17 +448,63 @@ oe_do_load = function()
                     return;
                 }
                 oe_log("Starting plugin check success")
-                // If there's a notification, fire it.
-                if(response.Result.Notification !== undefined && response.Result.Notification !== null)
+                try
                 {
-                    oe_log("Starting plugin check notification")
-                    var note = response.Result.Notification;
-                    oe_show_popup(note.Title, note.Message, note.Type, note.ActionText, note.ActionLink, note.ShowForSec, note.OnlyShowIfConnectedViaOe);
+                    // If there's a notification, fire it.
+                    if(response.Result.Notification !== undefined && response.Result.Notification !== null)
+                    {
+                        oe_log("Starting plugin check notification")
+                        var note = response.Result.Notification;
+                        oe_show_popup(note.Title, note.Message, note.Type, note.ActionText, note.ActionLink, note.ShowForSec, note.OnlyShowIfConnectedViaOe);
+                    }
+                }
+                catch (error)
+                {
+                    oe_error("response.Result.Notification; "+error)
+                }
+
+                try
+                {
+                    // If the plugin is not linked, show a message to the user to link it now.
+                    if(response.Result.IsLinked !== undefined && response.Result.IsLinked !== true)
+                    {
+                        // Only show every 10 seconds.
+                        // We want to show it often, so if the user misses it they can see it again easily.
+                        let showLink = true;
+                        try
+                        {
+                            const key = "oe-frontend-non-linked-printer-last-popup-time";
+                            var lastPopupTime = localStorage.getItem(key);
+                            if(lastPopupTime && (Date.now() - parseInt(lastPopupTime, 10) < 10000))
+                            {
+                                showLink = false;
+                            }
+                            localStorage.setItem(key, Date.now().toString());
+                        }
+                        catch{}
+
+                        if(showLink)
+                        {
+                            const link = "https://octoeverywhere.com/getstarted?source=moonraker_frontend_popup&printerid=" + encodeURIComponent(printerId);
+                            oe_show_popup(
+                                "Complete Your Setup",
+                                "You're <strong>only 5 seconds</strong> away from OctoEverywhere's free remote access, AI failure detection, notifications, and more.",
+                                "notice",
+                                "Finish Your Setup Now",
+                                link,
+                                20,
+                                false);
+                        }
+                    }
+                }
+                catch (error)
+                {
+                    oe_error("response.Result.IsLinked; "+error)
                 }
             }
             catch (error)
             {
-                oe_error("Exception in DoNotificationCheckIn "+error)
+                oe_error("Exception in oe_do_check_in "+error)
             }
         })
         .catch((e)=>

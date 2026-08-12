@@ -4,6 +4,7 @@
 *.iml
 build
 dist
+node_modules/
 *.egg*
 .DS_Store
 *.zip

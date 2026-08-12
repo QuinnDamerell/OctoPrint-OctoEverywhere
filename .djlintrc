@@ -1,0 +1,5 @@
+{
+  "profile": "jinja",
+  "extension": "jinja2",
+  "ignore": "H021"
+}
