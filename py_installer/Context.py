@@ -206,7 +206,7 @@ class Context:
                 self._ValidateString(self.CompanionInstanceId, "Required config var Companion Instance Id was not found")
                 self.CompanionDataRoot = self.CompanionDataRoot.strip()
                 self.CompanionInstanceId = self.CompanionInstanceId.strip()
-                if self.OsType != OsTypes.Debian:
+                if self.OsType != OsTypes.Debian and self.OsType != OsTypes.SonicPad:
                     raise Exception("The OctoEverywhere companion can only be installed on Debian based operating systems.")
             else:
                 self._ValidatePathAndExists(self.MoonrakerConfigFilePath, "Required config var Moonraker Config File Path was not found")
