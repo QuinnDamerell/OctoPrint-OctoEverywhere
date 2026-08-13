@@ -21,6 +21,9 @@ from .snapshotresizeparams import SnapshotResizeParams
 from .debugprofiler import DebugProfiler, DebugProfilerFeatures
 from .Notifications.bedcooldownwatcher import BedCooldownWatcher
 
+Image = None
+ImageFile = None
+
 try:
     # On some systems this package will install but the import will fail due to a missing system .so.
     # Since most setups don't use this package, we will import it with a try catch and if it fails we
@@ -883,10 +886,11 @@ class NotificationsHandler(INotificationHandler):
                         # manipulate the image even though we didn't get the whole thing. Otherwise, we would use the raw snapshot
                         # buffer, which is still an incomplete image.
                         # Use a try catch incase the import of ImageFile failed
-                        try:
-                            ImageFile.LOAD_TRUNCATED_IMAGES = True #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
-                        except Exception as _:
-                            pass
+                        if ImageFile is not None:
+                            try:
+                                ImageFile.LOAD_TRUNCATED_IMAGES = True
+                            except Exception as _:
+                                pass
 
                         # In pillow ~9.1.0 these constants moved.
                         # pylint: disable=no-member
@@ -989,13 +993,11 @@ class NotificationsHandler(INotificationHandler):
                             pilImage.save(buffer, format="JPEG", quality=95) #pyright: ignore[reportUnknownMemberType]
                             snapshot = Buffer(buffer.getvalue())
                             buffer.close()
-                    else:
-                        self.Logger.warning("Can't manipulate image because the Image rotation lib failed to import.")
                 except Exception as e:
                     # Note that in the case of an exception we don't overwrite the original snapshot buffer, so something can still be sent.
                     if isinstance(e, NameError) and "Image" in str(e):
                         self.Logger.info("Can't manipulate image because the Image rotation lib failed to import.")
-                    if "cannot identify image file" in str(e):
+                    elif "cannot identify image file" in str(e):
                         self.Logger.info("Can't manipulate image because the Image lib can't figure out the image type.")
                     else:
                         Sentry.OnException("Failed to manipulate image for notifications", e)
