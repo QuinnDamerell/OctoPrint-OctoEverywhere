@@ -483,50 +483,6 @@ $(function() {
                                     }
                                     worker();
                                 }
-                                // If the plugin is not linked, show a message to the user to link it now.
-                                else
-                                {
-                                    // Only show every 10 seconds.
-                                    // We want to show it often, so if the user misses it they can see it again easily.
-                                    let showLink = true;
-                                    try
-                                    {
-                                        const key = "oe-frontend-non-linked-printer-last-popup-time";
-                                        var lastPopupTime = localStorage.getItem(key);
-                                        if(lastPopupTime && (Date.now() - parseInt(lastPopupTime, 10) < 10000))
-                                        {
-                                            showLink = false;
-                                        }
-                                        localStorage.setItem(key, Date.now().toString());
-                                    }
-                                    catch{}
-
-                                    // Show the notification
-                                    if(showLink)
-                                    {
-                                        try
-                                        {
-                                            const link = "https://octoeverywhere.com/getstarted?source=octoprint_frontend_popup&printerid=" + encodeURIComponent(printerId);
-                                            const msg = FormatNotificationMsg(
-                                                "<strong>You're only 5 seconds away</strong> from OctoEverywhere's free remote access, AI failure detection, notifications, and more.",
-                                                "Finish Your Setup Now",
-                                                link);
-                                            new PNotify({
-                                                'title': "🚀 Complete Your Setup",
-                                                'text':  msg,
-                                                'type':  "notice",
-                                                'hide':  true,
-                                                'delay': 20 * 1000,
-                                                'mouse_reset' : true,
-                                                'icon' : false /* disable since we will use our own */
-                                            });
-                                        }
-                                        catch (error)
-                                        {
-                                            LogError("response.Result.Notification; "+error)
-                                        }
-                                    }
-                                }
                             }
                         }
                         catch (error)

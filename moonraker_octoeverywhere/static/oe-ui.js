@@ -462,45 +462,6 @@ oe_do_load = function()
                 {
                     oe_error("response.Result.Notification; "+error)
                 }
-
-                try
-                {
-                    // If the plugin is not linked, show a message to the user to link it now.
-                    if(response.Result.IsLinked !== undefined && response.Result.IsLinked !== true)
-                    {
-                        // Only show every 10 seconds.
-                        // We want to show it often, so if the user misses it they can see it again easily.
-                        let showLink = true;
-                        try
-                        {
-                            const key = "oe-frontend-non-linked-printer-last-popup-time";
-                            var lastPopupTime = localStorage.getItem(key);
-                            if(lastPopupTime && (Date.now() - parseInt(lastPopupTime, 10) < 10000))
-                            {
-                                showLink = false;
-                            }
-                            localStorage.setItem(key, Date.now().toString());
-                        }
-                        catch{}
-
-                        if(showLink)
-                        {
-                            const link = "https://octoeverywhere.com/getstarted?source=moonraker_frontend_popup&printerid=" + encodeURIComponent(printerId);
-                            oe_show_popup(
-                                "Complete Your Setup",
-                                "You're <strong>only 5 seconds</strong> away from OctoEverywhere's free remote access, AI failure detection, notifications, and more.",
-                                "notice",
-                                "Finish Your Setup Now",
-                                link,
-                                20,
-                                false);
-                        }
-                    }
-                }
-                catch (error)
-                {
-                    oe_error("response.Result.IsLinked; "+error)
-                }
             }
             catch (error)
             {
