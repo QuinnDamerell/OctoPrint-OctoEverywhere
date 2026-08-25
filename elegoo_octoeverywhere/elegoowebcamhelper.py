@@ -75,9 +75,12 @@ class ElegooWebcamHelper(IWebcamPlatformHelper):
             # wont's send data until the command is issued. So we return to let quick cam get connected.
             ElegooClient.Get().SendEnableWebcamCommand(False)
             # We also try to enable the light, to make sure Gadget can see the print.
-            # We send the command formatted the same as the frontend.
+            # CC1 command 403 toggles the light regardless of the requested value, so
+            # only send it when the known chamber light state reports that it is off.
             if self.Config.GetBool(Config.SectionElegoo, Config.AutoActivateChamberLightForWebcam, False):
-                ElegooClient.Get().SendRequest(403, {"LightStatus":{"SecondLight":True,"RgbLight": [0,0,0]}}, waitForResponse=False)
+                state = ElegooClient.Get().GetState()
+                if state is not None and state.ChamberLightOn is False:
+                    ElegooClient.Get().SendRequest(403, {"LightStatus":{"SecondLight":True,"RgbLight": [0,0,0]}}, waitForResponse=False)
 
 
     # !! Interface Function !!
