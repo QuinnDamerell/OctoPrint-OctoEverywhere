@@ -50,6 +50,29 @@ class QuickCamManager:
     # Used on some platforms when we know the stream is jmpeg, we add this to the URL so we can identify it easily.
     c_JMpegExtension = ".mjpg"
 
+    # The only query params we keep when normalizing a QuickCam URL. (see _NormalizeQuickCamUrl)
+    # Anything not on this list is dropped, since it's assumed to be cache busting noise, which would prevent
+    # streams from being shared and would spin up a new QuickCam instance (and capture thread) per request.
+    # Note the normalized URL is also the URL we actually connect to, so anything the webcam server needs
+    # to serve the stream - auth included - must be on this list!
+    # These values must all stay lower case, the compare is done against a lowercased param name.
+    c_AllowedGetParams = frozenset([
+        # Endpoint and stream selection. These are part of the URL contract, dropping them changes what's returned.
+        "action",                                                   # mjpg-streamer, ustreamer, camera-streamer (action=stream|snapshot)
+        "cmd",                                                      # Reolink (cmd=Snap|Video)
+        "src",                                                      # go2rtc
+        "channel", "subtype", "subject", "stream", "cam", "camera", # Dahua, Amcrest, Hikvision, OpenIPC, thingino, go2rtc
+        # Auth. Some setups put creds or a signed token in the query string, stripping them results in a 401.
+        "token", "access_token", "accesstoken", "auth", "authtoken",
+        "apikey", "api_key", "key",
+        "user", "username", "usr", "password", "passwd", "pwd",
+        "sig", "signature", "session", "sessionid",
+        # Stream quality and format, which are meaningful to the server and safe to keep.
+        c_FpsGetParam,
+        "quality", "resolution", "width", "height", "w", "h",
+        "rotate", "bitrate", "br", "codec", "format", "mode",
+    ])
+
 
     _Instance:"QuickCamManager" = None #pyright: ignore[reportAssignmentType]
 
@@ -149,24 +172,30 @@ class QuickCamManager:
             return qc
 
 
+    # Normalizes a webcam URL by stripping any query param that's not on the c_AllowedGetParams list.
+    # This is used to key the QuickCamMap, so cache busting params (which are unique per request) don't
+    # prevent streams from being shared. But it's also the URL we connect to, so any param the webcam
+    # server actually needs - like an auth token - must be on the allow list or the request will fail.
     def _NormalizeQuickCamUrl(self, url:str) -> str:
-        # Strip cache-busting query params while preserving action=stream style URLs.
-        if url.find("?") == -1:
+        # Most URLs have no query string at all, so we can skip all of the parsing work and return them untouched.
+        if "?" not in url:
             return url
 
         parts = urlsplit(url)
-        actionParams:List[Tuple[str, str]] = []
+        allowedParams:List[Tuple[str, str]] = []
+        strippedNames:List[str] = []
         for name, value in parse_qsl(parts.query, keep_blank_values=True):
-            nameLower = name.lower()
             # Important! We need to keep some params around so they don't get lost when trying to control the server!
-            if nameLower == "action" or nameLower == QuickCamManager.c_FpsGetParam:
-                actionParams.append((name, value))
+            if name.lower() in QuickCamManager.c_AllowedGetParams:
+                allowedParams.append((name, value))
             else:
-                self.Logger.debug("Stripping _NormalizeQuickCamUrl query param %s from QuickCam URL for normalization.", name)
+                strippedNames.append(name)
 
+        if len(strippedNames) > 0:
+            self.Logger.debug("_NormalizeQuickCamUrl stripped the query params [%s] from the QuickCam URL for normalization.", ", ".join(strippedNames))
 
-        query = urlencode(actionParams)
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+        # SplitResult is a named tuple, so _replace is the supported way to swap out just the query string.
+        return urlunsplit(parts._replace(query=urlencode(allowedParams)))
 
 
 # This class handles webcam streaming from different streaming endpoints that aren't http.
