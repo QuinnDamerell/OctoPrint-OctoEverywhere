@@ -23,6 +23,8 @@ from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.Proto.ServerHost import ServerHost
 from octoeverywhere.sentry import Sentry
 
+from elegoo_octoeverywhere.elegoorelaywebcamurldetector import ElegooRelayWebcamUrlDetector
+
 from .elegoocc2client import ElegooCc2Client
 from .elegoocc2commandhandler import ElegooCc2CommandHandler
 from .elegoocc2filemanager import ElegooCc2FileManager
@@ -89,6 +91,10 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
             webcamHelper = ElegooCc2WebcamHelper(self.Logger, self.Config)
             WebcamHelper.Init(self.Logger, webcamHelper, localStorageDir)
+            # Setup the stream detector that will modify incoming relay requests if needed.
+            # Same as the CC1 host: Elegoo apps (e.g. OctoApp) request the webcam at "/video",
+            # which must be rewritten to a webcam stream request instead of being relayed.
+            Compat.SetRelayWebcamStreamDetector(ElegooRelayWebcamUrlDetector(self.Logger))
 
             stateTranslator = ElegooCc2StateTranslator(self.Logger)
             self.NotificationHandler = NotificationsHandler(self.Logger, stateTranslator)
