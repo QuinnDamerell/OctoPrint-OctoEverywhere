@@ -257,14 +257,9 @@ class BambuHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
         else:
             self.Logger.error("!!! Notification Handler is None, this should never happen !!!")
 
-        # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
-        # This would be if the skipped the printer link or missed it in the setup script.
-        if len(connectedAccounts) == 0:
-            printerId = self.GetPrinterId()
-            if printerId is not None:
-                LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "bambu_host")
-            else:
-                self.Logger.error("Printer is unlinked from OctoEverywhere, but we don't have a printer id? This should never happen!")
+        # Allow the link helper to handle the event, it will log the linking message or the "account" linked message
+        # depending on the state.
+        LinkHelper.OnPrimaryConnectionEstablished(self.Logger, connectedAccounts, self.GetPrinterId(), "bambu_host")
 
 
     #

@@ -202,10 +202,9 @@ class ElegooCc2Host(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
 
         self.NotificationHandler.SetOctoKey(octoKey)
 
-        if len(connectedAccounts) == 0:
-            printerId = self.GetPrinterId()
-            if printerId is not None:
-                LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "elegoo_cc2_host")
+        # Allow the link helper to handle the event, it will log the linking message or the "account" linked message
+        # depending on the state.
+        LinkHelper.OnPrimaryConnectionEstablished(self.Logger, connectedAccounts, self.GetPrinterId(), "elegoo_cc2_host")
 
 
     def OnPluginUpdateRequired(self) -> None:

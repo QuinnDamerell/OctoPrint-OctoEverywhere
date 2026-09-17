@@ -297,14 +297,8 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
         self.Logger.info("Primary Connection To OctoEverywhere Established - We Are Ready To Go!")
         LocalWebApi.Get().OnPrimaryConnectionEstablished(len(connectedAccounts) > 0)
 
-        # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
-        # This would be if the skipped the printer link or missed it in the setup script.
-        if len(connectedAccounts) == 0:
-            printerId = self.GetPrinterId()
-            if printerId is None:
-                self.Logger.error("This printer is not linked to an OctoEverywhere account. Please link this printer to an account to use the remote features.")
-            else:
-                LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "moonraker_host")
+        # Allow the link helper to handle the event, it will log the linking message or the "account" linked message depending on the state.
+        LinkHelper.OnPrimaryConnectionEstablished(self.Logger, connectedAccounts, self.GetPrinterId(), "moonraker_host")
 
         # Now that we are connected, start the moonraker client.
         # We do this after the connection in case it needs to send any notifications or messages when starting.

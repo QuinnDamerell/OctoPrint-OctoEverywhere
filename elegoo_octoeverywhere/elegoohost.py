@@ -248,12 +248,8 @@ class ElegooHost(IHostCommandHandler, IPopUpInvoker, IStateChangeHandler):
         # Give the octoKey to who needs it.
         self.NotificationHandler.SetOctoKey(octoKey)
 
-        # Check if this printer is unlinked, if so add a message to the log to help the user setup the printer if desired.
-        # This would be if the skipped the printer link or missed it in the setup script.
-        if len(connectedAccounts) == 0:
-            printerId = self.GetPrinterId()
-            if printerId is not None:
-                LinkHelper.RunLinkPluginConsolePrinterAsync(self.Logger, printerId, "elegoo_host")
+        # Allow the link helper to handle the event, it will log the linking message or the "account" linked message depending on the state.
+        LinkHelper.OnPrimaryConnectionEstablished(self.Logger, connectedAccounts, self.GetPrinterId(), "elegoo_host")
 
 
     #

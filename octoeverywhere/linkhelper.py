@@ -1,7 +1,7 @@
 import time
 import logging
 import threading
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .httpsessions import HttpSessions
 
@@ -11,12 +11,17 @@ class LinkHelper:
     # This is used to prevent the short code from being printed multiple times, like when the plugin is re-connected
     s_HasRunShortCodeLinkLogic = False
 
-    # This is used by the docker manager to detect printers that are not linked and get the printer id so it can be linked.
-    # This line should not change or the docker manager will not be able to detect the printer.
+    # This is used by various platform hosts to scan the logs for the plugin's acount link status.
+    # Ideally, the LocalWebAPI should be used to pull the plugin status, but not all platforms use it.
+    c_PrinterLinkStatusLogPrefix = "plugin-account-link-status:"
+
+    # This is used by various platform hosts to scan the logs for the plugin's acount link status.
+    # Ideally, the LocalWebAPI should be used to pull the plugin status, but not all platforms use it.
     c_PrinterNotLinkedPrinterIdLogPrefix = "plugin-not-linked:"
 
     # This is used by some systems to scan the logs for the printer linking URL.
     # This line should not change or the systems that use it will break.
+    # Ideally, the LocalWebAPI should be used to pull the plugin status, but not all platforms use it.
     c_PrinterNotLinkedLinkURLLogPrefix = "account-linking-url:"
 
     # Checks with the service to see if the printer is setup on a account.
@@ -144,20 +149,43 @@ class LinkHelper:
         return f"https://octoeverywhere.com/getstarted?printerid={printerId}{extraArgs}"
 
 
+    # This should always be called when OnPrimaryConnectionEstablished is fired, so the proper logging messages are fired.
+    # Some platform hosts (like the U1 paxx firmware) look for these messages in the plugin logs to figure out the plugin linked state.
+    @staticmethod
+    def OnPrimaryConnectionEstablished(logger:logging.Logger, connectedAccounts:List[str], printerId:Optional[str], source:Optional[str]=None):
+        # Before we do anything, we need to print the account link status.
+        # Some platform hosts use this to determine the plugin's account link status.
+        isLinked = len(connectedAccounts) > 0
+        linkStatus = "true" if isLinked else "false"
+        logger.info(f"{LinkHelper.c_PrinterLinkStatusLogPrefix}<{linkStatus}>")
+
+        # If the user is linked, there's nothing to do.
+        if isLinked:
+            return
+
+        # We should always have a printer id.
+        if printerId is None:
+            logger.error("Printer is unlinked from OctoEverywhere, but we don't have a printer id? This should never happen!")
+            return
+
+        # Run the link helper to print the link message to the log and console.
+        LinkHelper._RunLinkPluginConsolePrinterAsync(logger, printerId, "bambu_host")
+
+
     # This will async run a thread that will provide the user with a link to the printer.
     @staticmethod
-    def RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:Optional[str]=None) -> None:
-        t = threading.Thread(target=LinkHelper._RunLinkPluginConsolePrinterAsync, args=(logger, printerId, source))
+    def _RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:Optional[str]=None) -> None:
+        t = threading.Thread(target=LinkHelper._RunLinkPluginConsolePrinterAsyncThread, args=(logger, printerId, source))
         t.daemon = True
         t.start()
 
 
     # Used by the plugins if they connect to the service and there's no account setup.
     @staticmethod
-    def _RunLinkPluginConsolePrinterAsync(logger:logging.Logger, printerId:str, source:Optional[str]=None):
+    def _RunLinkPluginConsolePrinterAsyncThread(logger:logging.Logger, printerId:str, source:Optional[str]=None):
 
-        # This is used by the docker manager to detect printers that are not linked and get the printer id so it can be linked.
-        # This line should not change or the docker manager will not be able to detect the printer.
+        # This is used by various platform hosts to scan the logs for the plugin's acount link status.
+        # Ideally, the LocalWebAPI should be used to pull the plugin status, but not all platforms use it.
         logger.info(f"{LinkHelper.c_PrinterNotLinkedPrinterIdLogPrefix}<{printerId}>")
 
         # This is used by some systems to scan the logs for the printer linking URL.
@@ -181,6 +209,7 @@ class LinkHelper:
             logger.error("Failed to run link plugin console printer. "+str(e))
 
         # If there's an error or the short code times out, fallback to the full URL.
+        # Note the U1 firmware looks for this text using the current logging level, so it can't change!
         logger.warning("")
         logger.warning("")
         logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
@@ -225,6 +254,7 @@ class LinkHelper:
                 logger.warning("Failed to get short code.")
                 return False
 
+            # Note the U1 firmware looks for this text using the current logging level, so it can't change!
             logger.warning("")
             logger.warning("")
             logger.warning("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")

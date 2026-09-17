@@ -48,7 +48,6 @@ if __name__ == '__main__':
             pass
         else:
             MoonrakerConfigFile = s.GetConfigVarAndValidate(jsonConfig, "MoonrakerConfigFile", ConfigDataTypes.Path)
-            MoonrakerConfigFile = s.GetConfigVarAndValidate(jsonConfig, "MoonrakerConfigFile", ConfigDataTypes.Path)
             DisableMoonrakerConfigFileWrites = s.GetConfigVarAndValidate(jsonConfig, "DisableMoonrakerConfigFileWrites", ConfigDataTypes.Bool, defaultValue=False)
 
     except Exception as e:
