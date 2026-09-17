@@ -1,7 +1,8 @@
 import json
 import logging
 import re
-from typing import Any, Dict, List, Optional, Union
+import threading
+from typing import Any, Dict, List, Optional, Union, cast
 
 from octoeverywhere.commandhandler import CommandHandler, CommandResponse
 from octoeverywhere.filesystemcommands import FileSystemCommandHelper, FileSystemTreeBuilder, VirtualFilePath, VirtualFileSystemTree
@@ -19,6 +20,7 @@ from .filemetadatacache import FileMetadataCache
 from .jsonrpcresponse import JsonRpcResponse
 from .lightmanager import LightManager
 from .printerstatemapping import PrinterStateMapping
+from .printeradapters import MoonrakerPrinterAdapterFactory
 
 # This class implements the Platform Command Handler Interface
 class MoonrakerCommandHandler(IPlatformCommandHandler):
@@ -46,6 +48,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     def __init__(self, logger:logging.Logger, config:Config) -> None:
         self.Logger = logger
         self.Config = config
+        self.ExtrusionLock = threading.Lock()
 
 
     # !! Platform Command Handler Interface Function !!
@@ -131,14 +134,16 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             "virtual_sdcard": None, # Needed for many things, including GetPrintTimeRemainingEstimateInSeconds_WithPrintStatsAndVirtualSdCardResult
             "toolhead": None,       # Needed to know which extruder is currently active.
             "heater_bed": None,     # Needed for temps
-            # Optional. Standard Klipper returns an empty object if this doesn't exist.
-            # Some forks, including Snapmaker U1 firmware, expose richer machine and action states here.
-            "machine_state_manager": None,
+            "webhooks": None,       # Klippy shutdown/error details, independent of the print state.
         }
 
         # Ask the printer what objects it has, so we only query ones that exist.
         # This is cached per connection by the client, so it doesn't cost a request on every status call.
         printerObjects = MoonrakerClient.Get().GetPrinterObjectList()
+        adapter = MoonrakerPrinterAdapterFactory.GetForObjects(printerObjects) if printerObjects is not None else None
+        if adapter is not None:
+            for objectName in adapter.GetStatusQueryObjects():
+                query_objects[objectName] = None
 
         # Add every extruder this printer has, so a tool changing printer reports the active tool's temp
         # rather than always reporting the one named "extruder".
@@ -169,7 +174,11 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             errorStr = result.ErrorStr.lower() if result.ErrorStr is not None else ""
             if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStr or "forbidden" in errorStr or MoonrakerClient.Get().IsDisconnectDueToAuth():
                 return CommandHandler.c_CommandError_LostAuth
-            return None
+            # Object queries can fail during a Klippy shutdown. printer.info remains available
+            # through Moonraker, so retain the actual fault instead of reporting an offline printer.
+            if result.ErrorCode == JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED:
+                return None
+            return self._GetKlippyErrorStatus()
 
         # Get the result.
         res = result.GetResult()
@@ -201,15 +210,24 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
         else:
             self.Logger.warning("MoonrakerCommandHandler failed to find the print_stats.status")
 
-        # TODO - If in an error state, set some context as to why.
-        # This is shown to the user directly, so it must be short (think of a dashboard status) and formatted well.
         errorStr:Optional[str] = None
+        platformErrorCode:Optional[str] = None
+        webhooks = statusObjectOrEmptyDict.get("webhooks", {})
+        if webhooks.get("state") in ("error", "shutdown"):
+            state = "error"
+            platformErrorCode, errorStr = PrinterStateMapping.GetWebhooksErrorInfo(
+                webhooks.get("state"), webhooks.get("state_message"), adapter=adapter)
+        elif state in ("paused", "error"):
+            platformErrorCode, errorStr = PrinterStateMapping.GetPrintStatsErrorInfo(
+                statusObjectOrEmptyDict.get("print_stats", {}), adapter=adapter)
+        # The notification parser retains a state fallback for older consumers. Status has a
+        # separate State field, so only expose a platform code when the firmware supplies one.
+        if platformErrorCode in ("paused", "error", "klippy_error", "klippy_shutdown", "klippy_disconnected"):
+            platformErrorCode = None
 
         # Some Klipper forks expose a richer machine/action state in a custom object.
         # Keep this additive as SubState so the core Moonraker state mapping remains stable.
-        subState_CanBeNone = PrinterStateMapping.GetMachineStateManagerSubState(
-            statusObjectOrEmptyDict.get("machine_state_manager", None)
-        )
+        subState_CanBeNone = adapter.GetPrinterSubState(statusObjectOrEmptyDict) if adapter is not None else None
 
         # Get current layer info
         # None = The platform doesn't provide it.
@@ -307,6 +325,7 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             "State": state,
             "SubState": subState_CanBeNone,
             "Error": errorStr,
+            "PlatformErrorCode": platformErrorCode,
             # List of lights with their status, or None if not supported/unknown
             "Lights": lights,
             "CurrentPrint":
@@ -340,6 +359,28 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
                 self.Logger.warning(f"Failed to build the Moonraker material system: {e}")
                 response["MaterialSystem"] = None
         return response
+
+
+    def _GetKlippyErrorStatus(self) -> Union[int, None, Dict[str, Any]]:
+        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.info")
+        if result.HasError():
+            errorStr = (result.GetErrorStr() or "").lower()
+            if result.ErrorCode == JsonRpcResponse.MR_401_UNAUTHORIZED or "unauthorized" in errorStr or "forbidden" in errorStr or MoonrakerClient.Get().IsDisconnectDueToAuth():
+                return CommandHandler.c_CommandError_LostAuth
+            return None
+        rawInfo = result.GetResult()
+        if not isinstance(rawInfo, dict):
+            return None
+        info = cast(Dict[str, Any], rawInfo)
+        if info.get("state") not in ("error", "shutdown"):
+            return None
+        # Error envelopes can be recognized without object discovery, which is unavailable
+        # when Klippy cannot start. No cached shutdown message survives a healthy response.
+        platformErrorCode, errorStr = PrinterStateMapping.GetWebhooksErrorInfo(info.get("state"), info.get("state_message"))
+        if platformErrorCode in ("klippy_error", "klippy_shutdown", "klippy_disconnected"):
+            platformErrorCode = None
+        return {"State": "error", "SubState": None, "Error": errorStr,
+                "PlatformErrorCode": platformErrorCode, "CurrentPrint": None, "Lights": None}
 
 
     # !! Platform Command Handler Interface Function !!
@@ -544,31 +585,115 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
     # !! Platform Command Handler Interface Function !!
     # Extrudes or retracts filament for the specified extruder.
     def ExecuteExtrude(self, extruder:int, distanceMm:float) -> CommandResponse:
-        # Validate extruder parameter
-        if extruder < 0 or extruder > 10:
-            self.Logger.error(f"ExecuteExtrude: Invalid extruder index '{extruder}'")
-            return CommandResponse.Error(400, "Invalid extruder index")
+        # Keep OE extrusion requests from changing tools or overwriting the saved state
+        # between selection and extrusion. Other printer clients still control their own commands.
+        with self.ExtrusionLock:
+            return self._ExecuteExtrude(extruder, distanceMm)
 
-        # Build G-code command
-        # M83: Set extruder to relative mode
-        # G1: Extrude with feedrate
-        # Feedrate: 300 mm/min (5 mm/s) for extrusion
-        # T{n}: Select extruder (if not extruder 0)
-        extruder_select = f"T{extruder}\n" if extruder > 0 else ""
-        gcode = f"{extruder_select}M83\nG1 E{distanceMm} F300"
 
-        # Execute G-code
-        result = MoonrakerClient.Get().SendJsonRpcRequest("printer.gcode.script", {
-            "script": gcode
-        })
+    def _ExecuteExtrude(self, extruder:int, distanceMm:float) -> CommandResponse:
+        client = MoonrakerClient.Get()
+        connectionGeneration = client.GetConnectionGeneration()
+        if connectionGeneration is None:
+            return self._BuildPhysicalToolError("extrude", None)
+        printerObjects = client.GetPrinterObjectList()
+        targetName = self._GetPhysicalExtruderName(extruder, printerObjects)
+        if targetName is None:
+            return self._BuildPhysicalToolError("extrude", printerObjects)
 
+        # gcode.commands includes native commands without help text as well as macros.
+        result = client.SendJsonRpcRequest("printer.objects.query", {
+            "objects": {"toolhead": ["extruder"], "gcode": ["commands"],
+                        "print_stats": ["state"], "virtual_sdcard": ["is_active"]}
+        }, expectedConnectionGeneration=connectionGeneration)
         if result.HasError():
-            self.Logger.error(f"ExecuteExtrude failed: {result.GetLoggingErrorStr()}")
+            return self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to discover tool selection commands")
+        status = result.GetResult().get("status", {})
+        if self._IsPrintActive(status):
+            return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Pause the print before manually extruding filament.")
+        activeName = status.get("toolhead", {}).get("extruder")
+        adapter = MoonrakerPrinterAdapterFactory.GetForObjects(printerObjects or [])
+        selection = adapter.GetPhysicalToolSelectionCommand(extruder)
+        if selection is None:
+            # Honor the printer's tool-change macro, which may perform mechanical docking.
+            # ACTIVATE_EXTRUDER alone cannot safely replace that macro.
+            commands = status.get("gcode", {}).get("commands", {})
+            if f"T{extruder}" in commands:
+                selection = f"T{extruder}"
+        if selection is not None:
+            result = client.SendJsonRpcRequest("printer.gcode.script", {"script": selection}, timeoutSec=120.0,
+                                              expectedConnectionGeneration=connectionGeneration)
+            if result.HasError():
+                return self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to select the requested tool")
+            result = client.SendJsonRpcRequest("printer.objects.query", {
+                "objects": {"toolhead": ["extruder"], "print_stats": ["state"], "virtual_sdcard": ["is_active"]}
+            }, expectedConnectionGeneration=connectionGeneration)
+            if result.HasError():
+                return self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to verify the selected tool")
+            status = result.GetResult().get("status", {})
+            if self._IsPrintActive(status):
+                return CommandResponse.Error(CommandHandler.c_CommandError_InvalidPrinterState, "Pause the print before manually extruding filament.")
+            activeName = status.get("toolhead", {}).get("extruder")
+        if activeName != targetName:
+            return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure,
+                                         "The printer did not activate the requested physical tool. No filament was extruded.")
+
+        # Save after tool selection so restoration uses the newly selected tool's offsets.
+        # Confirm SAVE first so a failed movement script can only restore this request's state.
+        # Refresh SAVE inside that script so movement and restoration share Klipper's G-code
+        # mutex. A fixed state name avoids accumulating saved states in Klipper indefinitely.
+        save = "SAVE_GCODE_STATE NAME=OCTOEVERYWHERE_EXTRUDE"
+        restore = "RESTORE_GCODE_STATE NAME=OCTOEVERYWHERE_EXTRUDE"
+        result = client.SendJsonRpcRequest("printer.gcode.script", {"script": save},
+                                          expectedConnectionGeneration=connectionGeneration)
+        if result.HasError():
+            return self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to save G-code state")
+        result = client.SendJsonRpcRequest("printer.gcode.script", {"script": f"{save}\nM83\nG1 E{distanceMm} F300\n{restore}"},
+                                          expectedConnectionGeneration=connectionGeneration)
+        if result.IsErrorCodeOeError():
             return self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to extrude")
+        if result.HasError():
+            # A cold-extrusion error aborts the script before RESTORE. Do not attempt this
+            # cleanup after an uncertain transport failure or on a different connection.
+            restoreResult = client.SendJsonRpcRequest("printer.gcode.script", {"script": restore},
+                                                      expectedConnectionGeneration=connectionGeneration)
+            if restoreResult.HasError():
+                self.Logger.error(f"ExecuteExtrude failed to restore G-code state: {restoreResult.GetLoggingErrorStr()}")
+            error = self._BuildMoonrakerJsonRpcCommandError("extrude", result, "Failed to extrude")
+            # The error could be from RESTORE after a completed G1; don't imply retrying
+            # the same movement is harmless when we cannot identify the failing line.
+            error.ErrorStr = (error.ErrorStr or "Extrusion failed.") + " Filament movement may have occurred; check the printer before retrying."
+            return error
 
         action = "extruded" if distanceMm > 0 else "retracted"
         self.Logger.info(f"ExecuteExtrude: Successfully {action} {abs(distanceMm)}mm on extruder {extruder}")
         return CommandResponse.Success(None)
+
+
+    @staticmethod
+    def _IsPrintActive(status:Dict[str, Any]) -> bool:
+        return status.get("print_stats", {}).get("state") == "printing" or bool(status.get("virtual_sdcard", {}).get("is_active", False))
+
+
+    def _BuildPhysicalToolError(self, commandName:str, printerObjects:Optional[List[str]]) -> CommandResponse:
+        if printerObjects is not None:
+            return CommandResponse.Error(400, "The requested physical extruder is not available on this printer.")
+        client = MoonrakerClient.Get()
+        if client.IsDisconnectDueToAuth():
+            return self._BuildMoonrakerJsonRpcCommandError(commandName, JsonRpcResponse.FromError(JsonRpcResponse.MR_401_UNAUTHORIZED), "Moonraker authentication failed")
+        if client.GetConnectionGeneration() is None:
+            return self._BuildMoonrakerJsonRpcCommandError(commandName, JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED), "Printer not connected")
+        return CommandResponse.Error(CommandHandler.c_CommandError_ExecutionFailure, "Could not discover the printer's physical tools. Try again once the printer is ready.")
+
+
+    @staticmethod
+    def _GetPhysicalExtruderName(toolNumber:int, printerObjects:Optional[List[str]]) -> Optional[str]:
+        # Indexes refer to physical suffixes, not positions in a possibly sparse object list.
+        # The status fallback to 'extruder' must never be used to authorize a mutation.
+        if isinstance(toolNumber, bool) or not isinstance(toolNumber, int) or toolNumber < 0 or printerObjects is None:
+            return None
+        name = "extruder" if toolNumber == 0 else f"extruder{toolNumber}"
+        return name if name in printerObjects else None
 
 
     # !! Platform Command Handler Interface Function !!
@@ -586,11 +711,16 @@ class MoonrakerCommandHandler(IPlatformCommandHandler):
             gcode_commands.append(f"M140 S{bedC}")
 
         if toolC is not None:
-            # M104: Set hotend temperature without waiting
-            # Note the tool number is optional; when it's not set the printer's currently active tool is used.
+            # A named heater always addresses the physical tool on standard Klipper and
+            # avoids firmware-specific logical filament remapping of M104 Tn.
             if toolNumber is not None:
-                gcode_commands.append(f"M104 T{toolNumber} S{toolC}")
+                printerObjects = MoonrakerClient.Get().GetPrinterObjectList()
+                targetName = self._GetPhysicalExtruderName(toolNumber, printerObjects)
+                if targetName is None:
+                    return self._BuildPhysicalToolError("set-temp", printerObjects)
+                gcode_commands.append(f"SET_HEATER_TEMPERATURE HEATER={targetName} TARGET={toolC}")
             else:
+                # With no explicit tool, preserve M104's active-tool behavior.
                 gcode_commands.append(f"M104 S{toolC}")
 
         if chamberC is not None:

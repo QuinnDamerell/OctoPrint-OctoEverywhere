@@ -102,6 +102,7 @@ class MoonrakerClient(IMoonrakerClient):
         # Don't run it until StartRunningIfNotAlready is called!
         self.WebSocket:Optional[Client] = None
         self.WebSocketConnected = False
+        self.WebSocketGeneration = 0
         self.WebSocketKlippyReady = False
         self.WebSocketLock = threading.Lock()
         self.LastWebhooksState:Optional[str] = None
@@ -126,6 +127,15 @@ class MoonrakerClient(IMoonrakerClient):
 
     def IsDisconnectDueToAuth(self) -> bool:
         return self.LastConnectionFailedDueToAuth
+
+
+    # Identifies the connection used for a sequence of related commands. Callers
+    # can pass this generation with each request to stop the sequence on reconnect.
+    def GetConnectionGeneration(self) -> Optional[int]:
+        with self.WebSocketLock:
+            if self.WebSocketConnected is False or self.WebSocket is None:
+                return None
+            return self.WebSocketGeneration
 
 
     # Actually starts the client running, trying to connect the websocket and such.
@@ -302,7 +312,8 @@ class MoonrakerClient(IMoonrakerClient):
     # https://moonraker.readthedocs.io/en/latest/web_api/#json-rpc-api-overview
     # https://moonraker.readthedocs.io/en/latest/web_api/#websocket-setup
     #
-    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None, timeoutSec:Optional[float]=None, waitForResponse:bool=True) -> JsonRpcResponse:
+    def SendJsonRpcRequest(self, method:str, paramsDict:Optional[Dict[Any, Any]]=None, timeoutSec:Optional[float]=None,
+                           waitForResponse:bool=True, expectedConnectionGeneration:Optional[int]=None) -> JsonRpcResponse:
         msgId = 0
         waitContext = None
         with self.JsonRpcIdLock:
@@ -330,7 +341,7 @@ class MoonrakerClient(IMoonrakerClient):
 
             # Try to send. default=str makes the json dump use the str function if it fails to serialize something.
             jsonStr = json.dumps(obj, default=str)
-            if self._WebSocketSend(jsonStr) is False:
+            if self._WebSocketSend(jsonStr, expectedConnectionGeneration) is False:
                 self.Logger.info("Moonraker client failed to send JsonRPC request "+method)
                 return JsonRpcResponse.FromError(JsonRpcResponse.OE_ERROR_WS_NOT_CONNECTED)
 
@@ -383,13 +394,18 @@ class MoonrakerClient(IMoonrakerClient):
 
     # Sends a string to the connected websocket.
     # forceSend is used to send the initial messages before the system is ready.
-    def _WebSocketSend(self, jsonStr:str) -> bool:
+    def _WebSocketSend(self, jsonStr:str, expectedConnectionGeneration:Optional[int]=None) -> bool:
         # Only allow one send at a time, thus we do it under lock.
         with self.WebSocketLock:
             # Note that in the past we waited for klippy ready, but that doesn't really make sense because a lot of apis like db and such don't care.
             # Any api that needs klippy to be ready will fail with an error anyways.
             if self.WebSocketConnected is False:
                 self.Logger.info("Moonraker client - tired to send a websocket message when the socket wasn't open.")
+                return False
+            # Check under the same lock that protects the connection and the send,
+            # so reconnect cannot redirect a later command to a different session.
+            if expectedConnectionGeneration is not None and expectedConnectionGeneration != self.WebSocketGeneration:
+                self.Logger.info("Moonraker client skipped a request because its connection changed.")
                 return False
             localWs = self.WebSocket
             if localWs is None:
@@ -779,6 +795,7 @@ class MoonrakerClient(IMoonrakerClient):
 
         # Set that the websocket is open.
         with self.WebSocketLock:
+            self.WebSocketGeneration += 1
             self.WebSocketConnected = True
 
         # According to the docs, there's a startup sequence we need to before sending requests.

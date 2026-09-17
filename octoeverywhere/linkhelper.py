@@ -169,7 +169,7 @@ class LinkHelper:
             return
 
         # Run the link helper to print the link message to the log and console.
-        LinkHelper._RunLinkPluginConsolePrinterAsync(logger, printerId, "bambu_host")
+        LinkHelper._RunLinkPluginConsolePrinterAsync(logger, printerId, source)
 
 
     # This will async run a thread that will provide the user with a link to the printer.
