@@ -291,7 +291,10 @@ class OctoSession(IOctoSession):
             # Get our unique challenge
             rasChallenge = self.ServerAuth.GetEncryptedChallenge()
             if rasChallenge is None:
-                raise Exception("Rsa challenge generation failed.")
+                # The auth helper already reported the cause. Still close the session, but don't report it twice.
+                self.Logger.error("RSA challenge generation failed. Check the rsa and pyasn1 installation.")
+                self.OnSessionError(0)
+                return
             rasChallengeKeyVerInt = ServerAuthHelper.c_ServerAuthKeyVersion
 
             # Define which type of compression we can receive (beyond None)

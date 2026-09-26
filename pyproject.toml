@@ -22,12 +22,18 @@ requires-python = ">=3.7,<4"
 #   For a full list of changes, reasons, and version details, see the repo readme.md
 #   For the source lib, we must be on version 1.6 due to a bug before that version.
 #   We also must remain compatible with Python 3.7 for the Sonic pad. For now we are pulling the latest changes and fixing any 3.7 issues.
+# Security minimums (requests, urllib3, dnspython)
+#   pip won't upgrade a package that's already installed unless it no longer satisfies the requirement, so the minimum version is the only way to push
+#   security fixes to existing installs. Newer versions of these packages drop support for older PY versions, so we use python_version markers to set
+#   the minimum to the newest version each PY version can install. When bumping these, make sure each minimum still supports its PY version range.
+#   Only do this for pure python packages! Forcing an upgrade of a native package (like pillow or zstandard) can force a source build on platforms without wheels.
 # dnspython
 #	We depend on a feature that was released with 2.3.0, so we need to require at least that.
 #   For the same reason as websocket_client for the sonic pad, we also need to include at least 2.3.0, since 2.3.0 is the last version to support python 3.7.8.
 # urllib3
 #   There is a bug with parsing headers in versions older than 1.26.? (https://github.com/diyan/pywinrm/issues/269). At least 1.26.6 fixes it, ubt we decide to just stick with a newer version.
 #   The sonic pad can't support anything newer than 2.0.0, so we need to stay below that. But we moved the sonic pad to it's own requirements file, so we can go higher.
+#   Don't raise the sonic pad's cap! urllib3 2.x raises an ImportError on OpenSSL older than 1.1.1, which the sonic pad has.
 # zstandard
 #   zstandard gives us great compression that's super fast, but it requires a native lib to installed. The PY package will come with a lib and or try to build it, but we can also install it via apt-get.
 #   For the complexity, we can't list it as a required install, since it won't work on some platforms. So instead we will try to install it during runtime, and then it will be used after the following restart.
@@ -45,14 +51,20 @@ requires-python = ">=3.7,<4"
 #
 dependencies = [
     "octowebsocket_client==1.9.1",
-    "requests>=2.31.0",
+    "requests>=2.31.0; python_version < '3.8'",
+    "requests>=2.32.4; python_version >= '3.8' and python_version < '3.10'",
+    "requests>=2.33.0; python_version >= '3.10'",
     "octoflatbuffers==24.3.27",
     "pillow",
-    "certifi>=2025.1.31",
+    "certifi>=2026.7.22",
     "rsa>=4.9",
-    "dnspython>=2.3.0",
+    "dnspython>=2.3.0; python_version < '3.8'",
+    "dnspython>=2.6.1; python_version >= '3.8'",
     "httpx>=0.24.1",
-    "urllib3>=2.0.0",
+    "urllib3>=2.0.7; python_version < '3.8'",
+    "urllib3>=2.2.3; python_version >= '3.8' and python_version < '3.9'",
+    "urllib3>=2.6.3; python_version >= '3.9' and python_version < '3.10'",
+    "urllib3>=2.8.0; python_version >= '3.10'",
     "sentry-sdk>=2.20.0,<3",
     "pybind11",
 ]

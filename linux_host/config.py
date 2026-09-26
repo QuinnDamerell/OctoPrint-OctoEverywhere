@@ -1,5 +1,8 @@
 import logging
+import io
 import os
+import stat
+import uuid
 import threading
 
 from typing import List, Optional
@@ -445,26 +448,46 @@ class Config:
         if self.Config is None:
             return
 
-        # Write the current settings to the file.
-        # This lets the config lib format everything how it wants.
-        with open(self.OeConfigFilePath, 'w', encoding="utf-8") as f:
-            self.Config.write(f)
+        # Format the settings and comments before touching the saved config.
+        with io.StringIO() as buffer:
+            self.Config.write(buffer)
+            lines = buffer.getvalue().splitlines(keepends=True)
 
-        # After writing, read the file and insert any comments we have.
         finalOutput = ""
-        with open(self.OeConfigFilePath, 'r', encoding="utf-8") as f:
-            # Read all lines
-            lines = f.readlines()
-            for line in lines:
-                lineLower = line.lower()
-                # If anything in the line matches the target, add the comment just before this line.
-                for cObj in Config.c_ConfigComments:
-                    if cObj["Target"] in lineLower:
-                        # Add the comment.
-                        finalOutput += "# " + cObj["Comment"] + os.linesep
-                        break
-                finalOutput += line
+        for line in lines:
+            lineLower = line.lower()
+            # If anything in the line matches the target, add the comment just before this line.
+            for cObj in Config.c_ConfigComments:
+                if cObj["Target"] in lineLower:
+                    finalOutput += "# " + cObj["Comment"] + "\n"
+                    break
+            finalOutput += line
 
-        # Finally, write the file back one more time.
-        with open(self.OeConfigFilePath, 'w', encoding="utf-8") as f:
-            f.write(finalOutput)
+        # Write beside the config, then replace it atomically. Keep symlinks and the existing owner and permissions intact.
+        configPath = os.path.realpath(self.OeConfigFilePath)
+        configStat = os.stat(configPath) if os.path.exists(configPath) else None
+        tempFilePath:Optional[str] = None
+        try:
+            # Create the file the same way open() would, so a new config gets the normal permissions from the umask.
+            # We don't use tempfile, since it always creates files only the owner can read.
+            newFilePath = os.path.join(os.path.dirname(configPath), "." + os.path.basename(configPath) + "." + uuid.uuid4().hex + ".tmp")
+            fd = os.open(newFilePath, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+            tempFilePath = newFilePath
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(finalOutput)
+                f.flush()
+                os.fsync(f.fileno())
+            if configStat is not None:
+                os.chmod(tempFilePath, stat.S_IMODE(configStat.st_mode))
+                # The installer runs as root, so keep the service user as the owner. Only root can change the owner.
+                if hasattr(os, "geteuid") and hasattr(os, "chown") and os.geteuid() == 0:
+                    os.chown(tempFilePath, configStat.st_uid, configStat.st_gid)
+            os.replace(tempFilePath, configPath)
+            tempFilePath = None
+        finally:
+            if tempFilePath is not None:
+                try:
+                    os.remove(tempFilePath)
+                except OSError as e:
+                    if self.Logger is not None:
+                        self.Logger.warning("Failed to clean up temporary config file: %s", e)

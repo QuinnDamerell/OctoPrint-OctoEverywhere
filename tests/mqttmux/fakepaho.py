@@ -52,6 +52,8 @@ class FakePahoClient:
         self.connect_called = False
         self.loop_started = False
         self.loop_stopped = False
+        self._loop_exit = threading.Event()
+        self._thread: Optional[threading.Thread] = None
         self.disconnect_called = False
         self.tls_args: Optional[Tuple] = None
         self.tls_insecure = False
@@ -93,17 +95,24 @@ class FakePahoClient:
         self.password = password
 
     def connect(self, host: str, port: int, keepalive: int = 60) -> None:
+        self._loop_exit.clear()
         self.connect_called = True
         self.connect_args = (host, port, keepalive)
 
     def loop_start(self) -> None:
+        self._thread = threading.Thread(target=self._loop_exit.wait, daemon=True)
         self.loop_started = True
+        self._thread.start()
 
     def loop_stop(self) -> None:
+        self._loop_exit.set()
+        if self._thread is not None and self._thread.ident is not None:
+            self._thread.join(2)
         self.loop_stopped = True
 
     def disconnect(self) -> None:
         self.disconnect_called = True
+        self._loop_exit.set()
 
     def _NextMid(self) -> int:
         with self._mid_lock:
@@ -145,6 +154,7 @@ class FakePahoClient:
         if self.on_disconnect is None:
             return
         self.on_disconnect(self, None, {}, FakeReasonCode(reason_value), None)
+        self._loop_exit.set()
 
     def FireMessage(self, topic: str, payload: bytes, qos: int = 0, retain: bool = False, mid: int = 0) -> None:
         if self.on_message is None:

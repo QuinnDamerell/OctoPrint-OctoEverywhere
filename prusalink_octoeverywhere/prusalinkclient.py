@@ -9,6 +9,7 @@ from linux_host.config import Config
 from linux_host.localwebapi import LocalWebApi
 
 from octoeverywhere.httpsessions import HttpSessions
+from octoeverywhere.exceptions import NoSentryReportException
 from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.octohttprequest import OctoHttpRequest
 from octoeverywhere.sentry import Sentry
@@ -182,7 +183,7 @@ class PrusaLinkClient:
                 if isinstance(e, PrusaLinkAuthException):
                     self.LastConnectionFailedDueToAuth = True
                     self.Logger.error("Prusa Link authentication failed. Check the Prusa Link username/password or API key in the config.")
-                elif Sentry.IsCommonConnectionException(e):
+                elif isinstance(e, NoSentryReportException) or Sentry.IsCommonConnectionException(e):
                     self.LastConnectionFailedDueToAuth = False
                     self.Logger.warning("Prusa Link printer connection error: %s", str(e))
                 else:
@@ -234,6 +235,9 @@ class PrusaLinkClient:
             return None
         if response.status_code == 401 or response.status_code == 403:
             raise PrusaLinkAuthException()
+        if response.status_code == 502:
+            # Local gateways can return 502 while the printer is offline. Keep the response in the local retry log.
+            raise NoSentryReportException(f"Prusa Link gateway is unavailable. Path: {path} Status: 502 Body: {response.text[:300]}")
         if response.status_code < 200 or response.status_code >= 300:
             raise Exception(f"Prusa Link request failed. Path: {path} Status: {response.status_code} Body: {response.text[:300]}")
         if response.text is None or len(response.text) == 0:

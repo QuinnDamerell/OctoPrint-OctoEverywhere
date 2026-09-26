@@ -229,6 +229,7 @@ class MqttUpstreamMux:
             if self._is_shutdown:
                 return
             self._is_shutdown = True
+            self._is_connected = False
         self._wake_event.set()
         self._disconnect_event.set()
         client = None
@@ -521,12 +522,11 @@ class MqttUpstreamMux:
                     return
             try:
                 self._ConnectOnce()
-                # Connect succeeded - reset backoff and wait for disconnect.
+                # The connection closed normally.
                 backoff = self._backoff_min_sec
-                self._disconnect_event.wait()
-                self._disconnect_event.clear()
             except Exception as e:
                 self._logger.warning("MqttMux connect attempt failed: %s", e)
+            self._disconnect_event.clear()
             # If we were shut down, exit.
             with self._state_lock:
                 if self._is_shutdown:
@@ -591,22 +591,38 @@ class MqttUpstreamMux:
         if ctx.username is not None or ctx.password is not None:
             client.username_pw_set(ctx.username, ctx.password)
         self._logger.info("MqttMux connecting to %s:%s (transport=%s)", ctx.host, ctx.port, transport)
-        # connect() blocks for the TCP handshake but not for CONNACK; loop_start
-        # spins up paho's network thread which then processes CONNACK and fires
-        # on_connect.
+        # Keep paho in threaded mode so publishes from other threads only queue packets.
+        # Calling loop_forever ourselves would let those callers also write to the socket,
+        # which can interleave partial MQTT packets with the network loop's writes.
         try:
             client.connect(ctx.host, int(ctx.port), keepalive=ctx.keep_alive_sec)
+            # Install before processing CONNACK so the first callback sees the active client.
+            with self._state_lock:
+                if self._is_shutdown:
+                    return
+                self._client = client
             client.loop_start()
-        except Exception:
+            while not self._disconnect_event.wait(1.0):
+                # A malformed packet can terminate paho's thread without on_disconnect. Paho has
+                # no public loop-liveness API; only inspect its thread here, never replace it.
+                networkThread = getattr(client, "_thread", None)
+                if networkThread is None or not networkThread.is_alive():
+                    raise RuntimeError("MqttMux network loop stopped without disconnecting.")
+        finally:
+            # Parser failures don't necessarily deliver on_disconnect. Wake pending requests and
+            # clear connected state before replacing this client, even on that path.
+            self._OnPahoDisconnect(client, None, None, "network loop stopped", None)
+            try:
+                client.disconnect()
+            except Exception as e:
+                self._logger.debug("MqttMux disconnect after network loop: %s", e)
             try:
                 client.loop_stop()
-            except Exception:
-                pass
-            raise
-        # Install only after connect + loop_start succeed so a failed attempt
-        # doesn't leave a half-initialized client visible to other threads.
-        with self._state_lock:
-            self._client = client
+            except Exception as e:
+                self._logger.debug("MqttMux loop_stop after network loop: %s", e)
+            with self._state_lock:
+                if self._client is client:
+                    self._client = None
 
 
     def _IsActivePahoClient(self, client: Any) -> bool:

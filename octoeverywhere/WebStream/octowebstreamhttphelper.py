@@ -116,7 +116,8 @@ class OctoWebStreamHttpHelper:
             self.HttpStreamAccumulationReader.CloseAsync()
 
         # Ensure the upload body is cleaned up.
-        self.UploadBody.Cleanup()
+        # If the message thread is still appending, finalizing, or using the upload, the body will clean up once it's done.
+        self.UploadBody.Close()
 
 
     # Called when a new message has arrived for this stream from the server.
@@ -136,13 +137,17 @@ class OctoWebStreamHttpHelper:
         # If the data is done flag is set, that indicates that
         # the full upload buffer has been transmitted.
         if webStreamMsg.IsDataTransmissionDone():
-            # If we didn't know the upload size, we need to finalize it now
-            self.UploadBody.Finalize()
-
             # Do the request. This will block this thread until it's done and the entire response is sent.
-            # We want to make sure we destroy the compression context after this returns, no matter what.
+            # Finalizing compressed uploads also uses this context, so clean it up even if we close during finalize.
             with self.CompressionContext:
-                self.executeHttpRequest()
+                try:
+                    # Finalize returns False if the stream closed while the upload was being received or finalized.
+                    if self.UploadBody.Finalize() is False or self.IsClosed:
+                        return True
+                    self.executeHttpRequest()
+                finally:
+                    # Once finalized, this thread owns the upload body, so it must always release it.
+                    self.UploadBody.Cleanup()
 
             # Return true since this stream is now done
             return True

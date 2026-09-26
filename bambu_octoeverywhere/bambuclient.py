@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import threading
+import time
 from typing import Any, Callable, Dict, Optional, cast
 
 from octoeverywhere.localip import LocalIpHelper
@@ -72,6 +73,7 @@ class BambuClient:
         self.Version:Optional[BambuVersion] = None
         self.HasDoneFirstFullStateSync = False
         self.LastConnectionFailedDueToAuth = False
+        self.LastMalformedMessageReconnectSec = 0.0
 
         # Pull required configs.
         self.Config = config
@@ -419,9 +421,13 @@ class BambuClient:
             # Get version first so the version object is populated before the
             # first big pushall arrives.
             if not self._Publish({"info": {"sequence_id": "0", "command": "get_version"}}):
-                raise Exception("Failed to publish get_version")
+                self.Logger.warning("Bambu full state sync failed to send get_version. Reconnecting.")
+                self._mux.ForceReconnect()
+                return
             if not self._Publish({"pushing": {"sequence_id": "0", "command": "pushall"}}):
-                raise Exception("Failed to publish full sync")
+                self.Logger.warning("Bambu full state sync failed to send pushall. Reconnecting.")
+                self._mux.ForceReconnect()
+                return
         except Exception as e:
             Sentry.OnException("BambuClient _DoFullStateSync exception.", e)
             # Drop the connection so the supervisor reconnects fresh. Do NOT
@@ -433,8 +439,19 @@ class BambuClient:
     def _OnReportMessage(self, mqtt_msg: MqttMessage) -> None:
         try:
             msg = json.loads(mqtt_msg.payload)
-            if msg is None:
-                raise Exception("Parsed json MQTT message returned None")
+        except (json.JSONDecodeError, UnicodeDecodeError) as e:
+            # We lost a state update. Reconnect to get a full sync, but don't reconnect in a tight loop if
+            # the printer keeps sending bad data. Don't put the raw payload in the error log.
+            Sentry.OnException(f"Bambu received an invalid MQTT message ({len(mqtt_msg.payload)} bytes).", e)
+            now = time.monotonic()
+            if self.LastMalformedMessageReconnectSec == 0.0 or now - self.LastMalformedMessageReconnectSec >= 60.0:
+                self.LastMalformedMessageReconnectSec = now
+                self._mux.ForceReconnect()
+            return
+        try:
+            if not isinstance(msg, dict):
+                raise Exception("Parsed json MQTT message was not an object")
+            msg = cast(Dict[str, Any], msg)
             if BambuClient._PrintMQTTMessages and self.Logger.isEnabledFor(logging.DEBUG):
                 self.Logger.debug("Incoming Bambu Message:\r\n%s", json.dumps(msg, indent=3))
 
@@ -482,7 +499,7 @@ class BambuClient:
                 Sentry.OnException("Exception calling StateTranslator.OnMqttMessage", e)
 
         except Exception as e:
-            Sentry.OnException(f"Failed to handle incoming mqtt message. `{mqtt_msg.payload!r}`", e)
+            Sentry.OnException("Failed to handle incoming mqtt message.", e)
 
 
     def _HandlePendingCommandResponse(self, topic:str, msg:Dict[str, Any]) -> None:

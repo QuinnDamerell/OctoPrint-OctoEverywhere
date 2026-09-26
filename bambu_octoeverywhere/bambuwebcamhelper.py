@@ -1,10 +1,10 @@
 import logging
 import time
 from typing import List, Optional
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from linux_host.config import Config
 
-from octoeverywhere.sentry import Sentry
 from octoeverywhere.Webcam.webcamsettingitem import WebcamSettingItem
 from octoeverywhere.interfaces import IWebcamPlatformHelper
 
@@ -114,22 +114,27 @@ class BambuWebcamHelper(IWebcamPlatformHelper):
             self.Logger.error("BambuWebcamHelper failed to get a ip or access code from the config, thus we can't stream.")
             return
 
+        # The configured host is kept up to date by the printer connection. Bracket IPv6 addresses for the URL.
+        host = ipOrHostname.strip()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        auth = f"bblp:{quote(accessCode, safe='')}@{host}"
+
         # If there is a RTSP URL, we know this printer uses the RTSP protocol to stream the webcam.
         if rtspUrl is not None and len(rtspUrl) > 0:
-            # Use the URL the X1 sent us, but inject the auth into it.
-            protocolEnd = rtspUrl.find("://")
-            if protocolEnd != -1:
-                protocolEnd += 3
-                self.CachedStreamingUrl = rtspUrl[:protocolEnd] + f"bblp:{accessCode}@" + rtspUrl[protocolEnd:]
-                # We should be able to find the IP in the URL, warn if not.
-                if self.CachedStreamingUrl.find(ipOrHostname) == -1:
-                    Sentry.LogError(f"BambuWebcamHelper didn't find the currently known IP of the printer in the RTSP URL returned from the printer. Printer URL:{rtspUrl} Known IP:{ipOrHostname}")
-            else:
-                self.Logger.error(f"BambuWebcamHelper failed to parse the return rtsp URL from the printer, using our own. {rtspUrl}")
-                self.CachedStreamingUrl = f"rtsps://bblp:{accessCode}@{ipOrHostname}:322/streaming/live/1"
+            try:
+                # Some printers return an old IP or 0.0.0.0. Use the host we connect to, but keep the stream path and port.
+                parsedUrl = urlsplit(rtspUrl)
+                if parsedUrl.scheme not in ("rtsp", "rtsps") or parsedUrl.hostname is None:
+                    raise ValueError("Invalid RTSP URL")
+                port = f":{parsedUrl.port}" if parsedUrl.port is not None else ""
+                self.CachedStreamingUrl = urlunsplit((parsedUrl.scheme, auth + port, parsedUrl.path, parsedUrl.query, parsedUrl.fragment))
+            except ValueError:
+                self.Logger.warning("BambuWebcamHelper failed to parse the RTSP URL from the printer, using the default stream path.")
+                self.CachedStreamingUrl = f"rtsps://{auth}:322/streaming/live/1"
         else:
             # If there is no RTSP URL, we assume the printer uses the websocket based cam streaming.
-            self.CachedStreamingUrl = f"ws://bblp:{accessCode}@{ipOrHostname}:6000"
+            self.CachedStreamingUrl = f"ws://bblp:{accessCode}@{host}:6000"
 
         # Set the time we updated the cached values.
         self.LastUrlUpdateTimeSec = time.time()

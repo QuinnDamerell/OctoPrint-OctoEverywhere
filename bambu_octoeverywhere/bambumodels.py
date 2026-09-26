@@ -63,6 +63,9 @@ class BambuState:
         self.chamber_light:Optional[bool] = None
         # Custom fields
         self.LastTimeRemainingWallClock:Optional[float] = None
+        # Set by the state translator if the printer doesn't send the print ids or file name for the current print.
+        # See StartUsingIncompletePrintCookie.
+        self.IncompletePrintCookie:Optional[str] = None
 
 
     # Called when there's a new print message from the printer.
@@ -74,8 +77,8 @@ class BambuState:
         self.layer_num = msg.get("layer_num", self.layer_num)
         self.total_layer_num = msg.get("total_layer_num", self.total_layer_num)
         self.subtask_name = msg.get("subtask_name", self.subtask_name)
-        self.project_id = msg.get("project_id", self.project_id)
-        self.task_id = msg.get("task_id", self.task_id)
+        self.project_id = self._NormalizePrintId(msg.get("project_id", self.project_id))
+        self.task_id = self._NormalizePrintId(msg.get("task_id", self.task_id))
         self.mc_percent = msg.get("mc_percent", self.mc_percent)
         self.nozzle_temper = msg.get("nozzle_temper", self.nozzle_temper)
         self.nozzle_target_temper = msg.get("nozzle_target_temper", self.nozzle_target_temper)
@@ -119,6 +122,14 @@ class BambuState:
         self.mc_remaining_time = msg.get("mc_remaining_time", self.mc_remaining_time)
         if old_mc_remaining_time != self.mc_remaining_time:
             self.LastTimeRemainingWallClock = time.time()
+
+
+    @staticmethod
+    def _NormalizePrintId(value:Any) -> Optional[str]:
+        # Some firmware sends these as numbers, including 0 for local prints. Keep the cookie the same in either case.
+        if isinstance(value, (str, int)) and not isinstance(value, bool):
+            return str(value)
+        return None
 
 
     @staticmethod
@@ -200,6 +211,10 @@ class BambuState:
     # If there is no active print, this should return None!
     # See details in NotificationHandler._RecoverOrRestForNewPrint
     def GetPrintCookie(self) -> Optional[str]:
+        # If the printer didn't send the full print info for this print, use the cookie made from what it did send.
+        if self.IncompletePrintCookie is not None:
+            return self.IncompletePrintCookie
+
         # If there's no project id or subtask name, we shouldn't make a cookie..
         if (self.project_id is None or len(self.project_id) == 0
             or self.task_id is None or len(self.task_id) == 0
@@ -210,6 +225,17 @@ class BambuState:
         # For local prints, the task id seems to be unique per print.
         # The file name changes most of the time, so the combination of both makes a good pair.
         return f"{self.project_id}-{self.task_id}-{self.GetFileNameWithNoExtension()}"
+
+
+    # Called by the state translator if the printer doesn't send all of the print ids and file name for the current print.
+    # This builds a less unique cookie from whatever print info there is, so the print can still be tracked.
+    # The cookie is kept until the print ends, so it doesn't change if the rest of the print info arrives later.
+    def StartUsingIncompletePrintCookie(self) -> None:
+        self.IncompletePrintCookie = f"{self.project_id or 'none'}-{self.task_id or 'none'}-{self.GetFileNameWithNoExtension() or 'none'}"
+
+
+    def StopUsingIncompletePrintCookie(self) -> None:
+        self.IncompletePrintCookie = None
 
 
     # If the printer is in an error state, this tries to return the type, if known.
@@ -300,6 +326,7 @@ class BambuVersion:
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
         self.HasLoggedPrinterVersion = False
+        self.HasLoggedUnknownPrinterVersion = False
         # We only parse out what we currently use.
         # Note that not all of these values will be set on some printers.
         self.SoftwareVersion:Optional[str] = None
@@ -343,6 +370,10 @@ class BambuVersion:
             self.PrinterName = modelFromProductName
             return
 
+        # Version messages can be partial too. Once we know the model, a later partial update shouldn't clear it.
+        if self.PrinterName is not None and self.PrinterName is not BambuPrinters.Unknown:
+            return
+
         # If we didn't find a hardware, it's unknown.
         if self.Cpu is None:
             self.Cpu = BambuCPUs.Unknown
@@ -371,7 +402,7 @@ class BambuVersion:
                 self.PrinterName = esp32_map.get((self.HardwareVersion, self.ProjectName), BambuPrinters.Unknown)
 
         # We use the info above to get the printer name, but as a fallback we do a string check of the product names.
-        if self.PrinterName is None:
+        if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
             for pNameLower in productNamesLower:
                 if pNameLower.find("x1 carbon") != -1:
                     self.PrinterName = BambuPrinters.X1C
@@ -390,13 +421,18 @@ class BambuVersion:
 
         # If we still don't have a printer name, we set it to unknown and report it.
         if self.PrinterName is None or self.PrinterName is BambuPrinters.Unknown:
-            Sentry.LogInfo(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
-                "CPU": str(self.Cpu),
-                "ProjectName": str(self.ProjectName),
-                "HardwareVersion": str(self.HardwareVersion),
-                "SoftwareVersion": str(self.SoftwareVersion),
-            })
             self.PrinterName = BambuPrinters.Unknown
+            # We can't identify the printer until these fields arrive. This is common during the initial sync.
+            if self.Cpu is BambuCPUs.Unknown or not self.HardwareVersion or (self.Cpu is BambuCPUs.ESP32 and not self.ProjectName):
+                return
+            if self.HasLoggedUnknownPrinterVersion is False:
+                self.HasLoggedUnknownPrinterVersion = True
+                Sentry.LogInfo(f"Unknown printer type. CPU:{self.Cpu}, Project Name: {self.ProjectName}, Hardware Version: {self.HardwareVersion}",{
+                    "CPU": str(self.Cpu),
+                    "ProjectName": str(self.ProjectName),
+                    "HardwareVersion": str(self.HardwareVersion),
+                    "SoftwareVersion": str(self.SoftwareVersion),
+                })
 
         if self.HasLoggedPrinterVersion is False:
             self.HasLoggedPrinterVersion = True

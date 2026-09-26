@@ -402,19 +402,20 @@ class UploadBody:
                 self._CleanupStorage()
 
 
-    def Finalize(self) -> None:
+    # Returns True if the body is ready to be used by the request, or False if the body was closed.
+    def Finalize(self) -> bool:
         needsCleanup = False
         try:
             with self._lock:
                 if self._state != UploadBodyState.Building:
-                    return
+                    return self._state == UploadBodyState.Finalized
 
                 if self.KnownFullUploadSizeBytes is not None and self.UploadBytesReceivedSoFar != self.KnownFullUploadSizeBytes:
                     raise Exception("Http request tried to execute, but we haven't gotten all of the upload payload. Total:"+str(self.KnownFullUploadSizeBytes)+"; rec so far:"+str(self.UploadBytesReceivedSoFar))
 
                 if self.UploadBytesReceivedSoFar == 0:
                     self._state = UploadBodyState.Finalized
-                    return
+                    return True
 
                 self._state = UploadBodyState.Finalizing
 
@@ -441,6 +442,8 @@ class UploadBody:
 
         if needsCleanup:
             self._CleanupStorage()
+            return False
+        return True
 
 
     def OpenForRequest(self) -> UploadBodyReadContext:
@@ -467,15 +470,29 @@ class UploadBody:
         return self._bodyBuffer
 
 
+    # Called by the request owner when it's done with the body, or won't use it.
     def Cleanup(self) -> None:
+        self._Cleanup(isRequestOwner=True)
+
+
+    # Called when the stream closes, which can happen on any thread at any time.
+    # This stops accepting upload data and frees the storage as soon as nothing is using it.
+    # Once the body is finalized, the request owner can open it at any time, so the owner's Cleanup() frees it instead.
+    def Close(self) -> None:
+        self._Cleanup(isRequestOwner=False)
+
+
+    def _Cleanup(self, isRequestOwner:bool) -> None:
         with self._lock:
+            if self._state == UploadBodyState.Finalized and isRequestOwner is False:
+                return
             if self._state == UploadBodyState.CleanedUp:
                 cleanupNow = self._activeReadContextCount == 0 and self._activeAppendCount == 0 and self._HasStorage()
                 if cleanupNow is False:
                     return
             else:
-                # Defer the storage cleanup if a request read or an append is in-flight; whoever finishes last will
-                # run it (see _OnReadContextClosed and the AppendMessage finally), so we never free storage out from
+                # Defer the storage cleanup if a request read, an append, or a finalize is in-flight; whoever finishes last will
+                # run it (see _OnReadContextClosed, the AppendMessage finally, and Finalize), so we never free storage out from
                 # under an active reader/writer or block this (possibly close-path) thread on disk IO.
                 cleanupNow = self._state != UploadBodyState.Finalizing and self._activeReadContextCount == 0 and self._activeAppendCount == 0
             self._state = UploadBodyState.CleanedUp

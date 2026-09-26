@@ -6,6 +6,8 @@ import logging
 import threading
 from typing import Any, Dict, List, Optional
 
+import octowebsocket
+
 from octoeverywhere.compat import Compat
 from octoeverywhere.localip import LocalIpHelper
 from octoeverywhere.repeattimer import RepeatTimer
@@ -327,28 +329,29 @@ class ElegooClient:
                 # Get the current IP we want to try to connect with.
                 self.WebSocketConnectionIp = self._GetIpForConnectionAttempt(isConnectAttemptFromEventBump)
                 if self.WebSocketConnectionIp is None:
-                    raise Exception("No Elegoo printer IP address is available for this connection attempt.")
+                    # The printer can be powered off during discovery. Use the normal retry delay below.
+                    self.Logger.info("No Elegoo printer IP address is available for this connection attempt.")
+                else:
+                    # We must update the local IP to what we are trying to connect to.
+                    # This var is system wides and helps other systems access the target client IP.
+                    LocalIpHelper.SetConnectionTargetIpOverride(self.WebSocketConnectionIp)
 
-                # We must update the local IP to what we are trying to connect to.
-                # This var is system wides and helps other systems access the target client IP.
-                LocalIpHelper.SetConnectionTargetIpOverride(self.WebSocketConnectionIp)
+                    # Build the connection URL
+                    url = f"ws://{self.WebSocketConnectionIp}:{self.PortStr}/websocket"
 
-                # Build the connection URL
-                url = f"ws://{self.WebSocketConnectionIp}:{self.PortStr}/websocket"
+                    # Setup the websocket client for this connection.
+                    self.WebSocket = Client(url, onWsOpen=self._OnWsConnect, onWsClose=self._OnWsClose, onWsError=self._OnWsError, onWsData=self._OnWsData)
+                    self.WebSocket.SetDisableCertCheck(True)
 
-                # Setup the websocket client for this connection.
-                self.WebSocket = Client(url, onWsOpen=self._OnWsConnect, onWsClose=self._OnWsClose, onWsError=self._OnWsError, onWsData=self._OnWsData)
-                self.WebSocket.SetDisableCertCheck(True)
-
-                # Important! The connection to the print will close after 1 minute if we don't send any messages.
-                # Even if the websocket sends the ws ping message, it doesn't seem to reset the idle timer.
-                # So, we will use a repeat timer to send the SDCP protocol ping message every 50 seconds.
-                with RepeatTimer(self.Logger, "ElegooClientWsMsgKeepalive", 50.0, self._RepeatTimerKeepaliveTick) as t:
-                    t.start()
-                    # Connect to the server
-                    with self.WebSocket:
-                        # We use a ping payload of "ping" because it's what the web portal uses.
-                        self.WebSocket.RunUntilClosed(pingPayload="ping")
+                    # Important! The connection to the print will close after 1 minute if we don't send any messages.
+                    # Even if the websocket sends the ws ping message, it doesn't seem to reset the idle timer.
+                    # So, we will use a repeat timer to send the SDCP protocol ping message every 50 seconds.
+                    with RepeatTimer(self.Logger, "ElegooClientWsMsgKeepalive", 50.0, self._RepeatTimerKeepaliveTick) as t:
+                        t.start()
+                        # Connect to the server
+                        with self.WebSocket:
+                            # We use a ping payload of "ping" because it's what the web portal uses.
+                            self.WebSocket.RunUntilClosed(pingPayload="ping")
             except Exception as e:
                 Sentry.OnException("Elegoo client exception in main WS loop.", e)
 
@@ -363,7 +366,9 @@ class ElegooClient:
             #
             # So right now, the max sleep time is 30 seconds.
             sleepDelay = self.ConsecutivelyFailedConnectionAttempts
-            sleepDelay = min(sleepDelay, 6)
+            # Opening a socket resets the counter, but malformed first messages can close it immediately.
+            # Keep a minimum delay so a printer sending bad data can't create a tight reconnect loop.
+            sleepDelay = max(1, min(sleepDelay, 6))
             sleepDelaySec = 5.0 * sleepDelay
             self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Elegoo printer.")
             # Sleep for the time or until the event is set.
@@ -445,6 +450,8 @@ class ElegooClient:
             self.LastConnectionFailedDueToTooManyClients = False
             if Sentry.IsCommonConnectionException(e):
                 self.Logger.warning("Elegoo printer websocket connection error: %s", str(e))
+            elif isinstance(e, octowebsocket.WebSocketBadStatusException) and (getattr(e, "status_code", None) == 502 or msg.startswith("Handshake status 502 ")):
+                self.Logger.warning("Elegoo printer websocket gateway is unavailable, reconnecting: %s", e)
             else:
                 Sentry.OnException("Elegoo printer websocket error.", e)
 
@@ -453,7 +460,14 @@ class ElegooClient:
     def _OnWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode):
         try:
             # Try to deserialize the message.
-            msg = json.loads(buffer.GetBytesLike().decode("utf-8"))
+            try:
+                msgStr = buffer.GetBytesLike().decode("utf-8")
+            except UnicodeDecodeError as e:
+                # Don't pass a corrupt message to the parser or frontend. Reconnect to get a fresh printer state.
+                self.Logger.warning("Elegoo printer sent invalid UTF-8, reconnecting: %s", e)
+                ws.Close()
+                return
+            msg = json.loads(msgStr)
             if msg is None:
                 raise Exception("Parsed json message returned None")
 
@@ -681,7 +695,7 @@ class ElegooClient:
             if hasConfigIp:
                 self.Logger.info("Failed to find the Elegoo printer on the local network, using the existing IP.")
                 return configIpOrHostname
-            self.Logger.error("Failed to find the Elegoo printer on the local network and we have no known IP.")
+            self.Logger.info("Failed to find the Elegoo printer on the local network and we have no known IP.")
             return None
 
         # If we get an IP back, it is the printer.

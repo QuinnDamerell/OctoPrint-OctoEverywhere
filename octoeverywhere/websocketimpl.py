@@ -318,7 +318,17 @@ class Client(IWebSocketClient):
         # This prevents the case where send() fires the callback, we don't want to overlap the
         # send path callback.
         callbackThread = threading.Thread(target=self.fireWsErrorCallbackThread, args=(exception, ))
-        callbackThread.start()
+        try:
+            callbackThread.start()
+        except RuntimeError as e:
+            # If the device has run out of threads, we still have to fire the callbacks and close the socket.
+            # Otherwise the pending error flag prevents the close callback from ever being delivered.
+            try:
+                self.fireWsErrorCallbackThread(exception)
+            finally:
+                # Report the thread failure itself, even if the original error was an expected disconnect.
+                # This also preserves Sentry's existing restart policy for devices that support it.
+                Sentry.OnException("Websocket failed to start the error callback thread.", e)
 
 
     def fireWsErrorCallbackThread(self, exception:Exception):

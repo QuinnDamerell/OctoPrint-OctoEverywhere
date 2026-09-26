@@ -50,6 +50,10 @@ class HttpResult():
         self._customBodyStreamClosedCallback = customBodyStreamClosedCallback
         self._allowRedirectCorrection:bool = allowRedirectCorrection
 
+        # Used when reading frames from a multipart stream (like mjpeg) of ResponseForBodyRead.
+        # If a frame read goes past the end of the frame, the extra bytes are held here so the next frame read uses them first.
+        self.MultipartStreamCarryOver:Optional[bytearray] = None
+
         # Validate.
         if (self._customBodyStreamCallback is not None and self._customBodyStreamClosedCallback is None) or (self._customBodyStreamCallback is None and self._customBodyStreamClosedCallback is not None):
             raise Exception("Both the customBodyStreamCallback and customBodyStreamClosedCallback must be set!")

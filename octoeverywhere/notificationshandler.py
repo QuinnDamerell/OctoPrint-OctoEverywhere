@@ -88,6 +88,7 @@ class NotificationsHandler(INotificationHandler):
         self.ThirdLayerDoneSince = 0.0
         self.ProgressCompletionReported = []
         self.RestorePrintProgressPercentage = False
+        self.HasLoggedImageCapabilityWarning = False
 
         self.SpammyEventTimeDict:Dict[str, SpammyEventContext] = {}
         self.SpammyEventLock = threading.Lock()
@@ -236,7 +237,7 @@ class NotificationsHandler(INotificationHandler):
     def OnRestorePrintIfNeeded(self, isPrinting:bool, isPaused:bool, printCookie_CanBeNoneIfNoPrintIsActive:Optional[str]=None):
 
         # First, check if there's no active print currently.
-        if (isPrinting is False and isPaused is False) or printCookie_CanBeNoneIfNoPrintIsActive is None:
+        if (isPrinting is False and isPaused is False) or not printCookie_CanBeNoneIfNoPrintIsActive:
             # There's no print running.
             if self._IsPingTimerRunning():
                 self.Logger.info("Restore client sync state: There's no print running but the ping timers are running. Stopping them now.")
@@ -250,7 +251,7 @@ class NotificationsHandler(INotificationHandler):
         # Next, we know there's an active print, so check if we already are tracking it's print cookie.
         # This is a scenario like the plugin didn't crash, but it lost the connection to the server, but it's back now.
         printCookie = printCookie_CanBeNoneIfNoPrintIsActive
-        if self.PrintCookie is not None and self.PrintCookie == printCookie:
+        if self.PrintCookie is not None and self.PrintCookie == printCookie and self.GetPrintInfo() is not None:
             # We have a print cookie and the cookie matches.
             # This means we just need to make sure the timer states are correct.
             if isPrinting:
@@ -423,14 +424,21 @@ class NotificationsHandler(INotificationHandler):
         Sentry.Breadcrumb("OnResume called.", {"filename":fileName})
         if self._shouldIgnoreEvent(fileName):
             return
+        # A resumed print can outlive its cached context. If we know the print, recover it before restarting notifications and Gadget.
+        # If we don't know the print, like when OctoPrint connects to a printer that's already printing, still handle the resume.
+        restoredPrint = False
+        if self.GetPrintInfo() is None and self.PrintCookie:
+            self.OnRestorePrintIfNeeded(True, False, self.PrintCookie)
+            restoredPrint = True
         self._updateCurrentFileName(fileName)
         self._sendEvent("resume")
 
         # Clear any spammy event contexts we have, assuming the user cleared any issues before resume.
         self._clearSpammyEventContexts()
 
-        # Start the ping timer, to ensure it's running now.
-        self.StartPrintTimers(False, None)
+        # Start the ping timer, to ensure it's running now. The restore already started it with the restored print time.
+        if restoredPrint is False:
+            self.StartPrintTimers(False, None)
 
 
     # Fired when OctoPrint or the printer hits an error.
@@ -892,28 +900,28 @@ class NotificationsHandler(INotificationHandler):
                             except Exception as _:
                                 pass
 
-                        # In pillow ~9.1.0 these constants moved.
-                        # pylint: disable=no-member
-                        OE_FLIP_LEFT_RIGHT = 0
-                        OE_FLIP_TOP_BOTTOM = 0
-                        try:
-                            OE_FLIP_LEFT_RIGHT = Image.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue, reportUnknownMemberType] this is imported in the try catch at the top of the file.
-                            OE_FLIP_TOP_BOTTOM = Image.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable, reportAttributeAccessIssue, reportUnknownMemberType] this is imported in the try catch at the top of the file.
-                        except Exception:
-                            OE_FLIP_LEFT_RIGHT = Image.Transpose.FLIP_LEFT_RIGHT #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
-                            OE_FLIP_TOP_BOTTOM = Image.Transpose.FLIP_TOP_BOTTOM #pyright: ignore[reportPossiblyUnboundVariable] this is imported in the try catch at the top of the file.
-                        # pylint: enable=no-member
+                        # Pillow moved the flip constants. Only require them when the webcam actually needs a flip.
+                        imageTranspose = getattr(Image, "Transpose", Image)
+                        flipLeftRight = getattr(imageTranspose, "FLIP_LEFT_RIGHT", None)
+                        flipTopBottom = getattr(imageTranspose, "FLIP_TOP_BOTTOM", None)
+                        if (not callable(getattr(Image, "open", None))
+                            or (flipH and flipLeftRight is None) or (flipV and flipTopBottom is None)):
+                            if not self.HasLoggedImageCapabilityWarning:
+                                self.HasLoggedImageCapabilityWarning = True
+                                self.Logger.warning("Can't manipulate webcam images because the installed Pillow image APIs are incomplete.")
+                            # Image manipulation is optional, but the original snapshot must still respect the size limit.
+                            return snapshot if len(snapshot) <= NotificationsHandler.MaxSnapshotFileSizeBytes else None
 
                         # Update the image
                         # Note the order of the flips and the rotates are important!
                         # If they are reordered, when multiple are applied the result will not be correct.
                         didWork = False
                         pilImage = Image.open(io.BytesIO(snapshot.Get())) #pyright: ignore[reportPossiblyUnboundVariable, reportArgumentType, reportUnknownMemberType] this is imported in the try catch at the top of the file.
-                        if flipH:
-                            pilImage = pilImage.transpose(OE_FLIP_LEFT_RIGHT) #pyright: ignore[reportUnknownMemberType]
+                        if flipH and flipLeftRight is not None:
+                            pilImage = pilImage.transpose(flipLeftRight) #pyright: ignore[reportUnknownMemberType]
                             didWork = True
-                        if flipV:
-                            pilImage = pilImage.transpose(OE_FLIP_TOP_BOTTOM) #pyright: ignore[reportUnknownMemberType]
+                        if flipV and flipTopBottom is not None:
+                            pilImage = pilImage.transpose(flipTopBottom) #pyright: ignore[reportUnknownMemberType]
                             didWork = True
                         if rotation is not None and rotation != 0:
                             # Our rotation is clockwise while PIL is counter clockwise.
@@ -1057,7 +1065,7 @@ class NotificationsHandler(INotificationHandler):
         # The None check is important for Moonraker
         if fileName is None or len(fileName) == 0:
             return
-        pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
+        pi = self.GetPrintInfo()
         if pi is None:
             return
         pi.SetFileName(fileName)
@@ -1222,7 +1230,7 @@ class NotificationsHandler(INotificationHandler):
 
         # Get the print info if there is a current print.
         # Remember that some notifications will fire when there's no print running, like if OctoPrint loses it's connection to the printer while idle.
-        pi = PrintInfoManager.Get().GetPrintInfo(self.PrintCookie)
+        pi = self.GetPrintInfo()
         if pi is not None:
             args["PrintId"] = pi.GetPrintId()
             args["FileName"] = str(pi.GetFileName())

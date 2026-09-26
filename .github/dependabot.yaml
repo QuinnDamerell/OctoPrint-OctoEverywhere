@@ -11,3 +11,9 @@ updates:
     schedule:
       interval: weekly
       time: "06:00"
+  # Keeps the Dockerfile base image current. See the Dockerfile for what to check before merging these.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: weekly
+      time: "06:00"

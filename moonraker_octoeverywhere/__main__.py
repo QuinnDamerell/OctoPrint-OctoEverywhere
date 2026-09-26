@@ -35,6 +35,14 @@ if __name__ == '__main__':
         isCompanion = s.GetConfigVarAndValidate(jsonConfig, "IsCompanion", ConfigDataTypes.Bool, defaultValue=False)
         isDockerContainer = s.GetConfigVarAndValidate(jsonConfig, "IsDockerContainer", ConfigDataTypes.Bool, defaultValue=False)
 
+        # Optional - Allows the host to explicitly pass the Moonraker API key to use, for systems that require auth.
+        # If set, this is used over the config value and we won't try to find the key ourselves via the unix socket.
+        # An empty string is treated as not set, so hosts can always pass the var even if they don't have a key.
+        MoonrakerApiKey:Optional[str] = None
+        moonrakerApiKeyValue = jsonConfig.get("MoonrakerApiKey", None)
+        if moonrakerApiKeyValue is not None and len(str(moonrakerApiKeyValue).strip()) > 0:
+            MoonrakerApiKey = str(moonrakerApiKeyValue).strip()
+
         #
         # 3) Now parse the required vars based on the IsCompanion flag state.
         #
@@ -61,7 +69,7 @@ if __name__ == '__main__':
         # Create and run the main host!
         host = MoonrakerHost(KlipperConfigFolder, KlipperLogFolder, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
         host.RunBlocking(KlipperConfigFolder, LocalFileStoragePath, ServiceName, VirtualEnvPath, RepoRootFolder, #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
-                        MoonrakerConfigFile, DisableMoonrakerConfigFileWrites, isCompanion, isDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
+                        MoonrakerConfigFile, DisableMoonrakerConfigFileWrites, MoonrakerApiKey, isCompanion, isDockerContainer, devConfig_CanBeNone) #pyright: ignore[reportArgumentType,reportPossiblyUnboundVariable]
     except Exception as e:
         s.PrintErrorAndExit(f"Exception leaked from main moonraker host class. Error:{str(e)}")
 

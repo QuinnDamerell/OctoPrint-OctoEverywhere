@@ -41,6 +41,10 @@ class CompressionContext:
     def __init__(self, logger:logging.Logger) -> None:
         self.Logger = logger
         self.ResourceLock = threading.Lock()
+        # Close can run on another thread. Keep each rented context alive until its operation finishes,
+        # while still allowing compression and decompression to run at the same time.
+        self.CompressionLock = threading.Lock()
+        self.DecompressionLock = threading.Lock()
         self.IsClosed = False
 
         # Compression - can't be shared to be thread safe
@@ -72,6 +76,11 @@ class CompressionContext:
 
 
     def __exit__(self, exc_type:Any, exc_value:Any, traceback:Any):
+        with self.CompressionLock, self.DecompressionLock:
+            self._Close(exc_type, exc_value, traceback)
+
+
+    def _Close(self, exc_type:Any, exc_value:Any, traceback:Any):
         # Free anything that has been allocated in reverse order.
         # We use a lock to ensure we don't leak any of the resources, especially the rented ones.
         streamWriter = None
@@ -127,6 +136,11 @@ class CompressionContext:
     # Compresses the data.
     # Returns a successful CompressionResult or throws
     def Compress(self, data:Buffer) -> CompressionResult:
+        with self.CompressionLock:
+            return self._Compress(data)
+
+
+    def _Compress(self, data:Buffer) -> CompressionResult:
         # Ensure we are setup.
         startSec = time.time()
         with self.ResourceLock:
@@ -210,6 +224,11 @@ class CompressionContext:
 
     # Given a byte buffer, decompresses the stream and returns the bytes.
     def Decompress(self, data:Buffer, thisMsgUncompressedDataSize:int, isLastMessage:bool) -> Buffer:
+        with self.DecompressionLock:
+            return self._Decompress(data, thisMsgUncompressedDataSize, isLastMessage)
+
+
+    def _Decompress(self, data:Buffer, thisMsgUncompressedDataSize:int, isLastMessage:bool) -> Buffer:
         # Ensure we are setup.
         isFirstMessage = False
         with self.ResourceLock:

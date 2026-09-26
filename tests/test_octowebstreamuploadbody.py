@@ -562,23 +562,23 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertFalse(os.path.exists(filePath))
 
 
-    def test_append_after_cleanup_is_ignored(self) -> None:
-        # If the stream is torn down (Cleanup) while more upload data is still arriving, the late append should
+    def test_append_after_close_is_ignored(self) -> None:
+        # If the stream is torn down (Close) while more upload data is still arriving, the late append should
         # be dropped quietly rather than raising and resetting the whole connection.
         body = UploadBody(self.logger, 1, None, self.compressionContext, maxInMemoryBodyBytes=1024)
         self.addCleanup(body.Cleanup)
 
         body.AppendMessage(FakeWebStreamMsg(b"hello"))
-        body.Cleanup()
+        body.Close()
 
         # This must not raise.
         body.AppendMessage(FakeWebStreamMsg(b"world", isDone=True))
         self.assertEqual(body.UploadBytesReceivedSoFar, len(b"hello"))
 
 
-    def test_cleanup_during_append_defers_then_cleans_up(self) -> None:
-        # Simulates the socket close path calling Cleanup() while an append is actively writing to the spill file
-        # (these run on different threads in production). Cleanup() must not delete the file out from under the
+    def test_close_during_append_defers_then_cleans_up(self) -> None:
+        # Simulates the socket close path calling Close() while an append is actively writing to the spill file
+        # (these run on different threads in production). Close() must not delete the file out from under the
         # in-flight write; it defers, and the append finishes the cleanup once the write completes.
         payload = b"x" * 64
         body = UploadBody(self.logger, 1, len(payload), self.compressionContext, maxInMemoryBodyBytes=8)
@@ -591,15 +591,58 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
 
         class ReentrantCleanupMsg(FakeWebStreamMsg):
             def IsDataTransmissionDone(self) -> bool:
-                # Fire a concurrent-style Cleanup() exactly while this append is in-flight.
-                body.Cleanup()
+                # Fire a concurrent-style Close() exactly while this append is in-flight.
+                body.Close()
                 return True
 
-        # The append must not raise even though Cleanup() ran mid-write...
+        # The append must not raise even though Close() ran mid-write...
         body.AppendMessage(ReentrantCleanupMsg(payload, isDone=True))
 
-        # ...and the storage that Cleanup() deferred must be removed once the append finished.
+        # ...and the storage that Close() deferred must be removed once the append finished.
         self.assertFalse(os.path.exists(rawPath))
+
+
+    def test_close_during_finalize_cleans_up_and_fails_finalize(self) -> None:
+        payload = b"x" * 64
+        body = UploadBody(self.logger, 1, len(payload), self.compressionContext, maxInMemoryBodyBytes=8)
+        self.addCleanup(body.Cleanup)
+        body.AppendMessage(FakeWebStreamMsg(payload, isDone=True))
+        rawPath = body._rawUploadFilePath
+        finalizeFileBody = body._FinalizeFileBody
+
+        def closeDuringFinalize() -> None:
+            # Close can't free the storage while the finalize is using it, so the finalize must clean it up.
+            body.Close()
+            self.assertTrue(os.path.exists(rawPath))
+            finalizeFileBody()
+
+        with patch.object(body, "_FinalizeFileBody", side_effect=closeDuringFinalize):
+            self.assertFalse(body.Finalize())
+        self.assertFalse(os.path.exists(rawPath))
+        with self.assertRaisesRegex(Exception, "not in a finalized state"):
+            body.OpenForRequest()
+
+
+    def test_close_after_finalize_waits_for_request_owner_cleanup(self) -> None:
+        # Once finalized, the request thread can open the body at any time, so a close from the socket thread
+        # must leave the body for the owner's Cleanup().
+        payload = b"close-after-finalize-over-file-limit"
+        body = UploadBody(self.logger, 1, len(payload), self.compressionContext, maxInMemoryBodyBytes=4)
+        self.addCleanup(body.Cleanup)
+        body.AppendMessage(FakeWebStreamMsg(payload, isDone=True))
+        self.assertTrue(body.Finalize())
+
+        body.Close()
+        context = body.OpenForRequest()
+        filePath = context.FilePath
+        try:
+            self.assertEqual(context.GetData().read(), payload)
+            body.Close()
+            body.Cleanup()
+            self.assertTrue(os.path.exists(filePath))
+        finally:
+            context.Close()
+        self.assertFalse(os.path.exists(filePath))
 
 
     def test_known_size_mismatch_fails_finalize(self) -> None:

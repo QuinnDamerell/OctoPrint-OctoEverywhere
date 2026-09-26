@@ -228,6 +228,10 @@ class MoonrakerWebcamHelper(IWebcamPlatformHelper):
     # Does the settings update.
     def _DoAutoSettingsUpdate(self):
         try:
+            # This worker can wake up before host initialization finishes. The connection callback will wake us again.
+            if MoonrakerClient.Get() is None:
+                self.Logger.debug("Waiting for the Moonraker client before updating webcam settings.")
+                return
             self.Logger.debug("Starting auto webcam settings update...")
 
             # First, try to use the newer webcam API.

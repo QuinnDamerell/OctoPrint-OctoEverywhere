@@ -67,6 +67,56 @@ class _CaptureClient(IVirtualClient):
 
 class TestMuxLifecycle(unittest.TestCase):
 
+    def test_network_thread_exit_reconnects_and_notifies_clients(self):
+        class BrokenPahoClient(FakePahoClient):
+            def loop_start(self):
+                super().loop_start()
+                self.FireConnect(0)
+                # Model a parser failure terminating the loop without calling on_disconnect.
+                self._loop_exit.set()
+
+        broken = BrokenPahoClient()
+        healthy = FakePahoClient()
+        clients = iter([broken, healthy])
+        mux = MqttUpstreamMux(
+            logger=_silent_logger(), printer_key="test",
+            connection_context_provider=_make_ctx,
+            client_factory=lambda *a, **kw: next(clients),
+            backoff_min_sec=0.01, backoff_max_sec=0.02,
+        )
+        self.addCleanup(mux.Shutdown)
+        listener = _CaptureClient()
+        mux.Attach(listener)
+        mux.Start()
+        self.assertTrue(_wait_until(lambda: healthy.loop_started, timeout=3))
+        self.assertEqual(len(listener.connected), 1)
+        self.assertEqual(len(listener.disconnected), 1)
+        self.assertFalse(mux.IsUpstreamConnected())
+        self.assertTrue(broken.disconnect_called)
+        healthy.FireConnect(0)
+        self.assertTrue(mux.IsUpstreamConnected())
+        self.assertEqual(len(listener.connected), 2)
+
+    def test_force_reconnect_stops_network_loop(self):
+        first = FakePahoClient()
+        second = FakePahoClient()
+        clients = iter([first, second])
+        mux = MqttUpstreamMux(
+            logger=_silent_logger(), printer_key="test",
+            connection_context_provider=_make_ctx,
+            client_factory=lambda *a, **kw: next(clients),
+            backoff_min_sec=0.01, backoff_max_sec=0.02,
+        )
+        self.addCleanup(mux.Shutdown)
+        mux.Start()
+        self.assertTrue(_wait_until(lambda: first.loop_started))
+        first.FireConnect(0)
+        mux.ForceReconnect()
+        self.assertTrue(_wait_until(lambda: second.loop_started, timeout=3))
+        self.assertTrue(first.loop_stopped)
+        mux.Shutdown()
+        self.assertTrue(_wait_until(lambda: second.loop_stopped))
+
     def test_connect_fires_on_upstream_connected(self):
         fake = FakePahoClient()
         mux = _make_mux(fake)
@@ -79,6 +129,8 @@ class TestMuxLifecycle(unittest.TestCase):
             time.sleep(0.01)
         self.assertTrue(fake.connect_called)
         self.assertTrue(fake.loop_started)
+        self.assertIsNotNone(fake._thread)
+        self.assertIsNot(fake._thread, mux._supervisor_thread)
         # Trigger CONNACK.
         fake.FireConnect(0)
         self.assertTrue(mux.IsUpstreamConnected())

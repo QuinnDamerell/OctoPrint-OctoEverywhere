@@ -46,8 +46,8 @@ class MoonrakerClient(IMoonrakerClient):
     NonResponseMsgQueueMaxSize = 1000
 
     @staticmethod
-    def Init(logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
-        MoonrakerClient._Instance = MoonrakerClient(logger, config, moonrakerConfigFilePath, printerId, connectionStatusHandler, pluginVersionStr)
+    def Init(logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], startupMoonrakerApiKey:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str):
+        MoonrakerClient._Instance = MoonrakerClient(logger, config, moonrakerConfigFilePath, startupMoonrakerApiKey, printerId, connectionStatusHandler, pluginVersionStr)
 
 
     @staticmethod
@@ -55,7 +55,7 @@ class MoonrakerClient(IMoonrakerClient):
         return MoonrakerClient._Instance
 
 
-    def __init__(self, logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str) -> None:
+    def __init__(self, logger:logging.Logger, config:Config, moonrakerConfigFilePath:Optional[str], startupMoonrakerApiKey:Optional[str], printerId:str, connectionStatusHandler:IMoonrakerConnectionStatusHandler, pluginVersionStr:str) -> None:
         self.Logger = logger
         self.Config = config
         self.MoonrakerConfigFilePath = moonrakerConfigFilePath
@@ -90,9 +90,17 @@ class MoonrakerClient(IMoonrakerClient):
         self.NonResponseMsgThread.start()
 
         # Some instances use auth and we need an API key to access them. If this is not set to None, it's the API key.
-        # This is found and set when we try to connect and we fail due to an unauthed socket.
-        # It can also be set by the user in the config.
-        self.MoonrakerApiKey = self.Config.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, keepInConfigIfNone=True)
+        # The key can be explicitly set by the startup args or by the user in the config, the startup args take priority.
+        # If it's explicitly set, we always use it and never replace it with one we find ourselves.
+        # Otherwise, it's found and set via the unix socket when we try to connect and we fail due to an unauthed socket.
+        self.MoonrakerApiKey = startupMoonrakerApiKey
+        if self.MoonrakerApiKey is not None:
+            self.Logger.info("Using the Moonraker API key passed in the startup args.")
+        else:
+            self.MoonrakerApiKey = self.Config.GetStr(Config.MoonrakerSection, Config.MoonrakerApiKey, None, keepInConfigIfNone=True)
+            if self.MoonrakerApiKey is not None:
+                self.Logger.info("Using the Moonraker API key set in the config.")
+        self.IsMoonrakerApiKeyExplicitlySet = self.MoonrakerApiKey is not None
         self.LastConnectionFailedDueToAuth = False
         # Same idea, but sometimes we need to get the oneshot_token to access the system.
         # This code is only valid for 5 seconds, so it will be retrieved when we need it.
@@ -183,7 +191,7 @@ class MoonrakerClient(IMoonrakerClient):
                 if ip is None or portStr is None:
                     self.Logger.error("Failed to get companion moonraker details from config.")
                     return (currentHostStr, currentPortInt)
-                return (ip, int(portStr))
+                return (ip, self._ParseMoonrakerPort(portStr, currentPortInt))
 
             # Ensure we have a file.
             if self.MoonrakerConfigFilePath is None or os.path.exists(self.MoonrakerConfigFilePath) is False:
@@ -194,7 +202,8 @@ class MoonrakerClient(IMoonrakerClient):
             try:
                 # Open and read the config.
                 # Set strict to false, which allows for some common errors like duplicate keys to be ignored.
-                moonrakerConfig = configparser.ConfigParser(allow_no_value=True, strict=False)
+                # Moonraker allows inline comments. Read values literally so template placeholders don't trigger interpolation.
+                moonrakerConfig = configparser.ConfigParser(allow_no_value=True, strict=False, interpolation=None, inline_comment_prefixes=("#", ";"))
                 moonrakerConfig.read(self.MoonrakerConfigFilePath)
 
                 # We have found that some users don't have a [server] block, so if they don't, return the defaults.
@@ -207,7 +216,7 @@ class MoonrakerClient(IMoonrakerClient):
                 if "host" in serverBlock:
                     currentHostStr = moonrakerConfig['server']['host'].strip()
                 if "port" in serverBlock:
-                    currentPortInt = int(moonrakerConfig['server']['port'].strip())
+                    currentPortInt = self._ParseMoonrakerPort(moonrakerConfig['server']['port'], currentPortInt)
 
                 # A valid moonraker config is to set host: all, which binds to all interfaces.
                 # If we find that, use localhost. The Snapmaker U1 extended firmware does this for example.
@@ -231,18 +240,32 @@ class MoonrakerClient(IMoonrakerClient):
             with open(self.MoonrakerConfigFilePath, 'r', encoding="utf-8") as f:
                 foundHost = False
                 foundPort = False
-                # Just look for the host and port lines.
+                inServerSection = False
+                # Only read the server section, since other sections can define their own host and port.
                 lines = f.readlines()
                 for line in lines:
-                    lLower = line.lower()
-                    if "host:" in lLower:
-                        currentHostStr = line.split(":", 1)[1].strip()
+                    line = line.split("#", 1)[0].split(";", 1)[0].strip()
+                    if line.startswith("["):
+                        inServerSection = line.lower() == "[server]"
+                        continue
+                    if not inServerSection:
+                        continue
+                    key, separator, value = line.partition(":")
+                    if not separator or "=" in key:
+                        key, separator, value = line.partition("=")
+                    if not separator:
+                        continue
+                    key = key.strip().lower()
+                    if key == "host":
+                        currentHostStr = value.strip()
                         foundHost = True
-                    if "port:" in lLower:
-                        currentPortInt = int(line.split(":", 1)[1].strip())
+                    if key == "port":
+                        currentPortInt = self._ParseMoonrakerPort(value, currentPortInt)
                         foundPort = True
                     if foundHost and foundPort:
                         break
+                if currentHostStr.lower() == "all":
+                    currentHostStr = "127.0.0.1"
                 return (currentHostStr, currentPortInt)
 
         except configparser.ParsingError as e:
@@ -253,6 +276,18 @@ class MoonrakerClient(IMoonrakerClient):
         except Exception as e:
             Sentry.OnException("Failed to read moonraker port and host from config, assuming defaults. Host:"+currentHostStr+" Port:"+str(currentPortInt), e)
         return (currentHostStr, currentPortInt)
+
+
+    def _ParseMoonrakerPort(self, portValue:Optional[str], defaultPort:int) -> int:
+        try:
+            port = int(portValue) if portValue is not None else 0
+            if 0 < port <= 65535:
+                return port
+        except ValueError:
+            pass
+        # A bad value or an unresolved template such as %PORT% is a config problem, not a plugin exception.
+        self.Logger.warning("Invalid Moonraker port %s, using %d. Check the port in the Moonraker config.", portValue, defaultPort)
+        return defaultPort
 
 
     #
@@ -692,9 +727,12 @@ class MoonrakerClient(IMoonrakerClient):
                             return
                         # Since we know we will keep failing, sleep for a while to avoid spamming the logs and so the user sees this error.
                         self.LastConnectionFailedDueToAuth = True
-                        self.Logger.error("!!!! Moonraker auth is required, so you must re-run the OctoEverywhere installer or generate an API key in Mainsail or Fluidd and set it the octoeverywhere.conf. The octoeverywhere.conf config file can be found in /data for docker or ~/.octoeverywhere*/ for CLI installs")
+                        if self.IsMoonrakerApiKeyExplicitlySet:
+                            self.Logger.error("!!!! Moonraker rejected the API key that was explicitly set. Ensure the API key is valid; if it's set in the octoeverywhere.conf, you can generate a new one in Mainsail or Fluidd. The octoeverywhere.conf config file can be found in /data for docker or ~/.octoeverywhere*/ for CLI installs")
+                        else:
+                            self.Logger.error("!!!! Moonraker auth is required, so you must re-run the OctoEverywhere installer or generate an API key in Mainsail or Fluidd and set it the octoeverywhere.conf. The octoeverywhere.conf config file can be found in /data for docker or ~/.octoeverywhere*/ for CLI installs")
                         time.sleep(10)
-                        raise Exception("Websocket unauthorized.")
+                        raise NoSentryReportException("Websocket unauthorized.")
 
                     self.LastConnectionFailedDueToAuth = False
                     # Handle the timeout without throwing, since this happens sometimes when the system is down.
@@ -753,16 +791,19 @@ class MoonrakerClient(IMoonrakerClient):
     # Attempts to update the moonraker api key or one shot token.
     # Returns true if it's able to get one of them.
     def _TryToGetWebsocketAuth(self) -> bool:
-        # First, try to get an API key
+        # First, try to get an API key, unless one was explicitly set, in which case we always use it.
         # If we are running locally, we should be able to connect to the unix socket and always get it.
-        self.Logger.info("Our websocket connection to moonraker needs auth, trying to get the API key...")
-        newApiKey = MoonrakerCredentialManager.Get().TryToGetApiKey()
-        if newApiKey is not None:
-            # If we got a new API key, use it now.
-            self.Logger.info("Successfully got a new API key from Moonraker.")
-            self.MoonrakerApiKey = newApiKey
-            return True
-        self.Logger.debug("Failed to get a new API key from Moonraker, trying to get a oneshot token...")
+        if self.IsMoonrakerApiKeyExplicitlySet:
+            self.Logger.info("Our websocket connection to moonraker needs auth, but the API key is explicitly set so we won't try to find a new one. Trying to get a oneshot token...")
+        else:
+            self.Logger.info("Our websocket connection to moonraker needs auth, trying to get the API key...")
+            newApiKey = MoonrakerCredentialManager.Get().TryToGetApiKey()
+            if newApiKey is not None:
+                # If we got a new API key, use it now.
+                self.Logger.info("Successfully got a new API key from Moonraker.")
+                self.MoonrakerApiKey = newApiKey
+                return True
+            self.Logger.debug("Failed to get a new API key from Moonraker, trying to get a oneshot token...")
 
         # If we didn't get an new API key, try to get a oneshot token.
         # Note that we might already have an existing Moonraker API key, so we will include it in case.

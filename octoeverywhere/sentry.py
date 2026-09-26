@@ -1,9 +1,11 @@
 import os
+import errno
 import logging
 import socket
 import time
 import traceback
 import threading
+from http.client import IncompleteRead
 from typing import Any, Dict, List, Optional
 
 import octowebsocket
@@ -193,7 +195,7 @@ class Sentry:
         # We will simply only allows up to 5 errors reported every 4h.
         timeSinceErrorSec = time.time() - Sentry.LastErrorReport
         if timeSinceErrorSec < 60 * 60 * 4:
-            if Sentry.LastErrorCount > 5:
+            if Sentry.LastErrorCount >= 5:
                 return None
         else:
             # A new time window has been entered.
@@ -351,11 +353,47 @@ class Sentry:
             # If no messages matched, then we matched the exception type, but not the message, so return false.
             return False
 
-        try:
-            # This means a device was at the IP, but the port isn't open.
-            if matchesException(e, ConnectionRefusedError):
+        def matchesWrappedConnectionException(exception:Exception, depth:int=0) -> bool:
+            if depth > 5 or isinstance(exception, requests.exceptions.SSLError):
+                return False
+            if isinstance(exception, (requests.exceptions.ConnectionError, urllib3.exceptions.MaxRetryError,
+                                      urllib3.exceptions.NewConnectionError, urllib3.exceptions.ProtocolError)):
+                causes = [arg for arg in exception.args if isinstance(arg, Exception)]
+                if isinstance(exception, urllib3.exceptions.MaxRetryError) and isinstance(exception.reason, Exception):
+                    causes.append(exception.reason)
+                if not causes:
+                    cause = exception.__cause__ if exception.__cause__ is not None else exception.__context__
+                    if isinstance(cause, Exception):
+                        causes.append(cause)
+                # requests also wraps resource exhaustion and malformed HTTP as ConnectionError. Only ignore it
+                # when its underlying errors are known transport failures, not merely because of the wrapper.
+                return bool(causes) and all(matchesWrappedConnectionException(cause, depth + 1) for cause in causes)
+            if isinstance(exception, (IncompleteRead, urllib3.exceptions.TimeoutError)):
                 return True
-            if matchesException(e, ConnectionResetError):
+            return Sentry.IsCommonConnectionException(exception)
+
+        try:
+            # Match socket errors by errno, since their text varies between operating systems.
+            if isinstance(e, OSError) and e.errno in (errno.ECONNREFUSED, errno.ECONNRESET, errno.ECONNABORTED,
+                                                     errno.EHOSTUNREACH, errno.ENETUNREACH, errno.ENETDOWN,
+                                                     errno.ETIMEDOUT, errno.EPIPE):
+                return True
+            if isinstance(e, OSError) and getattr(e, "winerror", None) in (10050, 10051, 10053, 10054, 10060, 10061, 10065):
+                return True
+            if isinstance(e, socket.gaierror) and e.errno in (socket.EAI_AGAIN, socket.EAI_NONAME, socket.EAI_FAIL):
+                return True
+            if isinstance(e, octowebsocket.WebSocketAddressException):
+                # websocket-client wraps gaierror in args and preserves the exception context. Keep its errno,
+                # since some platforms only describe EAI_AGAIN as "Try again".
+                for cause in [e.__cause__, e.__context__] + list(e.args):
+                    if isinstance(cause, socket.gaierror) and Sentry.IsCommonConnectionException(cause):
+                        return True
+            if isinstance(e, requests.exceptions.Timeout):
+                return True
+            if isinstance(e, requests.exceptions.ConnectionError):
+                return matchesWrappedConnectionException(e)
+            # This means a device was at the IP, but the port isn't open.
+            if matchesException(e, (ConnectionRefusedError, ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
                 return True
             # This means the IP doesn't route to a device.
             if matchesException(e, OSError, ["No route to host", "Network is unreachable", "Network unreachable", "Host is unreachable"]):
@@ -363,7 +401,7 @@ class Sentry:
             if matchesException(e, socket.gaierror, ["Name does not resolve"]):
                 return True
             # This means the other side never responded.
-            if matchesException(e, TimeoutError, ["Connection timed out", "Operation timed out"]):
+            if matchesException(e, TimeoutError):
                 return True
             if matchesException(e, octowebsocket.WebSocketTimeoutException):
                 return True
@@ -373,7 +411,7 @@ class Sentry:
             if matchesException(e, octowebsocket.WebSocketConnectionClosedException, ["Connection to remote host was lost.", "ping/pong timed out", "Name or service not known"]):
                 return True
             # Invalid host name.
-            if matchesException(e, octowebsocket.WebSocketAddressException, ["Name or service not known"]):
+            if matchesException(e, octowebsocket.WebSocketAddressException, ["Name or service not known", "Temporary failure in name resolution", "Name does not resolve", "nodename nor servname provided, or not known"]):
                 return True
             # We don't care.
             if matchesException(e, octowebsocket.WebSocketConnectionClosedException):
@@ -390,18 +428,27 @@ class Sentry:
     @staticmethod
     def IsCommonHttpError(e:Exception) -> bool:
         try:
-            if isinstance(e, requests.exceptions.ConnectionError):
-                return True
-            if isinstance(e, requests.exceptions.Timeout):
+            if Sentry.IsCommonConnectionException(e):
                 return True
             if isinstance(e, requests.exceptions.TooManyRedirects):
                 return True
-            if isinstance(e, requests.exceptions.URLRequired):
-                return True
-            if isinstance(e, requests.exceptions.RequestException):
-                return True
             if isinstance(e, urllib3.exceptions.ReadTimeoutError):
                 return True
+            # A webcam can stop halfway through a frame when it goes offline. Only ignore protocol errors
+            # with a known interrupted-read cause; malformed HTTP responses should still be reported.
+            if isinstance(e, IncompleteRead):
+                return True
+            if isinstance(e, (urllib3.exceptions.ProtocolError, requests.exceptions.ChunkedEncodingError)):
+                causes = [e.__cause__] + list(e.args)
+                for cause in causes:
+                    if isinstance(cause, IncompleteRead):
+                        return True
+                    if isinstance(cause, Exception) and Sentry.IsCommonConnectionException(cause):
+                        return True
+                    if isinstance(cause, urllib3.exceptions.ProtocolError):
+                        for innerCause in cause.args:
+                            if isinstance(innerCause, IncompleteRead) or (isinstance(innerCause, Exception) and Sentry.IsCommonConnectionException(innerCause)):
+                                return True
         except Exception:
             pass
         return False

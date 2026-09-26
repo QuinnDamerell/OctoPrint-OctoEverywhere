@@ -5,6 +5,7 @@ import sys
 import types
 import unittest
 from typing import Any, Dict
+from unittest.mock import Mock, patch
 
 from tests.test_dependency_stubs import InstallTestDependencyStubs
 
@@ -24,6 +25,7 @@ def _ImportCommandHandler() -> Any:
 
 
 OctoPrintCommandHandler = _ImportCommandHandler()
+PrinterStateObject = importlib.import_module("octoprint_octoeverywhere.printerstateobject").PrinterStateObject
 
 
 class _FakePrinterObject:
@@ -88,6 +90,40 @@ class TestOctoPrintJobStatusState(unittest.TestCase):
             status = self._GetStatus(stateId)
             self.assertIsInstance(status, dict, f"'{stateId}' should return a status dict")
             self.assertEqual(status["State"], "error")
+
+
+class TestOctoPrintTimeRemaining(unittest.TestCase):
+    def _GetEstimate(self, currentData, jobData):
+        printer = Mock()
+        printer.get_current_data.return_value = currentData
+        printer.get_current_job.return_value = jobData
+        state = PrinterStateObject(logging.getLogger("test"), printer)
+        state.NotificationHandler = Mock()
+        state.NotificationHandler.GetCurrentDurationSecFloat.return_value = 40
+        return state.GetPrintTimeRemainingEstimateInSeconds()
+
+
+    def test_missing_optional_data_is_unknown_without_sentry(self) -> None:
+        for currentData in (None, {}, {"progress": None}, {"progress": {"printTimeLeft": None}}):
+            with self.subTest(currentData=currentData), patch("octoprint_octoeverywhere.printerstateobject.Sentry.OnException") as report:
+                self.assertEqual(self._GetEstimate(currentData, None), -1)
+                report.assert_not_called()
+
+
+    def test_missing_progress_still_uses_job_estimate(self) -> None:
+        with patch("octoprint_octoeverywhere.printerstateobject.Sentry.OnException") as report:
+            self.assertEqual(self._GetEstimate({"progress": None}, {"estimatedPrintTime": 300}), 260)
+            report.assert_not_called()
+
+
+    def test_progress_estimate_takes_priority(self) -> None:
+        self.assertEqual(self._GetEstimate({"progress": {"printTimeLeft": 123.0}}, {"estimatedPrintTime": 300}), 123)
+
+
+    def test_invalid_estimate_is_still_reported_and_falls_back(self) -> None:
+        with patch("octoprint_octoeverywhere.printerstateobject.Sentry.OnException") as report:
+            self.assertEqual(self._GetEstimate({"progress": {"printTimeLeft": "invalid"}}, {"estimatedPrintTime": 300}), 260)
+            report.assert_called_once()
 
 
 if __name__ == "__main__":

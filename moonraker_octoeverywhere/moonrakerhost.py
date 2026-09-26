@@ -75,6 +75,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
     def RunBlocking(self, klipperConfigDir:str, localStorageDir:str, serviceName:str, pyVirtEnvRoot:str, repoRoot:str,
                     moonrakerConfigFilePath:Optional[str], # Will be None in Companion mode
                     disableMoonrakerConfigFileWrites:bool,
+                    moonrakerApiKey:Optional[str], # Will be None unless the startup args explicitly set it.
                     isCompanion:bool, isDockerContainer:bool,
                     devConfig:Optional[Dict[str, Any]]) -> None:
         # Do all of this in a try catch, so we can log any issues before exiting
@@ -180,7 +181,7 @@ class MoonrakerHost(IMoonrakerConnectionStatusHandler, IHostCommandHandler, ISta
             # When everything is setup, start the moonraker client object.
             # This also creates the Notifications Handler and Gadget objects.
             # This doesn't start the moon raker connection, we don't do that until OE connects.
-            MoonrakerClient.Init(self.Logger, self.Config, moonrakerConfigFilePath, printerId, self, pluginVersionStr)
+            MoonrakerClient.Init(self.Logger, self.Config, moonrakerConfigFilePath, moonrakerApiKey, printerId, self, pluginVersionStr)
 
             # Init our file meta data cache helper
             FileMetadataCache.Init(self.Logger, MoonrakerClient.Get())

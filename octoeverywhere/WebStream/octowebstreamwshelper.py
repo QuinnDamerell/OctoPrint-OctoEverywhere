@@ -84,12 +84,16 @@ class OctoWebStreamWsHelper:
         # It might take multiple attempts depending on the network setup of the client.
         # This value keeps track of them.
         self.ConnectionAttempt = 0
+        self.IsUsingRelayProvider = False
         # This boolean tracks if a connection attempt was ever successful or not.
         self.SuccessfullyOpenedSocket = False
 
         # Attempt to connect to the websocket.
         if self.AttemptConnection() is False:
-            raise Exception("Web stream ws AttemptConnection didn't try to connect?")
+            # A command provider can reject a request, or the stream can close during setup.
+            # End this stream without taking down the entire service connection.
+            self.WebStream.SetClosedDueToFailedRequestConnection()
+            self.WebStream.Close()
 
 
     # This function will attempt to connect to the desired websocket.
@@ -160,14 +164,18 @@ class OctoWebStreamWsHelper:
 
         # On some platforms, we might have a websocket object that was provided by the platform.
         relayWebsocketProvider = Compat.GetRelayWebsocketProvider()
-        if relayWebsocketProvider is not None:
+        if relayWebsocketProvider is not None and (self.ConnectionAttempt == 1 or self.IsUsingRelayProvider):
             # Check if we failed once, if so, return None so the incoming WS will close.
             if self.ConnectionAttempt > 1:
                 self.Logger.info(self.getLogMsgPrefix()+" failed to connect to the relay provider and has nothing else to try.")
                 return None
             self.Logger.debug("%sopening websocket to using the relay provider, attempt %s", self.getLogMsgPrefix(), self.ConnectionAttempt)
-            return relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
+            ws = relayWebsocketProvider.GetWebsocketObject(path, pathType, self.HttpInitialContext,
                     onWsOpen=self.onWsOpened, onWsData=self.onWsData, onWsClose=self.onWsClosed, onWsError=self.onWsError, headers=self.Headers, subProtocolList=self.SubProtocolList)
+            if ws is not None:
+                self.IsUsingRelayProvider = True
+                return ws
+            # The relay provider doesn't handle this path. Continue with the normal command/HTTP routing.
 
         # We also need to check if this is a command websocket, and if so, allow the command system to handle it.
         if CommandHandler.Get().IsCommandRequest(self.HttpInitialContext):
@@ -349,7 +357,7 @@ class OctoWebStreamWsHelper:
         # which will take down the entire Stream. But since it's closed the web stream is already cleaning up.
         # This can happen if the socket closes locally and we sent the message to clean up to the service, but there
         # were already inbound messages on the way.
-        if self.IsWsObjClosed:
+        if self.IsWsObjClosed or self.IsClosed:
             return True
 
         # Note it's ok for this to be empty. Since DataAsByteArray returns 0 if it doesn't
@@ -362,7 +370,13 @@ class OctoWebStreamWsHelper:
         # If the message is compressed, decompress it.
         compressionType = webStreamMsg.DataCompression()
         if compressionType != DataCompression.DataCompression.None_:
-            buffer = Compression.Get().Decompress(self.CompressionContext, buffer, webStreamMsg.OriginalDataSize(), False, compressionType)
+            try:
+                buffer = Compression.Get().Decompress(self.CompressionContext, buffer, webStreamMsg.OriginalDataSize(), False, compressionType)
+            except Exception:
+                # Close may have finished while this message was waiting to use the context.
+                if self.IsClosed:
+                    return True
+                raise
 
         # Get the send type.
         sendType = WebSocketOpCode.CLOSE
@@ -397,6 +411,8 @@ class OctoWebStreamWsHelper:
 
 
     def onWsData(self, ws:IWebSocketClient, buffer:Buffer, msgType:WebSocketOpCode) -> None:
+        if self.IsClosed:
+            return
         # Only handle callbacks for the current websocket.
         if self.Ws is not None and self.Ws != ws:
             return
@@ -513,6 +529,9 @@ class OctoWebStreamWsHelper:
             # Send it!
             self.WebStream.SendToOctoStream(buffer, msgStartOffsetBytes, msgSizeBytes)
         except Exception as e:
+            # A close can finish while this callback is waiting to use the compression context.
+            if self.IsClosed:
+                return
             Sentry.OnException(self.getLogMsgPrefix()+ " got an error while trying to forward websocket data to the service.", e)
             self.WebStream.Close()
 

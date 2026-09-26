@@ -29,8 +29,8 @@ class PrinterStateObject(IPrinterStateReporter):
         # Try to get the progress object from the current data. This is at least set by things like PrintTimeGenius and is more accurate.
         try:
             currentData = self.OctoPrintPrinterObject.get_current_data() #pyright: ignore[reportUnknownMemberType]
-            if "progress" in currentData:
-                if "printTimeLeft" in currentData["progress"]:
+            if currentData is not None and "progress" in currentData:
+                if currentData["progress"] is not None and "printTimeLeft" in currentData["progress"]:
                     # When the print is just starting, the printTimeLeft will be None.
                     printTimeLeftSec = currentData["progress"]["printTimeLeft"]
                     if printTimeLeftSec is not None:
@@ -42,7 +42,7 @@ class PrinterStateObject(IPrinterStateReporter):
         # If that fails, try to use the default OctoPrint estimate.
         try:
             jobData = self.OctoPrintPrinterObject.get_current_job() #pyright: ignore[reportUnknownMemberType]
-            if "estimatedPrintTime" in jobData:
+            if jobData is not None and "estimatedPrintTime" in jobData:
 
                 # When the print is first starting and there is no known time, this can be none.
                 # In that case, return -1, unknown.

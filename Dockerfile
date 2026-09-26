@@ -1,6 +1,12 @@
-# Start with the latest alpine, for a solid base,
+# Start with alpine, for a solid base,
 # since we need some advance binaries for things like pillow and ffmpeg.
-FROM alpine:3.21.3
+#
+# We pin the minor version, so each build picks up the latest patch release, but a new alpine version is always a deliberate change.
+# Dependabot will open a PR when a new alpine version is released. Before merging it:
+#   - Check the python3 version the new alpine release uses. Our deps, like the zstandard version cap, need to support it.
+#   - Test the multi-arch build by pushing to the docker-build branch.
+# Note that ffmpeg is in the alpine community repo, which only gets updates until the next alpine release, so we should stay current.
+FROM alpine:3.23
 
 # Create a non-root user to run, so we don't run as root.
 # There's no need to run as root and it helps some platforms like openshift.
