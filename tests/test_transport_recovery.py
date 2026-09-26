@@ -230,7 +230,7 @@ class TestTransportRecovery(unittest.TestCase):
              patch("octoeverywhere.WebStream.octowebstreamwshelper.MDns.Get", return_value=mdns), \
              patch("octoeverywhere.WebStream.octowebstreamwshelper.Client") as client:
             self.assertIs(helper._GetWebsocketObject(), client.return_value)
-        self.assertEqual(client.call_args.kwargs["url"], "wss://printer.example/websocket")
+        self.assertEqual(client.call_args[1]["url"], "wss://printer.example/websocket")
 
     def test_selected_relay_provider_failure_does_not_fall_back(self):
         helper = self._MakeWsHelperForProvider()
