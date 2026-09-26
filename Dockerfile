@@ -6,7 +6,7 @@
 #   - Check the python3 version the new alpine release uses. Our deps, like the zstandard version cap, need to support it.
 #   - Test the multi-arch build by pushing to the docker-build branch.
 # Note that ffmpeg is in the alpine community repo, which only gets updates until the next alpine release, so we should stay current.
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Create a non-root user to run, so we don't run as root.
 # There's no need to run as root and it helps some platforms like openshift.
