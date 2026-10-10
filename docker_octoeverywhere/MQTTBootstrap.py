@@ -20,6 +20,20 @@ class MQTTBootstrap:
             logger.info(f"Setting MQTT Relay Port: {port}")
             config.SetInt(Config.SectionMqtt, Config.MqttLocalBrokerPort, port)
 
+        tlsPort = os.environ.get("MQTT_RELAY_TLS_PORT", None)
+        # A blank value (e.g. "MQTT_RELAY_TLS_PORT=" left in a compose file) is treated as unset.
+        if tlsPort is not None and len(tlsPort.strip()) > 0:
+            tlsPort = int(tlsPort.strip())
+            logger.info(f"Setting MQTT Relay TLS Port: {tlsPort}")
+            config.SetInt(Config.SectionMqtt, Config.MqttLocalBrokerTlsPort, tlsPort)
+
+        certPath = os.environ.get("MQTT_RELAY_TLS_CERT_PATH", None)
+        if certPath is not None:
+            config.SetStr(Config.SectionMqtt, Config.MqttLocalBrokerTlsCertPath, certPath)
+        keyPath = os.environ.get("MQTT_RELAY_TLS_KEY_PATH", None)
+        if keyPath is not None:
+            config.SetStr(Config.SectionMqtt, Config.MqttLocalBrokerTlsKeyPath, keyPath)
+
         requireUpstreamAuth = os.environ.get("MQTT_RELAY_REQUIRE_UPSTREAM_AUTH", None)
         if requireUpstreamAuth is not None:
             requireUpstreamAuth = requireUpstreamAuth.lower() in ['true', '1', 'yes']

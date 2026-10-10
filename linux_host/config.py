@@ -118,6 +118,9 @@ class Config:
     MqttLocalBrokerEnabled = "enable"
     MqttLocalBrokerBind = "bind_ip"
     MqttLocalBrokerPort = "port"
+    MqttLocalBrokerTlsPort = "tls_port"
+    MqttLocalBrokerTlsCertPath = "tls_cert_path"
+    MqttLocalBrokerTlsKeyPath = "tls_key_path"
     MqttLocalBrokerRequireUpstreamAuth = "require_upstream_auth"
     MqttLocalBrokerUsername = "username"
     MqttLocalBrokerPassword = "password"
@@ -153,10 +156,13 @@ class Config:
         { "Target": PrusaLinkUsername,  "Comment": "The Prusa Link username, Only used when auth_mode is 'password'."},
         { "Target": PrusaLinkPassword,  "Comment": "The Prusa Link password. Only used when auth_mode is 'password'. This is stored locally and never uploaded."},
         { "Target": PrusaLinkApiKey,  "Comment": "The Prusa Link API key. Only used when auth_mode is 'api_key'. See https://octoeverywhere.com/s/prusa-link-api-key for help."},
-        { "Target": MqttLocalBrokerEnabled,  "Comment": "If true (default), OctoEverywhere exposes a local MQTT broker server that muxes all MQTT clients down to one MQTT client connection to the 3D printer. Standards-compliant: any MQTT 3.1.1 client (mosquitto_pub/sub, Home Assistant, etc.) can connect."},
+        { "Target": MqttLocalBrokerEnabled,  "Comment": "If true (default), OctoEverywhere exposes a local MQTT relay that combines clients into one printer connection. Supports plaintext and TLS MQTT. Clients must support the broker certificate; camera and file transfers are separate services."},
         { "Target": MqttLocalBrokerBind,  "Comment": "Bind address for the local MQTT broker server. Use 0.0.0.0 to accept all LAN connections or 127.0.0.1 to restrict to this machine."},
-        { "Target": MqttLocalBrokerPort,  "Comment": "TCP port for the local MQTT broker server. Standard MQTT is 1883."},
-        { "Target": MqttLocalBrokerRequireUpstreamAuth,  "Comment": "If true (default), the local MQTT broker server requires the same credentials as the 3D printer to connect. (for Bambu: 'bblp' + access code; for Elegoo: 'elegoo' + access code). Set to false to disable upstream-credential auth and use the static username/password in the MQTT config."},
+        { "Target": MqttLocalBrokerPort,  "Comment": "Primary MQTT port (default 1883). Automatically accepts plaintext or TLS on each connection."},
+        { "Target": MqttLocalBrokerTlsPort,  "Comment": "Additional TLS-only MQTT port (default 8883). Set to 0 to disable this additional listener; TLS remains available on the primary port. If equal to port, one listener accepts both protocols."},
+        { "Target": MqttLocalBrokerTlsCertPath,  "Comment": "Optional custom PEM certificate chain path. Set tls_key_path if the private key is in a separate file. When both are unset, a unique self-signed certificate is generated and persisted in mqtt-tls alongside this config. Restart after changing certificates."},
+        { "Target": MqttLocalBrokerTlsKeyPath,  "Comment": "Optional custom PEM private key path for tls_cert_path. Keep the private key secret. Clients may need to trust the certificate."},
+        { "Target": MqttLocalBrokerRequireUpstreamAuth,  "Comment": "If true (default), require the current upstream credentials (Bambu LAN: 'bblp' + access code; Bambu Cloud: cloud username + token; Elegoo: 'elegoo' + access code). If false, use the static MQTT username/password. This does not control TLS."},
         { "Target": MqttLocalBrokerUsername,  "Comment": "Optional static username for local MQTT broker server auth. Only used when require_upstream_auth is false. Leave blank to allow anonymous connections (NOT recommended on a LAN)."},
         { "Target": MqttLocalBrokerPassword,  "Comment": "Optional static password for local MQTT broker server auth. Only used when require_upstream_auth is false. Leave blank to allow anonymous connections (NOT recommended on a LAN)."},
     ]

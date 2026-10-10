@@ -95,6 +95,17 @@ services:
         # The MQTT relay will combine the connections of all clients to a single MQTT connection to the printer, allowing any number of clients to connect to the plugin without hitting connection limits on the printer.
         - MQTT_RELAY_ENABLED=true
         #
+        # The primary port accepts plain MQTT or TLS automatically for each connection.
+        - MQTT_RELAY_PORT=1883
+        # Additional TLS-only port. Set to 0 to disable this listener, then remove its ports mapping below.
+        - MQTT_RELAY_TLS_PORT=8883
+        # A self-signed certificate is generated automatically and persisted in /data.
+        # Apps that verify certificates may need a trust setting or your own certificate.
+        # Optional: mount custom PEM files and set their paths inside the container.
+        # For one combined certificate/private-key PEM, set only MQTT_RELAY_TLS_CERT_PATH. Keep it private.
+        #- MQTT_RELAY_TLS_CERT_PATH=/certs/fullchain.pem
+        #- MQTT_RELAY_TLS_KEY_PATH=/certs/privkey.pem
+        #
         # If true, the MQTT relay will require clients to authenticate with the same credentials as the upstream printer connection.
         - MQTT_RELAY_REQUIRE_UPSTREAM_AUTH=true
         #
@@ -103,9 +114,11 @@ services:
         #- MQTT_RELAY_PASSWORD=
 
     ports:
-      # If using the MQTT relay, you will need to forward 1883 to allow your MQTT clients to connect to the plugin.
-      # There must be a unique port for each instance of the plugin. The first port is the host port (which you can change) the second is the MQTT relay server port in the container.
-      - 1883:1883
+      # Publish the ports your MQTT apps use: 1883 accepts plain MQTT or TLS; 8883 accepts TLS only.
+      # First port = host port; second = container port. Each instance needs unique host ports.
+      # Existing containers must be recreated (docker compose up -d) to add the 8883 mapping.
+      - "1883:1883"
+      - "8883:8883"
 
     volumes:
       # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
@@ -210,6 +223,16 @@ services:
   #       # The MQTT relay will combine the connections of all clients to a single MQTT connection to the printer, allowing any number of clients to connect to the plugin without hitting connection limits on the printer.
   #       - MQTT_RELAY_ENABLED=true
   #       #
+  #       # The primary port accepts plain MQTT or TLS automatically for each connection.
+  #       - MQTT_RELAY_PORT=1883
+  #       # Additional TLS-only port. Set to 0 to disable this listener, then remove its ports mapping below.
+  #       - MQTT_RELAY_TLS_PORT=8883
+  #       # A self-signed certificate is generated automatically and persisted in /data.
+  #       # Optional: mount custom PEM files and set their paths inside the container.
+  #       # For one combined certificate/private-key PEM, set only MQTT_RELAY_TLS_CERT_PATH. Keep it private.
+  #       #- MQTT_RELAY_TLS_CERT_PATH=/certs/fullchain.pem
+  #       #- MQTT_RELAY_TLS_KEY_PATH=/certs/privkey.pem
+  #       #
   #       # If true, the MQTT relay will require clients to authenticate with the same credentials as the upstream printer connection.
   #       - MQTT_RELAY_REQUIRE_UPSTREAM_AUTH=true
   #       #
@@ -218,10 +241,11 @@ services:
   #       #- MQTT_RELAY_PASSWORD=
 
   #   ports:
-  #     # If using the MQTT relay, you will need to forward 1883 to allow your MQTT clients to connect to the plugin.
-  #     # There must be a unique port for each instance of the plugin. The first port is the host port (which you can change) the second is the MQTT relay server port in the container.
-  #     - 1884:1883
+  #     # Each relay needs unique host ports. Connect this printer's apps to 1884 or 8884.
+  #     # Apps fixed to port 8883 need a separate host IP address or computer per relay.
+  #     - "1884:1883"
+  #     - "8884:8883"
 
   #   volumes:
   #     # This can also be an absolute path, e.g. /var/octoeverywhere/plugin/data or /c/users/name/plugin/data
-  #     - ./data:/data
+  #     - ./data-2:/data

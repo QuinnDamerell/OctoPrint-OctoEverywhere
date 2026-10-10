@@ -330,6 +330,38 @@ install_or_update_system_dependencies()
 }
 
 #
+# OpenSSL is optional: a package failure must not prevent required dependencies
+# from installing. The MQTT relay logs certificate setup failures and rejects
+# TLS connections when it cannot load or generate a certificate.
+# Keep this out of the required package lists used by Moonraker updates, too.
+#
+install_optional_openssl()
+{
+    if command -v openssl >/dev/null 2>&1 || [[ -x /opt/bin/openssl ]]
+    then
+        return 0
+    fi
+
+    log_info "Installing optional OpenSSL for MQTT relay TLS certificates..."
+    OE_OPENSSL_INSTALL_WARNING="Optional OpenSSL installation failed; continuing OctoEverywhere setup. MQTT relay TLS requires OpenSSL to generate certificates, or a configured custom certificate and key."
+    if [[ $IS_K1_OS -eq 1 ]] || [[ $IS_K2_OS -eq 1 ]]
+    then
+        if [[ -f /opt/bin/opkg ]]
+        then
+            /opt/bin/opkg install openssl-util || log_important "$OE_OPENSSL_INSTALL_WARNING"
+        else
+            log_important "$OE_OPENSSL_INSTALL_WARNING"
+        fi
+    elif [[ $IS_SONIC_PAD_OS -eq 1 ]]
+    then
+        opkg install openssl-util || log_important "$OE_OPENSSL_INSTALL_WARNING"
+    else
+        sudo apt install --yes openssl || log_important "$OE_OPENSSL_INSTALL_WARNING"
+    fi
+    return 0
+}
+
+#
 # Logic to install or update the virtual env and all of our required packages.
 #
 install_or_update_python_env()
@@ -462,6 +494,9 @@ ensure_creality_os_right_repo_path
 # Next, make sure our required system packages are installed.
 # These are required for other actions in this script, so it must be done first.
 install_or_update_system_dependencies
+
+# TLS certificate generation is optional and must not block installation.
+install_optional_openssl
 
 # Check that OctoPrint isn't found. If it is, we want to check with the user to make sure they are
 # not trying to setup OE for OctoPrint.
