@@ -8,4 +8,4 @@ pip install pyright
 pip install ruff
 pip install octoprint
 pip install -r ../requirements.txt
-pip install "zstandard>=0.21.0,<0.23.0"
+pip install "zstandard>=0.21.0,<0.26.0"

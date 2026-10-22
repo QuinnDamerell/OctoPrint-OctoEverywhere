@@ -5,6 +5,7 @@
 # pyright: reportUnknownMemberType=false
 
 import gzip
+import io
 import logging
 import threading
 import unittest
@@ -29,10 +30,18 @@ from octoeverywhere.WebStream.octoheaderimpl import BaseProtocol, HeaderHelper
 from octoeverywhere.WebStream.octowebstreamhttphelper import OctoWebStreamHttpHelper
 
 
+def GzipCompress(data:bytes) -> bytes:
+    # gzip.compress gained mtime in PY3.8; GzipFile keeps fixtures deterministic on PY3.7 too.
+    output = io.BytesIO()
+    with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressor:
+        compressor.write(data)
+    return output.getvalue()
+
+
 class HeaderFixtureHandler(BaseHTTPRequestHandler):
     payload = b'{"tiles":["/api/map_tiles/vector/{z}/{x}/{y}.mvt"]}'
-    compressed = gzip.compress(payload, mtime=0)
-    multipart = gzip.compress(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 3\r\n\r\nabc\r\n--frame--\r\n", mtime=0)
+    compressed = GzipCompress(payload)
+    multipart = GzipCompress(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: 3\r\n\r\nabc\r\n--frame--\r\n")
     cookies = ["first=1; Expires=Wed, 21 Oct 2030 07:28:00 GMT; Path=/", "second=2; Path=/"]
     requestHeaders:Dict[str, str] = {}
     requestBody = b""
@@ -220,7 +229,7 @@ class HttpHeaderRelayTests(unittest.TestCase):
         logger.warning.assert_not_called()
         logger.error.assert_not_called()
         stream.SendToOctoStream.assert_called_once()
-        buffer, start, _, isLast, _ = stream.SendToOctoStream.call_args.args
+        buffer, start, _, isLast, _ = stream.SendToOctoStream.call_args[0]
         self.assertTrue(isLast)
         envelope = OctoStreamMessage.OctoStreamMessage.GetRootAs(buffer.GetBytesLike(), start + 4)
         table = envelope.Context()
@@ -280,7 +289,7 @@ class HttpHeaderRelayTests(unittest.TestCase):
         self.assertNotIn("set-cookie", replay.Headers)
 
     def test_encoded_http_body_skips_tunnel_compression_and_preserves_protocol_flags(self) -> None:
-        encodedBody = gzip.compress(bytes(range(256)) * 20, mtime=0)
+        encodedBody = GzipCompress(bytes(range(256)) * 20)
         self.assertGreater(len(encodedBody), 200)
         for encoding in ("gzip", "br", "deflate", "gzip, br"):
             result = HttpResult(200, {"Content-Encoding": encoding}, "/", False)
