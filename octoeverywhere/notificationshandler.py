@@ -257,7 +257,10 @@ class NotificationsHandler(INotificationHandler):
             if isPrinting:
                 # There is an active print. Check our state.
                 if self._IsPingTimerRunning():
-                    self.Logger.info("Restore client sync state: We have the print cookie, detected an active print, and our timers are already running. So there's nothing to do.")
+                    # Gadget checks printer state on its own timer and can stop during a disconnect while the hourly ping timer survives.
+                    # Restore only the missing watcher, preserving the print's progress, scores, and suppression state.
+                    self.Gadget.EnsureWatching()
+                    self.Logger.info("Restore client sync state: We have the print cookie, detected an active print, and ensured the timers are running.")
                     return
                 else:
                     self.Logger.info("Restore client sync state: We have a print cookie, detected and active print, but the timers aren't running, so we will start them now.")

@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -9,7 +10,7 @@ InstallTestDependencyStubs()
 
 # pylint: disable=wrong-import-position,wrong-import-order,protected-access
 import octowebsocket  # noqa: E402
-from elegoo_octoeverywhere.elegooclient import ElegooClient  # noqa: E402
+from elegoo_octoeverywhere.elegooclient import ElegooClient, MsgWaitingContext  # noqa: E402
 from octoeverywhere.buffer import Buffer  # noqa: E402
 from octoeverywhere.interfaces import WebSocketOpCode  # noqa: E402
 
@@ -21,6 +22,8 @@ class TestElegooClientRecovery(unittest.TestCase):
         client.Logger = logging.getLogger("TestElegooClientRecovery")
         client.WebsocketMux = MagicMock()
         client._HandleStatusUpdate = MagicMock()
+        client.RequestLock = threading.Lock()
+        client.RequestPendingContexts = {}
         return client
 
 
@@ -44,17 +47,86 @@ class TestElegooClientRecovery(unittest.TestCase):
             report.assert_not_called()
 
 
-    def test_invalid_utf8_reconnects_without_forwarding_corrupt_data(self) -> None:
+    @staticmethod
+    def _MakeCorruptFileList(requestId):
+        # The control character is JSON-escaped, but the filename also contains raw invalid UTF-8.
+        response = {"Topic": "sdcp/response/printer", "Data": {
+            "RequestID": requestId, "Cmd": 258, "Data": {"FileList": [
+                {"name": "/local/valid_été.gcode"},
+                {"name": "/local/\u0010kQ0CORRUPTX@sample.gcode"},
+            ]},
+        }}
+        raw = json.dumps(response, ensure_ascii=False).encode("utf-8").replace(b"CORRUPT", b"\x8b\x9d")
+        return Buffer(raw)
+
+
+    def test_corrupt_filename_completes_local_request_without_disconnecting(self) -> None:
         client = self._MakeClient()
         websocket = MagicMock()
+        context = MsgWaitingContext("a" * 32)
+        client.RequestPendingContexts[context.Id] = context
         with patch("elegoo_octoeverywhere.elegooclient.Sentry.OnException") as report:
-            client._OnWsData(websocket, Buffer(b"\xff"), WebSocketOpCode.TEXT)
+            client._OnWsData(websocket, self._MakeCorruptFileList(context.Id), WebSocketOpCode.TEXT)
             report.assert_not_called()
-        websocket.Close.assert_called_once()
+        websocket.Close.assert_not_called()
+        self.assertTrue(context.GetEvent().is_set())
+        files = context.GetResult()["Data"]["Data"]["FileList"]
+        self.assertEqual(files[0]["name"], "/local/valid_été.gcode")
+        self.assertEqual(files[1]["name"], "/local/\u0010kQ0\ufffd\ufffdX@sample.gcode")
         client.WebsocketMux.OnIncomingMessage.assert_not_called()
 
 
-    def test_malformed_first_message_after_connect_keeps_minimum_retry_delay(self) -> None:
+    def test_corrupt_filename_mux_response_forwards_recovered_utf8(self) -> None:
+        client = self._MakeClient()
+        websocket = MagicMock()
+        context = MsgWaitingContext("a" * 32, wsId=7)
+        client.RequestPendingContexts[context.Id] = context
+        with patch("elegoo_octoeverywhere.elegooclient.Sentry.OnException") as report:
+            client._OnWsData(websocket, self._MakeCorruptFileList(context.Id), WebSocketOpCode.TEXT)
+            report.assert_not_called()
+        websocket.Close.assert_not_called()
+        client.WebsocketMux.OnIncomingMessage.assert_called_once()
+        wsId, buffer, opCode = client.WebsocketMux.OnIncomingMessage.call_args[0]
+        self.assertEqual(wsId, 7)
+        self.assertEqual(opCode, WebSocketOpCode.TEXT)
+        response = json.loads(buffer.GetBytesLike().decode("utf-8"))
+        self.assertEqual(response["Data"]["Data"]["FileList"][0]["name"], "/local/valid_été.gcode")
+        self.assertEqual(response["Data"]["Data"]["FileList"][1]["name"], "/local/\u0010kQ0\ufffd\ufffdX@sample.gcode")
+        self.assertNotIn(context.Id, client.RequestPendingContexts)
+
+
+    def test_corrupt_broadcast_forwards_recovered_utf8(self) -> None:
+        client = self._MakeClient()
+        websocket = MagicMock()
+        buffer = Buffer(b'{"Topic":"sdcp/status/printer","Status":{"name":"printer\xff"}}')
+        client._OnWsData(websocket, buffer, WebSocketOpCode.TEXT)
+        websocket.Close.assert_not_called()
+        client._HandleStatusUpdate.assert_called_once_with({"name": "printer\ufffd"})
+        client.WebsocketMux.OnIncomingMessage.assert_called_once()
+        wsId, forwardedBuffer, opCode = client.WebsocketMux.OnIncomingMessage.call_args[0]
+        self.assertIsNone(wsId)
+        self.assertEqual(opCode, WebSocketOpCode.TEXT)
+        self.assertEqual(json.loads(forwardedBuffer.GetBytesLike().decode("utf-8"))["Status"], {"name": "printer\ufffd"})
+
+
+    def test_invalid_json_is_dropped_and_next_status_is_processed(self) -> None:
+        for raw in (b"\xff", b'{"Topic":', b'{"Topic":"sdcp/status/printer","Status":{"name":"\x10\xff"}}'):
+            with self.subTest(raw=raw):
+                client = self._MakeClient()
+                websocket = MagicMock()
+                with patch("elegoo_octoeverywhere.elegooclient.Sentry.OnException") as report:
+                    client._OnWsData(websocket, Buffer(raw), WebSocketOpCode.TEXT)
+                    report.assert_not_called()
+                websocket.Close.assert_not_called()
+                client.WebsocketMux.OnIncomingMessage.assert_not_called()
+                client._HandleStatusUpdate.assert_not_called()
+                validBuffer = Buffer(b'{"Topic":"sdcp/status/printer","Status":{"name":"valid"}}')
+                client._OnWsData(websocket, validBuffer, WebSocketOpCode.TEXT)
+                client._HandleStatusUpdate.assert_called_once_with({"name": "valid"})
+                client.WebsocketMux.OnIncomingMessage.assert_called_once_with(None, validBuffer, WebSocketOpCode.TEXT)
+
+
+    def test_connection_closed_after_connect_uses_retry_delay(self) -> None:
         class StopWorker(BaseException):
             pass
 
@@ -66,10 +138,10 @@ class TestElegooClientRecovery(unittest.TestCase):
         client.SleepEvent = MagicMock()
         client.SleepEvent.wait.side_effect = StopWorker()
         websocket = MagicMock()
-        def connectAndReceive(**kwargs):
+        def connectAndClose(**kwargs):
             client._OnWsConnect(websocket)
-            client._OnWsData(websocket, Buffer(b"\xff"), WebSocketOpCode.TEXT)
-        websocket.RunUntilClosed.side_effect = connectAndReceive
+            websocket.Close()
+        websocket.RunUntilClosed.side_effect = connectAndClose
         with patch("elegoo_octoeverywhere.elegooclient.LocalWebApi.Get"), \
              patch("elegoo_octoeverywhere.elegooclient.LocalIpHelper.SetConnectionTargetIpOverride"), \
              patch("elegoo_octoeverywhere.elegooclient.Client", return_value=websocket), \

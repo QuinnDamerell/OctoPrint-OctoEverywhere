@@ -34,6 +34,8 @@ class Gadget:
         self.PrinterStateInterface = printerStateInterface
         self.Lock = threading.Lock()
         self.Timer:Optional[RepeatTimer] = None
+        # Explicit timer lifecycle decisions invalidate an in-flight printer-state check.
+        self.WatchingGeneration = 0
         self.Profiler:Optional[DebugProfiler] = None
         self.DefaultProtocolAndDomain = "https://gadget-v1-oeapi.octoeverywhere.com"
         self.FailedConnectionAttempts = 0
@@ -71,21 +73,28 @@ class Gadget:
 
     def StartWatching(self) -> None:
         with self.Lock:
+            self.WatchingGeneration += 1
             # Stop any running timer.
             self._stopTimerUnderLock()
 
             # Reset any per print stats, so they aren't stale
             self._resetPerPrintState()
 
-            self.Logger.info("Gadget is now watching!")
+            self._startTimerUnderLock()
 
-            # Start a new timer.
-            self.Timer = RepeatTimer(self.Logger, "Gadget", Gadget.c_defaultIntervalSec, self._timerCallback)
-            self.Timer.start()
+
+    # Restore a timer that stopped during a temporary disconnect without resetting this print's scores or suppression.
+    def EnsureWatching(self) -> None:
+        with self.Lock:
+            # Even a healthy timer must ignore a disconnected state observed before this restore.
+            self.WatchingGeneration += 1
+            if self.Timer is None:
+                self._startTimerUnderLock()
 
 
     def StopWatching(self) -> None:
         with self.Lock:
+            self.WatchingGeneration += 1
             self._stopTimerUnderLock()
 
 
@@ -153,6 +162,12 @@ class Gadget:
         self.IsSuppressed = False
 
 
+    def _startTimerUnderLock(self) -> None:
+        self.Logger.info("Gadget is now watching!")
+        self.Timer = RepeatTimer(self.Logger, "Gadget", Gadget.c_defaultIntervalSec, self._timerCallback)
+        self.Timer.start()
+
+
     def _stopTimerUnderLock(self) -> None:
         if self.Timer is not None:
             self.Logger.info("Gadget has stopped watching!")
@@ -189,9 +204,15 @@ class Gadget:
 
             # Check to ensure we should still be running. If the state is anything other than printing, we shouldn't be running
             # We will be restarted on a new print starting or when resume is called.
+            with self.Lock:
+                watchingGeneration = self.WatchingGeneration
+            # Some platforms query their printer here, so do not hold the timer lock across this call.
             if self.PrinterStateInterface.ShouldPrintingTimersBeRunning() is False:
-                self.Logger.warning("Gadget timer is running but the print state is not printing, so the timer is topping.")
-                self.StopWatching()
+                with self.Lock:
+                    # A reconnect may already have restored this timer after the state check began.
+                    if watchingGeneration == self.WatchingGeneration:
+                        self.Logger.warning("Gadget timer is running but the print state is not printing, so the timer is stopping.")
+                        self._stopTimerUnderLock()
                 return
 
             # If we should be running, then the print status is "PRINTING".

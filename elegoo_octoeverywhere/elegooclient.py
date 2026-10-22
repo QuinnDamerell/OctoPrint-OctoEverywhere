@@ -366,11 +366,11 @@ class ElegooClient:
             #
             # So right now, the max sleep time is 30 seconds.
             sleepDelay = self.ConsecutivelyFailedConnectionAttempts
-            # Opening a socket resets the counter, but malformed first messages can close it immediately.
-            # Keep a minimum delay so a printer sending bad data can't create a tight reconnect loop.
+            # Opening a socket resets the counter, even if the printer closes it immediately.
+            # Wait at least five seconds unless a caller requests an earlier connection attempt.
             sleepDelay = max(1, min(sleepDelay, 6))
             sleepDelaySec = 5.0 * sleepDelay
-            self.Logger.info(f"Sleeping for {sleepDelaySec} seconds before trying to reconnect to the Elegoo printer.")
+            self.Logger.info(f"Waiting up to {sleepDelaySec} seconds before trying to reconnect to the Elegoo printer.")
             # Sleep for the time or until the event is set.
             isConnectAttemptFromEventBump = self.SleepEvent.wait(sleepDelaySec)
             self.SleepEvent.clear()
@@ -463,11 +463,20 @@ class ElegooClient:
             try:
                 msgStr = buffer.GetBytesLike().decode("utf-8")
             except UnicodeDecodeError as e:
-                # Don't pass a corrupt message to the parser or frontend. Reconnect to get a fresh printer state.
-                self.Logger.warning("Elegoo printer sent invalid UTF-8, reconnecting: %s", e)
-                ws.Close()
+                # A corrupt filename can persist in every file list response. Reconnecting would keep
+                # hitting that same entry and prevent us from tracking print state transitions.
+                self.Logger.warning("Elegoo printer sent invalid UTF-8, replacing invalid bytes: %s", e)
+                msgStr = buffer.GetBytesLike().decode("utf-8", errors="replace")
+                # The mux forwards this buffer to browsers, so it must use the recovered UTF-8 too.
+                # Valid messages keep their original buffer without the extra allocation.
+                buffer = Buffer(msgStr.encode("utf-8"))
+            try:
+                msg = json.loads(msgStr)
+            except json.JSONDecodeError as e:
+                # Replacement can't repair malformed JSON (such as unescaped control characters).
+                # Ignore only this message so later status updates can still reach us.
+                self.Logger.warning("Elegoo printer sent invalid JSON, ignoring message: %s", e)
                 return
-            msg = json.loads(msgStr)
             if msg is None:
                 raise Exception("Parsed json message returned None")
 
