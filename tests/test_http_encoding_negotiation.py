@@ -5,6 +5,7 @@
 # pyright: reportUnknownMemberType=false
 
 import gzip
+import io
 import logging
 import threading
 import unittest
@@ -22,9 +23,17 @@ from octoeverywhere.Proto.PathTypes import PathTypes
 from octoeverywhere.WebStream.octoheaderimpl import BaseProtocol, HeaderHelper
 
 
+def GzipCompress(data:bytes) -> bytes:
+    # gzip.compress gained mtime in PY3.8; GzipFile keeps fixtures deterministic on PY3.7 too.
+    output = io.BytesIO()
+    with gzip.GzipFile(fileobj=output, mode="wb", mtime=0) as compressor:
+        compressor.write(data)
+    return output.getvalue()
+
+
 class EncodingFixtureHandler(BaseHTTPRequestHandler):
     payload = b"window.fixture = 'a cacheable frontend asset';\n" * 40
-    compressed = gzip.compress(payload, mtime=0)
+    compressed = GzipCompress(payload)
     requestHeaders:Dict[str, str] = {}
 
     def log_message(self, format:str, *args:object) -> None: #pylint: disable=redefined-builtin

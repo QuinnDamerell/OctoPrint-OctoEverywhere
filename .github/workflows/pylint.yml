@@ -40,7 +40,7 @@ jobs:
         pip install ruff
         pip install octoprint
         pip install -r requirements.txt
-        pip install "zstandard>=0.21.0,<0.23.0"
+        pip install "zstandard>=0.21.0,<0.26.0"
 
     - name: 👖 Running Pylint
       run: |
@@ -70,3 +70,24 @@ jobs:
       # it requires no network and runs identically on every Python version.
       run: |
         python -m unittest discover -s tests -v
+
+  modern_python:
+    # Exercise current container runtimes without requiring OctoPrint to support them yet.
+    name: Unit tests (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v7
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install "zstandard>=0.21.0,<0.26.0"
+    - name: Unit tests
+      run: python -m unittest discover -s tests -v
