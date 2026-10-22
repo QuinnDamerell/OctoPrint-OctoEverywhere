@@ -1,3 +1,4 @@
+import importlib
 import sys
 import types
 from typing import Any
@@ -115,6 +116,14 @@ def _InstallDnsStub() -> None:
 
 
 def _InstallFlatbuffersStub() -> None:
+    # Relay fixtures exercise actual wire serialization when this dependency is installed.
+    # Keep the lightweight fallback for test environments that do not have it.
+    try:
+        importlib.import_module("octoflatbuffers")
+        return
+    except ImportError:
+        pass
+
     flatbuffers = _InstallModule("octoflatbuffers")
 
     class _Builder:

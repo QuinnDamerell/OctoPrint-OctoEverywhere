@@ -1,8 +1,9 @@
 import logging
 from enum import Enum
-from typing import Dict, Optional, List
+from typing import Dict, List, Optional, Tuple
 
 from ..sentry import Sentry
+from ..httpheaderpolicy import HttpHeaderPolicy
 from ..octostreammsgbuilder import OctoStreamMsgBuilder
 from ..octohttprequest import OctoHttpRequest
 
@@ -32,6 +33,7 @@ class HeaderHelper:
         # Get the count of headers in the message.
         sendHeaders:Dict[str,str] = {}
         if httpInitialContext is not None:
+            requestHeaders:List[Tuple[str, str]] = []
             headersLen = httpInitialContext.HeadersLength()
             # Convert each header and fix them up.
             i = 0
@@ -50,21 +52,28 @@ class HeaderHelper:
                 if name is None or value is None:
                     logger.warning("GatherRequestHeaders found a header that has a null name or value.")
                     continue
+                if not HttpHeaderPolicy.IsValidHeader(name, value):
+                    logger.warning("GatherRequestHeaders ignored an invalid HTTP header.")
+                    continue
+                requestHeaders.append((name, value))
+
+            excludedHeaders = HttpHeaderPolicy.GetHopByHopHeaderNames(requestHeaders)
+            for name, value in requestHeaders:
                 lowerName = name.lower()
 
-                # Filter out headers we don't want to send.
+                if lowerName in excludedHeaders or lowerName == "content-length":
+                    # requests computes framing from the finalized upload body on this HTTP leg.
+                    # Trailer fields are not carried by the relay protocol.
+                    continue
+
                 if lowerName == "accept-encoding":
-                    # We don't want to accept encoding because it's just a waste of CPU to send over
-                    # local host. We will do our own encoding when we send the data over the websocket.
+                    # Request unencoded local responses; compression belongs to the OctoEverywhere tunnel.
+                    # Cloudflare asks origins for br/gzip to save origin-to-edge bandwidth. Our origin
+                    # hop is the local network, where bandwidth is free and the home device's CPU is
+                    # the scarce resource, so we take identity and compress once for the tunnel.
                     continue
-                if lowerName == "transfer-encoding":
-                    # We don't want to send the transfer encoding since it' won't be accurate any longer.
-                    # If the request was compressed, it will be de-compressed by the server and then we use a different
-                    # compression system over the wire.
-                    # If the request was chunked, our system will read the entire message and send it on the wire
-                    # in multiple stream messages.
-                    # Thus, we don't need to / shouldn't include this header.
-                    continue
+
+                # Filter out headers we don't want to send.
                 if lowerName == "upgrade-insecure-requests":
                     # We don't support https over the local host.
                     continue
@@ -126,12 +135,7 @@ class HeaderHelper:
         else:
             logger.error("GatherRequestHeaders was sent a protocol it doesn't know! "+str(protocol))
 
-        # We exclude this from being set above, but even more so, we want to define it as empty.
-        # If we exclude it, the py request lib seems to add it by itself.
-        # We don't want to mess with encoding, because doing to encoding over local host is a waste of time.
-        #
-        # Note this header is also force set in MakeHttpCall, because calls to things like camera-streamer must set it
-        # and no users of the MakeHttpCall support handing response compression.
+        # Set this explicitly so requests cannot advertise its own compression preferences.
         sendHeaders["Accept-Encoding"] = "identity"
         return sendHeaders
 

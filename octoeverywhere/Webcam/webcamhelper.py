@@ -10,6 +10,7 @@ from ..octohttprequest import OctoHttpRequest
 from ..interfaces import IWebcamPlatformHelper
 from .webcamsettingitem import WebcamSettingItem
 from ..httpresult import HttpResult, HttpResultOrNone
+from ..httpheaderpolicy import HttpHeaderPolicy
 from ..WebStream.uploadbody import UploadBody
 
 from ..Proto.HttpInitialContext import HttpInitialContext
@@ -320,9 +321,8 @@ class WebcamHelper:
     # Returns the octoHttpResult, so the function is chainable
     def _EnsureJpegHeaderInfo(self, octoHttpResult:HttpResultOrNone) -> HttpResultOrNone:
         # Ensure we got a result.
-        if octoHttpResult is None or octoHttpResult.StatusCode > 300:
+        if octoHttpResult is None or octoHttpResult.StatusCode != 200:
             return octoHttpResult
-
         # The GetSnapshot API will always return the fully buffered snapshot.
         # If there already isn't a full buffered body, make one now.
         buf = octoHttpResult.FullBodyBuffer
@@ -334,7 +334,24 @@ class WebcamHelper:
                 self.Logger.error("_EnsureJpegHeaderInfo got a null body read from ReadAllContentFromStreamResponse")
                 return None
 
-        imgBuffer = WebcamUtil.EnsureJpegHeaderInfo(self.Logger, buf)
+        # HTTP encoding is independent of the tunnel. A compressed or partial snapshot must not
+        # be inspected as JPEG bytes, and an origin's no-transform/signature prevents byte repair.
+        # Still buffer these responses above to preserve GetSnapshot's contract for notifications.
+        contentEncoding = octoHttpResult.Headers.get("Content-Encoding", "").strip().lower()
+        if (contentEncoding not in ("", "identity") or "Content-Range" in octoHttpResult.Headers
+                or HttpHeaderPolicy.HasNoTransform(octoHttpResult.Headers.items())
+                or "Signature" in octoHttpResult.Headers or "Signature-Input" in octoHttpResult.Headers):
+            return octoHttpResult
+
+        repair = WebcamUtil.EnsureJpegHeaderInfoWithDetails(self.Logger, buf)
+        imgBuffer = repair.ImageBuffer
+        # APP0 identifier repair edits the input buffer in place, so comparing the two buffers
+        # afterward would miss it. The repair result tells us whether the JPEG bytes changed.
+        if repair.FixMode in (WebcamUtil.c_JpegHeaderFixModeSetApp0Identifier, WebcamUtil.c_JpegHeaderFixModeInsertApp0):
+            # Repaired JPEG bytes no longer match the origin's validators or digests.
+            for name in ("ETag", "Last-Modified", "Content-MD5", "Digest", "Content-Digest", "Repr-Digest", "Accept-Ranges"):
+                octoHttpResult.Headers.pop(name, None)
+            octoHttpResult.Headers["Content-Length"] = str(len(imgBuffer))
         octoHttpResult.SetFullBodyBuffer(imgBuffer)
         return octoHttpResult
 

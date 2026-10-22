@@ -72,6 +72,7 @@ class FakeResponse:
     def __init__(self, statusCode:int) -> None:
         self.status_code = statusCode
         self.headers = {"Content-Length": "0"}
+        self.raw = None
 
 
     def __enter__(self) -> "FakeResponse":
@@ -700,7 +701,7 @@ class TestOctoWebStreamUploadBody(unittest.TestCase):
         self.assertEqual(session.Calls[0]["body"], payload)
         self.assertEqual(session.Calls[1]["body"], payload)
         self.assertEqual(session.Calls[0]["headers"], {"X-Test": "1"})
-        self.assertEqual(session.Calls[1]["headers"], {})
+        self.assertEqual(session.Calls[1]["headers"], {"Accept-Encoding": "identity"})
         ret.Result.Free()
 
 

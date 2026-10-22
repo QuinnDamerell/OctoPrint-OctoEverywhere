@@ -6,6 +6,7 @@ from octoeverywhere.compat import Compat
 from octoeverywhere.sentry import Sentry
 from octoeverywhere.interfaces import IWebRequestHandler
 from octoeverywhere.httpresult import HttpResult
+from octoeverywhere.httpheaderpolicy import HttpHeaderPolicy
 from octoeverywhere.buffer import Buffer
 
 # The context class we return if we want to handle this request.
@@ -66,12 +67,28 @@ class MoonrakerWebRequestResponseHandler(IWebRequestHandler):
     # We are able to modify the bodyBuffer as we wish or not, but we must return the full bodyBuffer back to be returned.
     def HandleResponse(self, contextObject:ResponseHandlerContext, octoHttpResult:HttpResult, bodyBuffer:Buffer) -> Buffer:
         try:
+            # A local server can return encoded bytes even though we requested identity. Only edit
+            # complete, unencoded responses; signed responses and no-transform remain untouched.
+            contentEncoding = octoHttpResult.Headers.get("Content-Encoding", "").strip().lower()
+            if (octoHttpResult.StatusCode != 200 or contentEncoding not in ("", "identity")
+                    or "Content-Range" in octoHttpResult.Headers
+                    or HttpHeaderPolicy.HasNoTransform(octoHttpResult.Headers.items())
+                    or "Signature" in octoHttpResult.Headers or "Signature-Input" in octoHttpResult.Headers):
+                return bodyBuffer
             if contextObject.Type == ResponseHandlerContext.MainsailConfig:
-                return self._HandleMainsailConfig(octoHttpResult, bodyBuffer)
+                result = self._HandleMainsailConfig(octoHttpResult, bodyBuffer)
             elif contextObject.Type == ResponseHandlerContext.CameraStreamerWebRTCSdp:
-                return self._HandleWebRtcSdpResponse(octoHttpResult, bodyBuffer)
+                result = self._HandleWebRtcSdpResponse(octoHttpResult, bodyBuffer)
             else:
                 self.Logger.error("MoonrakerWebRequestResponseHandler tired to handle a context with an unknown Type? "+str(contextObject.Type))
+                return bodyBuffer
+            if result.GetBytesLike() != bodyBuffer.GetBytesLike():
+                # These describe the origin bytes. Keeping its validator could let a client reuse a
+                # config rewritten by an older plugin, so clear validators as nginx sub_filter does.
+                for name in ("ETag", "Last-Modified", "Content-MD5", "Digest", "Content-Digest", "Repr-Digest", "Accept-Ranges"):
+                    octoHttpResult.Headers.pop(name, None)
+                octoHttpResult.Headers["Content-Length"] = str(len(result))
+            return result
         except Exception as e:
             Sentry.OnException("MainsailConfigHandler exception while handling mainsail config.", e)
         return bodyBuffer

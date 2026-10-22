@@ -106,6 +106,16 @@ class Slipstream(ISlipstreamHandler):
     def GetCachedOctoHttpResult(self, httpInitialContext:HttpInitialContext) -> HttpResultOrNone:
         # Note that all of our URL caching logic is case sensitive! (because URLs are)
 
+        # A cached GET cannot perform writes, evaluate origin preconditions, or select a byte range.
+        # Send these requests to the origin; other GETs retain the existing cached-200 behavior.
+        if OctoStreamMsgBuilder.BytesToString(httpInitialContext.Method()) != "GET":
+            return None
+        for index in range(httpInitialContext.HeadersLength()):
+            header = httpInitialContext.Headers(index)
+            name = None if header is None else OctoStreamMsgBuilder.BytesToString(header.Key())
+            if name is not None and name.lower() in ("range", "if-range", "if-match", "if-unmodified-since"):
+                return None
+
         # Get the path.
         # If the path is empty, it's a protocol error. The upstream will handle it.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
@@ -277,6 +287,15 @@ class Slipstream(ISlipstreamHandler):
             # Check for success
             if octoHttpResult is None or octoHttpResult.StatusCode != 200:
                 self.Logger.error("Slipstream failed to make the http request for "+url)
+                return None
+
+            # Slipstream parses the index after undoing tunnel compression. It cannot decode an
+            # arbitrary HTTP Content-Encoding, and should not cache a partial representation.
+            # Leave these to the normal relay, which preserves the encoded bytes and headers.
+            if (octoHttpResult.Headers.get("Content-Encoding", "").strip().lower() not in ("", "identity")
+                    or "Content-Range" in octoHttpResult.Headers
+                    or "Signature" in octoHttpResult.Headers or "Signature-Input" in octoHttpResult.Headers):
+                # Cache-specific header changes can also invalidate an origin signature.
                 return None
 
             # Remove any headers we don't want.

@@ -3,6 +3,8 @@ import logging
 from typing import Dict, Optional, Union
 from urllib.parse import urlsplit
 
+import requests
+
 from .mdns import MDns
 from .buffer import Buffer
 from .compat import Compat
@@ -226,13 +228,14 @@ class OctoHttpRequest:
         if isinstance(data, Buffer) and len(data) == 0:
             data = None
 
-        # All of the users of MakeHttpCall don't handle compressed responses.
-        # For OctoStream request, this header is already set in GatherRequestHeaders, but for things like webcam snapshot requests and such, it's not set.
-        # Beyond nothing handling compressed responses, since the call is almost always over localhost, there's no point in doing compression, since it mainly just helps in transmit less data.
-        # Thus, for all calls, we set the Accept-Encoding to identity, telling the server no response compression is allowed.
-        # This is important for somethings like camera-streamer, which will use gzip by default. (which is also silly, because it's sending jpegs and jmpeg streams?)
+        # Avoid HTTP compression on the local connection; the OctoEverywhere tunnel compresses the body.
+        # Internal callers also require identity because they consume raw response bytes.
+        # Remove differently cased fields so they cannot override this decision in requests.
         if headers is None:
             headers = {}
+        for name in list(headers):
+            if name.lower() == "accept-encoding":
+                del headers[name]
         headers["Accept-Encoding"] = "identity"
 
         # First, try the main URL.
@@ -320,6 +323,18 @@ class OctoHttpRequest:
             return self.result
 
 
+    # nginx answers an upstream response it can't frame (an invalid Content-Length) with a 502 for that
+    # request only. Letting the ValueError escape would reach the web stream thread, which treats any
+    # exception as a protocol failure and disconnects the whole tunnel, dropping every other stream.
+    @staticmethod
+    def _BuildResult(logger:logging.Logger, response:requests.Response, url:str, isFallback:bool) -> HttpResult:
+        try:
+            return HttpResult.BuildFromRequestLibResponse(response, url, isFallback)
+        except ValueError as e:
+            logger.warning("%s returned a response that can't be framed, returning a 502. %s", url, e)
+            return HttpResult.Error(502, url, isFallback)
+
+
     # This function should always return a AttemptResult object.
     @staticmethod
     def MakeHttpCallAttempt(logger:logging.Logger, attemptName:str, method:str, url:str, headers:Optional[Dict[str,str]], data:UploadTypesBufferOrNone, mainResult:Optional[HttpResult], isFallback:bool, nextFallbackUrl:Optional[str], allowRedirects:bool=False, timeoutSec:Optional[float]=None) -> AttemptResult:
@@ -371,15 +386,15 @@ class OctoHttpRequest:
                 logger.debug("%s http URL threw an exception: %s", attemptName, e)
 
             # We have seen when making absolute calls to some lower end devices, like external IP cameras, they can't handle the number of headers we send.
-            # So if any call fails due to 431 (headers too long) we will retry the call with no headers at all. Note this will break most auth, but
+            # So if any call fails due to 431 (headers too long), retry with only the identity encoding preference. Note this will break most auth, but
             # most of these systems don't need auth headers or anything.
             # Strangely this seems to only work on Linux, where as on Windows the request.request function will throw a 'An existing connection was forcibly closed by the remote host' error.
             # Thus for windows, if the response is ever null, try again. This isn't ideal, but most windows users are just doing dev anyways.
             if (response is not None and response.status_code == 431) or (platform.system() == "Windows" and response is None):
                 if response is not None and response.status_code == 431:
-                    logger.info(url + " http call returned 431, too many headers. Trying again with no headers.")
+                    logger.info(url + " http call returned 431, too many headers. Trying again with minimal headers.")
                 else:
-                    logger.warning(url + " http call returned no response on Windows. Trying again with no headers.")
+                    logger.warning(url + " http call returned no response on Windows. Trying again with minimal headers.")
                 try:
                     # Reset the body stream if we have one.
                     if scopedBodyContext is not None:
@@ -387,7 +402,7 @@ class OctoHttpRequest:
                     response = HttpSessions.GetSession(url).request(
                                 method,
                                 url,
-                                headers={},
+                                headers={"Accept-Encoding": "identity"},
                                 data=requestBodyDataObject, #pyright: ignore[reportArgumentType]
                                 timeout=1800, allow_redirects=False, stream=True, verify=False)
                 except Exception as e:
@@ -401,7 +416,7 @@ class OctoHttpRequest:
         if response is not None and response.status_code != 404:
             # We got a valid response, we are done.
             # Return true and the result object, so it can be returned.
-            return OctoHttpRequest.AttemptResult(True, HttpResult.BuildFromRequestLibResponse(response, url, isFallback))
+            return OctoHttpRequest.AttemptResult(True, OctoHttpRequest._BuildResult(logger, response, url, isFallback))
 
         # Check if we have another fallback URL to try.
         if nextFallbackUrl is not None:
@@ -410,7 +425,7 @@ class OctoHttpRequest:
             # use capture the main result object, so we can use it eventually if all fallbacks fail.
             if response is None:
                 return OctoHttpRequest.AttemptResult(False, None)
-            return OctoHttpRequest.AttemptResult(False, HttpResult.BuildFromRequestLibResponse(response, url, isFallback))
+            return OctoHttpRequest.AttemptResult(False, OctoHttpRequest._BuildResult(logger, response, url, isFallback))
 
         # We don't have another fallback, so we need to end this.
         if mainResult is not None:
@@ -420,7 +435,7 @@ class OctoHttpRequest:
         else:
             if response is not None:
                 logger.debug("%s failed and we have no more fallbacks. We DON'T have a main response.", attemptName)
-                return OctoHttpRequest.AttemptResult(True, HttpResult.BuildFromRequestLibResponse(response, url, isFallback))
+                return OctoHttpRequest.AttemptResult(True, OctoHttpRequest._BuildResult(logger, response, url, isFallback))
 
             # Otherwise return the failure.
             logger.debug("%s failed and we have no more fallbacks. We DON'T have a main response.", attemptName)

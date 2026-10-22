@@ -78,6 +78,16 @@ class Slipstream(ISlipstreamHandler):
     def GetCachedOctoHttpResult(self, httpInitialContext:HttpInitialContext) -> HttpResultOrNone:
         # Note that all of our URL caching logic is case sensitive! (because URLs are)
 
+        # A cached GET cannot perform writes, evaluate origin preconditions, or select a byte range.
+        # Send these requests to the origin; other GETs retain the existing cached-200 behavior.
+        if OctoStreamMsgBuilder.BytesToString(httpInitialContext.Method()) != "GET":
+            return None
+        for index in range(httpInitialContext.HeadersLength()):
+            header = httpInitialContext.Headers(index)
+            name = None if header is None else OctoStreamMsgBuilder.BytesToString(header.Key())
+            if name is not None and name.lower() in ("range", "if-range", "if-match", "if-unmodified-since"):
+                return None
+
         # Get the path.
         # If the path is empty, it's a protocol error. The upstream will handle it.
         path = OctoStreamMsgBuilder.BytesToString(httpInitialContext.Path())
@@ -240,6 +250,15 @@ class Slipstream(ISlipstreamHandler):
                 self.Logger.error("Slipstream failed to make the http request for "+url)
                 return None
 
+            # Slipstream parses HTML/JavaScript after undoing tunnel compression. It cannot decode
+            # arbitrary HTTP Content-Encoding, and should not cache a partial representation.
+            # Leave these to the normal relay, which preserves the encoded bytes and headers.
+            if (octoHttpResult.Headers.get("Content-Encoding", "").strip().lower() not in ("", "identity")
+                    or "Content-Range" in octoHttpResult.Headers
+                    or "Signature" in octoHttpResult.Headers or "Signature-Input" in octoHttpResult.Headers):
+                # Cache-specific header changes can also invalidate an origin signature.
+                return None
+
             # Remove any headers we don't want.
             contentLength = None
             headers = octoHttpResult.Headers
@@ -259,8 +278,10 @@ class Slipstream(ISlipstreamHandler):
             # Set the cache header
             octoHttpResult.Headers["x-oe-slipstream-plugin"] = "1"
 
-            # Set a short cache on the files, so the browser doesn't have to re-fetch them.
-            octoHttpResult.Headers["cache-control"] = "max-age=3600"
+            # Keep origin directives, especially no-transform which the service uses to decide
+            # HTTP compression. Retain Elegoo's short browser cache default only when none is set.
+            if "Cache-Control" not in octoHttpResult.Headers:
+                octoHttpResult.Headers["Cache-Control"] = "max-age=3600"
 
             # Since the request is setup to use streaming mode, we need to read in the entire contents and store them
             # because when the function exist the request will be closed and the stream will no longer be able to be read.

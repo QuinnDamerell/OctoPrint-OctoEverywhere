@@ -4,8 +4,10 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 import requests
 from requests.structures import CaseInsensitiveDict
+from urllib3 import HTTPHeaderDict
 
 from .buffer import Buffer
+from .httpheaderpolicy import HttpHeaderPolicy
 from .streamreadhelper import StreamReadHelper
 from .Proto.DataCompression import DataCompression
 
@@ -29,7 +31,7 @@ HttpResultOrNone = Union["HttpResult", None]
 class HttpResult():
     def __init__(self,
                     statusCode:int,
-                    headers:Union[CaseInsensitiveDict[str], Dict[str, str]], #pyright: ignore[unsubscriptable-object] this is required for later PY versions.
+                    headers:Union[HTTPHeaderDict, CaseInsensitiveDict[str], Dict[str, str]], #pyright: ignore[unsubscriptable-object] this is required for later PY versions.
                     url:str,
                     didFallback:bool,
                     fullBodyBuffer:Optional[Buffer]=None,
@@ -62,12 +64,9 @@ class HttpResult():
         if fullBodyBuffer is not None:
             self.SetFullBodyBuffer(fullBodyBuffer)
 
-        # Always convert the headers to a CaseInsensitiveDict.
-        if isinstance(headers, dict):
-            # If the headers are a dict, we need to convert them to a CaseInsensitiveDict.
-            # This is because the requests lib uses CaseInsensitiveDict for headers.
-            headers = CaseInsensitiveDict(headers)
-        self._headers = headers
+        # Preserve repeated fields (especially Set-Cookie) while retaining case-insensitive lookup.
+        # items() returns separate values; assignment and deletion operate on all values for a name.
+        self._headers = HTTPHeaderDict(headers)
 
 
     # Allows for a quick way to create a Result object with no body.
@@ -94,11 +93,42 @@ class HttpResult():
     # Builds a Result object from a requests.Response object.
     @staticmethod
     def BuildFromRequestLibResponse(response:requests.Response, url:str, isFallback:bool=False) -> "HttpResult":
-        return HttpResult(response.status_code, response.headers, url, isFallback, requestLibResponseObj=response)
+        # requests.Response.headers has already comma-joined repeated fields. The raw response
+        # retains their boundaries and order. Synthetic/non-streamed responses may have no raw object.
+        rawHeaders = getattr(response.raw, "headers", None)
+        headers = rawHeaders if isinstance(rawHeaders, HTTPHeaderDict) else response.headers
+        if any("\n" in value for _, value in headers.items()):
+            # http.client keeps obs-fold line breaks in the value. Replace each fold with a space
+            # (RFC 9112 section 5.2) instead of dropping the whole field later as invalid.
+            unfolded = HTTPHeaderDict()
+            for name, value in headers.items():
+                unfolded.add(name, HttpHeaderPolicy.UnfoldHeaderValue(value))
+            headers = unfolded
+        result = HttpResult(response.status_code, headers, url, isFallback, requestLibResponseObj=response)
+        if "Transfer-Encoding" in result.Headers:
+            # urllib3 removes transfer framing while reading raw. An upstream Content-Length must
+            # not truncate that stream or become the downstream length when transfer framing is present.
+            # nginx answers this combination with a 502; RFC 9112 section 6.3 lets an intermediary
+            # forward it once Content-Length is removed, which keeps lax local servers working.
+            result.Headers.pop("Content-Length", None)
+        elif "Content-Length" in result.Headers:
+            # Identical repeated lengths are allowed (RFC 9110 section 8.6; nginx rejects any repeat);
+            # conflicting or invalid lengths cannot frame a response. The caller turns the
+            # ValueError into a 502 for this request, as nginx does.
+            lengths = [value.strip() for value in result.Headers["Content-Length"].split(",")]
+            if not all(value and all(character in "0123456789" for character in value) for value in lengths):
+                response.close()
+                raise ValueError("Invalid HTTP response Content-Length")
+            length = int(lengths[0])
+            if any(int(value) != length for value in lengths):
+                response.close()
+                raise ValueError("Conflicting HTTP response Content-Length values")
+            result.Headers["Content-Length"] = str(length)
+        return result
 
 
     @property
-    def Headers(self) -> CaseInsensitiveDict[str]: #pyright: ignore[unsubscriptable-object] this is required for later PY versions.
+    def Headers(self) -> HTTPHeaderDict:
         return self._headers
 
 
@@ -166,11 +196,32 @@ class HttpResult():
 
 
     # It's important we clear all of the vars that are set above.
-    # This is used by the system that updates the request object with a 304 if the cache headers match.
+    # Clear retained response-body state when the result is released.
     def ClearFullBodyBuffer(self) -> None:
         self._fullBodyBuffer = None
         self._bodyCompressionType = DataCompression.None_
         self._fullBodyBufferPreCompressedSize = 0
+
+
+    # Turns a full 200 into the 304 that nginx's not_modified filter sends: the status changes and
+    # Content-Type, Content-Length, Accept-Ranges, and Content-Encoding are removed, while validators
+    # and cache fields remain so the client can refresh its stored response. The unread origin body
+    # is discarded when this result closes, so the local connection isn't reused. That costs one new
+    # local connection, which is far cheaper than reading a body nobody will receive.
+    def ConvertToNotModified(self) -> None:
+        self.StatusCode = 304
+        self.ClearFullBodyBuffer()
+        for name in ("Content-Type", "Content-Length", "Accept-Ranges", "Content-Encoding"):
+            self._headers.pop(name, None)
+
+
+    def HasResponseBody(self, requestMethod:Optional[str]=None) -> bool:
+        if requestMethod is None and self._requestLibResponseObj is not None:
+            request = self._requestLibResponseObj.request
+            if request is not None:
+                requestMethod = request.method
+        return (requestMethod is None or requestMethod.upper() != "HEAD") and not (
+            100 <= self.StatusCode < 200 or self.StatusCode in (204, 205, 304))
 
 
     # Since most things use request Stream=True, this is a helpful util that will read the entire
@@ -182,6 +233,10 @@ class HttpResult():
         # Ensure we have a stream to read.
         if self._requestLibResponseObj is None:
             raise Exception("ReadAllContentFromStreamResponse was called on a result with no request lib Response object.")
+        if not self.HasResponseBody():
+            # HEAD/304 lengths describe the selected representation, not a payload to allocate/read.
+            self.SetFullBodyBuffer(Buffer(bytearray()))
+            return
         # It's more efficient to gather the data in a single buffer, and append together at the end.
         buffers:List[Union[bytes, bytearray]] = []
 
@@ -194,7 +249,7 @@ class HttpResult():
             # If we have a content length, we can use that to read more efficiently
             # And if the underlying stream supports readinto, we can use that to avoid some allocations and copies.
             useReadInto = StreamReadHelper.CanTryReadInto(self._requestLibResponseObj.raw)
-            contentLengthStr = self._requestLibResponseObj.headers.get("Content-Length", None)
+            contentLengthStr = self.Headers.get("Content-Length", None)
             if contentLengthStr is not None:
                 contentLength = int(contentLengthStr)
                 if maxBodySizeBytes is not None and contentLength > maxBodySizeBytes:
@@ -267,7 +322,7 @@ class HttpResult():
     # Creates a shallow replay copy of this result. FullBodyBuffer is shared, but response status and headers can be safely mutated by the caller.
     # This is mostly used to transfer a response from the requests lib that might be holding a socket open to a result that's untied and just has the response body, headers, etc.
     def CreateReplayCopy(self) -> "HttpResult":
-        result = HttpResult(self.StatusCode, CaseInsensitiveDict(self.Headers), self.Url, self.DidFallback)
+        result = HttpResult(self.StatusCode, self.Headers, self.Url, self.DidFallback)
         if self.FullBodyBuffer is not None:
             result.SetFullBodyBuffer(self.FullBodyBuffer, self.BodyBufferCompressionType, self.BodyBufferPreCompressSize)
         return result
