@@ -1,6 +1,6 @@
 import os
 import stat
-from typing import List
+from typing import List, Tuple
 
 from linux_host.version import Version
 
@@ -37,13 +37,17 @@ class Updater:
         # Enumerate all service file to find any local plugins, Sonic Pad plugins, companion service files, and bambu service files, since all service files contain this name.
         # Note GetServiceFileFolderPath will return dynamically based on the OsType detected.
         # Use sorted, so the results are in a nice user presentable order.
-        foundOeServices:List[str] = []
-        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context))) #pyright: ignore[reportUnknownMemberType] it can't be typed to prevent circular imports
-        for fileOrDirName in fileAndDirList:
-            Logger.Debug(f"Searching for OE services to update, found: {fileOrDirName}")
-            fileOrDirNameLower = fileOrDirName.lower()
-            if Configure.c_ServiceCommonName in fileOrDirNameLower:
-                foundOeServices.append(fileOrDirName)
+        foundOeServices:List[Tuple[str, str]] = []
+        foundServiceNames = set()
+        for serviceFolder in Paths.GetServiceFileFolderPaths(context):
+            if not os.path.isdir(serviceFolder):
+                continue
+            for fileOrDirName in sorted(os.listdir(serviceFolder)):
+                Logger.Debug(f"Searching for OE services to update, found: {fileOrDirName}")
+                fileOrDirNameLower = fileOrDirName.lower()
+                if Configure.c_ServiceCommonName in fileOrDirNameLower and fileOrDirNameLower not in foundServiceNames:
+                    foundOeServices.append((serviceFolder, fileOrDirName))
+                    foundServiceNames.add(fileOrDirNameLower)
 
         if len(foundOeServices) == 0:
             Logger.Warn("No local, companion, or Bambu Connect plugins were found on this device.")
@@ -54,11 +58,11 @@ class Updater:
         OptionalDepsInstaller.WaitForInstallToComplete(timeoutSec=60.0)
 
         Logger.Info("We found the following plugins to update:")
-        for s in foundOeServices:
+        for _, s in foundOeServices:
             Logger.Info(f"  {s}")
 
         Logger.Info("Restarting services...")
-        for s in foundOeServices:
+        for serviceFolder, s in foundOeServices:
             if context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K2:
                 # We need to build the fill name path
                 serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, s)
@@ -66,7 +70,16 @@ class Updater:
                 Service.RestartSonicPadService(serviceFilePath, False)
             elif context.OsType == OsTypes.K1:
                 # We need to build the fill name path
-                serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, s)
+                serviceFilePath = os.path.join(serviceFolder, s)
+                preferredServiceFilePath = os.path.join(Paths.GetServiceFileFolderPath(context), s)
+                if serviceFilePath != preferredServiceFilePath:
+                    Logger.Info(f"Moving service file to the persistent init folder: {preferredServiceFilePath}")
+                    Util.RunShellCommand(f"{serviceFilePath} stop", False)
+                    Util.RunShellCommand("ps -ef | grep 'moonraker_octoeverywhere' | grep -v grep | awk '{print $1}' | xargs -r kill -9", False)
+                    if os.path.exists(preferredServiceFilePath):
+                        raise Exception(f"Refusing to overwrite existing service file: {preferredServiceFilePath}")
+                    os.replace(serviceFilePath, preferredServiceFilePath)
+                    serviceFilePath = preferredServiceFilePath
                 Logger.Debug(f"Full service path: {serviceFilePath}")
                 Service.RestartK1Service(serviceFilePath, False)
             elif context.OsType == OsTypes.Debian:
