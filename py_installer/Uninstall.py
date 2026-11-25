@@ -1,6 +1,6 @@
 import os
 import shutil
-from typing import List
+from typing import List, Tuple
 
 from .Context import Context
 from .Context import OsTypes
@@ -14,12 +14,14 @@ class Uninstall:
     def DoUninstall(self, context:Context) -> None:
         # Ensure there's something to remove first.
         # Since all service names must use the same identifier in them, we can find any services using the same search.
-        foundOeServices:List[str] = []
-        fileAndDirList = sorted(os.listdir(Paths.GetServiceFileFolderPath(context))) #pyright: ignore[reportUnknownMemberType] it can't be typed to prevent circular imports
-        for fileOrDirName in fileAndDirList:
-            Logger.Debug(f"Searching for OE services to remove, found: {fileOrDirName}")
-            if Configure.c_ServiceCommonName in fileOrDirName.lower():
-                foundOeServices.append(fileOrDirName)
+        foundOeServices:List[Tuple[str, str]] = []
+        for serviceFolder in Paths.GetServiceFileFolderPaths(context):
+            if not os.path.isdir(serviceFolder):
+                continue
+            for fileOrDirName in sorted(os.listdir(serviceFolder)):
+                Logger.Debug(f"Searching for OE services to remove, found: {fileOrDirName}")
+                if Configure.c_ServiceCommonName in fileOrDirName.lower():
+                    foundOeServices.append((serviceFolder, fileOrDirName))
         if len(foundOeServices) == 0:
             Logger.Warn("No local, companion, or Bambu Connect plugins were found to remove.")
             return
@@ -41,7 +43,7 @@ class Uninstall:
 
         # TODO - We need to cleanup more, but for now, just make sure any services are shutdown.
         Logger.Info("Stopping services...")
-        for serviceFileName in foundOeServices:
+        for serviceFolder, serviceFileName in foundOeServices:
             if context.OsType == OsTypes.SonicPad or context.OsType == OsTypes.K2:
                 # We need to build the fill name path
                 serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, serviceFileName)
@@ -52,7 +54,7 @@ class Uninstall:
                 os.remove(serviceFilePath)
             elif context.OsType == OsTypes.K1:
                 # We need to build the fill name path
-                serviceFilePath = os.path.join(Paths.CrealityOsServiceFilePath, serviceFileName)
+                serviceFilePath = os.path.join(serviceFolder, serviceFileName)
                 Logger.Debug(f"Full service path: {serviceFilePath}")
                 Logger.Info(f"Stopping and deleting {serviceFileName}...")
                 Util.RunShellCommand(f"{serviceFilePath} stop", False)

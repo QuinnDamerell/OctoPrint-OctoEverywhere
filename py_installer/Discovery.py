@@ -182,13 +182,18 @@ class Discovery:
         moonrakerConfigFilePath = None
 
         # The service file should be something like this "/etc/init.d/S56moonraker_service" or "/etc/init.d/moonraker" on the K2
-        for fileOrDirName in os.listdir(Paths.CrealityOsServiceFilePath):
-            fullFileOrDirPath = os.path.join(Paths.CrealityOsServiceFilePath, fileOrDirName)
-            if os.path.isfile(fullFileOrDirPath):
-                if "moonraker" in fileOrDirName.lower():
+        serviceFolders = Paths.GetServiceFileFolderPaths(context)
+        for serviceFolder in serviceFolders:
+            if not os.path.isdir(serviceFolder):
+                continue
+            for fileOrDirName in os.listdir(serviceFolder):
+                fullFileOrDirPath = os.path.join(serviceFolder, fileOrDirName)
+                if os.path.isfile(fullFileOrDirPath) and "moonraker" in fileOrDirName.lower():
                     Logger.Debug(f"Found service file: {fullFileOrDirPath}")
                     moonrakerServiceFileName = fileOrDirName
                     break
+            if moonrakerServiceFileName is not None:
+                break
 
         moonrakerConfigFilePath = None
         if context.OsType == OsTypes.K1:
